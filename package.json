@@ -1,0 +1,31 @@
+{
+  "name": "hibiki",
+  "version": "0.1.0",
+  "description": "Hibiki (響) – Discord audio companion bot with a Vue-based control surface.",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "workspaces": [
+    "apps/bot",
+    "apps/web"
+  ],
+  "scripts": {
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "lint": "npm run lint -w apps/bot && npm run lint -w apps/web",
+    "dev": "concurrently \"npm run start:dev -w apps/bot\" \"npm run dev -w apps/web\"",
+    "build": "npm run build -w apps/web && npm run copy:web && npm run build -w apps/bot",
+    "copy:web": "node scripts/copy-web-dist.cjs",
+    "start": "npm run start:prod -w apps/bot"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "prettier": "^3.8.1"
+  },
+  "dependencies": {
+    "joi": "^18.0.2",
+    "slugify": "^1.6.6"
+  }
+}
