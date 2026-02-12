@@ -12,7 +12,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { SoundLibraryService } from '../sound.service';
 import { SoundFile } from '../sound.types';
 
-@Controller('api/sounds')
+@Controller('sounds')
 export class SoundController {
   constructor(private readonly sounds: SoundLibraryService) {}
 

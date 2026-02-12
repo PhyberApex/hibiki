@@ -54,6 +54,12 @@ export class AudioEngine {
     this.spawnInput(filePath, this.volumes.effects, false);
   }
 
+  destroy() {
+    this.stopBackground();
+    this.player.stop(true);
+    this.output.destroy();
+  }
+
   private spawnInput(filePath: string, volume: number, loop: boolean): ActiveStream {
     const input = this.mixer.input({ channels: 2, bitDepth: 16, sampleRate: 48000, volume });
     const ffmpeg = this.createFfmpeg(filePath);

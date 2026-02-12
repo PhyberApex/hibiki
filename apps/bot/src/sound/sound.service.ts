@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mkdir, readdir, stat, unlink, writeFile } from 'fs/promises';
 import { join, extname } from 'path';
@@ -7,7 +7,7 @@ import fg from 'fast-glob';
 import { SoundCategory, SoundFile } from './sound.types';
 
 @Injectable()
-export class SoundLibraryService {
+export class SoundLibraryService implements OnModuleInit {
   private readonly logger = new Logger(SoundLibraryService.name);
   private readonly musicDir: string;
   private readonly effectsDir: string;
@@ -47,7 +47,7 @@ export class SoundLibraryService {
         createdAt: stats.birthtime.toISOString(),
       });
     }
-    return results;
+    return results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async getFile(category: SoundCategory, id: string): Promise<SoundFile & { path: string }> {
