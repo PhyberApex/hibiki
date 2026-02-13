@@ -1,29 +1,30 @@
-# Stage 1 - build web + bot
+# Stage 1 - install deps and build
 FROM node:22-alpine AS builder
 WORKDIR /app
-ENV NODE_ENV=development
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
 
-# Enable npm workspaces install
-COPY package.json package-lock.json ./
-COPY apps/bot/package.json ./apps/bot/package.json
-COPY apps/web/package.json ./apps/web/package.json
-COPY scripts ./scripts
-RUN npm install
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY apps/bot/package.json apps/bot/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN npm run build
-RUN npm prune --omit=dev
+RUN pnpm run build
+RUN pnpm prune --prod
 
-# Stage 2 - production image
+# Stage 2 - production runtime
 FROM node:22-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy necessary runtime files
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/package-lock.json ./package-lock.json
+COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY --from=builder /app/apps ./apps
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/bot ./apps/bot
+COPY --from=builder /app/scripts ./scripts
 
 EXPOSE 3000
 CMD ["node", "apps/bot/dist/main.js"]
