@@ -15,6 +15,12 @@ import {
 import { PlayerService } from '../player/player.service';
 import { PermissionConfigService, PermissionRole } from '../permissions';
 
+export interface GuildDirectoryEntry {
+  guildId: string;
+  guildName: string;
+  channels: { id: string; name: string }[];
+}
+
 @Injectable()
 export class DiscordService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DiscordService.name);
@@ -70,6 +76,25 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
 
   getClient() {
     return this.client;
+  }
+
+  listGuildDirectory(): GuildDirectoryEntry[] {
+    if (!this.client.isReady()) {
+      return [];
+    }
+
+    return this.client.guilds.cache.map((guild) => ({
+      guildId: guild.id,
+      guildName: guild.name,
+      channels: guild.channels.cache
+        .filter((channel): channel is VoiceBasedChannel =>
+          channel.isVoiceBased(),
+        )
+        .map((channel) => ({
+          id: channel.id,
+          name: channel.name ?? channel.id,
+        })),
+    }));
   }
 
   getCommandRoles(guildRoleIds: string[]): Set<PermissionRole> {

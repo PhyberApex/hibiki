@@ -5,6 +5,7 @@ import {
   VoiceConnection,
   VoiceConnectionStatus,
 } from '@discordjs/voice';
+import type { DiscordGatewayAdapterCreator } from '@discordjs/voice';
 import { VoiceBasedChannel } from 'discord.js';
 import { AudioEngine } from './audio-engine';
 import { SoundCategory } from '../sound/sound.types';
@@ -25,7 +26,10 @@ export class GuildAudioManager {
   constructor(private readonly guildId: string) {}
 
   async connect(channel: VoiceBasedChannel) {
-    if (this.connection && this.connection.joinConfig.channelId === channel.id) {
+    if (
+      this.connection &&
+      this.connection.joinConfig.channelId === channel.id
+    ) {
       this.channelName = channel.name;
       return this.connection;
     }
@@ -34,7 +38,7 @@ export class GuildAudioManager {
     this.connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
-      adapterCreator: channel.guild.voiceAdapterCreator,
+      adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
       selfDeaf: false,
     });
     this.channelName = channel.name;

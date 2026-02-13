@@ -20,11 +20,12 @@ export function PermissionGuard(
     constructor(private readonly permissions: PermissionConfigService) {}
 
     canActivate(context: ExecutionContext): boolean {
-      const request = context.switchToHttp().getRequest();
-      const extracted = (roleExtractor?.(context) ??
-        request.user?.roles ??
-        []) as Iterable<PermissionRole>;
-      return this.permissions.hasPermission(commandKey, extracted);
+      const request = context
+        .switchToHttp()
+        .getRequest<Request & { user?: { roles?: PermissionRole[] } }>();
+      const resolvedRoles: Iterable<PermissionRole> =
+        roleExtractor?.(context) ?? request.user?.roles ?? [];
+      return this.permissions.hasPermission(commandKey, resolvedRoles);
     }
   }
 

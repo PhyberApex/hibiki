@@ -33,6 +33,12 @@ export class PlayerController {
     return this.player.getState();
   }
 
+  @Get('guilds')
+  @UseGuards(PermissionGuard('player.state.view'))
+  getGuildDirectory() {
+    return this.discord.listGuildDirectory();
+  }
+
   private resolveChannel(guildId: string, channelId?: string) {
     const client = this.discord.getClient();
     const guild = client.guilds.cache.get(guildId);

@@ -8,8 +8,8 @@ import { SoundLibraryService } from './sound.service';
 
 const createTempDir = () => mkdtempSync(join(tmpdir(), 'hibiki-sound-'));
 
-const createFile = (name: string, data: string): Express.Multer.File => {
-  const file = {
+function createFile(name: string, data: string): Express.Multer.File {
+  return {
     fieldname: 'file',
     originalname: name,
     encoding: '7bit',
@@ -20,19 +20,8 @@ const createFile = (name: string, data: string): Express.Multer.File => {
     path: '',
     buffer: Buffer.from(data),
     stream: Readable.from(data),
-  } satisfies Express.Multer.File;
-  return file;
-};
-
-const createFile = (name: string, data: string): Express.Multer.File =>
-  ({
-    fieldname: 'file',
-    originalname: name,
-    encoding: '7bit',
-    mimetype: 'audio/mpeg',
-    buffer: Buffer.from(data),
-    size: Buffer.byteLength(data),
-  }) as Express.Multer.File;
+  } as Express.Multer.File;
+}
 
 describe('SoundLibraryService', () => {
   let tempRoot: string;
@@ -44,13 +33,9 @@ describe('SoundLibraryService', () => {
     tempRoot = createTempDir();
     musicDir = join(tempRoot, 'music');
     effectsDir = join(tempRoot, 'effects');
-    const config = {
-      get: (key: string, fallback: string) => {
-        if (key === 'audio.musicDir') return musicDir;
-        if (key === 'audio.effectsDir') return effectsDir;
-        return fallback;
-      },
-    } as unknown as ConfigService;
+    const config = new ConfigService({
+      audio: { musicDir, effectsDir },
+    });
 
     service = new SoundLibraryService(config);
     await service.onModuleInit();
@@ -66,11 +51,9 @@ describe('SoundLibraryService', () => {
 
     const files = await service.list('music');
     expect(files).toHaveLength(1);
-    expect(files[0]).toMatchObject({
-      id: expect.stringContaining('lo-fi-vibes'),
-      category: 'music',
-      name: expect.stringContaining('Lo Fi Vibes'),
-    });
+    expect(files[0].id).toEqual(expect.stringContaining('lo-fi-vibes'));
+    expect(files[0].category).toBe('music');
+    expect(files[0].name).toEqual(expect.stringContaining('Lo Fi Vibes'));
     nowSpy.mockRestore();
   });
 

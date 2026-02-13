@@ -7,21 +7,21 @@ export class PlayerSnapshot {
   guildId!: string;
 
   @Column({ nullable: true })
-  connectedChannelId?: string;
+  connectedChannelId?: string | null;
 
   @Column({ nullable: true })
-  connectedChannelName?: string;
+  connectedChannelName?: string | null;
 
   @Column({ nullable: true })
-  trackId?: string;
+  trackId?: string | null;
 
   @Column({ nullable: true })
-  trackName?: string;
+  trackName?: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   trackFilename?: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   trackCategory?: SoundCategory | null;
 
   @Column({ default: true })

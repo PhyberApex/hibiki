@@ -6,6 +6,14 @@ import { GuildPlaybackState } from './player.types';
 import { SoundCategory } from '../sound/sound.types';
 import { PlayerSnapshotService } from '../persistence/player-snapshot.service';
 
+type SnapshotOverrides = {
+  trackId: string | null;
+  trackName: string | null;
+  trackFilename: string | null;
+  trackCategory: SoundCategory | null;
+  isIdle: boolean;
+};
+
 @Injectable()
 export class PlayerService {
   private readonly logger = new Logger(PlayerService.name);
@@ -106,6 +114,8 @@ export class PlayerService {
               category: (snapshot.trackCategory ?? 'music') as SoundCategory,
             }
           : null,
+        source: 'snapshot',
+        lastUpdated: snapshot.updatedAt.toISOString(),
       }));
 
     return [...live, ...persistedFallbacks];
@@ -116,24 +126,21 @@ export class PlayerService {
   }
 
   private getLiveState(): GuildPlaybackState[] {
+    const timestamp = new Date().toISOString();
     return Array.from(this.managers.entries()).map(([guildId, manager]) => ({
       guildId,
-      connectedChannelId: manager.channelId,
+      connectedChannelId: manager.channelId ?? undefined,
       connectedChannelName: manager.channelLabel,
       isIdle: manager.isIdle,
       track: manager.track ?? null,
+      source: 'live',
+      lastUpdated: timestamp,
     }));
   }
 
   private async persistManagerState(
     guildId: string,
-    overrides: Partial<{
-      trackId: string | null;
-      trackName: string | null;
-      trackFilename: string | null;
-      trackCategory: SoundCategory | null;
-      isIdle: boolean;
-    }> = {},
+    overrides: Partial<SnapshotOverrides> = {},
   ) {
     const manager = this.managers.get(guildId);
     if (!manager) {

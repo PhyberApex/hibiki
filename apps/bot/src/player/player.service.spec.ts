@@ -1,8 +1,6 @@
 import { SoundLibraryService } from '../sound/sound.service';
 import { PlayerService } from './player.service';
-import { GuildAudioManager } from '../audio/guild-audio.manager';
-
-jest.mock('../audio/guild-audio.manager');
+import type { PlayerSnapshotService } from '../persistence/player-snapshot.service';
 
 describe('PlayerService', () => {
   let service: PlayerService;
@@ -17,17 +15,17 @@ describe('PlayerService', () => {
       category: 'music',
       path: '/tmp/track.mp3',
     } as const;
-    const partialSounds = {
-      getFile: jest.fn().mockResolvedValue(mockFile),
-    } satisfies Partial<SoundLibraryService>;
-    sounds = partialSounds as jest.Mocked<SoundLibraryService>;
 
-    const partialSnapshots = {
+    sounds = {
+      getFile: jest.fn().mockResolvedValue(mockFile),
+    } as jest.Mocked<SoundLibraryService>;
+
+    snapshots = {
       upsert: jest.fn(),
       remove: jest.fn(),
       list: jest.fn().mockResolvedValue([]),
-    } satisfies Partial<PlayerSnapshotService>;
-    snapshots = partialSnapshots as jest.Mocked<PlayerSnapshotService>;
+    } as jest.Mocked<PlayerSnapshotService>;
+
     service = new PlayerService(sounds, snapshots);
   });
 

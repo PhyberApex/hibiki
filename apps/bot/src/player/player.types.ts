@@ -13,4 +13,6 @@ export interface GuildPlaybackState {
   connectedChannelName?: string;
   isIdle: boolean;
   track?: TrackSummary | null;
+  source: 'live' | 'snapshot';
+  lastUpdated?: string;
 }

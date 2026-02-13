@@ -42,6 +42,6 @@ export class PlayerSnapshotService {
   }
 
   async list(): Promise<PlayerSnapshot[]> {
-    return this.repo.find();
+    return this.repo.find({ order: { updatedAt: 'DESC' } });
   }
 }

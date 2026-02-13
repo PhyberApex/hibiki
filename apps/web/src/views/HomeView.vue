@@ -9,6 +9,21 @@ const state = ref<PlayerStateItem[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 
+const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+
+function formatRelative(iso?: string) {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const diffMs = date.getTime() - Date.now()
+  const diffMinutes = Math.round(diffMs / 60000)
+  if (Math.abs(diffMinutes) < 60) {
+    return rtf.format(diffMinutes, 'minute')
+  }
+  const diffHours = Math.round(diffMinutes / 60)
+  return rtf.format(diffHours, 'hour')
+}
+
 async function loadState() {
   loading.value = true
   error.value = null
@@ -47,13 +62,6 @@ onMounted(() => {
           {{ error ? 'Issue' : loading ? 'Syncing' : 'Live' }}
         </span>
       </div>
-      <header>
-        <h1>Player state</h1>
-        <button type="button" @click="loadState" :disabled="loading">
-          {{ loading ? 'Refreshing…' : 'Refresh' }}
-        </button>
-      </header>
-
       <p v-if="loading">Loading player state…</p>
       <p v-else-if="error" class="error">{{ error }}</p>
       <p v-else-if="state.length === 0">No guilds connected.</p>
@@ -72,7 +80,16 @@ onMounted(() => {
           </div>
           <div class="row">
             <span class="label">Status</span>
-            <span class="value">{{ guild.isIdle ? 'Idle' : 'Playing' }}</span>
+            <span class="value status-stack">
+              <span :class="['pill', guild.source === 'live' ? 'pill-live' : 'pill-snapshot']">
+                {{ guild.source === 'live' ? 'Live' : 'Snapshot' }}
+              </span>
+              <span class="subtle">{{ guild.isIdle ? 'Idle' : 'Playing' }}</span>
+            </span>
+          </div>
+          <div class="row" v-if="guild.lastUpdated">
+            <span class="label">Last update</span>
+            <span class="value subtle">{{ formatRelative(guild.lastUpdated) }}</span>
           </div>
           <div class="row">
             <span class="label">Track</span>
@@ -173,5 +190,37 @@ button:disabled {
 
 .error {
   color: #f87171;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-right: 0.4rem;
+}
+
+.pill-live {
+  background: #d9f99d;
+  color: #1a2e05;
+}
+
+.pill-snapshot {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.subtle {
+  color: var(--color-text-soft);
+  font-size: 0.85rem;
+}
+
+.status-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
 }
 </style>

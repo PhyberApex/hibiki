@@ -11,6 +11,14 @@ export interface PlayerStateItem {
   connectedChannelName?: string
   isIdle: boolean
   track: PlayerTrackInfo | null
+  source: 'live' | 'snapshot'
+  lastUpdated?: string
+}
+
+export interface GuildDirectoryEntry {
+  guildId: string
+  guildName: string
+  channels: { id: string; name: string }[]
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -66,4 +74,8 @@ export function triggerEffect(payload: { guildId: string; effectId: string; chan
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+}
+
+export function fetchGuildDirectory(signal?: AbortSignal): Promise<GuildDirectoryEntry[]> {
+  return request('/api/player/guilds', { signal })
 }
