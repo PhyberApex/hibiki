@@ -8,6 +8,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import { PermissionGuard } from '../../permissions';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { SoundLibraryService } from '../sound.service';
 import { SoundFile } from '../sound.types';
@@ -17,11 +18,13 @@ export class SoundController {
   constructor(private readonly sounds: SoundLibraryService) {}
 
   @Get('music')
+  @UseGuards(new PermissionGuard('sound.music.view'))
   listMusic(): Promise<SoundFile[]> {
     return this.sounds.list('music');
   }
 
   @Get('effects')
+  @UseGuards(new PermissionGuard('sound.effects.view'))
   listEffects(): Promise<SoundFile[]> {
     return this.sounds.list('effects');
   }
