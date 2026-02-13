@@ -28,7 +28,25 @@ onMounted(() => {
 
 <template>
   <main class="dashboard">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Status</p>
+        <h1>Control Center</h1>
+      </div>
+      <button type="button" class="ghost" @click="loadState" :disabled="loading">
+        {{ loading ? 'Refreshing…' : 'Refresh state' }}
+      </button>
+    </header>
     <section class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Live playback</p>
+          <h2>Player state</h2>
+        </div>
+        <span class="tag" :class="{ danger: error }">
+          {{ error ? 'Issue' : loading ? 'Syncing' : 'Live' }}
+        </span>
+      </div>
       <header>
         <h1>Player state</h1>
         <button type="button" @click="loadState" :disabled="loading">
