@@ -1,0 +1,20 @@
+{
+  "discordRoles": {
+    "123456789": ["admin"],
+    "987654321": ["moderator"]
+  },
+  "dashboardUsers": {
+    "admin@example.com": ["admin"],
+    "dj@example.com": ["dj"]
+  },
+  "commands": {
+    "sound.music.view": ["dj", "moderator", "admin"],
+    "sound.music.upload": ["admin"],
+    "sound.music.delete": ["admin"],
+    "discord.join": ["dj", "moderator", "admin"],
+    "discord.play": ["dj", "moderator", "admin"],
+    "discord.effect": ["dj", "moderator", "admin"],
+    "discord.leave": ["dj", "moderator", "admin"],
+    "discord.stop": ["moderator", "admin"]
+  }
+}

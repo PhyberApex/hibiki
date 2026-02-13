@@ -1,3 +1,5 @@
+import permissionConfigJson from './permission-config.json';
+
 export type PermissionRole = 'admin' | 'moderator' | 'dj';
 
 export interface CommandPermissionMap {
@@ -18,11 +20,8 @@ export interface PermissionConfig {
   commands: CommandPermissionMap;
 }
 
-export const permissionConfig: PermissionConfig = {
-  discordRoles: {},
-  dashboardUsers: {},
-  commands: {},
-};
+
+export const permissionConfig: PermissionConfig = permissionConfigJson as PermissionConfig;
 
 export const getRolesForDiscordMember = (
   roleIds: string[],
