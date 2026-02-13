@@ -1,1 +1,2 @@
-export * from './permission-config';
+export * from './permission.types'
+export * from './permission-config.service'
