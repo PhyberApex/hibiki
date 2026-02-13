@@ -1,117 +1,98 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Hibiki — Bot + API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Hibiki is a NestJS + Discord.js service that powers a Discord music bot, REST API, and Vue dashboard.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Architecture Overview
 
-## Hibiki Architecture
+| Layer | What it does |
+| --- | --- |
+| Discord service | Boots a Discord.js client, enforces permissions on `join/leave/play/effect/stop`, and forwards commands to the player service. |
+| REST API | Exposes `/api/player/*` and `/api/sounds/*` so the dashboard (and automations) can control the bot. |
+| Permissions | `apps/bot/src/permissions` loads `permission-config.json` into an injectable service + guard shared by Discord and REST. |
+| Persistence | Player state lives in memory *and* is snapshotted into `storage/data/hibiki.sqlite` so dashboards show “last seen” status even after restarts. |
+| Dashboard (Vue) | Lives in `apps/web` and talks to the REST endpoints (bundle copied into `apps/bot/web-dist` at build time). |
 
-Hibiki is structured into three cooperating parts:
+## Local Development
 
-- **Discord bot** – `apps/bot/src/discord/discord.service.ts` boots a Discord.js client, parses prefix commands (`join`, `leave`, `play`, `effect`, `stop`), and checks every invocation against the shared permission map.
-- **REST API** – Nest controllers expose the sound library and player state. Guards from `apps/bot/src/permissions` wrap each endpoint so the same permission config governs REST + Discord flows.
-- **Vue dashboard** – `apps/web` polls `/api/player/state` (and future endpoints) to render guild/channel/track status. Requests flow through the Nest app, so CORS is already configured.
+### Requirements
 
-### Permissions & Persistence
+- Node.js 22.12.0 (`.nvmrc` is provided, run `nvm use`)
+- pnpm 10.29.x (`corepack enable` to install)
+- ffmpeg installed locally (required for audio playback)
 
-### REST Endpoints
-
-- `GET /api/player/state` – dashboard poll for guild/channel status.
-- `POST /api/player/{join,leave,stop,play,effect}` – mirror Discord commands for dashboard control (guarded by permission keys).
-- `GET/POST/DELETE /api/sounds/*` – manage music/effect files stored on disk.
-
-- The allow/deny baseline lives in `apps/bot/src/permissions/permission-config.json`, mapping Discord role IDs, dashboard emails, and command keys to roles (`admin`, `moderator`, `dj`). Update this file to grant or revoke access.
-- Player state is kept in-memory inside `PlayerService`, while sound uploads persist on disk (`storage/music`, `storage/effects`). No DB is required yet; add one when multi-instance coordination is needed.
-
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+### One-time setup
 
 ```bash
-$ npm install
+# in repo root
+corepack enable
+pnpm install
 ```
 
-## Compile and run the project
+### Environment variables
+
+Create `.env` at the workspace root (or use your shell env) with:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+DISCORD_TOKEN=...
+DISCORD_CLIENT_ID=...
+DISCORD_GUILD_ID= (optional default guild)
+HIBIKI_PREFIX=!
+HIBIKI_DB_PATH=storage/data/hibiki.sqlite
+HIBIKI_STORAGE_PATH=storage
 ```
 
-## Run tests
+The defaults keep everything inside `storage/` so Docker volumes can persist uploads + SQLite.
+
+### Running locally
 
 ```bash
-# unit tests
-$ npm run test
+# dev mode (bot + Vue dev server)
+pnpm dev
 
-# e2e tests
-$ npm run test:e2e
+# build production assets (Vue → Nest)
+pnpm build
 
-# test coverage
-$ npm run test:cov
+# run compiled bot
+pnpm --filter @hibiki/bot start:prod
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Tests & lint
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+pnpm --filter @hibiki/bot test
+pnpm run lint
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## REST API quick reference
 
-## Resources
+- `GET /api/player/state` — live + snapshot player state.
+- `GET /api/player/guilds` — guild + voice channel directory for the dashboard.
+- `POST /api/player/{join,leave,stop,play,effect}` — mirrors Discord commands.
+- `GET|POST|DELETE /api/sounds/{music|effects}` — list/upload/delete assets.
 
-Check out a few resources that may come in handy when working with NestJS:
+All routes are protected by the permission guard (roles defined in `permission-config.json`).
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## Permissions config
 
-## Support
+`apps/bot/src/permissions/permission-config.json` maps Discord role IDs + dashboard emails to roles (`admin`, `moderator`, `dj`). Each role grants a set of command keys. Update the JSON and redeploy to change access.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## Persistence & volumes
 
-## Stay in touch
+- SQLite snapshots: `storage/data/hibiki.sqlite`
+- Sound uploads: `storage/music`, `storage/effects`
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+When running in Docker, mount `./storage` to a volume so uploads + snapshots survive container restarts:
 
-## License
+```bash
+docker run \
+  -v $(pwd)/storage:/app/storage \
+  ghcr.io/phyberapex/hibiki:latest
+```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## Release & CI
+
+- Release automation: release-please (`.github/workflows/release-please.yml`)
+- Docker builds: GitHub Actions push to GHCR on tagged releases
+- CI: `.github/workflows/checks.yml` runs lint/test/build via pnpm
+
+That's the gist! See `apps/web/README.md` for dashboard specifics or poke around the code under `apps/bot/src/*` for more details.
