@@ -3,9 +3,6 @@ import { ConfigService } from '@nestjs/config'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
-  CommandPermissionMap,
-  DashboardPermissionMap,
-  DiscordRolePermissionMap,
   PermissionConfig,
   PermissionRole,
 } from './permission.types'
@@ -20,12 +17,11 @@ export class PermissionConfigService {
 
   private loadConfig(): PermissionConfig {
     const configPath = this.configService.get<string>('permissions.file')
-    const resolvedPath = configPath ? resolve(configPath) : resolve(__dirname, 'permission-config.json')
-    if (!existsSync(resolvedPath)) {
+    const resolved = configPath ? resolve(configPath) : resolve(__dirname, 'permission-config.json')
+    if (!existsSync(resolved)) {
       return { discordRoles: {}, dashboardUsers: {}, commands: {} }
     }
-    const raw = readFileSync(resolvedPath, 'utf-8')
-    const parsed = JSON.parse(raw) as PermissionConfig
+    const parsed = JSON.parse(readFileSync(resolved, 'utf-8')) as PermissionConfig
     return {
       discordRoles: parsed.discordRoles ?? {},
       dashboardUsers: parsed.dashboardUsers ?? {},
@@ -33,14 +29,10 @@ export class PermissionConfigService {
     }
   }
 
-  getConfig(): PermissionConfig {
-    return this.config
-  }
-
   getRolesForDiscordMember(roleIds: string[]): Set<PermissionRole> {
     const roles = new Set<PermissionRole>()
-    roleIds.forEach((roleId) => {
-      const perms = this.config.discordRoles[roleId]
+    roleIds.forEach((id) => {
+      const perms = this.config.discordRoles[id]
       perms?.forEach((role) => roles.add(role))
     })
     return roles

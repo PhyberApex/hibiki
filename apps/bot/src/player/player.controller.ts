@@ -56,7 +56,6 @@ export class PlayerController {
     await this.player.connect(channel);
     return { status: 'ok' };
   }
-}
 
   @Post('leave')
   @UseGuards(new PermissionGuard('player.leave'))
@@ -87,4 +86,5 @@ export class PlayerController {
     const effect = await this.player.playEffect(body.guildId, body.effectId, channel);
     return { status: 'ok', effect };
   }
+
 
