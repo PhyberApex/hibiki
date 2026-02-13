@@ -2,26 +2,27 @@ import { PassThrough } from 'stream';
 import prism from 'prism-media';
 import {
   AudioPlayer,
+  AudioResource,
   createAudioPlayer,
   createAudioResource,
   NoSubscriberBehavior,
   StreamType,
 } from '@discordjs/voice';
-import AudioMixer from 'audio-mixer';
+import AudioMixer, { Mixer, MixerInput } from 'audio-mixer';
 
 interface ActiveStream {
   ffmpeg: prism.FFmpeg;
-  input: any;
+  input: MixerInput;
   loop?: boolean;
   filePath: string;
   volume: number;
 }
 
 export class AudioEngine {
-  private readonly mixer: any;
+  private readonly mixer: Mixer;
   private readonly output = new PassThrough();
   private readonly player: AudioPlayer;
-  private readonly resource;
+  private readonly resource: AudioResource<null>;
   private background?: ActiveStream;
 
   constructor(private readonly volumes = { music: 85, effects: 90 }) {
@@ -32,8 +33,12 @@ export class AudioEngine {
       clearInterval: 200,
     });
     this.mixer.pipe(this.output);
-    this.player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Pause } });
-    this.resource = createAudioResource(this.output, { inputType: StreamType.Raw });
+    this.player = createAudioPlayer({
+      behaviors: { noSubscriber: NoSubscriberBehavior.Pause },
+    });
+    this.resource = createAudioResource<null>(this.output, {
+      inputType: StreamType.Raw,
+    });
     this.player.play(this.resource);
   }
 
@@ -60,8 +65,17 @@ export class AudioEngine {
     this.output.destroy();
   }
 
-  private spawnInput(filePath: string, volume: number, loop: boolean): ActiveStream {
-    const input = this.mixer.input({ channels: 2, bitDepth: 16, sampleRate: 48000, volume });
+  private spawnInput(
+    filePath: string,
+    volume: number,
+    loop: boolean,
+  ): ActiveStream {
+    const input = this.mixer.input({
+      channels: 2,
+      bitDepth: 16,
+      sampleRate: 48000,
+      volume,
+    });
     const ffmpeg = this.createFfmpeg(filePath);
     ffmpeg.pipe(input);
     ffmpeg.once('close', () => {
@@ -77,12 +91,18 @@ export class AudioEngine {
     return new prism.FFmpeg({
       args: [
         '-re',
-        '-i', filePath,
-        '-analyzeduration', '0',
-        '-loglevel', '0',
-        '-f', 's16le',
-        '-ar', '48000',
-        '-ac', '2',
+        '-i',
+        filePath,
+        '-analyzeduration',
+        '0',
+        '-loglevel',
+        '0',
+        '-f',
+        's16le',
+        '-ar',
+        '48000',
+        '-ac',
+        '2',
       ],
     });
   }

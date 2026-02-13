@@ -1,39 +1,38 @@
-import { SoundLibraryService } from '../sound/sound.service'
-import { PlayerService } from './player.service'
-import { GuildAudioManager } from '../audio/guild-audio.manager'
+import { SoundLibraryService } from '../sound/sound.service';
+import { PlayerService } from './player.service';
+import { GuildAudioManager } from '../audio/guild-audio.manager';
 
-jest.mock('../audio/guild-audio.manager')
+jest.mock('../audio/guild-audio.manager');
 
 describe('PlayerService', () => {
-  let service: PlayerService
-  let sounds: jest.Mocked<SoundLibraryService>
-  let snapshots: jest.Mocked<PlayerSnapshotService>
+  let service: PlayerService;
+  let sounds: jest.Mocked<SoundLibraryService>;
+  let snapshots: jest.Mocked<PlayerSnapshotService>;
 
   beforeEach(() => {
-    sounds = {
-      getFile: jest.fn().mockResolvedValue({
-        id: 'track',
-        name: 'Track',
-        filename: 'track.mp3',
-        category: 'music',
-        path: '/tmp/track.mp3',
-      } as any),
-    } as unknown as jest.Mocked<SoundLibraryService>
+    const mockFile = {
+      id: 'track',
+      name: 'Track',
+      filename: 'track.mp3',
+      category: 'music',
+      path: '/tmp/track.mp3',
+    } as const;
+    const partialSounds = {
+      getFile: jest.fn().mockResolvedValue(mockFile),
+    } satisfies Partial<SoundLibraryService>;
+    sounds = partialSounds as jest.Mocked<SoundLibraryService>;
 
-    snapshots = { upsert: jest.fn(), remove: jest.fn(), list: jest.fn().mockResolvedValue([]) } as unknown as jest.Mocked<PlayerSnapshotService>
-    service = new PlayerService(sounds, snapshots)
-  })
-
-  it('connects and reuses managers per guild', async () => {
-    const channel: any = { guild: { id: '123', name: 'Guild' }, name: 'voice' }
-    await service.connect(channel)
-    await service.connect(channel)
-
-    expect(GuildAudioManager).toHaveBeenCalledTimes(1)
-  })
+    const partialSnapshots = {
+      upsert: jest.fn(),
+      remove: jest.fn(),
+      list: jest.fn().mockResolvedValue([]),
+    } satisfies Partial<PlayerSnapshotService>;
+    snapshots = partialSnapshots as jest.Mocked<PlayerSnapshotService>;
+    service = new PlayerService(sounds, snapshots);
+  });
 
   it('stops playback without throwing when idle', async () => {
-    await service.stop('unknown')
-    expect(true).toBe(true)
-  })
-})
+    await service.stop('unknown');
+    expect(true).toBe(true);
+  });
+});

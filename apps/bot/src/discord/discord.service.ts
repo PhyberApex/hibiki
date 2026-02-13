@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   Client,
@@ -8,7 +13,7 @@ import {
   VoiceBasedChannel,
 } from 'discord.js';
 import { PlayerService } from '../player/player.service';
-import { getRolesForDiscordMember, hasPermission, PermissionRole } from '../permissions';
+import { PermissionConfigService, PermissionRole } from '../permissions';
 
 @Injectable()
 export class DiscordService implements OnModuleInit, OnModuleDestroy {
@@ -19,6 +24,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly config: ConfigService,
     private readonly player: PlayerService,
+    private readonly permissions: PermissionConfigService,
   ) {
     this.prefix = this.config.get<string>('discord.commandPrefix', '!');
     this.client = new Client({
@@ -35,7 +41,9 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     const token = this.config.get<string>('discord.token');
     if (!token) {
-      this.logger.warn('No Discord token configured. Skipping Discord client login.');
+      this.logger.warn(
+        'No Discord token configured. Skipping Discord client login.',
+      );
       return;
     }
 
@@ -43,7 +51,9 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`Logged in as ${this.client.user?.tag}`);
     });
 
-    this.client.on('messageCreate', (message) => this.handleMessage(message));
+    this.client.on('messageCreate', (message) => {
+      void this.handleMessage(message);
+    });
 
     try {
       await this.client.login(token);
@@ -63,11 +73,11 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   }
 
   getCommandRoles(guildRoleIds: string[]): Set<PermissionRole> {
-    return getRolesForDiscordMember(guildRoleIds);
+    return this.permissions.getRolesForDiscordMember(guildRoleIds);
   }
 
   hasPermission(commandKey: string, roles: Iterable<PermissionRole>) {
-    return hasPermission(commandKey, roles);
+    return this.permissions.hasPermission(commandKey, roles);
   }
 
   private async handleMessage(message: Message) {
@@ -79,16 +89,20 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const [command, ...args] = message.content.slice(this.prefix.length).trim().split(/\s+/);
+    const [command, ...args] = message.content
+      .slice(this.prefix.length)
+      .trim()
+      .split(/\s+/);
     if (!command) {
       return;
     }
 
     const commandKey = `discord.${command.toLowerCase()}`;
     const memberRoleIds = Array.from(message.member?.roles.cache.keys() ?? []);
-    const permissionRoles = getRolesForDiscordMember(memberRoleIds);
+    const permissionRoles =
+      this.permissions.getRolesForDiscordMember(memberRoleIds);
 
-    if (!hasPermission(commandKey, permissionRoles)) {
+    if (!this.permissions.hasPermission(commandKey, permissionRoles)) {
       await message.reply('You do not have permission to run this command.');
       return;
     }
@@ -143,7 +157,11 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     }
 
     const channel = message.member?.voice.channel as VoiceBasedChannel | null;
-    const file = await this.player.playMusic(message.guild!.id, trackId, channel ?? undefined);
+    const file = await this.player.playMusic(
+      message.guild!.id,
+      trackId,
+      channel ?? undefined,
+    );
     await message.reply(`Queued **${file.name}**.`);
   }
 
@@ -155,7 +173,11 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     }
 
     const channel = message.member?.voice.channel as VoiceBasedChannel | null;
-    const file = await this.player.playEffect(message.guild!.id, effectId, channel ?? undefined);
+    const file = await this.player.playEffect(
+      message.guild!.id,
+      effectId,
+      channel ?? undefined,
+    );
     await message.reply(`Triggered **${file.name}**.`);
   }
 }

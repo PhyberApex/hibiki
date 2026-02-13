@@ -1,5 +1,5 @@
-import { Module } from '@nestjs/common'
-import { PermissionConfigService } from './permission-config.service'
+import { Module } from '@nestjs/common';
+import { PermissionConfigService } from './permission-config.service';
 
 @Module({
   providers: [PermissionConfigService],
