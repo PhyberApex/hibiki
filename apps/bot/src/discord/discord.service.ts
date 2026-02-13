@@ -8,7 +8,7 @@ import {
   VoiceBasedChannel,
 } from 'discord.js';
 import { PlayerService } from '../player/player.service';
-import { getRolesForDiscordMember, hasPermission } from '../permissions';
+import { getRolesForDiscordMember, hasPermission, PermissionRole } from '../permissions';
 
 @Injectable()
 export class DiscordService implements OnModuleInit, OnModuleDestroy {
@@ -56,6 +56,18 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     if (this.client.isReady()) {
       await this.client.destroy();
     }
+  }
+
+  getClient() {
+    return this.client;
+  }
+
+  getCommandRoles(guildRoleIds: string[]): Set<PermissionRole> {
+    return getRolesForDiscordMember(guildRoleIds);
+  }
+
+  hasPermission(commandKey: string, roles: Iterable<PermissionRole>) {
+    return hasPermission(commandKey, roles);
   }
 
   private async handleMessage(message: Message) {

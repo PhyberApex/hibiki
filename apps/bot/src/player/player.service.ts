@@ -71,6 +71,18 @@ export class PlayerService {
     return this.managers.get(guildId)?.channelId;
   }
 
+  async resolveChannel(guildId: string, channelId: string) {
+    const guild = this.managers.get(guildId)?.clientGuild ?? null;
+    if (!guild) {
+      throw new Error('Guild not connected');
+    }
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel || !channel.isVoiceBased()) {
+      throw new Error('Channel not available');
+    }
+    return channel;
+  }
+
   private getOrCreateManager(guildId: string) {
     if (!this.managers.has(guildId)) {
       this.managers.set(guildId, new GuildAudioManager(guildId));
