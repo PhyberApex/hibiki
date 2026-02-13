@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import type { PlayerStateItem } from '@/api/player'
 import { fetchPlayerState } from '@/api/player'
+import SoundList from '@/components/SoundList.vue'
 
 const state = ref<PlayerStateItem[]>([])
 const loading = ref(true)
@@ -67,23 +68,34 @@ onMounted(() => {
         </li>
       </ul>
     </section>
+
+    <div class="sound-grid">
+      <SoundList title="Music" type="music" />
+      <SoundList title="Effects" type="effects" />
+    </div>
   </main>
 </template>
 
 <style scoped>
 .dashboard {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 2rem;
   padding: 2rem;
 }
 
 .panel {
   width: 100%;
-  max-width: 720px;
   background: var(--color-background-soft);
   border-radius: 12px;
   padding: 1.5rem;
   box-shadow: 0 10px 40px rgba(15, 23, 42, 0.15);
+}
+
+.sound-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 
 header {
