@@ -4,6 +4,7 @@ import type { SoundFile } from '@/api/sounds'
 import { deleteSound, listEffects, listMusic, uploadSound } from '@/api/sounds'
 
 const props = defineProps<{ title: string; type: 'music' | 'effects' }>()
+const emit = defineEmits<{ uploaded: [] }>()
 
 const items = ref<SoundFile[]>([])
 const loading = ref(true)
@@ -32,6 +33,7 @@ async function handleUpload(event: Event) {
   try {
     await uploadSound(props.type, file)
     await loadSounds()
+    emit('uploaded')
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Upload failed'
   } finally {
@@ -43,6 +45,7 @@ async function handleDelete(id: string) {
   if (!confirm('Delete this file?')) return
   await deleteSound(props.type, id)
   await loadSounds()
+  emit('uploaded')
 }
 
 onMounted(() => {
@@ -52,25 +55,25 @@ onMounted(() => {
 
 <template>
   <section class="sound-panel">
-    <header>
-      <h2>{{ title }}</h2>
-      <label class="upload-btn">
+    <header class="panel-header">
+      <h2 class="sound-title">{{ title }}</h2>
+      <label class="btn btn-upload" :class="{ uploading }">
         <input type="file" accept="audio/*" @change="handleUpload" :disabled="uploading" hidden />
         {{ uploading ? 'Uploading…' : 'Upload' }}
       </label>
     </header>
 
-    <p v-if="loading">Loading…</p>
-    <p v-else-if="error" class="error">{{ error }}</p>
-    <p v-else-if="items.length === 0">No sounds yet.</p>
+    <p v-if="loading" class="sound-message">Loading…</p>
+    <p v-else-if="error" class="sound-message sound-error">{{ error }}</p>
+    <p v-else-if="items.length === 0" class="sound-message">No sounds yet.</p>
 
-    <ul v-else>
-      <li v-for="sound in items" :key="sound.id">
-        <div>
-          <strong>{{ sound.name }}</strong>
-          <small>{{ sound.filename }}</small>
+    <ul v-else class="sound-list">
+      <li v-for="sound in items" :key="sound.id" class="sound-item">
+        <div class="sound-info">
+          <span class="sound-name">{{ sound.name }}</span>
+          <span class="sound-filename">{{ sound.filename }}</span>
         </div>
-        <button type="button" @click="handleDelete(sound.id)">Delete</button>
+        <button type="button" class="btn btn-danger-ghost" @click="handleDelete(sound.id)">Delete</button>
       </li>
     </ul>
   </section>
@@ -78,27 +81,70 @@ onMounted(() => {
 
 <style scoped>
 .sound-panel {
+  background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 1rem;
-  background: var(--color-background);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
 }
 
-header {
+.panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 }
 
-.upload-btn {
-  border: 1px dashed var(--color-border);
-  border-radius: 999px;
-  padding: 0.3rem 1rem;
+.sound-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.btn {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: background var(--transition), opacity var(--transition);
 }
 
-ul {
+.btn-upload {
+  background: var(--color-accent-muted);
+  color: var(--color-accent);
+  border: 1px dashed var(--color-accent);
+}
+.btn-upload:hover:not(.uploading) {
+  background: rgba(6, 182, 212, 0.25);
+}
+.btn-upload.uploading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.btn-danger-ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+.btn-danger-ghost:hover {
+  background: var(--color-error-muted);
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.sound-message {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+.sound-error {
+  color: var(--color-error);
+}
+
+.sound-list {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -107,23 +153,32 @@ ul {
   gap: 0.5rem;
 }
 
-li {
+.sound-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 8px;
-  padding: 0.75rem;
-}
-
-button {
-  background: transparent;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-md);
 }
 
-.error {
-  color: #f87171;
+.sound-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.sound-name {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.sound-filename {
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+  font-family: ui-monospace, monospace;
 }
 </style>

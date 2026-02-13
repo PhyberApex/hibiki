@@ -1,3 +1,10 @@
 packages:
   - apps/bot
   - apps/web
+
+onlyBuiltDependencies:
+  - '@discordjs/opus'
+  - '@nestjs/core'
+  - esbuild
+  - sqlite3
+  - unrs-resolver

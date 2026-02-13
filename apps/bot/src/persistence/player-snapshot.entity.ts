@@ -6,22 +6,22 @@ export class PlayerSnapshot {
   @PrimaryColumn()
   guildId!: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   connectedChannelId?: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   connectedChannelName?: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   trackId?: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   trackName?: string | null;
 
   @Column({ type: 'text', nullable: true })
   trackFilename?: string | null;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   trackCategory?: SoundCategory | null;
 
   @Column({ default: true })

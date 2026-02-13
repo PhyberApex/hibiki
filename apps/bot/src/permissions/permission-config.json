@@ -1,81 +1,22 @@
 {
-  "discordRoles": {
-    "123456789": [
-      "admin"
-    ],
-    "987654321": [
-      "moderator"
-    ]
-  },
-  "dashboardUsers": {
-    "admin@example.com": [
-      "admin"
-    ],
-    "dj@example.com": [
-      "dj"
-    ]
-  },
+  "discordRoles": { "123456789": ["admin"], "987654321": ["moderator"] },
+  "dashboardUsers": { "admin@example.com": ["admin"], "dj@example.com": ["dj"] },
   "commands": {
-    "sound.music.view": [
-      "dj",
-      "moderator",
-      "admin"
-    ],
-    "sound.music.upload": [
-      "admin"
-    ],
-    "sound.music.delete": [
-      "admin"
-    ],
-    "discord.join": [
-      "dj",
-      "moderator",
-      "admin"
-    ],
-    "discord.play": [
-      "dj",
-      "moderator",
-      "admin"
-    ],
-    "discord.effect": [
-      "dj",
-      "moderator",
-      "admin"
-    ],
-    "discord.leave": [
-      "dj",
-      "moderator",
-      "admin"
-    ],
-    "discord.stop": [
-      "moderator",
-      "admin"
-    ],
-    "player.state.view": [
-      "moderator",
-      "admin"
-    ],
-    "player.join": [
-      "moderator",
-      "admin"
-    ],
-    "player.leave": [
-      "moderator",
-      "admin"
-    ],
-    "player.stop": [
-      "moderator",
-      "admin"
-    ],
-    "player.play": [
-      "dj",
-      "moderator",
-      "admin"
-    ],
-    "player.effect": [
-      "dj",
-      "moderator",
-      "admin"
-    ]
+    "sound.music.view": ["dj", "moderator", "admin"],
+    "sound.music.upload": ["admin"],
+    "sound.music.delete": ["admin"],
+    "discord.join": ["dj", "moderator", "admin"],
+    "discord.play": ["dj", "moderator", "admin"],
+    "discord.effect": ["dj", "moderator", "admin"],
+    "discord.songs": ["dj", "moderator", "admin"],
+    "discord.effects": ["dj", "moderator", "admin"],
+    "discord.leave": ["dj", "moderator", "admin"],
+    "discord.stop": ["moderator", "admin"],
+    "player.state.view": ["moderator", "admin"],
+    "player.join": ["moderator", "admin"],
+    "player.leave": ["moderator", "admin"],
+    "player.stop": ["moderator", "admin"],
+    "player.play": ["dj", "moderator", "admin"],
+    "player.effect": ["dj", "moderator", "admin"]
   }
 }

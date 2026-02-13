@@ -10,4 +10,5 @@ export const validationSchema = Joi.object({
   HIBIKI_EFFECTS_DIR: Joi.string().default('storage/effects'),
   HIBIKI_WEB_DIST: Joi.string().default('apps/bot/web-dist'),
   HIBIKI_DB_PATH: Joi.string().default('storage/data/hibiki.sqlite'),
+  HIBIKI_DASHBOARD_DEFAULT_ROLES: Joi.string().optional().allow(''),
 });

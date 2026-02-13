@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -6,8 +6,8 @@ import { resolve } from 'path';
 import { AppController } from './app.controller';
 import { configuration } from './config/configuration';
 import { validationSchema } from './config/validation';
+import { DashboardDefaultRolesMiddleware } from './dashboard-default-roles.middleware';
 import { SoundModule } from './sound/sound.module';
-import { PlayerModule } from './player/player.module';
 import { DiscordModule } from './discord/discord.module';
 import { PersistenceModule } from './persistence/persistence.module';
 import { PlayerSnapshot } from './persistence/player-snapshot.entity';
@@ -18,6 +18,11 @@ import { PlayerSnapshot } from './persistence/player-snapshot.entity';
       isGlobal: true,
       load: [configuration],
       validationSchema,
+      // Load .env from repo root (when running via pnpm dev) or cwd
+      envFilePath: [
+        resolve(__dirname, '../../../.env'),
+        resolve(process.cwd(), '.env'),
+      ],
     }),
     ServeStaticModule.forRootAsync({
       inject: [ConfigService],
@@ -48,9 +53,13 @@ import { PlayerSnapshot } from './persistence/player-snapshot.entity';
     }),
     PersistenceModule,
     SoundModule,
-    PlayerModule,
     DiscordModule,
   ],
   controllers: [AppController],
+  providers: [DashboardDefaultRolesMiddleware],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(DashboardDefaultRolesMiddleware).forRoutes('*');
+  }
+}

@@ -1,15 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
 :root {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  line-height: 1.5;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
   font-weight: 400;
-  color: #0f172a;
-  background-color: #f4f5fb;
-  --color-primary: #5865f2;
-  --color-background: #ffffff;
-  --color-background-soft: #f8f9ff;
-  --color-border: #e3e8f7;
-  --color-border-soft: #f0f2fb;
-  --color-text-soft: #64748b;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+
+  /* Dark theme – control panel / studio vibe */
+  --color-bg: #0c0c0e;
+  --color-bg-elevated: #161618;
+  --color-bg-card: #1a1a1d;
+  --color-border: #27272a;
+  --color-border-focus: #3f3f46;
+  --color-text: #f4f4f5;
+  --color-text-muted: #a1a1aa;
+  --color-text-dim: #71717a;
+  --color-accent: #06b6d4;
+  --color-accent-hover: #22d3ee;
+  --color-accent-muted: rgba(6, 182, 212, 0.15);
+  --color-success: #22c55e;
+  --color-success-muted: rgba(34, 197, 94, 0.15);
+  --color-error: #ef4444;
+  --color-error-muted: rgba(239, 68, 68, 0.15);
+  --color-live: #22c55e;
+  --color-snapshot: #71717a;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 9999px;
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --transition: 0.2s ease;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
@@ -17,10 +43,12 @@ body {
   min-height: 100vh;
 }
 
-* {
-  box-sizing: border-box;
+button {
+  font: inherit;
+  cursor: pointer;
 }
 
-button {
+select,
+input {
   font: inherit;
 }

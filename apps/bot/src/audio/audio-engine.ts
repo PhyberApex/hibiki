@@ -8,29 +8,36 @@ import {
   NoSubscriberBehavior,
   StreamType,
 } from '@discordjs/voice';
-import AudioMixer, { Mixer, MixerInput } from 'audio-mixer';
+import { AudioMixer } from 'node-audio-mixer';
 
+/** Mixer input: Writable stream with destroy() */
+interface MixerInputLike {
+  destroy(): void;
+}
+
+/** One active stream (music or effect) feeding into the mixer */
 interface ActiveStream {
   ffmpeg: prism.FFmpeg;
-  input: MixerInput;
+  input: MixerInputLike;
   loop?: boolean;
   filePath: string;
   volume: number;
 }
 
 export class AudioEngine {
-  private readonly mixer: Mixer;
+  private readonly mixer: AudioMixer;
   private readonly output = new PassThrough();
   private readonly player: AudioPlayer;
   private readonly resource: AudioResource<null>;
   private background?: ActiveStream;
 
   constructor(private readonly volumes = { music: 85, effects: 90 }) {
-    this.mixer = new AudioMixer.Mixer({
+    this.mixer = new AudioMixer({
+      sampleRate: 48000,
       channels: 2,
       bitDepth: 16,
-      sampleRate: 48000,
-      clearInterval: 200,
+      generateSilence: true,
+      autoClose: false,
     });
     this.mixer.pipe(this.output);
     this.player = createAudioPlayer({
@@ -61,6 +68,7 @@ export class AudioEngine {
 
   destroy() {
     this.stopBackground();
+    this.mixer.destroy();
     this.player.stop(true);
     this.output.destroy();
   }
@@ -70,19 +78,22 @@ export class AudioEngine {
     volume: number,
     loop: boolean,
   ): ActiveStream {
-    const input = this.mixer.input({
+    const input = this.mixer.createAudioInput({
+      sampleRate: 48000,
       channels: 2,
       bitDepth: 16,
-      sampleRate: 48000,
       volume,
     });
     const ffmpeg = this.createFfmpeg(filePath);
     ffmpeg.pipe(input);
-    ffmpeg.once('close', () => {
-      input.close();
-      if (loop) {
+    ffmpeg.once('close', (code) => {
+      input.destroy();
+      if (loop && this.background?.filePath === filePath) {
         this.background = this.spawnInput(filePath, volume, loop);
       }
+    });
+    ffmpeg.once('error', () => {
+      input.destroy();
     });
     return { ffmpeg, input, loop, filePath, volume };
   }
@@ -111,7 +122,7 @@ export class AudioEngine {
     if (!this.background) return;
     this.background.ffmpeg.removeAllListeners();
     this.background.ffmpeg.destroy();
-    this.background.input.close();
+    this.background.input.destroy();
     this.background = undefined;
   }
 }

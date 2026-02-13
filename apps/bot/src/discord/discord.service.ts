@@ -13,6 +13,7 @@ import {
   VoiceBasedChannel,
 } from 'discord.js';
 import { PlayerService } from '../player/player.service';
+import { SoundLibraryService } from '../sound/sound.service';
 import { PermissionConfigService, PermissionRole } from '../permissions';
 
 export interface GuildDirectoryEntry {
@@ -30,6 +31,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly config: ConfigService,
     private readonly player: PlayerService,
+    private readonly sounds: SoundLibraryService,
     private readonly permissions: PermissionConfigService,
   ) {
     this.prefix = this.config.get<string>('discord.commandPrefix', '!');
@@ -148,6 +150,12 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       case 'effect':
         await this.handlePlayEffect(message, args);
         break;
+      case 'songs':
+        await this.handleListSongs(message);
+        break;
+      case 'effects':
+        await this.handleListEffects(message);
+        break;
       default:
         await message.reply('Unknown command.');
     }
@@ -175,34 +183,92 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handlePlayMusic(message: Message, args: string[]) {
-    const trackId = args[0];
-    if (!trackId) {
-      await message.reply('Provide a track ID.');
+    const idOrName = args[0];
+    if (!idOrName) {
+      await message.reply(
+        `Provide a track name or ID. Use \`${this.prefix}songs\` to list.`,
+      );
       return;
     }
 
-    const channel = message.member?.voice.channel as VoiceBasedChannel | null;
-    const file = await this.player.playMusic(
-      message.guild!.id,
-      trackId,
-      channel ?? undefined,
-    );
-    await message.reply(`Queued **${file.name}**.`);
+    try {
+      const channel = message.member?.voice.channel as VoiceBasedChannel | null;
+      const file = await this.player.playMusic(
+        message.guild!.id,
+        idOrName,
+        channel ?? undefined,
+      );
+      await message.reply(`Playing **${file.name}**.`);
+    } catch (err) {
+      await message.reply(
+        err instanceof Error ? err.message : 'Could not play that track.',
+      );
+    }
   }
 
   private async handlePlayEffect(message: Message, args: string[]) {
-    const effectId = args[0];
-    if (!effectId) {
-      await message.reply('Provide an effect ID.');
+    const idOrName = args[0];
+    if (!idOrName) {
+      await message.reply(
+        `Provide an effect name or ID. Use \`${this.prefix}effects\` to list.`,
+      );
       return;
     }
 
-    const channel = message.member?.voice.channel as VoiceBasedChannel | null;
-    const file = await this.player.playEffect(
-      message.guild!.id,
-      effectId,
-      channel ?? undefined,
-    );
-    await message.reply(`Triggered **${file.name}**.`);
+    try {
+      const channel = message.member?.voice.channel as VoiceBasedChannel | null;
+      const file = await this.player.playEffect(
+        message.guild!.id,
+        idOrName,
+        channel ?? undefined,
+      );
+      await message.reply(`Triggered **${file.name}**.`);
+    } catch (err) {
+      await message.reply(
+        err instanceof Error ? err.message : 'Could not play that effect.',
+      );
+    }
+  }
+
+  private async handleListSongs(message: Message) {
+    try {
+      const list = await this.sounds.list('music');
+      if (list.length === 0) {
+        await message.reply('No songs uploaded yet. Use the dashboard to add music.');
+        return;
+      }
+      const maxShow = 15;
+      const lines = list.slice(0, maxShow).map(
+        (s, i) => `${i + 1}. **${s.name}** (\`${s.id}\`)`,
+      );
+      const text =
+        lines.join('\n') +
+        (list.length > maxShow ? `\n… and ${list.length - maxShow} more.` : '');
+      await message.reply(`**Songs:**\n${text}\n\nUse \`${this.prefix}play <name or id>\` to play.`);
+    } catch (err) {
+      this.logger.warn('List songs failed', err);
+      await message.reply('Failed to list songs.');
+    }
+  }
+
+  private async handleListEffects(message: Message) {
+    try {
+      const list = await this.sounds.list('effects');
+      if (list.length === 0) {
+        await message.reply('No effects uploaded yet. Use the dashboard to add effects.');
+        return;
+      }
+      const maxShow = 15;
+      const lines = list.slice(0, maxShow).map(
+        (s, i) => `${i + 1}. **${s.name}** (\`${s.id}\`)`,
+      );
+      const text =
+        lines.join('\n') +
+        (list.length > maxShow ? `\n… and ${list.length - maxShow} more.` : '');
+      await message.reply(`**Effects:**\n${text}\n\nUse \`${this.prefix}effect <name or id>\` to trigger.`);
+    } catch (err) {
+      this.logger.warn('List effects failed', err);
+      await message.reply('Failed to list effects.');
+    }
   }
 }

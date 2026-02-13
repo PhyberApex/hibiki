@@ -79,6 +79,33 @@ export class SoundLibraryService implements OnModuleInit {
     };
   }
 
+  /**
+   * Resolve by exact id first, then by name (case-insensitive contains).
+   */
+  async getFileByIdOrName(
+    category: SoundCategory,
+    idOrName: string,
+  ): Promise<SoundFile & { path: string }> {
+    try {
+      return await this.getFile(category, idOrName);
+    } catch {
+      // fall back to name match
+    }
+    const list = await this.list(category);
+    const lower = idOrName.toLowerCase();
+    const match = list.find(
+      (f) =>
+        f.id.toLowerCase() === lower ||
+        f.name.toLowerCase().includes(lower),
+    );
+    if (!match) {
+      throw new NotFoundException(
+        `No ${category} found matching '${idOrName}'`,
+      );
+    }
+    return this.getFile(category, match.id);
+  }
+
   private async findFilename(
     category: SoundCategory,
     id: string,

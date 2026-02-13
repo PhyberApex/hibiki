@@ -18,7 +18,12 @@ Hibiki is a NestJS + Discord.js service that powers a Discord music bot, REST AP
 
 - Node.js 22.12.0 (`.nvmrc` is provided, run `nvm use`)
 - pnpm 10.29.x (`corepack enable` to install)
-- ffmpeg installed locally (required for audio playback)
+- **ffmpeg** — required for decoding and playing audio. Install for your OS:
+  - **macOS:** `brew install ffmpeg`
+  - **Ubuntu/Debian:** `sudo apt install ffmpeg`
+  - **Windows:** `choco install ffmpeg` or install from [ffmpeg.org](https://ffmpeg.org/download.html)
+
+  If ffmpeg is missing, playback will fail with "FFmpeg/avconv not found!".
 
 ### One-time setup
 
@@ -30,7 +35,7 @@ pnpm install
 
 ### Environment variables
 
-Create `.env` at the workspace root (or use your shell env) with:
+Copy `.env.sample` to `.env` at the workspace root (or use your shell env) with:
 
 ```bash
 DISCORD_TOKEN=...
@@ -39,6 +44,8 @@ DISCORD_GUILD_ID= (optional default guild)
 HIBIKI_PREFIX=!
 HIBIKI_DB_PATH=storage/data/hibiki.sqlite
 HIBIKI_STORAGE_PATH=storage
+# Optional: set so the web dashboard can call the API without login (e.g. HIBIKI_DASHBOARD_DEFAULT_ROLES=admin)
+# HIBIKI_DASHBOARD_DEFAULT_ROLES=admin
 ```
 
 The defaults keep everything inside `storage/` so Docker volumes can persist uploads + SQLite.
@@ -48,6 +55,7 @@ The defaults keep everything inside `storage/` so Docker volumes can persist upl
 ```bash
 # dev mode (bot + Vue dev server)
 pnpm dev
+# Open the Vue dev server URL (e.g. http://localhost:5173); it proxies /api to the bot.
 
 # build production assets (Vue → Nest)
 pnpm build
@@ -62,6 +70,22 @@ pnpm --filter @hibiki/bot start:prod
 pnpm --filter @hibiki/bot test
 pnpm run lint
 ```
+
+## Discord commands
+
+All commands use the configurable prefix (default `!`). Permissions are defined in `permission-config.json`.
+
+| Command | Description |
+| --- | --- |
+| `!join` | Join your current voice channel. |
+| `!leave` | Disconnect from the guild. |
+| `!stop` | Stop playback. |
+| `!songs` | List available music (name + id). |
+| `!effects` | List available sound effects. |
+| `!play <name or id>` | Play a song by name or id (e.g. `!play ambient` or `!play my-track-123`). |
+| `!effect <name or id>` | Trigger an effect by name or id. |
+
+Use `!songs` and `!effects` to see what’s available, then `!play` / `!effect` with the name or id.
 
 ## REST API quick reference
 
@@ -81,11 +105,30 @@ All routes are protected by the permission guard (roles defined in `permission-c
 - SQLite snapshots: `storage/data/hibiki.sqlite`
 - Sound uploads: `storage/music`, `storage/effects`
 
-When running in Docker, mount `./storage` to a volume so uploads + snapshots survive container restarts:
+When running in Docker, mount `./storage` to a volume so uploads + snapshots survive container restarts.
+
+## Deploy with Docker
+
+From the **repo root**:
+
+1. Copy `.env.sample` to `.env` and set `DISCORD_TOKEN` and `DISCORD_CLIENT_ID`.
+2. Create a `storage` directory (or let Docker create it when the volume mounts):
+   ```bash
+   mkdir -p storage
+   ```
+3. Run with Docker Compose:
+   ```bash
+   docker compose up -d
+   ```
+   The dashboard and API are at `http://localhost:3000`. The `./storage` volume persists SQLite and uploaded sounds.
+
+To run the pre-built image without Compose:
 
 ```bash
-docker run \
+docker run -d \
+  -p 3000:3000 \
   -v $(pwd)/storage:/app/storage \
+  --env-file .env \
   ghcr.io/phyberapex/hibiki:latest
 ```
 

@@ -28,13 +28,27 @@
 ## Backlog / things still to explore
 1. **Queue awareness:** snapshots only record last track; no queued tracks or resume state. Consider storing queue metadata if resumed playback matters.
 2. **Guild/channel metadata:** directory endpoint relies on cached Discord data; no caching/TTL yet. Could add periodic refresh + error feedback in UI.
-3. **Dashboard polish:** add success/error toasts for player actions, and maybe show currently playing track art/upload previews.
+3. **Dashboard polish (done):** success/error toasts for player actions added; track/effect selection is now dropdowns (music + effects lists). Optional: show currently playing track art/upload previews.
 4. **Testing:** add integration/e2e coverage (supertest) hitting `/api/player/*` with mocked guards, plus Discord service unit tests using discord.js mocks.
-5. **Deployment docs:** mention sample docker-compose (bot + volume + env file). Currently only README snippet.
+5. **Deployment docs (done):** `.env.sample` created; `docker-compose.yml` added; bot README documents “Deploy with Docker” with compose and `docker run` examples.
+
+## Original prompt checklist (from user)
+
+- **Name:** Japanese-inspired ✓ (Hibiki)
+- **Web UI:** TypeScript + Vue ✓
+- **Backend:** TypeScript + NestJS ✓
+- **Single Docker container** ✓ (Dockerfile + docker-compose)
+- **Releases:** release-please + Docker on release (workflows on `main`; if you use `develop` as default, either merge to `main` for releases or change workflow branches)
+- **Discord bot** ✓ (!join, !leave, !stop, !play, !effect, !songs, !effects)
+- **Web UI:** See where bot is running + manage uploaded sounds ✓
+- **Discord-only control** ✓ (text commands; !songs/!effects list tracks; !play/!effect accept name or id)
+- **Two sound types** ✓ (music = background; effects = mixed in via audio-mixer)
+
+Gaps addressed in this pass: dashboard API auth (set `HIBIKI_DASHBOARD_DEFAULT_ROLES=admin` so UI works without login), Vite proxy for dev, Discord !songs/!effects and play-by-name.
 
 ## How to resume later
-- Pull `develop`, run `pnpm install`, copy `.env.sample` (not yet created) or reuse docs above.
-- `pnpm dev` to iterate; `pnpm run lint` before committing (conventional commits, e.g. `feat: ...`).
-- Outstanding work primarily sits in `apps/web` (UX polish) and `apps/bot/src/player/*` for richer queue logic.
+- Pull `develop`, run `pnpm install`, copy `.env.sample` to `.env` and set Discord vars. Set `HIBIKI_DASHBOARD_DEFAULT_ROLES=admin` so the dashboard can call the API.
+- `pnpm dev` to iterate (Vite proxies `/api` to the bot); `pnpm run lint` before committing (conventional commits, e.g. `feat: ...`).
+- Outstanding work: queue/resume in `apps/bot/src/player/*` and `apps/bot/src/audio/*`, plus integration/e2e tests.
 
 Have fun, future me 👾

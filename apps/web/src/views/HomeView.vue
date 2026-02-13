@@ -8,6 +8,11 @@ import PlayerControls from '@/components/PlayerControls.vue'
 const state = ref<PlayerStateItem[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
+/** Bump when sounds are uploaded/deleted so PlayerControls refetches dropdowns */
+const soundsVersion = ref(0)
+function onSoundsUpdated() {
+  soundsVersion.value += 1
+}
 
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
@@ -48,68 +53,67 @@ onMounted(() => {
         <p class="eyebrow">Status</p>
         <h1>Control Center</h1>
       </div>
-      <button type="button" class="ghost" @click="loadState" :disabled="loading">
-        {{ loading ? 'Refreshing…' : 'Refresh state' }}
+      <button type="button" class="btn btn-ghost" @click="loadState" :disabled="loading">
+        {{ loading ? 'Refreshing…' : 'Refresh' }}
       </button>
     </header>
+
     <section class="panel">
       <div class="panel-header">
         <div>
-          <p class="eyebrow">Live playback</p>
+          <p class="eyebrow">Playback</p>
           <h2>Player state</h2>
         </div>
-        <span class="tag" :class="{ danger: error }">
-          {{ error ? 'Issue' : loading ? 'Syncing' : 'Live' }}
+        <span class="tag" :class="{ 'tag-error': error }">
+          {{ error ? 'Error' : loading ? 'Syncing' : 'Live' }}
         </span>
       </div>
-      <p v-if="loading">Loading player state…</p>
-      <p v-else-if="error" class="error">{{ error }}</p>
-      <p v-else-if="state.length === 0">No guilds connected.</p>
+      <p v-if="loading" class="panel-message">Loading player state…</p>
+      <p v-else-if="error" class="panel-message panel-error">{{ error }}</p>
+      <p v-else-if="state.length === 0" class="panel-message">No guilds connected.</p>
 
       <ul v-else class="state-list">
         <li v-for="guild in state" :key="guild.guildId" class="state-card">
-          <div class="row">
-            <span class="label">Guild</span>
-            <span class="value">{{ guild.guildId }}</span>
-          </div>
-          <div class="row">
-            <span class="label">Channel</span>
-            <span class="value">
-              {{ guild.connectedChannelName ?? '—' }}
+          <div class="state-card-header">
+            <span class="state-guild-id">{{ guild.guildId }}</span>
+            <span :class="['pill', guild.source === 'live' ? 'pill-live' : 'pill-snapshot']">
+              {{ guild.source === 'live' ? 'Live' : 'Snapshot' }}
             </span>
           </div>
-          <div class="row">
-            <span class="label">Status</span>
-            <span class="value status-stack">
-              <span :class="['pill', guild.source === 'live' ? 'pill-live' : 'pill-snapshot']">
-                {{ guild.source === 'live' ? 'Live' : 'Snapshot' }}
-              </span>
-              <span class="subtle">{{ guild.isIdle ? 'Idle' : 'Playing' }}</span>
-            </span>
-          </div>
-          <div class="row" v-if="guild.lastUpdated">
-            <span class="label">Last update</span>
-            <span class="value subtle">{{ formatRelative(guild.lastUpdated) }}</span>
-          </div>
-          <div class="row">
-            <span class="label">Track</span>
-            <span class="value">
-              <template v-if="guild.track">
-                {{ guild.track.name }}
-                <small>({{ guild.track.category }})</small>
-              </template>
-              <template v-else>—</template>
-            </span>
-          </div>
+          <dl class="state-dl">
+            <div class="state-row">
+              <dt>Channel</dt>
+              <dd>{{ guild.connectedChannelName ?? '—' }}</dd>
+            </div>
+            <div class="state-row">
+              <dt>Status</dt>
+              <dd class="state-status">{{ guild.isIdle ? 'Idle' : 'Playing' }}</dd>
+            </div>
+            <div v-if="guild.lastUpdated" class="state-row">
+              <dt>Updated</dt>
+              <dd class="state-muted">{{ formatRelative(guild.lastUpdated) }}</dd>
+            </div>
+            <div class="state-row">
+              <dt>Track</dt>
+              <dd>
+                <template v-if="guild.track">
+                  {{ guild.track.name }}
+                  <span class="state-category">{{ guild.track.category }}</span>
+                </template>
+                <template v-else>—</template>
+              </dd>
+            </div>
+          </dl>
         </li>
       </ul>
     </section>
 
-    <PlayerControls />
+    <PlayerControls :sounds-version="soundsVersion" />
+
 
     <div class="sound-grid">
-      <SoundList title="Music" type="music" />
-      <SoundList title="Effects" type="effects" />
+      <SoundList title="Music" type="music" @uploaded="onSoundsUpdated" />
+      <SoundList title="Effects" type="effects" @uploaded="onSoundsUpdated" />
     </div>
   </main>
 </template>
@@ -119,42 +123,101 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  padding: 2rem;
+  max-width: 1000px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-dim);
+}
+
+.page-header h1 {
+  margin: 0.2rem 0 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.btn {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background var(--transition), opacity var(--transition);
+}
+
+.btn-ghost {
+  background: var(--color-bg-card);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .panel {
-  width: 100%;
-  background: var(--color-background-soft);
-  border-radius: 12px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   padding: 1.5rem;
-  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.15);
+  box-shadow: var(--shadow-card);
 }
 
-.sound-grid {
-  display: grid;
-  gap: 1.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-}
-
-header {
+.panel-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
 }
 
-button {
-  border: none;
-  border-radius: 999px;
-  padding: 0.4rem 1.25rem;
-  background: var(--color-primary, #646cff);
-  color: white;
-  cursor: pointer;
+.panel-header .eyebrow {
+  margin: 0;
 }
 
-button:disabled {
-  opacity: 0.6;
-  cursor: progress;
+.panel-header h2 {
+  margin: 0.2rem 0 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.tag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-full);
+  background: var(--color-success-muted);
+  color: var(--color-live);
+}
+.tag-error {
+  background: var(--color-error-muted);
+  color: var(--color-error);
+}
+
+.panel-message {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+.panel-error {
+  color: var(--color-error);
 }
 
 .state-list {
@@ -166,61 +229,83 @@ button:disabled {
 }
 
 .state-card {
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 1rem;
-  background: var(--color-background);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.25rem;
 }
 
-.row {
+.state-card-header {
   display: flex;
   justify-content: space-between;
-  font-size: 0.95rem;
-  margin-bottom: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
 }
 
-.label {
-  font-weight: 600;
-  color: var(--color-text-soft);
-}
-
-.value {
+.state-guild-id {
+  font-size: 0.8rem;
   font-weight: 500;
-}
-
-.error {
-  color: #f87171;
+  color: var(--color-text-dim);
+  font-family: ui-monospace, monospace;
 }
 
 .pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  margin-right: 0.4rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-full);
 }
-
 .pill-live {
-  background: #d9f99d;
-  color: #1a2e05;
+  background: var(--color-success-muted);
+  color: var(--color-live);
 }
-
 .pill-snapshot {
-  background: #e2e8f0;
-  color: #0f172a;
+  background: var(--color-border);
+  color: var(--color-text-muted);
 }
 
-.subtle {
-  color: var(--color-text-soft);
-  font-size: 0.85rem;
+.state-dl {
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
 }
 
-.status-stack {
+.state-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  align-items: center;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.9rem;
+  gap: 1rem;
+}
+
+.state-row dt {
+  margin: 0;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.state-row dd {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.state-status {
+  font-weight: 500;
+}
+
+.state-muted {
+  color: var(--color-text-muted) !important;
+}
+
+.state-category {
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+  margin-left: 0.35rem;
+}
+
+.sound-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 </style>

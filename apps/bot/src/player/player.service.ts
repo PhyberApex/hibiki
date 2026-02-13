@@ -54,11 +54,11 @@ export class PlayerService {
 
   async playMusic(
     guildId: string,
-    trackId: string,
+    trackIdOrName: string,
     channel?: VoiceBasedChannel,
   ) {
     const manager = await this.resolveManager(guildId, channel);
-    const file = await this.sounds.getFile('music', trackId);
+    const file = await this.sounds.getFileByIdOrName('music', trackIdOrName);
     manager.playMusic(file.path, {
       id: file.id,
       name: file.name,
@@ -78,11 +78,11 @@ export class PlayerService {
 
   async playEffect(
     guildId: string,
-    effectId: string,
+    effectIdOrName: string,
     channel?: VoiceBasedChannel,
   ) {
     const manager = await this.resolveManager(guildId, channel);
-    const file = await this.sounds.getFile('effects', effectId);
+    const file = await this.sounds.getFileByIdOrName('effects', effectIdOrName);
     manager.playEffect(file.path);
     this.logger.log(`Triggered effect '${file.name}' on guild ${guildId}`);
     await this.persistManagerState(guildId, {
@@ -111,7 +111,7 @@ export class PlayerService {
               id: snapshot.trackId,
               name: snapshot.trackName ?? 'Unknown',
               filename: snapshot.trackFilename ?? 'unknown',
-              category: (snapshot.trackCategory ?? 'music') as SoundCategory,
+              category: snapshot.trackCategory ?? 'music',
             }
           : null,
         source: 'snapshot',
