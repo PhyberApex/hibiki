@@ -21,6 +21,19 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
+## Hibiki Architecture
+
+Hibiki is structured into three cooperating parts:
+
+- **Discord bot** – `apps/bot/src/discord/discord.service.ts` boots a Discord.js client, parses prefix commands (`join`, `leave`, `play`, `effect`, `stop`), and checks every invocation against the shared permission map.
+- **REST API** – Nest controllers expose the sound library and player state. Guards from `apps/bot/src/permissions` wrap each endpoint so the same permission config governs REST + Discord flows.
+- **Vue dashboard** – `apps/web` polls `/api/player/state` (and future endpoints) to render guild/channel/track status. Requests flow through the Nest app, so CORS is already configured.
+
+### Permissions & Persistence
+
+- The allow/deny baseline lives in `apps/bot/src/permissions/permission-config.json`, mapping Discord role IDs, dashboard emails, and command keys to roles (`admin`, `moderator`, `dj`). Update this file to grant or revoke access.
+- Player state is kept in-memory inside `PlayerService`, while sound uploads persist on disk (`storage/music`, `storage/effects`). No DB is required yet; add one when multi-instance coordination is needed.
+
 ## Description
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
