@@ -31,6 +31,12 @@ Hibiki is structured into three cooperating parts:
 
 ### Permissions & Persistence
 
+### REST Endpoints
+
+- `GET /api/player/state` – dashboard poll for guild/channel status.
+- `POST /api/player/{join,leave,stop,play,effect}` – mirror Discord commands for dashboard control (guarded by permission keys).
+- `GET/POST/DELETE /api/sounds/*` – manage music/effect files stored on disk.
+
 - The allow/deny baseline lives in `apps/bot/src/permissions/permission-config.json`, mapping Discord role IDs, dashboard emails, and command keys to roles (`admin`, `moderator`, `dj`). Update this file to grant or revoke access.
 - Player state is kept in-memory inside `PlayerService`, while sound uploads persist on disk (`storage/music`, `storage/effects`). No DB is required yet; add one when multi-instance coordination is needed.
 

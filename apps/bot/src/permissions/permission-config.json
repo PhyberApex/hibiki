@@ -58,6 +58,24 @@
     "player.join": [
       "moderator",
       "admin"
+    ],
+    "player.leave": [
+      "moderator",
+      "admin"
+    ],
+    "player.stop": [
+      "moderator",
+      "admin"
+    ],
+    "player.play": [
+      "dj",
+      "moderator",
+      "admin"
+    ],
+    "player.effect": [
+      "dj",
+      "moderator",
+      "admin"
     ]
   }
 }

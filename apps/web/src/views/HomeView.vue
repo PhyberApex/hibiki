@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import type { PlayerStateItem } from '@/api/player'
 import { fetchPlayerState } from '@/api/player'
 import SoundList from '@/components/SoundList.vue'
+import PlayerControls from '@/components/PlayerControls.vue'
 
 const state = ref<PlayerStateItem[]>([])
 const loading = ref(true)
@@ -68,6 +69,8 @@ onMounted(() => {
         </li>
       </ul>
     </section>
+
+    <PlayerControls />
 
     <div class="sound-grid">
       <SoundList title="Music" type="music" />

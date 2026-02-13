@@ -57,3 +57,34 @@ export class PlayerController {
     return { status: 'ok' };
   }
 }
+
+  @Post('leave')
+  @UseGuards(new PermissionGuard('player.leave'))
+  async leave(@Body('guildId') guildId: string) {
+    await this.player.disconnect(guildId);
+    return { status: 'ok' };
+  }
+
+  @Post('stop')
+  @UseGuards(new PermissionGuard('player.stop'))
+  async stop(@Body('guildId') guildId: string) {
+    await this.player.stop(guildId);
+    return { status: 'ok' };
+  }
+
+  @Post('play')
+  @UseGuards(new PermissionGuard('player.play'))
+  async play(@Body() body: PlayPayload) {
+    const channel = body.channelId ? this.resolveChannel(body.guildId, body.channelId) : undefined;
+    const track = await this.player.playMusic(body.guildId, body.trackId, channel);
+    return { status: 'ok', track };
+  }
+
+  @Post('effect')
+  @UseGuards(new PermissionGuard('player.effect'))
+  async effect(@Body() body: EffectPayload) {
+    const channel = body.channelId ? this.resolveChannel(body.guildId, body.channelId) : undefined;
+    const effect = await this.player.playEffect(body.guildId, body.effectId, channel);
+    return { status: 'ok', effect };
+  }
+
