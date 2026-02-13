@@ -30,6 +30,7 @@ export class SoundController {
   }
 
   @Post('music')
+  @UseGuards(new PermissionGuard('sound.music.upload'))
   @UseInterceptors(FileInterceptor('file'))
   async uploadMusic(@UploadedFile() file?: Express.Multer.File) {
     if (!file) {
@@ -39,6 +40,7 @@ export class SoundController {
   }
 
   @Post('effects')
+  @UseGuards(new PermissionGuard('sound.effects.upload'))
   @UseInterceptors(FileInterceptor('file'))
   async uploadEffect(@UploadedFile() file?: Express.Multer.File) {
     if (!file) {
@@ -48,11 +50,13 @@ export class SoundController {
   }
 
   @Delete('music/:id')
+  @UseGuards(new PermissionGuard('sound.music.delete'))
   deleteMusic(@Param('id') id: string) {
     return this.sounds.remove('music', id);
   }
 
   @Delete('effects/:id')
+  @UseGuards(new PermissionGuard('sound.effects.delete'))
   deleteEffect(@Param('id') id: string) {
     return this.sounds.remove('effects', id);
   }
