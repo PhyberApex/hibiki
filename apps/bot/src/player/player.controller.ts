@@ -28,7 +28,7 @@ export class PlayerController {
   ) {}
 
   @Get('state')
-  @UseGuards(new PermissionGuard('player.state.view'))
+  @UseGuards(PermissionGuard('player.state.view'))
   getState() {
     return this.player.getState();
   }
@@ -50,7 +50,7 @@ export class PlayerController {
   }
 
   @Post('join')
-  @UseGuards(new PermissionGuard('player.join'))
+  @UseGuards(PermissionGuard('player.join'))
   async join(@Body() body: JoinPayload) {
     const channel = this.resolveChannel(body.guildId, body.channelId);
     await this.player.connect(channel);
@@ -58,21 +58,21 @@ export class PlayerController {
   }
 
   @Post('leave')
-  @UseGuards(new PermissionGuard('player.leave'))
+  @UseGuards(PermissionGuard('player.leave'))
   async leave(@Body('guildId') guildId: string) {
     await this.player.disconnect(guildId);
     return { status: 'ok' };
   }
 
   @Post('stop')
-  @UseGuards(new PermissionGuard('player.stop'))
+  @UseGuards(PermissionGuard('player.stop'))
   async stop(@Body('guildId') guildId: string) {
     await this.player.stop(guildId);
     return { status: 'ok' };
   }
 
   @Post('play')
-  @UseGuards(new PermissionGuard('player.play'))
+  @UseGuards(PermissionGuard('player.play'))
   async play(@Body() body: PlayPayload) {
     const channel = body.channelId ? this.resolveChannel(body.guildId, body.channelId) : undefined;
     const track = await this.player.playMusic(body.guildId, body.trackId, channel);
@@ -80,7 +80,7 @@ export class PlayerController {
   }
 
   @Post('effect')
-  @UseGuards(new PermissionGuard('player.effect'))
+  @UseGuards(PermissionGuard('player.effect'))
   async effect(@Body() body: EffectPayload) {
     const channel = body.channelId ? this.resolveChannel(body.guildId, body.channelId) : undefined;
     const effect = await this.player.playEffect(body.guildId, body.effectId, channel);

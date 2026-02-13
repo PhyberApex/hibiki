@@ -1,16 +1,19 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common'
-import { PermissionConfigService, PermissionRole } from './permission-config.service'
+import { CanActivate, ExecutionContext, Injectable, mixin, Type } from '@nestjs/common'
+import { PermissionConfigService } from './permission-config.service'
+import { PermissionRole } from './permission.types'
 
-@Injectable()
-export class PermissionGuard implements CanActivate {
-  constructor(
-    private readonly permissionService: PermissionConfigService,
-    private readonly commandKey: string,
-    private readonly roleExtractor?: (context: ExecutionContext) => Iterable<PermissionRole>,
-  ) {}
+type RoleExtractor = (context: ExecutionContext) => Iterable<PermissionRole>
 
-  canActivate(context: ExecutionContext): boolean {
-    const roles = this.roleExtractor?.(context) ?? context.switchToHttp().getRequest().user?.roles ?? []
-    return this.permissionService.hasPermission(this.commandKey, roles)
+export function PermissionGuard(commandKey: string, roleExtractor?: RoleExtractor): Type<CanActivate> {
+  @Injectable()
+  class PermissionGuardMixin implements CanActivate {
+    constructor(private readonly permissions: PermissionConfigService) {}
+
+    canActivate(context: ExecutionContext): boolean {
+      const roles = roleExtractor?.(context) ?? context.switchToHttp().getRequest().user?.roles ?? []
+      return this.permissions.hasPermission(commandKey, roles)
+    }
   }
+
+  return mixin(PermissionGuardMixin)
 }
