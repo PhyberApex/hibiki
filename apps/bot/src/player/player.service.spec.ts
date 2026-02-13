@@ -7,6 +7,7 @@ jest.mock('../audio/guild-audio.manager')
 describe('PlayerService', () => {
   let service: PlayerService
   let sounds: jest.Mocked<SoundLibraryService>
+  let snapshots: jest.Mocked<PlayerSnapshotService>
 
   beforeEach(() => {
     sounds = {
@@ -19,7 +20,8 @@ describe('PlayerService', () => {
       } as any),
     } as unknown as jest.Mocked<SoundLibraryService>
 
-    service = new PlayerService(sounds)
+    snapshots = { upsert: jest.fn(), remove: jest.fn(), list: jest.fn().mockResolvedValue([]) } as unknown as jest.Mocked<PlayerSnapshotService>
+    service = new PlayerService(sounds, snapshots)
   })
 
   it('connects and reuses managers per guild', async () => {

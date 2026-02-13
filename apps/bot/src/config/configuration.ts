@@ -11,4 +11,7 @@ export const configuration = () => ({
     effectsDir: process.env.HIBIKI_EFFECTS_DIR ?? 'storage/effects',
     webDistDir: process.env.HIBIKI_WEB_DIST ?? 'apps/bot/web-dist',
   },
+  database: {
+    path: process.env.HIBIKI_DB_PATH ?? 'storage/data/hibiki.sqlite',
+  },
 });
