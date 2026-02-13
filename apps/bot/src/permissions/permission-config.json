@@ -54,6 +54,10 @@
     "player.state.view": [
       "moderator",
       "admin"
+    ],
+    "player.join": [
+      "moderator",
+      "admin"
     ]
   }
 }
