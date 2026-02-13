@@ -31,3 +31,5 @@ import { DiscordModule } from './discord/discord.module';
   controllers: [AppController],
 })
 export class AppModule {}
+
+// TODO: integrate PermissionGuard when user roles are ready.

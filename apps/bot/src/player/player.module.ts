@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PermissionGuard } from '../permissions/guard';
 import { PlayerService } from './player.service';
 import { SoundModule } from '../sound/sound.module';
 
