@@ -1,12 +1,15 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
+  Query,
   StreamableFile,
   UploadedFile,
   UseInterceptors,
@@ -28,13 +31,45 @@ export class SoundController {
   constructor(private readonly sounds: SoundLibraryService) {}
 
   @Get('music')
-  listMusic(): Promise<SoundFile[]> {
-    return this.sounds.list('music');
+  listMusic(@Query('tag') tag?: string): Promise<SoundFile[]> {
+    return this.sounds.list('music', tag);
   }
 
   @Get('effects')
-  listEffects(): Promise<SoundFile[]> {
-    return this.sounds.list('effects');
+  listEffects(@Query('tag') tag?: string): Promise<SoundFile[]> {
+    return this.sounds.list('effects', tag);
+  }
+
+  @Get('music/tags')
+  listMusicTags(): Promise<string[]> {
+    return this.sounds.getDistinctTags('music');
+  }
+
+  @Get('effects/tags')
+  listEffectsTags(): Promise<string[]> {
+    return this.sounds.getDistinctTags('effects');
+  }
+
+  @Patch('music/:id/tags')
+  setMusicTags(
+    @Param('id') id: string,
+    @Body() body: { tags: string[] },
+  ): Promise<{ tags: string[] }> {
+    const tags = Array.isArray(body?.tags) ? body.tags : [];
+    return this.sounds.setTags('music', id, tags).then(() => ({
+      tags: [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))],
+    }));
+  }
+
+  @Patch('effects/:id/tags')
+  setEffectsTags(
+    @Param('id') id: string,
+    @Body() body: { tags: string[] },
+  ): Promise<{ tags: string[] }> {
+    const tags = Array.isArray(body?.tags) ? body.tags : [];
+    return this.sounds.setTags('effects', id, tags).then(() => ({
+      tags: [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))],
+    }));
   }
 
   @Get('music/:id/file')

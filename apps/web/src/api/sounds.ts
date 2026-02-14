@@ -3,7 +3,9 @@ export interface SoundFile {
   name: string
   filename: string
   category: string
-  path: string
+  path?: string
+  createdAt?: string
+  tags?: string[]
 }
 
 async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -21,12 +23,36 @@ async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   return JSON.parse(text) as T
 }
 
-export function listMusic(signal?: AbortSignal) {
-  return request<SoundFile[]>('/api/sounds/music', { signal })
+export function listMusic(tag?: string, signal?: AbortSignal) {
+  const url = tag ? `/api/sounds/music?tag=${encodeURIComponent(tag)}` : '/api/sounds/music'
+  return request<SoundFile[]>(url, { signal })
 }
 
-export function listEffects(signal?: AbortSignal) {
-  return request<SoundFile[]>('/api/sounds/effects', { signal })
+export function listEffects(tag?: string, signal?: AbortSignal) {
+  const url = tag ? `/api/sounds/effects?tag=${encodeURIComponent(tag)}` : '/api/sounds/effects'
+  return request<SoundFile[]>(url, { signal })
+}
+
+export function listMusicTags(signal?: AbortSignal) {
+  return request<string[]>('/api/sounds/music/tags', { signal })
+}
+
+export function listEffectsTags(signal?: AbortSignal) {
+  return request<string[]>('/api/sounds/effects/tags', { signal })
+}
+
+export function setSoundTags(
+  type: 'music' | 'effects',
+  id: string,
+  tags: string[],
+  signal?: AbortSignal,
+) {
+  return request<{ tags: string[] }>(`/api/sounds/${type}/${id}/tags`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tags }),
+    signal,
+  })
 }
 
 export async function uploadSound(

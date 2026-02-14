@@ -121,7 +121,7 @@ onMounted(() => {
       </ul>
     </section>
 
-    <PlayerControls :sounds-version="soundsVersion" @action-done="loadState" />
+    <PlayerControls :player-state="state" :sounds-version="soundsVersion" @action-done="loadState" />
 
     <div class="sound-grid">
       <SoundList title="Music" type="music" @uploaded="onSoundsUpdated" />

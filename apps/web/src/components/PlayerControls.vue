@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 
+import type { GuildDirectoryEntry, PlayerStateItem } from '@/api/player'
+
 const props = withDefaults(
-  defineProps<{ soundsVersion?: number }>(),
-  { soundsVersion: 0 },
+  defineProps<{ playerState?: PlayerStateItem[]; soundsVersion?: number }>(),
+  { playerState: () => [], soundsVersion: 0 },
 )
 const emit = defineEmits<{ actionDone: [] }>()
-import type { GuildDirectoryEntry } from '@/api/player'
 import {
   fetchGuildDirectory,
   joinChannel,
@@ -49,6 +50,24 @@ const channels = computed(() => {
   const guild = directory.value.find((entry) => entry.guildId === guildId.value)
   return guild?.channels ?? []
 })
+
+const selectedGuildState = computed(() =>
+  props.playerState.find((g) => g.guildId === guildId.value),
+)
+const isJoined = computed(() => !!selectedGuildState.value?.connectedChannelId)
+const isPlaying = computed(() => isJoined.value && !selectedGuildState.value?.isIdle)
+
+const canJoin = computed(
+  () => !busy.value && !!guildId.value && !!channelId.value && !isJoined.value,
+)
+const canLeave = computed(() => !busy.value && !!guildId.value && isJoined.value)
+const canStop = computed(() => !busy.value && !!guildId.value && isPlaying.value)
+const canPlay = computed(
+  () => !busy.value && !!guildId.value && !!trackId.value,
+)
+const canEffect = computed(
+  () => !busy.value && !!guildId.value && !!effectId.value,
+)
 
 function ensureChannelSelection() {
   if (!channels.value.length) {
@@ -244,11 +263,11 @@ onMounted(() => {
     </div>
 
     <div class="actions">
-      <button type="button" class="btn btn-primary" :disabled="busy" @click="onJoin">Join</button>
-      <button type="button" class="btn btn-secondary" :disabled="busy" @click="onLeave">Leave</button>
-      <button type="button" class="btn btn-secondary" :disabled="busy" @click="onStop">Stop</button>
-      <button type="button" class="btn btn-primary" :disabled="busy" @click="onPlay">Play</button>
-      <button type="button" class="btn btn-secondary" :disabled="busy" @click="onEffect">Effect</button>
+      <button type="button" class="btn btn-primary" :disabled="!canJoin" @click="onJoin">Join</button>
+      <button type="button" class="btn btn-secondary" :disabled="!canLeave" @click="onLeave">Leave</button>
+      <button type="button" class="btn btn-secondary" :disabled="!canStop" @click="onStop">Stop</button>
+      <button type="button" class="btn btn-primary" :disabled="!canPlay" @click="onPlay">Play</button>
+      <button type="button" class="btn btn-secondary" :disabled="!canEffect" @click="onEffect">Effect</button>
     </div>
   </section>
 </template>

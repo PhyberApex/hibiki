@@ -7,4 +7,5 @@ export interface SoundFile {
   size: number;
   category: SoundCategory;
   createdAt: string;
+  tags?: string[];
 }

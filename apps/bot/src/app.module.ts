@@ -11,6 +11,7 @@ import { DiscordModule } from './discord/discord.module';
 import { AppConfig } from './persistence/app-config.entity';
 import { PersistenceModule } from './persistence/persistence.module';
 import { PlayerSnapshot } from './persistence/player-snapshot.entity';
+import { SoundTag } from './persistence/sound-tag.entity';
 
 @Module({
   imports: [
@@ -47,7 +48,7 @@ import { PlayerSnapshot } from './persistence/player-snapshot.entity';
           process.cwd(),
           config.get<string>('database.path', 'storage/data/hibiki.sqlite'),
         ),
-        entities: [PlayerSnapshot, AppConfig],
+        entities: [PlayerSnapshot, AppConfig, SoundTag],
         synchronize: true,
       }),
     }),

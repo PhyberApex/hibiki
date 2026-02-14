@@ -10,6 +10,7 @@ import { mkdir, stat, unlink, writeFile } from 'fs/promises';
 import { join, extname } from 'path';
 import slugify from 'slugify';
 import fg from 'fast-glob';
+import { SoundTagService } from '../persistence/sound-tag.service';
 import { SoundCategory, SoundFile } from './sound.types';
 
 @Injectable()
@@ -18,7 +19,10 @@ export class SoundLibraryService implements OnModuleInit {
   private readonly musicDir: string;
   private readonly effectsDir: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly soundTags: SoundTagService,
+  ) {
     this.musicDir = this.configService.get<string>(
       'audio.musicDir',
       'storage/music',
@@ -43,7 +47,7 @@ export class SoundLibraryService implements OnModuleInit {
     return filename ? join(base, filename) : base;
   }
 
-  async list(category: SoundCategory): Promise<SoundFile[]> {
+  async list(category: SoundCategory, tagFilter?: string): Promise<SoundFile[]> {
     const base = this.resolvePath(category);
     const entries = await fg('*', { cwd: base, onlyFiles: true });
     const results: SoundFile[] = [];
@@ -63,7 +67,29 @@ export class SoundLibraryService implements OnModuleInit {
         this.logger.warn(`Skipping missing file: ${filePath}`);
       }
     }
-    return results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const soundIds = results.map((r) => r.id);
+    const tagsMap = await this.soundTags.getTagsBySoundIds(category, soundIds);
+    for (const item of results) {
+      item.tags = tagsMap.get(item.id) ?? [];
+    }
+    let filtered = results;
+    if (tagFilter?.trim()) {
+      const allowedIds = await this.soundTags.getSoundIdsWithTag(
+        category,
+        tagFilter.trim().toLowerCase(),
+      );
+      filtered = results.filter((r) => allowedIds.has(r.id));
+    }
+    return filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async setTags(category: SoundCategory, soundId: string, tags: string[]): Promise<void> {
+    await this.findFilename(category, soundId);
+    await this.soundTags.setTags(category, soundId, tags);
+  }
+
+  async getDistinctTags(category: SoundCategory): Promise<string[]> {
+    return this.soundTags.getDistinctTags(category);
   }
 
   /** Return a readable stream of the file for playback/download. */
@@ -141,6 +167,7 @@ export class SoundLibraryService implements OnModuleInit {
   async remove(category: SoundCategory, id: string): Promise<void> {
     const file = await this.findFilename(category, id);
     await unlink(this.resolvePath(category, file));
+    await this.soundTags.setTags(category, id, []);
   }
 
   async save(
