@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PlayerSnapshot } from './player-snapshot.entity';
@@ -17,12 +17,15 @@ export interface SnapshotPayload {
 
 @Injectable()
 export class PlayerSnapshotService {
+  private readonly logger = new Logger(PlayerSnapshotService.name);
+
   constructor(
     @InjectRepository(PlayerSnapshot)
     private readonly repo: Repository<PlayerSnapshot>,
   ) {}
 
   async upsert(payload: SnapshotPayload) {
+    this.logger.debug(`Snapshot upsert guild=${payload.guildId} channel=${payload.connectedChannelId ?? 'none'} idle=${payload.isIdle ?? true}`);
     const snapshot = this.repo.create({
       guildId: payload.guildId,
       connectedChannelId: payload.connectedChannelId ?? null,
@@ -39,9 +42,12 @@ export class PlayerSnapshotService {
 
   async remove(guildId: string) {
     await this.repo.delete({ guildId });
+    this.logger.debug(`Snapshot removed guild=${guildId}`);
   }
 
   async list(): Promise<PlayerSnapshot[]> {
-    return this.repo.find({ order: { updatedAt: 'DESC' } });
+    const list = await this.repo.find({ order: { updatedAt: 'DESC' } });
+    this.logger.debug(`Snapshot list: ${list.length} guild(s)`);
+    return list;
   }
 }

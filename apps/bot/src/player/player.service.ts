@@ -46,10 +46,12 @@ export class PlayerService {
   async stop(guildId: string) {
     const manager = this.managers.get(guildId);
     if (!manager) {
+      this.logger.debug(`Stop guild ${guildId}: no manager`);
       return;
     }
     manager.stopMusic();
     await this.persistManagerState(guildId);
+    this.logger.log(`Stopped playback on guild ${guildId}`);
   }
 
   async playMusic(
@@ -97,6 +99,7 @@ export class PlayerService {
 
   async getState(): Promise<GuildPlaybackState[]> {
     const live = this.getLiveState();
+    this.logger.debug(`getState: ${live.length} live guild(s)`);
     const liveGuilds = new Set(live.map((state) => state.guildId));
     const snapshots = await this.snapshots.list();
     const persistedFallbacks = snapshots
@@ -170,11 +173,13 @@ export class PlayerService {
   private async resolveManager(guildId: string, channel?: VoiceBasedChannel) {
     const manager = this.getOrCreateManager(guildId);
     if (channel) {
+      this.logger.log(`Connecting to ${channel.guild.name}#${channel.name} for play/effect`);
       await manager.connect(channel);
       await this.persistManagerState(guildId);
       return manager;
     }
     if (!manager.connected) {
+      this.logger.warn(`resolveManager guild ${guildId}: not connected, no channel provided`);
       throw new Error(
         'Hibiki is not connected to a voice channel. Use join first.',
       );

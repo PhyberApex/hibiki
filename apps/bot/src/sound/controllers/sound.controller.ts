@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Logger,
   Param,
   Patch,
   Post,
@@ -28,15 +29,19 @@ const MIME_BY_EXT: Record<string, string> = {
 
 @Controller('sounds')
 export class SoundController {
+  private readonly logger = new Logger(SoundController.name);
+
   constructor(private readonly sounds: SoundLibraryService) {}
 
   @Get('music')
   listMusic(@Query('tag') tag?: string): Promise<SoundFile[]> {
+    this.logger.log(`GET /sounds/music${tag ? `?tag=${tag}` : ''}`);
     return this.sounds.list('music', tag);
   }
 
   @Get('effects')
   listEffects(@Query('tag') tag?: string): Promise<SoundFile[]> {
+    this.logger.log(`GET /sounds/effects${tag ? `?tag=${tag}` : ''}`);
     return this.sounds.list('effects', tag);
   }
 
@@ -74,6 +79,7 @@ export class SoundController {
 
   @Get('music/:id/file')
   async streamMusic(@Param('id') id: string) {
+    this.logger.log(`GET /sounds/music/${id}/file`);
     const { stream, filename } = await this.sounds.getStream('music', id);
     const ext = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')) : '';
     const type = MIME_BY_EXT[ext] ?? 'audio/mpeg';
@@ -82,6 +88,7 @@ export class SoundController {
 
   @Get('effects/:id/file')
   async streamEffect(@Param('id') id: string) {
+    this.logger.log(`GET /sounds/effects/${id}/file`);
     const { stream, filename } = await this.sounds.getStream('effects', id);
     const ext = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')) : '';
     const type = MIME_BY_EXT[ext] ?? 'audio/wav';
@@ -91,30 +98,38 @@ export class SoundController {
   @Post('music')
   @UseInterceptors(FileInterceptor('file'))
   async uploadMusic(@UploadedFile() file?: Express.Multer.File) {
+    this.logger.log(`POST /sounds/music (file=${file?.originalname ?? 'none'})`);
     if (!file) {
       throw new BadRequestException('No file provided');
     }
-    return this.sounds.save('music', file);
+    const result = await this.sounds.save('music', file);
+    this.logger.log(`Uploaded music: ${result.filename} (id=${result.id})`);
+    return result;
   }
 
   @Post('effects')
   @UseInterceptors(FileInterceptor('file'))
   async uploadEffect(@UploadedFile() file?: Express.Multer.File) {
+    this.logger.log(`POST /sounds/effects (file=${file?.originalname ?? 'none'})`);
     if (!file) {
       throw new BadRequestException('No file provided');
     }
-    return this.sounds.save('effects', file);
+    const result = await this.sounds.save('effects', file);
+    this.logger.log(`Uploaded effect: ${result.filename} (id=${result.id})`);
+    return result;
   }
 
   @Delete('music/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteMusic(@Param('id') id: string) {
+    this.logger.log(`DELETE /sounds/music/${id}`);
     return this.sounds.remove('music', id);
   }
 
   @Delete('effects/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteEffect(@Param('id') id: string) {
+    this.logger.log(`DELETE /sounds/effects/${id}`);
     return this.sounds.remove('effects', id);
   }
 }

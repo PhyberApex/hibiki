@@ -79,6 +79,9 @@ export class SoundLibraryService implements OnModuleInit {
         tagFilter.trim().toLowerCase(),
       );
       filtered = results.filter((r) => allowedIds.has(r.id));
+      this.logger.debug(`List ${category} tag=${tagFilter}: ${filtered.length} of ${results.length} items`);
+    } else {
+      this.logger.debug(`List ${category}: ${results.length} items`);
     }
     return filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
@@ -86,6 +89,7 @@ export class SoundLibraryService implements OnModuleInit {
   async setTags(category: SoundCategory, soundId: string, tags: string[]): Promise<void> {
     await this.findFilename(category, soundId);
     await this.soundTags.setTags(category, soundId, tags);
+    this.logger.log(`Set tags for ${category}/${soundId}: [${tags.join(', ')}]`);
   }
 
   async getDistinctTags(category: SoundCategory): Promise<string[]> {
@@ -99,6 +103,7 @@ export class SoundLibraryService implements OnModuleInit {
   ): Promise<{ stream: ReturnType<typeof createReadStream>; filename: string }> {
     const filename = await this.findFilename(category, id);
     const path = this.resolvePath(category, filename);
+    this.logger.debug(`Stream ${category}/${id} -> ${filename}`);
     const stream = createReadStream(path);
     return { stream, filename };
   }
@@ -166,8 +171,10 @@ export class SoundLibraryService implements OnModuleInit {
 
   async remove(category: SoundCategory, id: string): Promise<void> {
     const file = await this.findFilename(category, id);
-    await unlink(this.resolvePath(category, file));
+    const path = this.resolvePath(category, file);
+    await unlink(path);
     await this.soundTags.setTags(category, id, []);
+    this.logger.log(`Removed ${category}/${id} (${file})`);
   }
 
   async save(

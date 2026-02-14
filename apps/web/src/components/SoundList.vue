@@ -29,6 +29,7 @@ const editingTagInput = ref('')
 const playingId = ref<string | null>(null)
 const dragOver = ref(false)
 const audioEl = ref<HTMLAudioElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 const toast = ref<{ type: 'success' | 'error'; text: string } | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -146,7 +147,9 @@ async function handleFiles(files: FileList | File[] | null) {
 
 function handleUpload(event: Event) {
   const input = event.target as HTMLInputElement
-  const files = input.files
+  const fileList = input.files
+  if (!fileList?.length) return
+  const files = Array.from(fileList)
   input.value = ''
   handleFiles(files)
 }
@@ -245,10 +248,23 @@ onMounted(() => {
         @dragover="onDragOver"
         @dragleave="onDragLeave"
       >
-        <label class="btn btn-upload" :class="{ uploading }">
-          <input type="file" accept="audio/*" @change="handleUpload" :disabled="uploading" hidden />
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept="audio/*"
+          class="upload-input-hidden"
+          :disabled="uploading"
+          @change="handleUpload"
+        />
+        <button
+          type="button"
+          class="btn btn-upload"
+          :class="{ uploading }"
+          :disabled="uploading"
+          @click="fileInputRef?.click()"
+        >
           {{ uploading ? 'Uploading…' : 'Upload' }}
-        </label>
+        </button>
         <span class="upload-hint">or drop here</span>
       </div>
     </header>
@@ -557,6 +573,15 @@ onMounted(() => {
   height: 0;
   opacity: 0;
   pointer-events: none;
+}
+
+.upload-input-hidden {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
 }
 
 .sound-now-playing {
