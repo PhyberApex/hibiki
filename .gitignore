@@ -11,6 +11,8 @@ apps/bot/node_modules
 apps/bot/storage
 apps/bot/web-dist
 storage
+.pnpm-store
 .tmp
 coverage
 npm-debug.log*
+.idea
