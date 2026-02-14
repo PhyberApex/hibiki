@@ -1,13 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-
 import type { GuildDirectoryEntry, PlayerStateItem } from '@/api/player'
 
-const props = withDefaults(
-  defineProps<{ playerState?: PlayerStateItem[]; soundsVersion?: number }>(),
-  { playerState: () => [], soundsVersion: 0 },
-)
-const emit = defineEmits<{ actionDone: [] }>()
+import type { SoundFile } from '@/api/sounds'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   fetchGuildDirectory,
   joinChannel,
@@ -16,8 +11,13 @@ import {
   stopPlayback,
   triggerEffect,
 } from '@/api/player'
-import type { SoundFile } from '@/api/sounds'
-import { listMusic, listEffects } from '@/api/sounds'
+import { listEffects, listMusic } from '@/api/sounds'
+
+const props = withDefaults(
+  defineProps<{ playerState?: PlayerStateItem[], soundsVersion?: number }>(),
+  { playerState: () => [], soundsVersion: 0 },
+)
+const emit = defineEmits<{ actionDone: [] }>()
 
 const directory = ref<GuildDirectoryEntry[]>([])
 const directoryError = ref<string | null>(null)
@@ -34,11 +34,12 @@ const effectId = ref('')
 const busy = ref(false)
 
 type ToastType = 'success' | 'error'
-const toast = ref<{ type: ToastType; text: string } | null>(null)
+const toast = ref<{ type: ToastType, text: string } | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 function showToast(type: ToastType, text: string) {
-  if (toastTimer) clearTimeout(toastTimer)
+  if (toastTimer)
+    clearTimeout(toastTimer)
   toast.value = { type, text }
   toastTimer = setTimeout(() => {
     toast.value = null
@@ -47,12 +48,12 @@ function showToast(type: ToastType, text: string) {
 }
 
 const channels = computed(() => {
-  const guild = directory.value.find((entry) => entry.guildId === guildId.value)
+  const guild = directory.value.find(entry => entry.guildId === guildId.value)
   return guild?.channels ?? []
 })
 
 const selectedGuildState = computed(() =>
-  props.playerState.find((g) => g.guildId === guildId.value),
+  props.playerState.find(g => g.guildId === guildId.value),
 )
 const isJoined = computed(() => !!selectedGuildState.value?.connectedChannelId)
 const isPlaying = computed(() => isJoined.value && !selectedGuildState.value?.isIdle)
@@ -74,7 +75,7 @@ function ensureChannelSelection() {
     channelId.value = ''
     return
   }
-  if (!channels.value.some((channel) => channel.id === channelId.value)) {
+  if (!channels.value.some(channel => channel.id === channelId.value)) {
     channelId.value = channels.value[0]?.id ?? ''
   }
 }
@@ -86,10 +87,12 @@ async function loadDirectory() {
     const data = await fetchGuildDirectory()
     directory.value = data
     ensureChannelSelection()
-  } catch (err) {
-    directoryError.value =
-      err instanceof Error ? err.message : 'Failed to load guilds'
-  } finally {
+  }
+  catch (err) {
+    directoryError.value
+      = err instanceof Error ? err.message : 'Failed to load guilds'
+  }
+  finally {
     directoryLoading.value = false
   }
 }
@@ -103,7 +106,8 @@ async function loadSounds() {
     ])
     musicTracks.value = music
     effectsList.value = effects
-  } finally {
+  }
+  finally {
     soundsLoading.value = false
   }
 }
@@ -118,35 +122,42 @@ async function run(
     await action()
     showToast('success', successMessage)
     emit('actionDone')
-  } catch (err) {
+  }
+  catch (err) {
     showToast('error', err instanceof Error ? err.message : 'Action failed')
-  } finally {
+  }
+  finally {
     busy.value = false
   }
 }
 
-const onJoin = () =>
-  run(() => {
+function onJoin() {
+  return run(() => {
     if (!guildId.value || !channelId.value) {
       throw new Error('Select a guild + channel')
     }
     return joinChannel(guildId.value, channelId.value)
   }, 'Joined voice channel')
+}
 
-const onLeave = () =>
-  run(() => {
-    if (!guildId.value) throw new Error('Select a guild first')
+function onLeave() {
+  return run(() => {
+    if (!guildId.value)
+      throw new Error('Select a guild first')
     return leaveGuild(guildId.value)
   }, 'Left voice channel')
+}
 
-const onStop = () =>
-  run(() => {
-    if (!guildId.value) throw new Error('Select a guild first')
+function onStop() {
+  return run(() => {
+    if (!guildId.value)
+      throw new Error('Select a guild first')
     return stopPlayback(guildId.value)
   }, 'Playback stopped')
+}
 
-const onPlay = () =>
-  run(() => {
+function onPlay() {
+  return run(() => {
     if (!guildId.value || !trackId.value)
       throw new Error('Select a guild and a track')
     return playTrack({
@@ -155,9 +166,10 @@ const onPlay = () =>
       channelId: channelId.value || undefined,
     })
   }, 'Playing track')
+}
 
-const onEffect = () =>
-  run(() => {
+function onEffect() {
+  return run(() => {
     if (!guildId.value || !effectId.value)
       throw new Error('Select a guild and an effect')
     return triggerEffect({
@@ -166,6 +178,7 @@ const onEffect = () =>
       channelId: channelId.value || undefined,
     })
   }, 'Effect triggered')
+}
 
 watch(guildId, () => {
   ensureChannelSelection()
@@ -185,14 +198,16 @@ onMounted(() => {
   <section class="control-panel">
     <header class="panel-header">
       <div>
-        <p class="eyebrow">Actions</p>
+        <p class="eyebrow">
+          Actions
+        </p>
         <h2>Playback controls</h2>
       </div>
       <div class="header-actions">
         <Transition name="toast">
           <div
             v-if="toast"
-            :class="['toast', toast.type === 'success' ? 'toast-success' : 'toast-error']"
+            class="toast" :class="[toast.type === 'success' ? 'toast-success' : 'toast-error']"
             role="alert"
           >
             {{ toast.text }}
@@ -201,20 +216,22 @@ onMounted(() => {
         <button
           type="button"
           class="btn btn-ghost"
-          @click="loadDirectory"
           :disabled="directoryLoading"
+          @click="loadDirectory"
         >
           {{ directoryLoading ? 'Refreshing…' : 'Reload guilds' }}
         </button>
       </div>
     </header>
 
-    <p v-if="directoryError" class="control-error">{{ directoryError }}</p>
+    <p v-if="directoryError" class="control-error">
+      {{ directoryError }}
+    </p>
 
     <div class="control-grid">
       <label class="field">
         <span class="field-label">Guild</span>
-        <select v-model="guildId" @change="ensureChannelSelection" class="field-input">
+        <select v-model="guildId" class="field-input" @change="ensureChannelSelection">
           <option disabled value="">Select a guild…</option>
           <option v-for="guild in directory" :key="guild.guildId" :value="guild.guildId">
             {{ guild.guildName }}
@@ -263,11 +280,21 @@ onMounted(() => {
     </div>
 
     <div class="actions">
-      <button type="button" class="btn btn-primary" :disabled="!canJoin" @click="onJoin">Join</button>
-      <button type="button" class="btn btn-secondary" :disabled="!canLeave" @click="onLeave">Leave</button>
-      <button type="button" class="btn btn-secondary" :disabled="!canStop" @click="onStop">Stop</button>
-      <button type="button" class="btn btn-primary" :disabled="!canPlay" @click="onPlay">Play</button>
-      <button type="button" class="btn btn-secondary" :disabled="!canEffect" @click="onEffect">Effect</button>
+      <button type="button" class="btn btn-primary" :disabled="!canJoin" @click="onJoin">
+        Join
+      </button>
+      <button type="button" class="btn btn-secondary" :disabled="!canLeave" @click="onLeave">
+        Leave
+      </button>
+      <button type="button" class="btn btn-secondary" :disabled="!canStop" @click="onStop">
+        Stop
+      </button>
+      <button type="button" class="btn btn-primary" :disabled="!canPlay" @click="onPlay">
+        Play
+      </button>
+      <button type="button" class="btn btn-secondary" :disabled="!canEffect" @click="onEffect">
+        Effect
+      </button>
     </div>
   </section>
 </template>

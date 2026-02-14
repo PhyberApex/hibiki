@@ -9,11 +9,11 @@
 ## Stack
 
 | Part        | Tech                    |
-| ----------- | ----------------------- |
-| Bot + API   | NestJS, Discord.js       |
-| Dashboard   | Vue 3, TypeScript, Vite  |
-| Persistence| SQLite (snapshots)       |
-| Audio       | discord-player, ffmpeg   |
+|-------------|-------------------------|
+| Bot + API   | NestJS, Discord.js      |
+| Dashboard   | Vue 3, TypeScript, Vite |
+| Persistence | SQLite (snapshots)      |
+| Audio       | discord-player, ffmpeg  |
 
 ## Requirements
 

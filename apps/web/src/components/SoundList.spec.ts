@@ -1,5 +1,5 @@
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
 import SoundList from './SoundList.vue'
 
 vi.mock('@/api/sounds', () => ({
@@ -13,7 +13,7 @@ vi.mock('@/api/sounds', () => ({
   soundStreamUrl: (type: string, id: string) => `/api/sounds/${type}/${id}/file`,
 }))
 
-describe('SoundList', () => {
+describe('soundList', () => {
   it('renders title from prop', () => {
     const wrapper = mount(SoundList, {
       props: { title: 'Music', type: 'music' },

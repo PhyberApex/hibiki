@@ -1,3 +1,3 @@
-export * from './permission.types';
-export * from './permission-config.service';
-export * from './permissions.module';
+export * from './permission-config.service'
+export * from './permission.types'
+export * from './permissions.module'

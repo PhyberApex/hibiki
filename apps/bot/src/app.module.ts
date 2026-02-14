@@ -1,17 +1,17 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ServeStaticModule } from '@nestjs/serve-static';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { resolve } from 'path';
-import { AppController } from './app.controller';
-import { configuration } from './config/configuration';
-import { validationSchema } from './config/validation';
-import { SoundModule } from './sound/sound.module';
-import { DiscordModule } from './discord/discord.module';
-import { AppConfig } from './persistence/app-config.entity';
-import { PersistenceModule } from './persistence/persistence.module';
-import { PlayerSnapshot } from './persistence/player-snapshot.entity';
-import { SoundTag } from './persistence/sound-tag.entity';
+import { resolve } from 'node:path'
+import { Module } from '@nestjs/common'
+import { ConfigModule, ConfigService } from '@nestjs/config'
+import { ServeStaticModule } from '@nestjs/serve-static'
+import { TypeOrmModule } from '@nestjs/typeorm'
+import { AppController } from './app.controller'
+import { configuration } from './config/configuration'
+import { validationSchema } from './config/validation'
+import { DiscordModule } from './discord/discord.module'
+import { AppConfig } from './persistence/app-config.entity'
+import { PersistenceModule } from './persistence/persistence.module'
+import { PlayerSnapshot } from './persistence/player-snapshot.entity'
+import { SoundTag } from './persistence/sound-tag.entity'
+import { SoundModule } from './sound/sound.module'
 
 @Module({
   imports: [
@@ -31,13 +31,13 @@ import { SoundTag } from './persistence/sound-tag.entity';
         const distDir = config.get<string>(
           'audio.webDistDir',
           'apps/bot/web-dist',
-        );
+        )
         return [
           {
             rootPath: resolve(process.cwd(), distDir),
             exclude: ['/api*'],
           },
-        ];
+        ]
       },
     }),
     TypeOrmModule.forRootAsync({

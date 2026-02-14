@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  fetchPlayerState,
   fetchBotStatus,
+  fetchGuildDirectory,
+  fetchPlayerState,
   joinChannel,
   leaveGuild,
-  stopPlayback,
   playTrack,
+  stopPlayback,
   triggerEffect,
-  fetchGuildDirectory,
 } from './player'
 
 describe('player API', () => {

@@ -1,32 +1,32 @@
-import { Column, Entity, PrimaryColumn } from 'typeorm';
-import type { SoundCategory } from '../sound/sound.types';
+import type { SoundCategory } from '../sound/sound.types'
+import { Column, Entity, PrimaryColumn } from 'typeorm'
 
 @Entity({ name: 'player_snapshots' })
 export class PlayerSnapshot {
   @PrimaryColumn()
-  guildId!: string;
+  guildId!: string
 
   @Column({ type: 'varchar', nullable: true })
-  connectedChannelId?: string | null;
+  connectedChannelId?: string | null
 
   @Column({ type: 'varchar', nullable: true })
-  connectedChannelName?: string | null;
+  connectedChannelName?: string | null
 
   @Column({ type: 'varchar', nullable: true })
-  trackId?: string | null;
+  trackId?: string | null
 
   @Column({ type: 'varchar', nullable: true })
-  trackName?: string | null;
+  trackName?: string | null
 
   @Column({ type: 'text', nullable: true })
-  trackFilename?: string | null;
+  trackFilename?: string | null
 
   @Column({ type: 'varchar', nullable: true })
-  trackCategory?: SoundCategory | null;
+  trackCategory?: SoundCategory | null
 
   @Column({ default: true })
-  isIdle!: boolean;
+  isIdle!: boolean
 
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
-  updatedAt!: Date;
+  updatedAt!: Date
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
 import type { AllowlistConfig } from '@/api/permissions'
+import { onMounted, ref } from 'vue'
 import {
   fetchPermissionsConfig,
   updatePermissionsConfig,
@@ -37,10 +37,10 @@ function removeUserRow(i: number) {
 
 function buildConfig(): AllowlistConfig {
   const allowedDiscordRoleIds = roleIdInputs.value
-    .map((s) => s.trim())
+    .map(s => s.trim())
     .filter(Boolean)
   const allowedDiscordUserIds = userIdInputs.value
-    .map((s) => s.trim())
+    .map(s => s.trim())
     .filter(Boolean)
   return { allowedDiscordRoleIds, allowedDiscordUserIds }
 }
@@ -51,17 +51,19 @@ async function load() {
   try {
     const res = await fetchPermissionsConfig()
     config.value = res
-    roleIdInputs.value =
-      res.allowedDiscordRoleIds.length > 0
+    roleIdInputs.value
+      = res.allowedDiscordRoleIds.length > 0
         ? [...res.allowedDiscordRoleIds]
         : ['']
-    userIdInputs.value =
-      res.allowedDiscordUserIds.length > 0
+    userIdInputs.value
+      = res.allowedDiscordUserIds.length > 0
         ? [...res.allowedDiscordUserIds]
         : ['']
-  } catch (e) {
+  }
+  catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load'
-  } finally {
+  }
+  finally {
     loading.value = false
   }
 }
@@ -75,10 +77,14 @@ async function save() {
     await updatePermissionsConfig(newConfig)
     config.value = newConfig
     toast.value = 'Saved. Empty list = no one can use the bot until you add role or user IDs.'
-    setTimeout(() => { toast.value = null }, 4000)
-  } catch (e) {
+    setTimeout(() => {
+      toast.value = null
+    }, 4000)
+  }
+  catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to save'
-  } finally {
+  }
+  finally {
     saving.value = false
   }
 }
@@ -90,7 +96,9 @@ onMounted(() => load())
   <main class="permissions-page">
     <header class="page-header">
       <div>
-        <p class="eyebrow">Settings</p>
+        <p class="eyebrow">
+          Settings
+        </p>
         <h1>Who can use the bot</h1>
       </div>
       <div class="header-actions">
@@ -113,25 +121,33 @@ onMounted(() => load())
       </div>
     </header>
 
-    <p v-if="toast" class="toast toast-success">{{ toast }}</p>
-    <p v-if="error" class="toast toast-error">{{ error }}</p>
+    <p v-if="toast" class="toast toast-success">
+      {{ toast }}
+    </p>
+    <p v-if="error" class="toast toast-error">
+      {{ error }}
+    </p>
 
-    <p v-if="loading" class="panel-message">Loading…</p>
+    <p v-if="loading" class="panel-message">
+      Loading…
+    </p>
 
     <template v-else>
       <section class="panel">
-        <h2 class="panel-header">Allowed Discord role IDs</h2>
+        <h2 class="panel-header">
+          Allowed Discord role IDs
+        </h2>
         <p class="panel-desc">
           Users with any of these roles can use the bot. Get role IDs from Discord (Developer Mode → right‑click role → Copy ID). If both lists are empty, no one can use the bot.
         </p>
         <ul class="id-list">
-          <li v-for="(id, i) in roleIdInputs" :key="'role-' + i" class="id-row">
+          <li v-for="(id, i) in roleIdInputs" :key="`role-${i}`" class="id-row">
             <input
               v-model="roleIdInputs[i]"
               type="text"
               class="input"
               placeholder="e.g. 123456789"
-            />
+            >
             <button
               type="button"
               class="btn btn-ghost btn-sm btn-icon"
@@ -148,18 +164,20 @@ onMounted(() => load())
       </section>
 
       <section class="panel">
-        <h2 class="panel-header">Allowed Discord user IDs</h2>
+        <h2 class="panel-header">
+          Allowed Discord user IDs
+        </h2>
         <p class="panel-desc">
           These users can use the bot even without an allowed role. Leave empty if you only use roles.
         </p>
         <ul class="id-list">
-          <li v-for="(id, i) in userIdInputs" :key="'user-' + i" class="id-row">
+          <li v-for="(id, i) in userIdInputs" :key="`user-${i}`" class="id-row">
             <input
               v-model="userIdInputs[i]"
               type="text"
               class="input"
               placeholder="e.g. 987654321"
-            />
+            >
             <button
               type="button"
               class="btn btn-ghost btn-sm btn-icon"

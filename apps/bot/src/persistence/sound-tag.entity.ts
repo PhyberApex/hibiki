@@ -1,13 +1,13 @@
-import { Column, Entity, PrimaryColumn } from 'typeorm';
+import { Entity, PrimaryColumn } from 'typeorm'
 
 @Entity({ name: 'sound_tags' })
 export class SoundTag {
   @PrimaryColumn()
-  category!: string;
+  category!: string
 
   @PrimaryColumn()
-  soundId!: string;
+  soundId!: string
 
   @PrimaryColumn()
-  tag!: string;
+  tag!: string
 }

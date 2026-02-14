@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { SoundFile } from '@/api/sounds'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import {
   deleteSound,
   listEffects,
@@ -12,7 +12,7 @@ import {
   uploadSound,
 } from '@/api/sounds'
 
-const props = defineProps<{ title: string; type: 'music' | 'effects' }>()
+const props = defineProps<{ title: string, type: 'music' | 'effects' }>()
 const emit = defineEmits<{ uploaded: [] }>()
 
 const items = ref<SoundFile[]>([])
@@ -30,11 +30,12 @@ const playingId = ref<string | null>(null)
 const dragOver = ref(false)
 const audioEl = ref<HTMLAudioElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
-const toast = ref<{ type: 'success' | 'error'; text: string } | null>(null)
+const toast = ref<{ type: 'success' | 'error', text: string } | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 function showToast(type: 'success' | 'error', text: string) {
-  if (toastTimer) clearTimeout(toastTimer)
+  if (toastTimer)
+    clearTimeout(toastTimer)
   toast.value = { type, text }
   toastTimer = setTimeout(() => {
     toast.value = null
@@ -44,9 +45,10 @@ function showToast(type: 'success' | 'error', text: string) {
 
 async function loadTags() {
   try {
-    availableTags.value =
-      props.type === 'music' ? await listMusicTags() : await listEffectsTags()
-  } catch {
+    availableTags.value
+      = props.type === 'music' ? await listMusicTags() : await listEffectsTags()
+  }
+  catch {
     availableTags.value = []
   }
 }
@@ -56,12 +58,14 @@ async function loadSounds() {
   error.value = null
   try {
     const tag = selectedTag.value || undefined
-    items.value =
-      props.type === 'music' ? await listMusic(tag) : await listEffects(tag)
+    items.value
+      = props.type === 'music' ? await listMusic(tag) : await listEffects(tag)
     await loadTags()
-  } catch (err) {
+  }
+  catch (err) {
     error.value = err instanceof Error ? err.message : 'Unknown error'
-  } finally {
+  }
+  finally {
     loading.value = false
   }
 }
@@ -70,13 +74,16 @@ const sortedItems = computed(() => {
   const list = [...items.value]
   if (sortBy.value === 'name') {
     list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-  } else if (sortBy.value === 'date') {
+  }
+  else if (sortBy.value === 'date') {
     list.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
-  } else {
+  }
+  else {
     list.sort((a, b) => {
       const ta = (a.tags?.[0] ?? '').toLowerCase()
       const tb = (b.tags?.[0] ?? '').toLowerCase()
-      if (ta !== tb) return ta.localeCompare(tb)
+      if (ta !== tb)
+        return ta.localeCompare(tb)
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
     })
   }
@@ -94,53 +101,53 @@ function cancelEditingTags() {
 }
 
 async function saveTags(soundId: string) {
-  if (editingTagsId.value !== soundId) return
+  if (editingTagsId.value !== soundId)
+    return
   const tagsToSave = [...editingTagsDraft.value]
   try {
     const res = await setSoundTags(props.type, soundId, tagsToSave)
-    const sound = items.value.find((s) => s.id === soundId)
-    if (sound) sound.tags = res.tags
+    const sound = items.value.find(s => s.id === soundId)
+    if (sound)
+      sound.tags = res.tags
     editingTagsId.value = null
     showToast('success', 'Tags updated.')
-  } catch (err) {
+  }
+  catch (err) {
     showToast('error', err instanceof Error ? err.message : 'Failed to save tags')
   }
 }
 
 function addTagToDraft(tag: string) {
   const t = tag.trim().toLowerCase()
-  if (t && !editingTagsDraft.value.includes(t)) editingTagsDraft.value.push(t)
+  if (t && !editingTagsDraft.value.includes(t))
+    editingTagsDraft.value.push(t)
 }
 
 function removeTagFromDraft(tag: string) {
-  editingTagsDraft.value = editingTagsDraft.value.filter((t) => t !== tag)
-}
-
-function addTagFromInput(e: Event) {
-  const input = e.target as HTMLInputElement
-  const v = input.value.trim()
-  if (v) addTagToDraft(v)
-  input.value = ''
-  editingTagInput.value = ''
+  editingTagsDraft.value = editingTagsDraft.value.filter(t => t !== tag)
 }
 
 function addTagFromInputRef() {
   const v = editingTagInput.value.trim()
-  if (v) addTagToDraft(v)
+  if (v)
+    addTagToDraft(v)
   editingTagInput.value = ''
 }
 
 async function handleFiles(files: FileList | File[] | null) {
   const file = Array.isArray(files) ? files[0] : files?.[0]
-  if (!file) return
+  if (!file)
+    return
   uploading.value = true
   try {
     await uploadSound(props.type, file)
     await loadSounds()
     emit('uploaded')
-  } catch (err) {
+  }
+  catch (err) {
     error.value = err instanceof Error ? err.message : 'Upload failed'
-  } finally {
+  }
+  finally {
     uploading.value = false
   }
 }
@@ -148,7 +155,8 @@ async function handleFiles(files: FileList | File[] | null) {
 function handleUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const fileList = input.files
-  if (!fileList?.length) return
+  if (!fileList?.length)
+    return
   const files = Array.from(fileList)
   input.value = ''
   handleFiles(files)
@@ -158,7 +166,8 @@ function onDrop(e: DragEvent) {
   e.preventDefault()
   dragOver.value = false
   const files = e.dataTransfer?.files
-  if (files?.length) handleFiles(files)
+  if (files?.length)
+    handleFiles(files)
 }
 
 function onDragOver(e: DragEvent) {
@@ -202,7 +211,9 @@ async function togglePlay(id: string) {
   const el = audioEl.value
   if (el) {
     el.src = playUrl(id)
-    el.play().catch(() => { stop() })
+    el.play().catch(() => {
+      stop()
+    })
   }
 }
 
@@ -211,19 +222,22 @@ function onAudioEnded() {
 }
 
 const playingSound = computed(() => {
-  if (!playingId.value) return null
-  return items.value.find((s) => s.id === playingId.value) || null
+  if (!playingId.value)
+    return null
+  return items.value.find(s => s.id === playingId.value) || null
 })
 
 async function confirmDelete(id: string) {
-  if (pendingDeleteId.value !== id) return
+  if (pendingDeleteId.value !== id)
+    return
   pendingDeleteId.value = null
   try {
     await deleteSound(props.type, id)
     await loadSounds()
     emit('uploaded')
     showToast('success', 'Deleted.')
-  } catch (err) {
+  }
+  catch (err) {
     showToast('error', err instanceof Error ? err.message : 'Delete failed')
   }
 }
@@ -240,7 +254,9 @@ onMounted(() => {
 <template>
   <section class="sound-panel">
     <header class="panel-header panel-header-upload">
-      <h2 class="sound-title">{{ title }}</h2>
+      <h2 class="sound-title">
+        {{ title }}
+      </h2>
       <div
         class="upload-drop-zone"
         :class="{ 'upload-drop-zone-active': dragOver }"
@@ -255,7 +271,7 @@ onMounted(() => {
           class="upload-input-hidden"
           :disabled="uploading"
           @change="handleUpload"
-        />
+        >
         <button
           type="button"
           class="btn btn-upload"
@@ -287,7 +303,7 @@ onMounted(() => {
       </label>
     </div>
 
-    <p v-if="toast" :class="['sound-toast', toast.type === 'success' ? 'sound-toast-success' : 'sound-toast-error']">
+    <p v-if="toast" class="sound-toast" :class="[toast.type === 'success' ? 'sound-toast-success' : 'sound-toast-error']">
       {{ toast.text }}
     </p>
 
@@ -296,12 +312,20 @@ onMounted(() => {
     <div v-if="playingSound" class="sound-now-playing">
       <span class="sound-now-playing-label">Now playing:</span>
       <span class="sound-now-playing-name">{{ playingSound.name }}</span>
-      <button type="button" class="btn btn-stop" @click="stop">Stop</button>
+      <button type="button" class="btn btn-stop" @click="stop">
+        Stop
+      </button>
     </div>
 
-    <p v-if="loading" class="sound-message">Loading…</p>
-    <p v-else-if="error" class="sound-message sound-error">{{ error }}</p>
-    <p v-else-if="items.length === 0" class="sound-message">No sounds yet.</p>
+    <p v-if="loading" class="sound-message">
+      Loading…
+    </p>
+    <p v-else-if="error" class="sound-message sound-error">
+      {{ error }}
+    </p>
+    <p v-else-if="items.length === 0" class="sound-message">
+      No sounds yet.
+    </p>
 
     <ul v-else class="sound-list">
       <li v-for="sound in sortedItems" :key="sound.id" class="sound-item">
@@ -323,10 +347,16 @@ onMounted(() => {
               class="tag-input"
               placeholder="Add tag…"
               @keydown.enter.prevent="addTagFromInputRef"
-            />
-            <button type="button" class="btn btn-ghost-sm" @click="addTagFromInputRef">Add</button>
-            <button type="button" class="btn btn-ghost-sm" @click="saveTags(sound.id)">Save</button>
-            <button type="button" class="btn btn-ghost-sm" @click="cancelEditingTags">Cancel</button>
+            >
+            <button type="button" class="btn btn-ghost-sm" @click="addTagFromInputRef">
+              Add
+            </button>
+            <button type="button" class="btn btn-ghost-sm" @click="saveTags(sound.id)">
+              Save
+            </button>
+            <button type="button" class="btn btn-ghost-sm" @click="cancelEditingTags">
+              Cancel
+            </button>
           </div>
           <div v-else class="sound-tags-row">
             <span v-for="t in (sound.tags ?? [])" :key="t" class="tag">{{ t }}</span>
@@ -354,7 +384,7 @@ onMounted(() => {
             type="button"
             class="btn btn-play"
             :disabled="pendingDeleteId !== null"
-            :title="'Play ' + sound.name"
+            :title="`Play ${sound.name}`"
             @click="togglePlay(sound.id)"
           >
             Play
@@ -362,8 +392,12 @@ onMounted(() => {
         </div>
         <div v-if="pendingDeleteId === sound.id" class="sound-delete-confirm">
           <span class="sound-delete-label">Delete?</span>
-          <button type="button" class="btn btn-danger-sm" @click="confirmDelete(sound.id)">Yes</button>
-          <button type="button" class="btn btn-ghost-sm" @click="cancelDelete">Cancel</button>
+          <button type="button" class="btn btn-danger-sm" @click="confirmDelete(sound.id)">
+            Yes
+          </button>
+          <button type="button" class="btn btn-ghost-sm" @click="cancelDelete">
+            Cancel
+          </button>
         </div>
         <button
           v-else

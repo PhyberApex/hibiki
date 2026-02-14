@@ -1,5 +1,5 @@
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
 import PlayerControls from './PlayerControls.vue'
 
 vi.mock('@/api/player', () => ({
@@ -17,7 +17,7 @@ vi.mock('@/api/sounds', () => ({
   listEffects: vi.fn().mockResolvedValue([{ id: 'e1', name: 'Effect 1', filename: 'e1.wav', category: 'effects' }]),
 }))
 
-describe('PlayerControls', () => {
+describe('playerControls', () => {
   it('renders playback controls header', () => {
     const wrapper = mount(PlayerControls, {
       props: { playerState: [], soundsVersion: 0 },
@@ -32,7 +32,7 @@ describe('PlayerControls', () => {
     })
     await wrapper.vm.$nextTick()
     const buttons = wrapper.findAll('.btn')
-    const texts = buttons.map((b) => b.text())
+    const texts = buttons.map(b => b.text())
     expect(texts).toContain('Join')
     expect(texts).toContain('Leave')
     expect(texts).toContain('Stop')

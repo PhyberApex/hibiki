@@ -1,18 +1,23 @@
-import { BadRequestException, Body, Controller, Get, Put } from '@nestjs/common';
-import type { AllowlistConfig } from './permission.types';
-import { PermissionConfigService } from './permission-config.service';
-import { AppConfigService } from '../persistence/app-config.service';
+import type { AppConfigService } from '../persistence/app-config.service'
+import type { PermissionConfigService } from './permission-config.service'
+import type { AllowlistConfig } from './permission.types'
+import { BadRequestException, Body, Controller, Get, Put } from '@nestjs/common'
 
-const PERMISSIONS_KEY = 'permissions';
+const PERMISSIONS_KEY = 'permissions'
 
 function validateAllowlist(candidate: unknown): candidate is AllowlistConfig {
-  if (!candidate || typeof candidate !== 'object') return false;
-  const o = candidate as Record<string, unknown>;
-  if (!Array.isArray(o.allowedDiscordRoleIds)) return false;
-  if (!Array.isArray(o.allowedDiscordUserIds)) return false;
-  if (!o.allowedDiscordRoleIds.every((id) => typeof id === 'string')) return false;
-  if (!o.allowedDiscordUserIds.every((id) => typeof id === 'string')) return false;
-  return true;
+  if (!candidate || typeof candidate !== 'object')
+    return false
+  const o = candidate as Record<string, unknown>
+  if (!Array.isArray(o.allowedDiscordRoleIds))
+    return false
+  if (!Array.isArray(o.allowedDiscordUserIds))
+    return false
+  if (!o.allowedDiscordRoleIds.every(id => typeof id === 'string'))
+    return false
+  if (!o.allowedDiscordUserIds.every(id => typeof id === 'string'))
+    return false
+  return true
 }
 
 @Controller('permissions')
@@ -24,7 +29,7 @@ export class PermissionsController {
 
   @Get('config')
   getConfig() {
-    return this.permissionConfig.getConfig();
+    return this.permissionConfig.getConfig()
   }
 
   @Put('config')
@@ -32,10 +37,10 @@ export class PermissionsController {
     if (!validateAllowlist(body)) {
       throw new BadRequestException(
         'Invalid config: expected { allowedDiscordRoleIds: string[], allowedDiscordUserIds: string[] }',
-      );
+      )
     }
-    await this.appConfig.set(PERMISSIONS_KEY, JSON.stringify(body));
-    await this.permissionConfig.reload();
-    return this.permissionConfig.getConfig();
+    await this.appConfig.set(PERMISSIONS_KEY, JSON.stringify(body))
+    await this.permissionConfig.reload()
+    return this.permissionConfig.getConfig()
   }
 }

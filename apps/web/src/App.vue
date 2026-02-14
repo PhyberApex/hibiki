@@ -8,13 +8,21 @@ import { RouterLink, RouterView } from 'vue-router'
       <div class="brand">
         <span class="brand-icon">響</span>
         <div>
-          <h1 class="brand-title">Hibiki</h1>
-          <p class="brand-subtitle">Discord DJ</p>
+          <h1 class="brand-title">
+            Hibiki
+          </h1>
+          <p class="brand-subtitle">
+            Discord DJ
+          </p>
         </div>
       </div>
       <nav class="nav">
-        <RouterLink to="/" class="nav-link">Control center</RouterLink>
-        <RouterLink to="/permissions" class="nav-link">Permissions</RouterLink>
+        <RouterLink to="/" class="nav-link">
+          Control center
+        </RouterLink>
+        <RouterLink to="/permissions" class="nav-link">
+          Permissions
+        </RouterLink>
       </nav>
     </aside>
     <section class="content">

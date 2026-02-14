@@ -18,20 +18,25 @@ export interface PlayerStateItem {
 export interface GuildDirectoryEntry {
   guildId: string
   guildName: string
-  channels: { id: string; name: string }[]
+  channels: { id: string, name: string }[]
 }
 
 /** Parse error body from Nest/API; returns a user-friendly message. */
 async function getErrorMessage(response: Response): Promise<string> {
   const text = await response.text()
-  if (!text) return `Request failed (${response.status})`
+  if (!text)
+    return `Request failed (${response.status})`
   try {
-    const body = JSON.parse(text) as { message?: string | string[]; error?: string }
+    const body = JSON.parse(text) as { message?: string | string[], error?: string }
     const msg = body.message
-    if (typeof msg === 'string') return msg
-    if (Array.isArray(msg) && msg.length) return String(msg[0] ?? `Request failed (${response.status})`)
-    if (body.error) return `${body.error}: ${response.status}`
-  } catch {
+    if (typeof msg === 'string')
+      return msg
+    if (Array.isArray(msg) && msg.length)
+      return String(msg[0] ?? `Request failed (${response.status})`)
+    if (body.error)
+      return `${body.error}: ${response.status}`
+  }
+  catch {
     // ignore
   }
   return `Request failed (${response.status})`
@@ -86,7 +91,7 @@ export function stopPlayback(guildId: string) {
   })
 }
 
-export function playTrack(payload: { guildId: string; trackId: string; channelId?: string }) {
+export function playTrack(payload: { guildId: string, trackId: string, channelId?: string }) {
   return request('/api/player/play', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -94,7 +99,7 @@ export function playTrack(payload: { guildId: string; trackId: string; channelId
   })
 }
 
-export function triggerEffect(payload: { guildId: string; effectId: string; channelId?: string }) {
+export function triggerEffect(payload: { guildId: string, effectId: string, channelId?: string }) {
   return request('/api/player/effect', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

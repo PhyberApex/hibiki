@@ -11,14 +11,19 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     try {
       const body = JSON.parse(text) as { message?: string | string[] }
       const msg = body.message
-      if (typeof msg === 'string') message = msg
-      else if (Array.isArray(msg) && msg.length) message = String(msg[0] ?? message)
-    } catch {
-      if (text) message = text
+      if (typeof msg === 'string')
+        message = msg
+      else if (Array.isArray(msg) && msg.length)
+        message = String(msg[0] ?? message)
+    }
+    catch {
+      if (text)
+        message = text
     }
     throw new Error(message)
   }
-  if (response.status === 204) return undefined as T
+  if (response.status === 204)
+    return undefined as T
   return response.json()
 }
 

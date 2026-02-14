@@ -12,9 +12,7 @@
     "apps/web"
   ],
   "scripts": {
-    "format": "prettier --check .",
-    "format:write": "prettier --write .",
-    "lint": "pnpm --filter @hibiki/bot lint && pnpm --filter web lint",
+    "lint": "pnpm run -r lint",
     "dev": "concurrently \"pnpm --filter @hibiki/bot start:dev\" \"pnpm --filter web dev\"",
     "build": "pnpm --filter web build && pnpm copy:web && pnpm --filter @hibiki/bot build",
     "copy:web": "node scripts/copy-web-dist.cjs",
@@ -22,8 +20,7 @@
     "test:coverage": "pnpm run -r test:coverage"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
-    "prettier": "^3.8.1"
+    "concurrently": "^9.2.1"
   },
   "dependencies": {
     "@nestjs/typeorm": "^11.0.0",

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
 import type { BotStatus, PlayerStateItem } from '@/api/player'
+import { onMounted, ref } from 'vue'
 import { fetchBotStatus, fetchPlayerState } from '@/api/player'
-import SoundList from '@/components/SoundList.vue'
 import PlayerControls from '@/components/PlayerControls.vue'
+import SoundList from '@/components/SoundList.vue'
 
 const state = ref<PlayerStateItem[]>([])
 const loading = ref(true)
@@ -18,9 +18,11 @@ function onSoundsUpdated() {
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
 function formatRelative(iso?: string) {
-  if (!iso) return ''
+  if (!iso)
+    return ''
   const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
+  if (Number.isNaN(date.getTime()))
+    return ''
   const diffMs = date.getTime() - Date.now()
   const diffMinutes = Math.round(diffMs / 60000)
   if (Math.abs(diffMinutes) < 60) {
@@ -40,9 +42,11 @@ async function loadState() {
     ])
     state.value = stateRes
     botStatus.value = botRes
-  } catch (err) {
+  }
+  catch (err) {
     error.value = err instanceof Error ? err.message : 'Unknown error'
-  } finally {
+  }
+  finally {
     loading.value = false
   }
 }
@@ -56,13 +60,15 @@ onMounted(() => {
   <main class="dashboard">
     <header class="page-header">
       <div>
-        <p class="eyebrow">Status</p>
+        <p class="eyebrow">
+          Status
+        </p>
         <h1>Control Center</h1>
       </div>
       <div class="bot-status-wrap">
         <span
           v-if="botStatus"
-          :class="['bot-status', botStatus.ready ? 'bot-status-connected' : 'bot-status-disconnected']"
+          class="bot-status" :class="[botStatus.ready ? 'bot-status-connected' : 'bot-status-disconnected']"
           :title="botStatus.ready ? `Connected as ${botStatus.userTag ?? 'bot'}` : 'Discord bot not connected'"
         >
           <span class="bot-status-dot" aria-hidden="true" />
@@ -74,22 +80,30 @@ onMounted(() => {
     <section class="panel">
       <div class="panel-header">
         <div>
-          <p class="eyebrow">Playback</p>
+          <p class="eyebrow">
+            Playback
+          </p>
           <h2>Player state</h2>
         </div>
         <span class="tag" :class="{ 'tag-error': error }">
           {{ error ? 'Error' : loading ? 'Syncing' : 'Live' }}
         </span>
       </div>
-      <p v-if="loading" class="panel-message">Loading player state…</p>
-      <p v-else-if="error" class="panel-message panel-error">{{ error }}</p>
-      <p v-else-if="state.length === 0" class="panel-message">No guilds connected.</p>
+      <p v-if="loading" class="panel-message">
+        Loading player state…
+      </p>
+      <p v-else-if="error" class="panel-message panel-error">
+        {{ error }}
+      </p>
+      <p v-else-if="state.length === 0" class="panel-message">
+        No guilds connected.
+      </p>
 
       <ul v-else class="state-list">
         <li v-for="guild in state" :key="guild.guildId" class="state-card">
           <div class="state-card-header">
             <span class="state-guild-id">{{ guild.guildId }}</span>
-            <span :class="['pill', guild.source === 'live' ? 'pill-live' : 'pill-snapshot']">
+            <span class="pill" :class="[guild.source === 'live' ? 'pill-live' : 'pill-snapshot']">
               {{ guild.source === 'live' ? 'Live' : 'Snapshot' }}
             </span>
           </div>
@@ -100,11 +114,15 @@ onMounted(() => {
             </div>
             <div class="state-row">
               <dt>Status</dt>
-              <dd class="state-status">{{ guild.isIdle ? 'Idle' : 'Playing' }}</dd>
+              <dd class="state-status">
+                {{ guild.isIdle ? 'Idle' : 'Playing' }}
+              </dd>
             </div>
             <div v-if="guild.lastUpdated" class="state-row">
               <dt>Updated</dt>
-              <dd class="state-muted">{{ formatRelative(guild.lastUpdated) }}</dd>
+              <dd class="state-muted">
+                {{ formatRelative(guild.lastUpdated) }}
+              </dd>
             </div>
             <div class="state-row">
               <dt>Track</dt>
@@ -113,7 +131,9 @@ onMounted(() => {
                   {{ guild.track.name }}
                   <span class="state-category">{{ guild.track.category }}</span>
                 </template>
-                <template v-else>—</template>
+                <template v-else>
+                  —
+                </template>
               </dd>
             </div>
           </dl>

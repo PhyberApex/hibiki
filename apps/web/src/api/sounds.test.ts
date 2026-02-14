@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  listMusic,
-  listEffects,
-  listMusicTags,
-  listEffectsTags,
-  setSoundTags,
-  uploadSound,
   deleteSound,
+  listEffects,
+  listEffectsTags,
+  listMusic,
+  listMusicTags,
+  setSoundTags,
   soundStreamUrl,
+  uploadSound,
 } from './sounds'
 
 describe('sounds API', () => {

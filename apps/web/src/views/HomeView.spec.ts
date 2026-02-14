@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import HomeView from './HomeView.vue'
-import SoundList from '@/components/SoundList.vue'
+import { describe, expect, it, vi } from 'vitest'
 import PlayerControls from '@/components/PlayerControls.vue'
+import SoundList from '@/components/SoundList.vue'
+import HomeView from './HomeView.vue'
 
 vi.mock('@/api/player', () => ({
   fetchPlayerState: vi.fn().mockResolvedValue([]),
@@ -13,7 +13,7 @@ vi.mock('@/api/sounds', () => ({
   listEffects: vi.fn().mockResolvedValue([]),
 }))
 
-describe('HomeView', () => {
+describe('homeView', () => {
   it('renders Control Center heading', async () => {
     const wrapper = mount(HomeView)
     await wrapper.vm.$nextTick()
