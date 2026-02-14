@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createReadStream } from 'fs';
 import { mkdir, stat, unlink, writeFile } from 'fs/promises';
 import { join, extname } from 'path';
 import slugify from 'slugify';
@@ -48,17 +49,32 @@ export class SoundLibraryService implements OnModuleInit {
     const results: SoundFile[] = [];
     for (const file of entries) {
       const filePath = this.resolvePath(category, file);
-      const stats = await stat(filePath);
-      results.push({
-        id: file.replace(extname(file), ''),
-        name: this.humanize(file),
-        filename: file,
-        size: stats.size,
-        category,
-        createdAt: stats.birthtime.toISOString(),
-      });
+      try {
+        const stats = await stat(filePath);
+        results.push({
+          id: file.replace(extname(file), ''),
+          name: this.humanize(file),
+          filename: file,
+          size: stats.size,
+          category,
+          createdAt: stats.birthtime.toISOString(),
+        });
+      } catch (err) {
+        this.logger.warn(`Skipping missing file: ${filePath}`);
+      }
     }
     return results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  /** Return a readable stream of the file for playback/download. */
+  async getStream(
+    category: SoundCategory,
+    id: string,
+  ): Promise<{ stream: ReturnType<typeof createReadStream>; filename: string }> {
+    const filename = await this.findFilename(category, id);
+    const path = this.resolvePath(category, filename);
+    const stream = createReadStream(path);
+    return { stream, filename };
   }
 
   async getFile(

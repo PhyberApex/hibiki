@@ -14,10 +14,4 @@ export const configuration = () => ({
   database: {
     path: process.env.HIBIKI_DB_PATH ?? 'storage/data/hibiki.sqlite',
   },
-  dashboard: {
-    /** Comma-separated roles for unauthenticated API requests. In development, default to "admin" so the UI works without login. */
-    defaultRoles:
-      process.env.HIBIKI_DASHBOARD_DEFAULT_ROLES ??
-      (process.env.NODE_ENV === 'production' ? '' : 'admin'),
-  },
 });

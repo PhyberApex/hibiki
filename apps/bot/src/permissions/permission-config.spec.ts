@@ -1,20 +1,17 @@
 import { ConfigService } from '@nestjs/config';
+import { AppConfigService } from '../persistence/app-config.service';
 import { PermissionConfigService } from './permission-config.service';
 
+jest.mock('../persistence/app-config.service', () => ({
+  AppConfigService: class MockAppConfigService {
+    get = jest.fn().mockResolvedValue(null);
+    set = jest.fn().mockResolvedValue(undefined);
+  },
+}));
+
 const mockFile = JSON.stringify({
-  discordRoles: {
-    'role-admin': ['admin'],
-    'role-dj': ['dj'],
-  },
-  dashboardUsers: {
-    'admin@example.com': ['admin'],
-    'mixed@example.com': ['admin', 'moderator'],
-  },
-  commands: {
-    'player.play': ['dj'],
-    'player.stop': ['admin'],
-    unrestricted: [],
-  },
+  allowedDiscordRoleIds: ['role-1', 'role-2'],
+  allowedDiscordUserIds: ['user-1'],
 });
 
 jest.mock('node:fs', () => ({
@@ -27,32 +24,43 @@ describe('PermissionConfigService', () => {
     get: jest.fn().mockReturnValue(undefined),
   } as unknown as ConfigService;
 
-  const service = new PermissionConfigService(configService);
+  const appConfig = new (AppConfigService as unknown as new () => AppConfigService)();
 
-  it('collects roles for guild members', () => {
-    const roles = service.getRolesForDiscordMember(['role-admin', 'role-dj']);
-    expect(Array.from(roles)).toEqual(expect.arrayContaining(['admin', 'dj']));
+  let service: PermissionConfigService;
+
+  beforeAll(async () => {
+    service = new PermissionConfigService(configService, appConfig);
+    await service.reload();
   });
 
-  it('returns dashboard roles case-insensitively', () => {
-    const roles = service.getRolesForDashboardUser('MIXED@example.com');
-    expect(Array.from(roles)).toEqual(
-      expect.arrayContaining(['admin', 'moderator']),
+  it('returns config with allowlists', () => {
+    const config = service.getConfig();
+    expect(config.allowedDiscordRoleIds).toEqual(['role-1', 'role-2']);
+    expect(config.allowedDiscordUserIds).toEqual(['user-1']);
+  });
+
+  it('allows user when they have an allowed role', () => {
+    expect(service.isAllowed(['role-1'], null)).toBe(true);
+    expect(service.isAllowed(['other', 'role-2'], null)).toBe(true);
+  });
+
+  it('allows user when their id is in allowlist', () => {
+    expect(service.isAllowed([], 'user-1')).toBe(true);
+    expect(service.isAllowed(['any'], 'user-1')).toBe(true);
+  });
+
+  it('denies user when neither role nor user id is allowed', () => {
+    expect(service.isAllowed(['other-role'], null)).toBe(false);
+    expect(service.isAllowed([], 'other-user')).toBe(false);
+  });
+
+  it('allows no one when both allowlists are empty', async () => {
+    const emptyService = new PermissionConfigService(configService, appConfig);
+    (appConfig.get as jest.Mock).mockResolvedValueOnce(
+      JSON.stringify({ allowedDiscordRoleIds: [], allowedDiscordUserIds: [] }),
     );
-  });
-
-  it('grants access when requirement met', () => {
-    const roles = new Set(['dj']);
-    expect(service.hasPermission('player.play', roles)).toBe(true);
-  });
-
-  it('denies access when requirement missing', () => {
-    const roles = new Set(['dj']);
-    expect(service.hasPermission('player.stop', roles)).toBe(false);
-  });
-
-  it('allows unrestricted commands', () => {
-    expect(service.hasPermission('unrestricted', new Set())).toBe(true);
-    expect(service.hasPermission('unknown', new Set())).toBe(true);
+    await emptyService.reload();
+    expect(emptyService.isAllowed([], null)).toBe(false);
+    expect(emptyService.isAllowed(['any'], 'anyone')).toBe(false);
   });
 });

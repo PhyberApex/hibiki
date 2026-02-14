@@ -14,7 +14,11 @@ async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   if (response.status === 204) {
     return undefined as T
   }
-  return response.json()
+  const text = await response.text()
+  if (!text.trim()) {
+    return undefined as T
+  }
+  return JSON.parse(text) as T
 }
 
 export function listMusic(signal?: AbortSignal) {
@@ -44,4 +48,9 @@ export function deleteSound(type: 'music' | 'effects', id: string, signal?: Abor
     method: 'DELETE',
     signal,
   })
+}
+
+/** URL to stream a sound for playback (use in <audio src="...">) */
+export function soundStreamUrl(type: 'music' | 'effects', id: string): string {
+  return `/api/sounds/${type}/${id}/file`
 }

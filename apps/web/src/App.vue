@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { RouterLink, RouterView } from 'vue-router'
 </script>
 
 <template>
@@ -12,7 +12,10 @@ import { RouterView } from 'vue-router'
           <p class="brand-subtitle">Discord DJ</p>
         </div>
       </div>
-      <nav class="nav-hint">Control center</nav>
+      <nav class="nav">
+        <RouterLink to="/" class="nav-link">Control center</RouterLink>
+        <RouterLink to="/permissions" class="nav-link">Permissions</RouterLink>
+      </nav>
     </aside>
     <section class="content">
       <RouterView />
@@ -70,11 +73,28 @@ import { RouterView } from 'vue-router'
   color: var(--color-text-muted);
 }
 
-.nav-hint {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-text-dim);
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.nav-link {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  padding: 0.4rem 0;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition);
+}
+
+.nav-link:hover {
+  color: var(--color-accent);
+}
+
+.nav-link.router-link-active {
+  color: var(--color-accent);
+  font-weight: 500;
 }
 
 .content {
@@ -94,9 +114,6 @@ import { RouterView } from 'vue-router'
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-  }
-  .nav-hint {
-    display: none;
   }
   .content {
     padding: 1.25rem;

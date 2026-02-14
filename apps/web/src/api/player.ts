@@ -29,7 +29,7 @@ async function getErrorMessage(response: Response): Promise<string> {
     const body = JSON.parse(text) as { message?: string | string[]; error?: string }
     const msg = body.message
     if (typeof msg === 'string') return msg
-    if (Array.isArray(msg) && msg.length) return msg[0]
+    if (Array.isArray(msg) && msg.length) return String(msg[0] ?? `Request failed (${response.status})`)
     if (body.error) return `${body.error}: ${response.status}`
   } catch {
     // ignore
@@ -49,8 +49,17 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json()
 }
 
+export interface BotStatus {
+  ready: boolean
+  userTag?: string
+}
+
 export function fetchPlayerState(signal?: AbortSignal): Promise<PlayerStateItem[]> {
   return request('/api/player/state', { signal })
+}
+
+export function fetchBotStatus(signal?: AbortSignal): Promise<BotStatus> {
+  return request('/api/player/bot-status', { signal })
 }
 
 export function joinChannel(guildId: string, channelId: string) {

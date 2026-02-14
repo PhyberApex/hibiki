@@ -108,6 +108,9 @@ export class AudioEngine {
         '0',
         '-loglevel',
         '0',
+        // Short fade-in (50ms) to avoid scratchy/clicky start when mixer switches to this source
+        '-af',
+        'afade=t=in:st=0:d=0.05',
         '-f',
         's16le',
         '-ar',

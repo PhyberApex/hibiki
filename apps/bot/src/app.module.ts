@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -6,9 +6,9 @@ import { resolve } from 'path';
 import { AppController } from './app.controller';
 import { configuration } from './config/configuration';
 import { validationSchema } from './config/validation';
-import { DashboardDefaultRolesMiddleware } from './dashboard-default-roles.middleware';
 import { SoundModule } from './sound/sound.module';
 import { DiscordModule } from './discord/discord.module';
+import { AppConfig } from './persistence/app-config.entity';
 import { PersistenceModule } from './persistence/persistence.module';
 import { PlayerSnapshot } from './persistence/player-snapshot.entity';
 
@@ -47,7 +47,7 @@ import { PlayerSnapshot } from './persistence/player-snapshot.entity';
           process.cwd(),
           config.get<string>('database.path', 'storage/data/hibiki.sqlite'),
         ),
-        entities: [PlayerSnapshot],
+        entities: [PlayerSnapshot, AppConfig],
         synchronize: true,
       }),
     }),
@@ -56,10 +56,5 @@ import { PlayerSnapshot } from './persistence/player-snapshot.entity';
     DiscordModule,
   ],
   controllers: [AppController],
-  providers: [DashboardDefaultRolesMiddleware],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(DashboardDefaultRolesMiddleware).forRoutes('*');
-  }
-}
+export class AppModule {}

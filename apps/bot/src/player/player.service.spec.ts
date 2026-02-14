@@ -18,13 +18,19 @@ describe('PlayerService', () => {
 
     sounds = {
       getFile: jest.fn().mockResolvedValue(mockFile),
-    } as jest.Mocked<SoundLibraryService>;
+      getFileByIdOrName: jest.fn().mockResolvedValue(mockFile),
+      list: jest.fn().mockResolvedValue([]),
+      onModuleInit: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn(),
+      save: jest.fn(),
+    } as unknown as jest.Mocked<SoundLibraryService>;
 
     snapshots = {
       upsert: jest.fn(),
       remove: jest.fn(),
       list: jest.fn().mockResolvedValue([]),
-    } as jest.Mocked<PlayerSnapshotService>;
+      repo: {} as PlayerSnapshotService['repo'],
+    } as unknown as jest.Mocked<PlayerSnapshotService>;
 
     service = new PlayerService(sounds, snapshots);
   });

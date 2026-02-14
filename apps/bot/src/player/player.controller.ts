@@ -1,5 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { PermissionGuard } from '../permissions';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { PlayerService } from './player.service';
 import { DiscordService } from '../discord/discord.service';
 
@@ -28,13 +27,16 @@ export class PlayerController {
   ) {}
 
   @Get('state')
-  @UseGuards(PermissionGuard('player.state.view'))
   async getState() {
     return this.player.getState();
   }
 
+  @Get('bot-status')
+  getBotStatus() {
+    return this.discord.getBotStatus();
+  }
+
   @Get('guilds')
-  @UseGuards(PermissionGuard('player.state.view'))
   getGuildDirectory() {
     return this.discord.listGuildDirectory();
   }
@@ -56,7 +58,6 @@ export class PlayerController {
   }
 
   @Post('join')
-  @UseGuards(PermissionGuard('player.join'))
   async join(@Body() body: JoinPayload) {
     const channel = this.resolveChannel(body.guildId, body.channelId);
     await this.player.connect(channel);
@@ -64,21 +65,18 @@ export class PlayerController {
   }
 
   @Post('leave')
-  @UseGuards(PermissionGuard('player.leave'))
   async leave(@Body('guildId') guildId: string) {
     await this.player.disconnect(guildId);
     return { status: 'ok' };
   }
 
   @Post('stop')
-  @UseGuards(PermissionGuard('player.stop'))
   async stop(@Body('guildId') guildId: string) {
     await this.player.stop(guildId);
     return { status: 'ok' };
   }
 
   @Post('play')
-  @UseGuards(PermissionGuard('player.play'))
   async play(@Body() body: PlayPayload) {
     const channel = body.channelId
       ? this.resolveChannel(body.guildId, body.channelId)
@@ -92,7 +90,6 @@ export class PlayerController {
   }
 
   @Post('effect')
-  @UseGuards(PermissionGuard('player.effect'))
   async effect(@Body() body: EffectPayload) {
     const channel = body.channelId
       ? this.resolveChannel(body.guildId, body.channelId)

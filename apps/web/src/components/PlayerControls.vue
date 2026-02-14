@@ -5,6 +5,7 @@ const props = withDefaults(
   defineProps<{ soundsVersion?: number }>(),
   { soundsVersion: 0 },
 )
+const emit = defineEmits<{ actionDone: [] }>()
 import type { GuildDirectoryEntry } from '@/api/player'
 import {
   fetchGuildDirectory,
@@ -97,6 +98,7 @@ async function run(
   try {
     await action()
     showToast('success', successMessage)
+    emit('actionDone')
   } catch (err) {
     showToast('error', err instanceof Error ? err.message : 'Action failed')
   } finally {

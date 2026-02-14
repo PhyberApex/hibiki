@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import type { PlayerStateItem } from '@/api/player'
-import { fetchPlayerState } from '@/api/player'
+import type { BotStatus, PlayerStateItem } from '@/api/player'
+import { fetchBotStatus, fetchPlayerState } from '@/api/player'
 import SoundList from '@/components/SoundList.vue'
 import PlayerControls from '@/components/PlayerControls.vue'
 
 const state = ref<PlayerStateItem[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
+const botStatus = ref<BotStatus | null>(null)
 /** Bump when sounds are uploaded/deleted so PlayerControls refetches dropdowns */
 const soundsVersion = ref(0)
 function onSoundsUpdated() {
@@ -33,7 +34,12 @@ async function loadState() {
   loading.value = true
   error.value = null
   try {
-    state.value = await fetchPlayerState()
+    const [stateRes, botRes] = await Promise.all([
+      fetchPlayerState(),
+      fetchBotStatus().catch(() => ({ ready: false } as BotStatus)),
+    ])
+    state.value = stateRes
+    botStatus.value = botRes
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Unknown error'
   } finally {
@@ -53,9 +59,16 @@ onMounted(() => {
         <p class="eyebrow">Status</p>
         <h1>Control Center</h1>
       </div>
-      <button type="button" class="btn btn-ghost" @click="loadState" :disabled="loading">
-        {{ loading ? 'Refreshing…' : 'Refresh' }}
-      </button>
+      <div class="bot-status-wrap">
+        <span
+          v-if="botStatus"
+          :class="['bot-status', botStatus.ready ? 'bot-status-connected' : 'bot-status-disconnected']"
+          :title="botStatus.ready ? `Connected as ${botStatus.userTag ?? 'bot'}` : 'Discord bot not connected'"
+        >
+          <span class="bot-status-dot" aria-hidden="true" />
+          {{ botStatus.ready ? (botStatus.userTag ?? 'Connected') : 'Bot disconnected' }}
+        </span>
+      </div>
     </header>
 
     <section class="panel">
@@ -108,8 +121,7 @@ onMounted(() => {
       </ul>
     </section>
 
-    <PlayerControls :sounds-version="soundsVersion" />
-
+    <PlayerControls :sounds-version="soundsVersion" @action-done="loadState" />
 
     <div class="sound-grid">
       <SoundList title="Music" type="music" @uploaded="onSoundsUpdated" />
@@ -146,6 +158,42 @@ onMounted(() => {
   font-size: 1.75rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+}
+
+.bot-status-wrap {
+  flex-shrink: 0;
+}
+.bot-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+}
+.bot-status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.bot-status-connected {
+  background: var(--color-success-muted);
+  color: var(--color-live);
+  border-color: var(--color-live);
+}
+.bot-status-connected .bot-status-dot {
+  background: var(--color-live);
+}
+.bot-status-disconnected {
+  background: var(--color-error-muted);
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+.bot-status-disconnected .bot-status-dot {
+  background: var(--color-error);
 }
 
 .btn {

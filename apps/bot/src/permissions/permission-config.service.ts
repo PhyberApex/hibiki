@@ -1,57 +1,107 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { PermissionConfig, PermissionRole } from './permission.types';
+import { AppConfigService } from '../persistence/app-config.service';
+import type { AllowlistConfig } from './permission.types';
+
+const PERMISSIONS_KEY = 'permissions';
+
+function normalizeAllowlist(raw: unknown): AllowlistConfig {
+  if (!raw || typeof raw !== 'object') {
+    return { allowedDiscordRoleIds: [], allowedDiscordUserIds: [] };
+  }
+  const o = raw as Record<string, unknown>;
+  let roleIds: string[];
+  let userIds: string[];
+  if (Array.isArray(o.allowedDiscordRoleIds) || Array.isArray(o.allowedDiscordUserIds)) {
+    roleIds = Array.isArray(o.allowedDiscordRoleIds)
+      ? (o.allowedDiscordRoleIds as string[]).filter((id) => typeof id === 'string')
+      : [];
+    userIds = Array.isArray(o.allowedDiscordUserIds)
+      ? (o.allowedDiscordUserIds as string[]).filter((id) => typeof id === 'string')
+      : [];
+  } else if (o.discordRoles && typeof o.discordRoles === 'object') {
+    // Migrate from old config: role IDs that had any permission are now allowed
+    roleIds = Object.keys(o.discordRoles as Record<string, unknown>);
+    userIds = [];
+  } else {
+    roleIds = [];
+    userIds = [];
+  }
+  return { allowedDiscordRoleIds: roleIds, allowedDiscordUserIds: userIds };
+}
 
 @Injectable()
-export class PermissionConfigService {
-  private config: PermissionConfig;
+export class PermissionConfigService implements OnModuleInit {
+  private config: AllowlistConfig = {
+    allowedDiscordRoleIds: [],
+    allowedDiscordUserIds: [],
+  };
 
-  constructor(private readonly configService: ConfigService) {
-    this.config = this.loadConfig();
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly appConfig: AppConfigService,
+  ) {}
+
+  async onModuleInit() {
+    await this.reload();
   }
 
-  private loadConfig(): PermissionConfig {
+  async reload(): Promise<void> {
+    this.config = await this.loadConfig();
+  }
+
+  getConfig(): AllowlistConfig {
+    return {
+      allowedDiscordRoleIds: [...this.config.allowedDiscordRoleIds],
+      allowedDiscordUserIds: [...this.config.allowedDiscordUserIds],
+    };
+  }
+
+  /**
+   * True if the user is allowed to use the bot. Empty allowlist = no one allowed.
+   */
+  isAllowed(memberRoleIds: string[], userId?: string | null): boolean {
+    const { allowedDiscordRoleIds, allowedDiscordUserIds } = this.config;
+    if (allowedDiscordRoleIds.length === 0 && allowedDiscordUserIds.length === 0) {
+      return false;
+    }
+    if (userId && allowedDiscordUserIds.includes(userId)) return true;
+    if (memberRoleIds.some((id) => allowedDiscordRoleIds.includes(id))) return true;
+    return false;
+  }
+
+  private async loadConfig(): Promise<AllowlistConfig> {
+    const stored = await this.appConfig.get(PERMISSIONS_KEY);
+    if (stored) {
+      try {
+        return normalizeAllowlist(JSON.parse(stored));
+      } catch {
+        // fall through
+      }
+    }
+    const fromFile = this.loadConfigFromFile();
+    const hasAny = fromFile.allowedDiscordRoleIds.length > 0 || fromFile.allowedDiscordUserIds.length > 0;
+    if (hasAny) {
+      await this.appConfig.set(PERMISSIONS_KEY, JSON.stringify(fromFile));
+    }
+    return fromFile;
+  }
+
+  private loadConfigFromFile(): AllowlistConfig {
     const configPath = this.configService.get<string>('permissions.file');
     const resolved = configPath
       ? resolve(configPath)
       : resolve(__dirname, 'permission-config.json');
     if (!existsSync(resolved)) {
-      return { discordRoles: {}, dashboardUsers: {}, commands: {} };
+      return { allowedDiscordRoleIds: [], allowedDiscordUserIds: [] };
     }
-    const parsed = JSON.parse(
-      readFileSync(resolved, 'utf-8'),
-    ) as PermissionConfig;
-    return {
-      discordRoles: parsed.discordRoles ?? {},
-      dashboardUsers: parsed.dashboardUsers ?? {},
-      commands: parsed.commands ?? {},
-    };
-  }
-
-  getRolesForDiscordMember(roleIds: string[]): Set<PermissionRole> {
-    const roles = new Set<PermissionRole>();
-    roleIds.forEach((id) => {
-      const perms = this.config.discordRoles[id];
-      perms?.forEach((role) => roles.add(role));
-    });
-    return roles;
-  }
-
-  getRolesForDashboardUser(email: string): Set<PermissionRole> {
-    const roles = new Set<PermissionRole>();
-    const perms = this.config.dashboardUsers[email.toLowerCase()];
-    perms?.forEach((role) => roles.add(role));
-    return roles;
-  }
-
-  hasPermission(commandKey: string, roles: Iterable<PermissionRole>): boolean {
-    const required = this.config.commands[commandKey];
-    if (!required || required.length === 0) {
-      return true;
+    try {
+      const parsed = JSON.parse(readFileSync(resolved, 'utf-8')) as unknown;
+      return normalizeAllowlist(parsed);
+    } catch {
+      return { allowedDiscordRoleIds: [], allowedDiscordUserIds: [] };
     }
-    const roleSet = new Set(roles);
-    return required.some((role) => roleSet.has(role));
   }
 }
