@@ -17,6 +17,7 @@
     "build": "pnpm --filter web build && pnpm copy:web && pnpm --filter @hibiki/bot build",
     "copy:web": "node scripts/copy-web-dist.cjs",
     "start": "pnpm --filter @hibiki/bot start:prod",
+    "test": "pnpm run -r test",
     "test:coverage": "pnpm run -r test:coverage"
   },
   "devDependencies": {

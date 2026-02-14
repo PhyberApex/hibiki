@@ -1,6 +1,4 @@
-import type {
-  OnModuleInit,
-} from '@nestjs/common'
+import type { OnModuleInit } from '@nestjs/common'
 import type { ConfigService } from '@nestjs/config'
 import type { SoundTagService } from '../persistence/sound-tag.service'
 import type { SoundCategory, SoundFile } from './sound.types'
