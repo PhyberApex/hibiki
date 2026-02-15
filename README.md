@@ -43,11 +43,8 @@ Before running Hibiki, you need a Discord application and bot token.
 1. Go to **OAuth2** → **URL Generator**.
 2. Under **Scopes**, select **bot**.
 3. Under **Bot Permissions**, select at least:
-   - **View Channels** / **Read Messages**
-   - **Send Messages**
-   - **Read Message History**
-   - **Connect** (voice)
-   - **Speak** (voice)
+   - **View Channels**, **Send Messages**, **Read Message History**
+   - **Connect** (join voice channels) and **Speak** (transmit audio) — required for voice
    - Optionally **Manage Messages** (for the `!delete` command to clear bot messages).
 4. Copy the **Generated URL** at the bottom, open it in a browser, choose your server, and authorize.
 
@@ -94,6 +91,8 @@ Dashboard is bundled and served by the bot at the same port (e.g. http://localho
 
 ## Docker
 
+### Run with Compose (local or server)
+
 ```bash
 cp .env.sample .env   # set DISCORD_TOKEN and DISCORD_CLIENT_ID
 mkdir -p storage
@@ -102,7 +101,18 @@ docker compose up -d
 
 Dashboard + API at http://localhost:3000. Mount `./storage` so uploads and SQLite persist.
 
-Pre-built image: `ghcr.io/phyberapex/hibiki:latest` (see [apps/bot/README.md](apps/bot/README.md) for `docker run`).
+### Pre-built images (GitHub Container Registry)
+
+Images are built and pushed via GitHub Actions to **ghcr.io**:
+
+| Tag | When | Use case |
+|-----|------|----------|
+| `ghcr.io/phyberapex/hibiki:latest` | On each **published release** | Stable; same as the latest version tag. |
+| `ghcr.io/phyberapex/hibiki:X.Y.Z` | On each **published release** | Pin to a specific version (e.g. `1.2.0`). |
+| `ghcr.io/phyberapex/hibiki:next` | On every **push to main** | Bleeding edge; may be unstable. |
+| `ghcr.io/phyberapex/hibiki:<sha>` | On every **push to main** | Pin to a specific commit (e.g. `a1b2c3d`). |
+
+Use version or `latest` for production; use `next` only for testing. See [apps/bot/README.md](apps/bot/README.md) for `docker run` and env vars.
 
 ## What the database is for
 
@@ -116,7 +126,7 @@ Sound files are **not** in the database; they live on disk under `storage/music`
 ## Docs
 
 - **[apps/bot/README.md](apps/bot/README.md)** — Discord commands, REST API, permissions, persistence, Docker details
-- **GitHub Pages** — Enable in repo **Settings → Pages**: source **Deploy from a branch**, branch **main**, folder **/docs**. The [docs/](docs/) folder contains a static site with setup and usage help.
+- **Docs website** — The [docs/](docs/) folder is a **Jekyll** site: edit [docs/index.md](docs/index.md) (Markdown) and push; GitHub Pages builds it when you use **Settings → Pages** → **Deploy from a branch** → **main** → folder **/docs**. See [docs/README.md](docs/README.md) for how it works and how to add pages.
 
 ## License
 

@@ -137,10 +137,14 @@ docker run -d \
   ghcr.io/phyberapex/hibiki:latest
 ```
 
+Use a version tag (e.g. `ghcr.io/phyberapex/hibiki:1.2.0`) to pin to a release, or `ghcr.io/phyberapex/hibiki:next` for the latest build from `main`.
+
 ## Release & CI
 
-- Release automation: release-please (`.github/workflows/release-please.yml`)
-- Docker builds: GitHub Actions push to GHCR on tagged releases
-- CI: `.github/workflows/checks.yml` runs lint/test/build via pnpm
+- **Release automation:** release-please (`.github/workflows/release-please.yml`) — creates release PRs and publishes releases.
+- **Docker (GHCR):**
+  - **Versioned:** On each **published release**, images are pushed as `ghcr.io/<owner>/hibiki:latest` and `ghcr.io/<owner>/hibiki:X.Y.Z` (see root README for the full tag table).
+  - **Bleeding edge:** On every **push to main**, images are pushed as `ghcr.io/<owner>/hibiki:next` and `ghcr.io/<owner>/hibiki:<commit-sha>`.
+- **CI:** `.github/workflows/checks.yml` runs lint, test, and build via pnpm.
 
 That's the gist! See `apps/web/README.md` for dashboard specifics or poke around the code under `apps/bot/src/*` for more details.
