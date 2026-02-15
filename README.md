@@ -132,6 +132,11 @@ Sound files are **not** in the database; they live on disk under `storage/music`
 - **[apps/bot/README.md](apps/bot/README.md)** — Discord commands, REST API, permissions, persistence, Docker details
 - **Docs website** — The [docs/](docs/) folder is a **Jekyll** site: edit [docs/index.md](docs/index.md) (Markdown) and push; GitHub Pages builds it when you use **Settings → Pages** → **Deploy from a branch** → **main** → folder **/docs**. See [docs/README.md](docs/README.md) for how it works and how to add pages.
 
-## License
+## Contributing
 
-MIT.
+Contributions are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, running lint and tests, and how to submit changes.
+
+## About this project
+
+This repository was created largely with the help of **AI-assisted coding tools**. The code and docs are maintained in the same way as any open-source project; we encourage human review, testing, and contributions.
+

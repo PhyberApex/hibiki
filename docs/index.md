@@ -66,6 +66,14 @@ Music and effects volume are set **per server** (per guild):
 - **Dashboard:** When the bot is connected to a server, the Playback controls show **Music volume** and **Effects volume** sliders. Change them and the new volume applies to the next track or effect (and to already-playing music when you change music volume for future playback).
 - **Discord:** Use `!volume` to see current levels, or `!volume music 80` / `!volume effects 90` to set them. The control panel (`!menu`) has **Music volume** and **Effects volume** dropdowns (0%, 25%, 50%, 75%, 100%).
 
+## If text commands do nothing (!menu, !play, etc.)
+
+The bot must have **Message Content Intent** enabled or it cannot read your messages. In the [Discord Developer Portal](https://discord.com/developers/applications) → your application → **Bot** → **Privileged Gateway Intents**, turn **Message Content Intent** **ON**, then save. Restart Hibiki after changing. If it’s already on, check the **Permissions** allowlist in the dashboard — your Discord user or role must be allowed to use the bot.
+
+## About this project
+
+This project was created in large part with **AI-assisted coding tools**. We encourage human review, testing, and contributions.
+
 ## Known issues
 
 - **Playback crackling at start** — The first second or so of a track (or effect) can sometimes crackle or pop. This is a known limitation of the current audio pipeline and may be improved in a future release.

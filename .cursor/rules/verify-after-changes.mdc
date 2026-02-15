@@ -1,0 +1,13 @@
+---
+description: Run lint and tests after making code changes
+alwaysApply: true
+---
+
+# Verify after code changes
+
+After editing application code (bot, web, or shared config), **run lint and tests** to ensure nothing is broken:
+
+1. **Lint:** From repo root run `pnpm run lint`. Fix any reported issues.
+2. **Tests:** From repo root run `pnpm run test`. Fix any failing tests.
+
+Do this before considering the change complete. If you introduce a regression, fix it or revert the change.
