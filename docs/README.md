@@ -6,9 +6,9 @@ The docs are built with **Jekyll** and published by **GitHub Pages** when you us
 
 1. **Source files** (what you edit):
    - **`index.md`** — Homepage content in Markdown. The front matter (`layout: default`, `title: ...`) tells Jekyll to wrap it in the default layout.
-   - **`_layouts/default.html`** — Shared layout: header (hero + logo), main area where `{{ content }}` is replaced by the rendered page, footer. All CSS lives here so the look is consistent.
-   - **`_config.yml`** — Site title, description, and `baseurl` (e.g. `/hibiki` so links work when the site is at `https://<user>.github.io/hibiki/`).
-   - **Assets** — Put `logo.jpg`, `banner.jpg`, `favicon.jpg` (and any other images) in `docs/`. Reference them in Markdown or the layout as `{{ site.baseurl }}/logo.jpg` so they work on GitHub Pages.
+   - **`_layouts/default.html`** — Shared layout: simple text header (title + tagline, no banner), main content area, footer. All CSS lives here.
+   - **`_config.yml`** — Site title, description (tagline), and `baseurl` (e.g. `/hibiki` so links work when the site is at `https://<user>.github.io/hibiki/`).
+   - **Assets** — `logo.png` and `banner.png` in `docs/` (favicon uses logo; layout shows banner at top and logo in header). Copy from repo root if you replace them.
 
 2. **Build (on GitHub)**  
    When you push to `main`, GitHub Pages runs Jekyll on the `docs/` folder. Jekyll:
@@ -21,7 +21,7 @@ The docs are built with **Jekyll** and published by **GitHub Pages** when you us
 
 ## Editing content
 
-- **Change the homepage:** Edit **`index.md`**. Use normal Markdown: `**bold**`, `[text](url)`, `code`, fenced code blocks, lists. Section structure uses `<section>` and `<div class="container">` so the layout’s CSS applies.
+- **Change the homepage:** Edit **`index.md`**. Use normal Markdown: `##` headings, `**bold**`, `[text](url)`, `` `code` ``, fenced code blocks (triple backticks), and lists. The layout wraps content in a single `.container`; use `##` for sections so headings and paragraphs render correctly.
 - **Change the look (header, footer, styles):** Edit **`_layouts/default.html`** (and keep `{{ content }}` so the page body still appears).
 - **Change site title/description or base URL:** Edit **`_config.yml`**. If the repo is under a different path (e.g. different org or repo name), set `baseurl` to match (e.g. `"/my-repo"`).
 
@@ -40,7 +40,12 @@ The docs are built with **Jekyll** and published by **GitHub Pages** when you us
 
 ## Preview locally (optional)
 
-If you have Ruby and Bundler:
+You need **Ruby** and **Bundler** to run `bundle` and Jekyll locally:
+
+- **Ruby** — Check with `ruby -v`. macOS often has a system Ruby; if it’s missing or too old, install via [Homebrew](https://brew.sh/) (`brew install ruby`) or use [rbenv](https://github.com/rbenv/rbenv) / [rvm](https://rvm.io/).
+- **Bundler** — Install with `gem install bundler`. Then run `bundle install` (or the commands below) in the directory that has a `Gemfile`.
+
+From the repo root:
 
 ```bash
 cd docs
@@ -57,8 +62,8 @@ The built site is in `docs/_site/`; that folder is in `.gitignore` and is not co
 
 | What            | Where                |
 |-----------------|----------------------|
-| Homepage text   | `index.md`           |
-| Layout + CSS    | `_layouts/default.html` |
-| Site settings   | `_config.yml`        |
-| Images          | `docs/*.jpg` (and reference via `{{ site.baseurl }}/...`) |
-| Build           | Done by GitHub Pages on push to `main` (folder `/docs`)   |
+| Homepage text   | `index.md` (D&D-focused intro, setup, volume, known issues) |
+| Layout + CSS    | `_layouts/default.html` (simple header, no banner) |
+| Site settings   | `_config.yml` (title, tagline “Echoes of Adventure…”, baseurl) |
+| Logo & banner   | `docs/logo.png`, `docs/banner.png` (layout uses both) |
+| Build           | Done by GitHub Pages on push to `main` (folder `/docs`) |

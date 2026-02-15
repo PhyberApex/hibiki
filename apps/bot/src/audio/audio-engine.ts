@@ -26,14 +26,19 @@ interface ActiveStream {
   volume: number
 }
 
+const DEFAULT_VOLUMES = { music: 85, effects: 90 }
+const CLAMP = (v: number) => Math.min(100, Math.max(0, Math.round(v)))
+
 export class AudioEngine {
   private readonly mixer: AudioMixer
   private readonly output = new PassThrough()
   private readonly player: AudioPlayer
   private readonly resource: AudioResource<null>
   private background?: ActiveStream
+  private volumes = { ...DEFAULT_VOLUMES }
 
-  constructor(private readonly volumes = { music: 85, effects: 90 }) {
+  constructor(initialVolumes = DEFAULT_VOLUMES) {
+    this.volumes = { music: CLAMP(initialVolumes.music), effects: CLAMP(initialVolumes.effects) }
     this.mixer = new AudioMixer({
       sampleRate: 48000,
       channels: 2,
@@ -53,6 +58,17 @@ export class AudioEngine {
 
   get audioPlayer() {
     return this.player
+  }
+
+  getVolumes(): { music: number, effects: number } {
+    return { ...this.volumes }
+  }
+
+  setVolumes(updates: { music?: number, effects?: number }): void {
+    if (typeof updates.music === 'number')
+      this.volumes.music = CLAMP(updates.music)
+    if (typeof updates.effects === 'number')
+      this.volumes.effects = CLAMP(updates.effects)
   }
 
   playMusic(filePath: string) {

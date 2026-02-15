@@ -8,6 +8,7 @@ import {
   joinChannel,
   leaveGuild,
   playTrack,
+  setVolume,
   stopPlayback,
   triggerEffect,
 } from '@/api/player'
@@ -69,6 +70,11 @@ const canPlay = computed(
 const canEffect = computed(
   () => !busy.value && !!guildId.value && !!effectId.value,
 )
+
+const guildVolume = computed(() => {
+  const s = props.playerState.find(g => g.guildId === guildId.value)
+  return s?.volume ?? null
+})
 
 function ensureChannelSelection() {
   if (!channels.value.length) {
@@ -180,6 +186,30 @@ function onEffect() {
   }, 'Effect triggered')
 }
 
+async function onMusicVolumeChange(percent: number) {
+  if (!guildId.value)
+    return
+  try {
+    await setVolume({ guildId: guildId.value, music: percent })
+    emit('actionDone')
+  }
+  catch (err) {
+    showToast('error', err instanceof Error ? err.message : 'Failed to set volume')
+  }
+}
+
+async function onEffectsVolumeChange(percent: number) {
+  if (!guildId.value)
+    return
+  try {
+    await setVolume({ guildId: guildId.value, effects: percent })
+    emit('actionDone')
+  }
+  catch (err) {
+    showToast('error', err instanceof Error ? err.message : 'Failed to set volume')
+  }
+}
+
 watch(guildId, () => {
   ensureChannelSelection()
 })
@@ -279,6 +309,33 @@ onMounted(() => {
       </label>
     </div>
 
+    <div v-if="guildVolume" class="volume-controls">
+      <label class="volume-field">
+        <span class="field-label">Music volume</span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          :value="guildVolume.music"
+          class="volume-slider"
+          @change="onMusicVolumeChange(Number(($event.target as HTMLInputElement).value))"
+        >
+        <span class="volume-value">{{ guildVolume.music }}%</span>
+      </label>
+      <label class="volume-field">
+        <span class="field-label">Effects volume</span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          :value="guildVolume.effects"
+          class="volume-slider"
+          @change="onEffectsVolumeChange(Number(($event.target as HTMLInputElement).value))"
+        >
+        <span class="volume-value">{{ guildVolume.effects }}%</span>
+      </label>
+    </div>
+
     <div class="actions">
       <button type="button" class="btn btn-primary" :disabled="!canJoin" @click="onJoin">
         Join
@@ -375,6 +432,34 @@ onMounted(() => {
   margin: 0;
   font-size: 0.9rem;
   color: var(--color-error);
+}
+
+.volume-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: end;
+}
+
+.volume-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.volume-field .field-label {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.volume-slider {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
+.volume-value {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
 }
 
 .btn {

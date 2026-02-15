@@ -1,9 +1,13 @@
 # Hibiki (響)
 
-**Discord audio companion bot** — play music and sound effects in voice channels, controlled from Discord or a web dashboard.
+![Hibiki](logo.png)
 
-- **Discord:** `!join`, `!leave`, `!play`, `!effect`, `!menu` (control panel), `!songs` / `!effects`
-- **Web dashboard:** Control Center for player state, join/leave, play/effect, upload and manage sounds, bot status, permissions
+![Banner](banner.png)
+
+**Discord audio companion bot** — play music and sound effects in voice channels, controlled from Discord or a web dashboard. Built with **Dungeons & Dragons** in mind (background music, ambience, sound effects at the table) but works for any server.
+
+- **Discord:** `!join`, `!leave`, `!play`, `!effect`, `!volume`, `!menu` (control panel), `!songs` / `!effects`
+- **Web dashboard:** Control Center for player state, join/leave, play/effect, **volume (music & effects per server)**, upload and manage sounds, bot status, permissions
 - **Single Docker image:** One container, mount `storage/` for persistence (SQLite + uploads)
 
 ## Stack
@@ -17,7 +21,7 @@
 
 ## Requirements
 
-- **Node.js** 20+ (see [.nvmrc](.nvmrc))
+- **Node.js** 20 or 22 (see [.nvmrc](.nvmrc)). Use `nvm use` or the version in `.nvmrc`; the voice stack uses `@discordjs/opus`, which ships prebuilds only for these versions. Node 23+ can cause "Cannot find module ... opus.node" when joining voice.
 - **pnpm** (run `corepack enable` then `pnpm install`)
 - **ffmpeg** — required for audio playback. Install via your package manager (`brew install ffmpeg`, `apt install ffmpeg`, etc.)
 

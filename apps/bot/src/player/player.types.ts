@@ -15,4 +15,6 @@ export interface GuildPlaybackState {
   track?: TrackSummary | null
   source: 'live' | 'snapshot'
   lastUpdated?: string
+  /** Present when live; music and effects volume 0–100. */
+  volume?: { music: number, effects: number }
 }

@@ -1,5 +1,7 @@
 # Hibiki — Bot + API
 
+![Hibiki](../../logo.png)
+
 Hibiki is a NestJS + Discord.js service that powers a Discord music bot, REST API, and Vue dashboard.
 
 ## Architecture Overview
@@ -83,17 +85,20 @@ All commands use the configurable prefix (default `!`). Who can use the bot is s
 | `!join` | Join your current voice channel. |
 | `!leave` | Disconnect from the guild. |
 | `!stop` | Stop playback. |
+| `!volume` [music or effects] [0-100] | Show or set music/effects volume for this server. |
 | `!songs` | List available music (name + id). |
 | `!effects` | List available sound effects. |
 | `!play <name or id>` | Play a song by name or id (e.g. `!play ambient` or `!play my-track-123`). |
 | `!effect <name or id>` | Trigger an effect by name or id. |
 
-Use `!songs` and `!effects` to see what’s available, then `!play` / `!effect` with the name or id. Prefer `!menu` for a guided in-Discord UI.
+Use `!songs` and `!effects` to see what’s available, then `!play` / `!effect` with the name or id. Prefer `!menu` for a guided in-Discord UI. The control panel also has **Music volume** and **Effects volume** dropdowns.
 
 ## REST API quick reference
 
-- `GET /api/player/state` — live + snapshot player state.
+- `GET /api/player/state` — live + snapshot player state (includes `volume: { music, effects }` when connected).
 - `GET /api/player/guilds` — guild + voice channel directory for the dashboard.
+- `GET /api/player/volume?guildId=...` — get music/effects volume (0–100) for a guild.
+- `PATCH /api/player/volume` — set volume; body `{ guildId, music?, effects? }`.
 - `POST /api/player/{join,leave,stop,play,effect}` — mirrors Discord commands.
 - `GET|POST|DELETE /api/sounds/{music|effects}` — list/upload/delete assets.
 

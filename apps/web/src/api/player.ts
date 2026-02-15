@@ -13,6 +13,8 @@ export interface PlayerStateItem {
   track: PlayerTrackInfo | null
   source: 'live' | 'snapshot'
   lastUpdated?: string
+  /** Music and effects volume 0–100; only present when live. */
+  volume?: { music: number, effects: number }
 }
 
 export interface GuildDirectoryEntry {
@@ -109,4 +111,16 @@ export function triggerEffect(payload: { guildId: string, effectId: string, chan
 
 export function fetchGuildDirectory(signal?: AbortSignal): Promise<GuildDirectoryEntry[]> {
   return request('/api/player/guilds', { signal })
+}
+
+export function setVolume(payload: {
+  guildId: string
+  music?: number
+  effects?: number
+}) {
+  return request<{ music: number, effects: number }>('/api/player/volume', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
 }
