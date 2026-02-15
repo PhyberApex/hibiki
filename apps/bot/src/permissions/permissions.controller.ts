@@ -1,7 +1,7 @@
-import type { AppConfigService } from '../persistence/app-config.service'
-import type { PermissionConfigService } from './permission-config.service'
 import type { AllowlistConfig } from './permission.types'
 import { BadRequestException, Body, Controller, Get, Put } from '@nestjs/common'
+import { AppConfigService } from '../persistence/app-config.service' // eslint-disable-line ts/consistent-type-imports
+import { PermissionConfigService } from './permission-config.service' // eslint-disable-line ts/consistent-type-imports
 
 const PERMISSIONS_KEY = 'permissions'
 

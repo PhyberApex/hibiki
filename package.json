@@ -12,23 +12,17 @@
     "apps/web"
   ],
   "scripts": {
-    "lint": "pnpm run -r lint",
+    "lint": "turbo run lint",
     "dev": "concurrently \"pnpm --filter @hibiki/bot start:dev\" \"pnpm --filter web dev\"",
-    "build": "pnpm --filter web build && pnpm copy:web && pnpm --filter @hibiki/bot build",
+    "build": "turbo run build",
     "copy:web": "node scripts/copy-web-dist.cjs",
     "start": "pnpm --filter @hibiki/bot start:prod",
-    "test": "pnpm run -r test",
-    "test:coverage": "pnpm run -r test:coverage"
+    "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
-  },
-  "dependencies": {
-    "@nestjs/typeorm": "^11.0.0",
-    "joi": "^18.0.2",
-    "slugify": "^1.6.6",
-    "sqlite3": "^5.1.7",
-    "typeorm": "^0.3.28"
+    "concurrently": "^9.2.1",
+    "turbo": "^2.3.3"
   },
   "packageManager": "pnpm@10.29.3"
 }

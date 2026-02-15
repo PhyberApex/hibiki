@@ -62,9 +62,7 @@ export class PermissionConfigService implements OnModuleInit {
     }
   }
 
-  /**
-   * True if the user is allowed to use the bot. Empty allowlist = no one allowed.
-   */
+  /** User allowed if their role or user ID is in the allowlist. Empty list = nobody. */
   isAllowed(memberRoleIds: string[], userId?: string | null): boolean {
     const { allowedDiscordRoleIds, allowedDiscordUserIds } = this.config
     if (allowedDiscordRoleIds.length === 0 && allowedDiscordUserIds.length === 0) {
@@ -84,7 +82,7 @@ export class PermissionConfigService implements OnModuleInit {
         return normalizeAllowlist(JSON.parse(stored))
       }
       catch {
-        // fall through
+        // invalid or missing; use file/defaults below
       }
     }
     const fromFile = this.loadConfigFromFile()

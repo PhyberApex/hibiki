@@ -19,22 +19,19 @@ import { SoundModule } from './sound/sound.module'
       isGlobal: true,
       load: [configuration],
       validationSchema,
-      // Load .env from repo root (when running via pnpm dev) or cwd
       envFilePath: [
-        resolve(__dirname, '../../../.env'),
+        resolve(__dirname, '../../../.env'), // repo root (e.g. pnpm dev)
         resolve(process.cwd(), '.env'),
       ],
     }),
     ServeStaticModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const distDir = config.get<string>(
-          'audio.webDistDir',
-          'apps/bot/web-dist',
-        )
+        const botRoot = resolve(__dirname, '..')
+        const distDir = config.get<string>('audio.webDistDir', 'web-dist')
         return [
           {
-            rootPath: resolve(process.cwd(), distDir),
+            rootPath: resolve(botRoot, distDir),
             exclude: ['/api*'],
           },
         ]

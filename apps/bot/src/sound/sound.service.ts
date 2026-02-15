@@ -98,7 +98,7 @@ export class SoundLibraryService implements OnModuleInit {
     return this.soundTags.getDistinctTags(category)
   }
 
-  /** Return a readable stream of the file for playback/download. */
+  /** Stream the file for playback or download. */
   async getStream(
     category: SoundCategory,
     id: string,
@@ -128,9 +128,7 @@ export class SoundLibraryService implements OnModuleInit {
     }
   }
 
-  /**
-   * Resolve by exact id first, then by name (case-insensitive contains).
-   */
+  /** Exact id first; else case-insensitive match on id or name. */
   async getFileByIdOrName(
     category: SoundCategory,
     idOrName: string,
@@ -139,7 +137,7 @@ export class SoundLibraryService implements OnModuleInit {
       return await this.getFile(category, idOrName)
     }
     catch {
-      // fall back to name match
+      // not an exact id; try name match below
     }
     const list = await this.list(category)
     const lower = idOrName.toLowerCase()

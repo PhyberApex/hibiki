@@ -8,6 +8,8 @@ apps/bot/dist
 apps/web/dist
 apps/web/node_modules
 apps/bot/node_modules
+apps/web/.turbo
+apps/bot/.turbo
 apps/bot/storage
 apps/bot/web-dist
 storage
@@ -16,3 +18,4 @@ storage
 coverage
 npm-debug.log*
 .idea
+.turbo

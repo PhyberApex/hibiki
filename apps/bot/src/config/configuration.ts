@@ -10,7 +10,7 @@ export function configuration() {
       storageRoot: process.env.HIBIKI_STORAGE_PATH ?? 'storage',
       musicDir: process.env.HIBIKI_MUSIC_DIR ?? 'storage/music',
       effectsDir: process.env.HIBIKI_EFFECTS_DIR ?? 'storage/effects',
-      webDistDir: process.env.HIBIKI_WEB_DIST ?? 'apps/bot/web-dist',
+      webDistDir: process.env.HIBIKI_WEB_DIST ?? 'web-dist',
     },
     database: {
       path: process.env.HIBIKI_DB_PATH ?? 'storage/data/hibiki.sqlite',

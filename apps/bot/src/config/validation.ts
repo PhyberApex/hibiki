@@ -8,6 +8,6 @@ export const validationSchema = Joi.object({
   HIBIKI_STORAGE_PATH: Joi.string().default('storage'),
   HIBIKI_MUSIC_DIR: Joi.string().default('storage/music'),
   HIBIKI_EFFECTS_DIR: Joi.string().default('storage/effects'),
-  HIBIKI_WEB_DIST: Joi.string().default('apps/bot/web-dist'),
+  HIBIKI_WEB_DIST: Joi.string().default('web-dist'),
   HIBIKI_DB_PATH: Joi.string().default('storage/data/hibiki.sqlite'),
 })

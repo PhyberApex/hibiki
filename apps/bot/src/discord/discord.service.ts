@@ -96,7 +96,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     return this.client
   }
 
-  /** Whether the Discord client is logged in and ready (valid credentials, can join/play). */
+  /** Client connected and ready to join/play. */
   getBotStatus(): { ready: boolean, userTag?: string } {
     if (!this.client.isReady()) {
       return { ready: false }
@@ -185,7 +185,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Builds the persistent panel content + components (buttons + dropdown). */
+  /** Panel message body and action rows (buttons, channel/track dropdowns). */
   private buildPanelComponents(): {
     content: string
     components: (ActionRowBuilder<ButtonBuilder> | ActionRowBuilder<StringSelectMenuBuilder>)[]

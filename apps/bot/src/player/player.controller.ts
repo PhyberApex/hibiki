@@ -1,6 +1,6 @@
-import type { DiscordService } from '../discord/discord.service'
-import type { PlayerService } from './player.service'
 import { Body, Controller, Get, Logger, Post } from '@nestjs/common'
+import { DiscordService } from '../discord/discord.service' // eslint-disable-line ts/consistent-type-imports
+import { PlayerService } from './player.service' // eslint-disable-line ts/consistent-type-imports
 
 interface JoinPayload {
   guildId: string

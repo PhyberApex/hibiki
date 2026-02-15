@@ -21,7 +21,7 @@ export interface GuildDirectoryEntry {
   channels: { id: string, name: string }[]
 }
 
-/** Parse error body from Nest/API; returns a user-friendly message. */
+/** Extract a user-facing message from a Nest error response body. */
 async function getErrorMessage(response: Response): Promise<string> {
   const text = await response.text()
   if (!text)
@@ -37,7 +37,7 @@ async function getErrorMessage(response: Response): Promise<string> {
       return `${body.error}: ${response.status}`
   }
   catch {
-    // ignore
+    // non-JSON or no message field
   }
   return `Request failed (${response.status})`
 }

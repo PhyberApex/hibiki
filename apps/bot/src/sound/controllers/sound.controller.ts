@@ -1,4 +1,3 @@
-import type { SoundLibraryService } from '../sound.service'
 import type { SoundFile } from '../sound.types'
 import {
   BadRequestException,
@@ -18,6 +17,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
+import { SoundLibraryService } from '../sound.service' // eslint-disable-line ts/consistent-type-imports
 
 const MIME_BY_EXT: Record<string, string> = {
   '.mp3': 'audio/mpeg',

@@ -15,7 +15,7 @@ const saving = ref(false)
 const error = ref<string | null>(null)
 const toast = ref<string | null>(null)
 
-/** Editable lists (we add empty row for new entry) */
+// One trailing empty row per list for adding new IDs.
 const roleIdInputs = ref<string[]>([])
 const userIdInputs = ref<string[]>([])
 

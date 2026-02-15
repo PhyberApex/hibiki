@@ -9,7 +9,7 @@ const state = ref<PlayerStateItem[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const botStatus = ref<BotStatus | null>(null)
-/** Bump when sounds are uploaded/deleted so PlayerControls refetches dropdowns */
+// Incremented when sound list changes so PlayerControls refetches track/effect options.
 const soundsVersion = ref(0)
 function onSoundsUpdated() {
   soundsVersion.value += 1

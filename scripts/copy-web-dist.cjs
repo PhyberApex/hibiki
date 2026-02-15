@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Copy built web dashboard into bot's static serve dir (Nest serves from web-dist).
 const { cp, mkdir, rm } = require('fs/promises');
 const { join } = require('path');
 
