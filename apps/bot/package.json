@@ -1,6 +1,6 @@
 {
   "name": "@hibiki/bot",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Hibiki backend + Discord bot service",
   "author": "PhyberApex",
