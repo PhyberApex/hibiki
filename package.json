@@ -1,7 +1,7 @@
 {
   "name": "hibiki",
   "version": "0.1.0",
-  "description": "Hibiki (響) – Discord audio companion bot with a Vue-based control surface.",
+  "description": "Hibiki (響) – Echoes of Adventure a Music Bot for Discord.",
   "private": true,
   "license": "MIT",
   "engines": {
