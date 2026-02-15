@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/PhyberApex/hibiki/compare/hibiki-v0.1.0...hibiki-v0.1.1) (2026-02-15)
+
+
+### Bug Fixes
+
+* **text:** Fixed the !menu / !panel not working ([#7](https://github.com/PhyberApex/hibiki/issues/7)) ([bc8e421](https://github.com/PhyberApex/hibiki/commit/bc8e42191d96b1dbeff1d5e06a2b341461439ab9))
+
 ## [0.1.0](https://github.com/PhyberApex/hibiki/compare/hibiki-v0.0.1...hibiki-v0.1.0) (2026-02-15)
 
 
