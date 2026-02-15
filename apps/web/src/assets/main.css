@@ -1,0 +1,15 @@
+@import './base.css';
+
+#app {
+  min-height: 100vh;
+  font-weight: normal;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+a:hover {
+  color: var(--color-accent-hover);
+}

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hibiki — Discord audio companion bot</title>
+  <link rel="icon" href="favicon.jpg" type="image/jpeg">
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --bg-card: #1c1c21;
+      --bg-code: #16161a;
+      --text: #e4e4e7;
+      --text-muted: #a1a1aa;
+      --text-dim: #71717a;
+      --accent: #22d3ee;
+      --accent-dim: #0891b2;
+      --border: #27272a;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 1rem;
+    }
+    .hero {
+      position: relative;
+      min-height: 260px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-card) no-repeat center / cover;
+      background-image: url('banner.jpg');
+      border-bottom: 1px solid var(--border);
+    }
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(15,15,18,0.5) 0%, rgba(15,15,18,0.88) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+      padding: 2rem;
+    }
+    .hero .logo {
+      height: 72px;
+      width: auto;
+      border-radius: var(--radius);
+    }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(1.75rem, 4vw, 2.25rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .hero p {
+      margin: 0.4rem 0 0;
+      color: var(--text-muted);
+      font-size: 1.05rem;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 1.75rem;
+    }
+    section {
+      padding: 3.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    section:last-of-type { border-bottom: none; }
+    h2 {
+      margin: 0 0 1.25rem;
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+    .lead {
+      font-size: 1.08rem;
+      line-height: 1.65;
+      color: var(--text-muted);
+      margin: 0 0 1.5rem;
+    }
+    main p {
+      margin: 0 0 1rem;
+      color: var(--text);
+    }
+    main p:last-child { margin-bottom: 0; }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+    code {
+      font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+      font-size: 0.9em;
+      padding: 0.15em 0.4em;
+      background: var(--bg-code);
+      border-radius: 4px;
+      color: var(--accent);
+    }
+    .features {
+      display: grid;
+      gap: 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .feature {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.35rem;
+    }
+    .feature img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 6px;
+      margin-bottom: 0.85rem;
+    }
+    .feature h3 { margin: 0 0 0.4rem; font-size: 1.02rem; font-weight: 600; }
+    .feature p { margin: 0; font-size: 0.9rem; color: var(--text-muted); line-height: 1.55; }
+    .cta {
+      display: inline-block;
+      margin-top: 1rem;
+      padding: 0.55rem 1.1rem;
+      background: var(--accent);
+      color: #0c1222;
+      text-decoration: none;
+      font-weight: 600;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .cta:hover { background: var(--accent-dim); text-decoration: none; }
+    .steps { counter-reset: step; list-style: none; padding: 0; margin: 0 0 1.5rem; }
+    .steps li {
+      counter-increment: step;
+      margin-bottom: 1.5rem;
+      padding-left: 3rem;
+      position: relative;
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 0.1rem;
+      width: 1.75rem;
+      height: 1.75rem;
+      background: var(--accent);
+      color: #0c1222;
+      border-radius: 50%;
+      font-size: 0.85rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+    .steps li strong { display: block; margin-bottom: 0.35rem; color: var(--text); }
+    .steps li p { margin: 0; color: var(--text-muted); font-size: 0.95rem; line-height: 1.65; }
+    .steps li p + .code { margin-top: 0.6rem; }
+    pre, .code {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.1rem 1.25rem;
+      overflow: auto;
+      font-size: 0.88rem;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    .code { margin: 0.5rem 0 1rem; }
+    pre code { padding: 0; background: none; color: inherit; }
+    footer {
+      padding: 2.5rem 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-overlay">
+      <img src="logo.jpg" alt="Hibiki" class="logo">
+      <div>
+        <h1>Hibiki</h1>
+        <p>Discord audio companion bot — music, effects, and a Vue dashboard</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <div class="container">
+        <h2>What is Hibiki?</h2>
+        <p class="lead">
+          Hibiki (響) is a Discord bot that plays music and sound effects in voice channels. Control it with Discord commands or a web dashboard: join/leave, play tracks, trigger effects, manage uploads, and see bot status at a glance.
+        </p>
+        <p>
+          Built with NestJS and Discord.js on the backend and Vue 3 on the frontend. Single Docker image. SQLite is used only for <strong>player snapshots</strong> (so the dashboard shows “last seen” state after restarts) and the <strong>permissions allowlist</strong> (who can use the bot). Sound files live on disk, not in the database.
+        </p>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <h2>Features</h2>
+        <div class="features">
+          <div class="feature">
+            <img src="banner.jpg" alt="Dashboard">
+            <h3>Web dashboard</h3>
+            <p>Control Center: player state, join/leave, play music or effects, upload and manage sounds. Bot connection status and permissions in one place.</p>
+          </div>
+          <div class="feature">
+            <img src="logo.jpg" alt="Discord">
+            <h3>Discord commands</h3>
+            <p><code>!join</code>, <code>!leave</code>, <code>!play</code>, <code>!effect</code>, <code>!menu</code> for a button panel. List songs and effects, then play by name or id.</p>
+          </div>
+          <div class="feature">
+            <img src="favicon.jpg" alt="Deploy">
+            <h3>One container</h3>
+            <p>Single Docker image. Mount a volume for storage; SQLite and uploaded sounds persist. Optional docker-compose for local or server deploy.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <h2>Discord bot setup</h2>
+        <p class="lead">You need a Discord application and bot token before running Hibiki. Follow these steps once.</p>
+
+        <ol class="steps">
+          <li>
+            <strong>Create an application</strong>
+            <p>Go to <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Discord Developer Portal</a> → <strong>New Application</strong>. Name it (e.g. Hibiki) and create. On the <strong>General Information</strong> page, copy the <strong>Application ID</strong> — this is <code>DISCORD_CLIENT_ID</code>.</p>
+          </li>
+          <li>
+            <strong>Create the bot and get the token</strong>
+            <p>In the sidebar, open <strong>Bot</strong> → <strong>Add Bot</strong>. Under <strong>Token</strong>, click <strong>Reset Token</strong> (or View Token), then copy it. This is <code>DISCORD_TOKEN</code> — keep it secret. Under <strong>Privileged Gateway Intents</strong>, turn on <strong>Message Content Intent</strong> (required for commands).</p>
+          </li>
+          <li>
+            <strong>Invite the bot to your server</strong>
+            <p>Open <strong>OAuth2</strong> → <strong>URL Generator</strong>. Under Scopes choose <strong>bot</strong>. Under Bot Permissions select: View Channels, Send Messages, Read Message History, <strong>Connect</strong>, <strong>Speak</strong>, and optionally Manage Messages (for <code>!delete</code>). Copy the generated URL, open it in a browser, pick your server, and authorize. The bot will show up in your server (offline until Hibiki is running).</p>
+          </li>
+          <li>
+            <strong>Set environment variables</strong>
+            <p>In the repo root, copy the sample env and add the values you copied:</p>
+            <pre class="code"><code>cp .env.sample .env
+# Edit .env and set:
+# DISCORD_TOKEN=your_bot_token
+# DISCORD_CLIENT_ID=your_application_id</code></pre>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <h2>Run Hibiki</h2>
+        <p class="lead">After the Discord bot is set up, install dependencies and start the bot and dashboard.</p>
+        <p><strong>Requirements:</strong> Node.js 20+, pnpm (<code>corepack enable</code>), and ffmpeg installed on your system.</p>
+        <pre class="code"><code>git clone https://github.com/phyberapex/hibiki.git
+cd hibiki
+corepack enable && pnpm install
+cp .env.sample .env   # set DISCORD_TOKEN and DISCORD_CLIENT_ID
+pnpm dev</code></pre>
+        <p>Dashboard: <a href="http://localhost:5173">http://localhost:5173</a> (dev). Check the “Bot connected” indicator; then use the Control Center to join a voice channel and play. You can also use Discord commands (<code>!join</code>, <code>!play</code>, <code>!menu</code>, etc.). Who can use the bot is set in the dashboard under <strong>Permissions</strong> (allowlist of role/user IDs).</p>
+        <p><strong>Docker:</strong> <code>docker compose up -d</code> (after setting <code>.env</code>). Dashboard and API at <a href="http://localhost:3000">http://localhost:3000</a>.</p>
+        <a href="https://github.com/phyberapex/hibiki" class="cta">View on GitHub</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>Hibiki — MIT. <a href="https://github.com/phyberapex/hibiki">Source</a></p>
+    </div>
+  </footer>
+</body>
+</html>

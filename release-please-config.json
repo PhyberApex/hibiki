@@ -1,0 +1,10 @@
+{
+  "release-type": "node",
+  "pull-request-header": ":sparkles: chore: prepare release",
+  "extra-files": [
+    "apps/bot/package.json"
+  ],
+  "packages": {
+    ".": {}
+  }
+}
