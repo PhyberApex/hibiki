@@ -105,4 +105,78 @@ describe('playerService', () => {
     expect(snapshots.remove).toHaveBeenCalledWith('guild-1')
     expect((service as any).managers.has('guild-1')).toBe(false)
   })
+
+  it('getVolume returns null when no manager for guild', () => {
+    expect(service.getVolume('unknown')).toBeNull()
+  })
+
+  it('getVolume returns volumes from manager when present', () => {
+    (service as any).managers.set('guild-1', {
+      getVolumes: () => ({ music: 70, effects: 80 }),
+    })
+    expect(service.getVolume('guild-1')).toEqual({ music: 70, effects: 80 })
+  })
+
+  it('setVolume throws when no manager for guild', () => {
+    expect(() =>
+      service.setVolume('unknown', { music: 50 }),
+    ).toThrow('No player for this guild. Join a voice channel first.')
+  })
+
+  it('setVolume updates manager volumes', () => {
+    const setVolumes = jest.fn()
+    const managers = (service as any).managers as Map<string, { setVolumes: jest.Mock }>
+    managers.set('guild-1', { setVolumes })
+    service.setVolume('guild-1', { music: 60, effects: 90 })
+    expect(setVolumes).toHaveBeenCalledWith({ music: 60, effects: 90 })
+  })
+
+  it('getState merges live state with snapshot fallbacks', async () => {
+    const manager = {
+      channelId: 'ch-1',
+      channelLabel: 'General',
+      isIdle: true,
+      track: null as { id: string, name: string, filename: string, category: string } | null,
+      getVolumes: () => ({ music: 85, effects: 90 }),
+    };
+    (service as any).managers.set('guild-1', manager)
+    snapshots.list.mockResolvedValue([
+      {
+        guildId: 'guild-2',
+        connectedChannelId: null,
+        connectedChannelName: null,
+        isIdle: true,
+        trackId: null,
+        trackName: null,
+        trackFilename: null,
+        trackCategory: null,
+        updatedAt: new Date('2024-01-01'),
+      },
+    ] as any)
+
+    const state = await service.getState()
+
+    expect(state.length).toBeGreaterThanOrEqual(1)
+    const live = state.find(s => s.source === 'live')
+    expect(live?.guildId).toBe('guild-1')
+    expect(live?.volume).toEqual({ music: 85, effects: 90 })
+    const snapshot = state.find(s => s.source === 'snapshot')
+    expect(snapshot?.guildId).toBe('guild-2')
+  })
+
+  it('playMusic without channel throws when manager not connected', async () => {
+    (service as any).managers.set('guild-1', {
+      connect: jest.fn(),
+      connected: false,
+      playMusic: jest.fn(),
+      channelId: null,
+      channelLabel: null,
+      isIdle: true,
+      track: null,
+      getVolumes: () => ({ music: 85, effects: 90 }),
+    })
+    await expect(
+      service.playMusic('guild-1', 'track'),
+    ).rejects.toThrow('Hibiki is not connected to a voice channel')
+  })
 })
