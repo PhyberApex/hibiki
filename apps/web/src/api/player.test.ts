@@ -6,6 +6,7 @@ import {
   joinChannel,
   leaveGuild,
   playTrack,
+  setVolume,
   stopPlayback,
   triggerEffect,
 } from './player'
@@ -128,5 +129,33 @@ describe('player API', () => {
       text: () => Promise.resolve(JSON.stringify({ message: 'Bad request' })),
     } as Response)
     await expect(fetchPlayerState()).rejects.toThrow('Bad request')
+  })
+
+  it('fetchPlayerState passes signal', async () => {
+    const controller = new AbortController()
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([]),
+    } as Response)
+    await fetchPlayerState(controller.signal)
+    expect(fetch).toHaveBeenCalledWith('/api/player/state', {
+      signal: controller.signal,
+    })
+  })
+
+  it('setVolume sends PATCH and returns volume', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ music: 80, effects: 90 }),
+    } as Response)
+    const result = await setVolume({ guildId: 'g1', music: 80, effects: 90 })
+    expect(result).toEqual({ music: 80, effects: 90 })
+    expect(fetch).toHaveBeenCalledWith('/api/player/volume', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guildId: 'g1', music: 80, effects: 90 }),
+    })
   })
 })

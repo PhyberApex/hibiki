@@ -94,4 +94,44 @@ describe('soundController', () => {
     await controller.deleteMusic('track-1')
     expect(sounds.remove).toHaveBeenCalledWith('music', 'track-1')
   })
+
+  it('listEffectsTags returns distinct tags for effects', async () => {
+    sounds.getDistinctTags.mockResolvedValue(['sfx', 'boom'])
+    const result = await controller.listEffectsTags()
+    expect(result).toEqual(['sfx', 'boom'])
+    expect(sounds.getDistinctTags).toHaveBeenCalledWith('effects')
+  })
+
+  it('setEffectsTags normalizes and saves tags', async () => {
+    sounds.setTags.mockResolvedValue(undefined)
+    const result = await controller.setEffectsTags('effect-1', {
+      tags: ['  SFX  ', 'boom', 'SFX'],
+    })
+    expect(result.tags).toEqual(['sfx', 'boom'])
+    expect(sounds.setTags).toHaveBeenCalledWith('effects', 'effect-1', [
+      '  SFX  ',
+      'boom',
+      'SFX',
+    ])
+  })
+
+  it('streamEffect returns StreamableFile', async () => {
+    sounds.getStream.mockResolvedValue({
+      stream: { destroy: jest.fn() },
+      filename: 'boom.wav',
+    })
+    const result = await controller.streamEffect('effect-1')
+    expect(result).toBeInstanceOf(StreamableFile)
+    expect(sounds.getStream).toHaveBeenCalledWith('effects', 'effect-1')
+  })
+
+  it('uploadEffect throws when no file', async () => {
+    await expect(controller.uploadEffect(undefined)).rejects.toThrow()
+    expect(sounds.save).not.toHaveBeenCalled()
+  })
+
+  it('deleteEffect calls remove', async () => {
+    await controller.deleteEffect('effect-1')
+    expect(sounds.remove).toHaveBeenCalledWith('effects', 'effect-1')
+  })
 })

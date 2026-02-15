@@ -93,4 +93,12 @@ export class GuildAudioManager {
   get connected() {
     return Boolean(this.connection)
   }
+
+  getVolumes(): { music: number, effects: number } {
+    return this.engine.getVolumes()
+  }
+
+  setVolumes(updates: { music?: number, effects?: number }): void {
+    this.engine.setVolumes(updates)
+  }
 }

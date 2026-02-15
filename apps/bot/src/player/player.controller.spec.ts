@@ -26,6 +26,8 @@ describe('playerController', () => {
       stop: jest.fn().mockResolvedValue(undefined),
       playMusic: jest.fn().mockResolvedValue({ id: 't1', name: 'Track' }),
       playEffect: jest.fn().mockResolvedValue({ id: 'e1', name: 'Boom' }),
+      getVolume: jest.fn().mockReturnValue({ music: 85, effects: 90 }),
+      setVolume: jest.fn(),
     } as unknown as jest.Mocked<PlayerService>
 
     discord = {
@@ -131,5 +133,89 @@ describe('playerController', () => {
       trackId: 'track-1',
     })
     expect(player.playMusic).toHaveBeenCalledWith('guild-1', 'track-1', undefined)
+  })
+
+  it('getVolume returns volume when guild has player', () => {
+    const vol = controller.getVolume('guild-1')
+    expect(vol).toEqual({ music: 85, effects: 90 })
+    expect(player.getVolume).toHaveBeenCalledWith('guild-1')
+  })
+
+  it('getVolume throws when guildId is missing', () => {
+    expect(() => controller.getVolume(undefined!)).toThrow('guildId is required')
+  })
+
+  it('getVolume throws when no player for guild', () => {
+    player.getVolume.mockReturnValue(null)
+    expect(() => controller.getVolume('guild-1')).toThrow(
+      'No player for this guild. Join a voice channel first.',
+    )
+  })
+
+  it('setVolume updates and returns volume', () => {
+    const result = controller.setVolume({
+      guildId: 'guild-1',
+      music: 80,
+      effects: 70,
+    })
+    expect(player.setVolume).toHaveBeenCalledWith('guild-1', {
+      music: 80,
+      effects: 70,
+    })
+    expect(player.getVolume).toHaveBeenCalledWith('guild-1')
+    expect(result).toEqual({ music: 85, effects: 90 })
+  })
+
+  it('setVolume throws when guildId is missing', () => {
+    expect(() =>
+      controller.setVolume({ guildId: undefined!, music: 50 }),
+    ).toThrow('guildId is required')
+  })
+
+  it('join throws when channel not found', async () => {
+    discord.getClient = jest.fn().mockReturnValue({
+      guilds: {
+        cache: {
+          get: jest.fn().mockReturnValue({
+            channels: { cache: { get: jest.fn().mockReturnValue(undefined) } },
+          }),
+        },
+      },
+    })
+    const mod = await Test.createTestingModule({
+      controllers: [PlayerController],
+      providers: [
+        { provide: PlayerService, useValue: player },
+        { provide: DiscordService, useValue: discord },
+      ],
+    }).compile()
+    const ctrl = mod.get(PlayerController)
+    await expect(
+      ctrl.join({ guildId: 'guild-1', channelId: 'missing' }),
+    ).rejects.toThrow('Channel not found or not voice-based')
+  })
+
+  it('join throws when channel is not voice-based', async () => {
+    const textChannel = { ...mockChannel, isVoiceBased: () => false }
+    discord.getClient = jest.fn().mockReturnValue({
+      guilds: {
+        cache: {
+          get: jest.fn().mockReturnValue({
+            channels: { cache: { get: jest.fn().mockReturnValue(textChannel) } },
+          }),
+        },
+      },
+    })
+    const mod = await Test.createTestingModule({
+      controllers: [PlayerController],
+      providers: [
+        { provide: PlayerService, useValue: player },
+        { provide: DiscordService, useValue: discord },
+      ],
+    }).compile()
+    const ctrl = mod.get(PlayerController)
+    await expect(
+      ctrl.join({ guildId: 'guild-1', channelId: 'ch-1' }),
+    ).rejects.toThrow('Channel not found or not voice-based')
   })
 })

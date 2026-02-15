@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Logger, Post } from '@nestjs/common'
+import { Body, Controller, Get, Logger, Patch, Post, Query } from '@nestjs/common'
 import { DiscordService } from '../discord/discord.service' // eslint-disable-line ts/consistent-type-imports
 import { PlayerService } from './player.service' // eslint-disable-line ts/consistent-type-imports
 
@@ -17,6 +17,12 @@ interface EffectPayload {
   guildId: string
   effectId: string
   channelId?: string
+}
+
+interface VolumePayload {
+  guildId: string
+  music?: number
+  effects?: number
 }
 
 @Controller('player')
@@ -44,6 +50,31 @@ export class PlayerController {
   getGuildDirectory() {
     this.logger.log('GET /player/guilds')
     return this.discord.listGuildDirectory()
+  }
+
+  @Get('volume')
+  getVolume(@Query('guildId') guildId: string) {
+    if (!guildId) {
+      throw new Error('guildId is required')
+    }
+    const volume = this.player.getVolume(guildId)
+    if (!volume) {
+      throw new Error('No player for this guild. Join a voice channel first.')
+    }
+    return volume
+  }
+
+  @Patch('volume')
+  setVolume(@Body() body: VolumePayload) {
+    this.logger.log(`PATCH /player/volume guild=${body.guildId} music=${body.music ?? '-'} effects=${body.effects ?? '-'}`)
+    if (!body.guildId) {
+      throw new Error('guildId is required')
+    }
+    this.player.setVolume(body.guildId, {
+      music: body.music,
+      effects: body.effects,
+    })
+    return this.player.getVolume(body.guildId)
   }
 
   private resolveChannel(guildId: string, channelId?: string) {

@@ -6,7 +6,7 @@ import { RouterLink, RouterView } from 'vue-router'
   <div class="layout">
     <aside class="sidebar">
       <div class="brand">
-        <span class="brand-icon">響</span>
+        <img src="/logo.png" alt="Hibiki" class="brand-logo" width="48" height="48">
         <div>
           <h1 class="brand-title">
             Hibiki
@@ -54,17 +54,12 @@ import { RouterLink, RouterView } from 'vue-router'
   gap: 0.75rem;
 }
 
-.brand-icon {
-  width: 44px;
-  height: 44px;
+.brand-logo {
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-md);
-  background: var(--color-accent-muted);
-  color: var(--color-accent);
-  font-size: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .brand-title {

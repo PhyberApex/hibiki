@@ -128,6 +128,21 @@ export class PlayerService {
     return this.managers.get(guildId)?.channelId
   }
 
+  getVolume(guildId: string): { music: number, effects: number } | null {
+    return this.managers.get(guildId)?.getVolumes() ?? null
+  }
+
+  setVolume(
+    guildId: string,
+    updates: { music?: number, effects?: number },
+  ): void {
+    const manager = this.managers.get(guildId)
+    if (!manager) {
+      throw new Error('No player for this guild. Join a voice channel first.')
+    }
+    manager.setVolumes(updates)
+  }
+
   private getLiveState(): GuildPlaybackState[] {
     const timestamp = new Date().toISOString()
     return Array.from(this.managers.entries()).map(([guildId, manager]) => ({
@@ -138,6 +153,7 @@ export class PlayerService {
       track: manager.track ?? null,
       source: 'live',
       lastUpdated: timestamp,
+      volume: manager.getVolumes(),
     }))
   }
 

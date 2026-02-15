@@ -177,6 +177,9 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       case 'help':
         await this.handleHelp(message)
         break
+      case 'volume':
+        await this.handleVolume(message, args)
+        break
       case 'delete':
         await this.handleDelete(message)
         break
@@ -262,10 +265,25 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             .setValue('effects'),
         ),
     )
+    const volOpts = [0, 25, 50, 75, 100].map(n =>
+      new StringSelectMenuOptionBuilder()
+        .setLabel(`${n}%`)
+        .setValue(String(n)),
+    )
+    const row4 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('hibiki_menu_volume_music')
+        .setPlaceholder('Music volume…')
+        .addOptions(volOpts),
+      new StringSelectMenuBuilder()
+        .setCustomId('hibiki_menu_volume_effects')
+        .setPlaceholder('Effects volume…')
+        .addOptions(volOpts),
+    )
     return {
       content:
         '**🎛️ Hibiki control panel** — Use the buttons or dropdown below. This message stays here until deleted.',
-      components: [row1, row2, row3],
+      components: [row1, row2, row3, row4],
     }
   }
 
@@ -449,6 +467,52 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
           components: [],
         }).catch(() => {})
       }
+      return
+    }
+
+    if (customId === 'hibiki_menu_volume_music') {
+      const num = Number.parseInt(value, 10)
+      if (Number.isNaN(num) || num < 0 || num > 100) {
+        await interaction.reply({ content: 'Invalid volume.', ephemeral: true }).catch(() => {})
+        return
+      }
+      try {
+        this.player.setVolume(interaction.guildId, { music: num })
+        const vol = this.player.getVolume(interaction.guildId)!
+        await interaction.reply({
+          content: `Music volume set to **${vol.music}%**. (Effects: ${vol.effects}%)`,
+          ephemeral: true,
+        }).catch(() => {})
+      }
+      catch (err) {
+        await interaction.reply({
+          content: err instanceof Error ? err.message : 'Join a voice channel first.',
+          ephemeral: true,
+        }).catch(() => {})
+      }
+      return
+    }
+
+    if (customId === 'hibiki_menu_volume_effects') {
+      const num = Number.parseInt(value, 10)
+      if (Number.isNaN(num) || num < 0 || num > 100) {
+        await interaction.reply({ content: 'Invalid volume.', ephemeral: true }).catch(() => {})
+        return
+      }
+      try {
+        this.player.setVolume(interaction.guildId, { effects: num })
+        const vol = this.player.getVolume(interaction.guildId)!
+        await interaction.reply({
+          content: `Effects volume set to **${vol.effects}%**. (Music: ${vol.music}%)`,
+          ephemeral: true,
+        }).catch(() => {})
+      }
+      catch (err) {
+        await interaction.reply({
+          content: err instanceof Error ? err.message : 'Join a voice channel first.',
+          ephemeral: true,
+        }).catch(() => {})
+      }
     }
   }
 
@@ -610,6 +674,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       `**${p}join** — join your voice channel`,
       `**${p}leave** — disconnect from voice`,
       `**${p}stop** — stop playback`,
+      `**${p}volume** [music|effects] [0-100] — show or set volume`,
       `**${p}songs** — list music tracks`,
       `**${p}effects** — list sound effects`,
       `**${p}play** <name or id> — play a track`,
@@ -617,6 +682,40 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       `**${p}delete** — clear this channel's bot messages`,
     ].join('\n')
     await message.reply({ content: `**Commands:**\n${text}` })
+  }
+
+  private async handleVolume(message: Message, args: string[]) {
+    const guildId = message.guild!.id
+    const reply = (content: string) => message.reply(content).catch(() => {})
+
+    if (args.length === 0) {
+      const vol = this.player.getVolume(guildId)
+      if (!vol) {
+        await reply('Not connected here. Use `!join` first, then volume applies.')
+        return
+      }
+      await reply(`**Volume:** Music **${vol.music}%**, Effects **${vol.effects}%**. Use \`${this.prefix}volume music 80\` or \`${this.prefix}volume effects 90\` to change.`)
+      return
+    }
+
+    const which = args[0].toLowerCase()
+    if (which !== 'music' && which !== 'effects') {
+      await reply(`Use \`${this.prefix}volume music <0-100>\` or \`${this.prefix}volume effects <0-100>\`.`)
+      return
+    }
+    const num = args[1] ? Number.parseInt(args[1], 10) : Number.NaN
+    if (Number.isNaN(num) || num < 0 || num > 100) {
+      await reply('Give a number 0–100, e.g. `!volume music 80`.')
+      return
+    }
+    try {
+      this.player.setVolume(guildId, which === 'music' ? { music: num } : { effects: num })
+      const vol = this.player.getVolume(guildId)!
+      await reply(`**${which}** volume set to **${num}%**. (Music: ${vol.music}%, Effects: ${vol.effects}%)`)
+    }
+    catch (err) {
+      await reply(err instanceof Error ? err.message : 'Join a voice channel first.')
+    }
   }
 
   private async handleDelete(message: Message) {
