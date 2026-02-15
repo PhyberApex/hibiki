@@ -12,7 +12,7 @@ import { RouterLink, RouterView } from 'vue-router'
             Hibiki
           </h1>
           <p class="brand-subtitle">
-            Discord DJ
+            Echoes of Adventure
           </p>
         </div>
       </div>
