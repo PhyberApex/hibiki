@@ -1,0 +1,15 @@
+# Hibiki — Discord music bot + dashboard
+# Usage: copy .env.sample to .env, set DISCORD_TOKEN and DISCORD_CLIENT_ID, then:
+#   docker compose up -d
+# Persistence: ./storage is mounted so SQLite and uploaded sounds survive restarts.
+
+services:
+  hibiki:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/app/storage
+    restart: unless-stopped
