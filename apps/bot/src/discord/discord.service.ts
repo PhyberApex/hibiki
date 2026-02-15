@@ -129,17 +129,29 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       return
     }
 
-    if (!message.guild || !message.content.startsWith(this.prefix)) {
+    if (!message.guild) {
       return
     }
 
-    const [command, ...args] = message.content
+    const content = message.content ?? ''
+    if (!content.startsWith(this.prefix)) {
+      return
+    }
+
+    const [command, ...args] = content
       .slice(this.prefix.length)
       .trim()
       .split(/\s+/)
     if (!command) {
+      this.logger.debug(
+        `Prefix received but no command (content may be empty). Enable "Message Content Intent" in Developer Portal → Bot if commands are ignored.`,
+      )
       return
     }
+
+    this.logger.log(
+      `Command '${command}' from ${message.author.tag} in ${message.guild.name}`,
+    )
 
     const memberRoleIds = Array.from(message.member?.roles.cache.keys() ?? [])
     const userId = message.author?.id ?? null
@@ -270,11 +282,14 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
         .setLabel(`${n}%`)
         .setValue(String(n)),
     )
+    // One select menu per action row (Discord limit)
     const row4 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId('hibiki_menu_volume_music')
         .setPlaceholder('Music volume…')
         .addOptions(volOpts),
+    )
+    const row5 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId('hibiki_menu_volume_effects')
         .setPlaceholder('Effects volume…')
@@ -283,7 +298,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     return {
       content:
         '**🎛️ Hibiki control panel** — Use the buttons or dropdown below. This message stays here until deleted.',
-      components: [row1, row2, row3, row4],
+      components: [row1, row2, row3, row4, row5],
     }
   }
 
