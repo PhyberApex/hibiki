@@ -12,12 +12,12 @@ flag_management:
   default_rules:
     carryforward: true
   individual_flags:
-    - name: api
+    - name: bot
       paths:
-        - packages/api/
-    - name: ui
+        - apps/bot/
+    - name: web
       paths:
-        - packages/ui/
+        - apps/web/
 
 comment:
   layout: "reach,diff,flags,tree"
