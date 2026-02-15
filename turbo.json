@@ -6,6 +6,7 @@
       "outputs": ["dist/**", "web-dist/**"]
     },
     "lint": {},
+    "lint:fix": {},
     "test": {
       "outputs": ["coverage/**"]
     },

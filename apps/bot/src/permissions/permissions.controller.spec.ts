@@ -2,10 +2,10 @@ import type { TestingModule } from '@nestjs/testing'
 import { BadRequestException } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { AppConfigService } from '../persistence/app-config.service'
-import { PermissionsController } from './permissions.controller'
 import { PermissionConfigService } from './permission-config.service'
+import { PermissionsController } from './permissions.controller'
 
-describe('PermissionsController', () => {
+describe('permissionsController', () => {
   let controller: PermissionsController
   let permissionConfig: jest.Mocked<PermissionConfigService>
   let appConfig: jest.Mocked<AppConfigService>

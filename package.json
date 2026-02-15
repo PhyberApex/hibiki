@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
     "dev": "concurrently \"pnpm --filter @hibiki/bot start:dev\" \"pnpm --filter web dev\"",
     "build": "turbo run build",
     "copy:web": "node scripts/copy-web-dist.cjs",
