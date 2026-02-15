@@ -1,10 +1,10 @@
 import type { OnModuleInit } from '@nestjs/common'
-import type { ConfigService } from '@nestjs/config'
-import type { AppConfigService } from '../persistence/app-config.service'
 import type { AllowlistConfig } from './permission.types'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { Injectable } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config' // eslint-disable-line ts/consistent-type-imports
+import { AppConfigService } from '../persistence/app-config.service' // eslint-disable-line ts/consistent-type-imports
 
 const PERMISSIONS_KEY = 'permissions'
 

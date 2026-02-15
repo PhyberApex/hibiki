@@ -1,6 +1,4 @@
 import type { OnModuleInit } from '@nestjs/common'
-import type { ConfigService } from '@nestjs/config'
-import type { SoundTagService } from '../persistence/sound-tag.service'
 import type { SoundCategory, SoundFile } from './sound.types'
 import { createReadStream } from 'node:fs'
 import { mkdir, stat, unlink, writeFile } from 'node:fs/promises'
@@ -10,8 +8,10 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config' // eslint-disable-line ts/consistent-type-imports
 import fg from 'fast-glob'
 import slugify from 'slugify'
+import { SoundTagService } from '../persistence/sound-tag.service' // eslint-disable-line ts/consistent-type-imports
 
 @Injectable()
 export class SoundLibraryService implements OnModuleInit {

@@ -2,20 +2,17 @@ import type {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common'
-import type { ConfigService } from '@nestjs/config'
 import type {
   ButtonInteraction,
   Message,
   StringSelectMenuInteraction,
   VoiceBasedChannel,
 } from 'discord.js'
-import type { PermissionConfigService } from '../permissions'
-import type { PlayerService } from '../player/player.service'
-import type { SoundLibraryService } from '../sound/sound.service'
 import {
   Injectable,
   Logger,
 } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config' // eslint-disable-line ts/consistent-type-imports
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -26,6 +23,9 @@ import {
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } from 'discord.js'
+import { PermissionConfigService } from '../permissions' // eslint-disable-line ts/consistent-type-imports
+import { PlayerService } from '../player/player.service' // eslint-disable-line ts/consistent-type-imports
+import { SoundLibraryService } from '../sound/sound.service' // eslint-disable-line ts/consistent-type-imports
 
 export interface GuildDirectoryEntry {
   guildId: string

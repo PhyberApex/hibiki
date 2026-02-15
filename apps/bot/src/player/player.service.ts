@@ -1,10 +1,10 @@
 import type { VoiceBasedChannel } from 'discord.js'
-import type { PlayerSnapshotService } from '../persistence/player-snapshot.service'
-import type { SoundLibraryService } from '../sound/sound.service'
 import type { SoundCategory } from '../sound/sound.types'
 import type { GuildPlaybackState } from './player.types'
 import { Injectable, Logger } from '@nestjs/common'
 import { GuildAudioManager } from '../audio/guild-audio.manager'
+import { PlayerSnapshotService } from '../persistence/player-snapshot.service' // eslint-disable-line ts/consistent-type-imports
+import { SoundLibraryService } from '../sound/sound.service' // eslint-disable-line ts/consistent-type-imports
 
 interface SnapshotOverrides {
   trackId: string | null
