@@ -51,8 +51,8 @@ importers:
         specifier: ^0.14.1
         version: 0.14.3
       discord-api-types:
-        specifier: ^0.37.93
-        version: 0.37.120
+        specifier: ^0.38.0
+        version: 0.38.39
       discord.js:
         specifier: ^14.22.0
         version: 14.25.1
