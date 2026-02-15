@@ -14,6 +14,8 @@ Hibiki is a NestJS + Discord.js service that powers a Discord music bot, REST AP
 | Persistence | Player state lives in memory *and* is snapshotted into `storage/data/hibiki.sqlite` so dashboards show “last seen” status even after restarts. |
 | Dashboard (Vue) | Lives in `apps/web` and talks to the REST endpoints (bundle copied into `apps/bot/web-dist` at build time). |
 
+**Multi-guild:** The bot can be in **multiple servers (guilds) at the same time** — one voice channel per server. Each guild has its own playback state and volume; the dashboard and API are per-guild.
+
 ## Local Development
 
 ### Requirements
