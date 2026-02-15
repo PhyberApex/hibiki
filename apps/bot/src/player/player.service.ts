@@ -1,10 +1,11 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { SoundCategory } from '../sound/sound.types'
 import type { GuildPlaybackState } from './player.types'
-import { Injectable, Logger } from '@nestjs/common'
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common'
 import { GuildAudioManager } from '../audio/guild-audio.manager'
-import { PlayerSnapshotService } from '../persistence/player-snapshot.service' // eslint-disable-line ts/consistent-type-imports
-import { SoundLibraryService } from '../sound/sound.service' // eslint-disable-line ts/consistent-type-imports
+import { DiscordService } from '../discord/discord.service'
+import { PlayerSnapshotService } from '../persistence/player-snapshot.service'
+import { SoundLibraryService } from '../sound/sound.service'
 
 interface SnapshotOverrides {
   trackId: string | null
@@ -20,8 +21,9 @@ export class PlayerService {
   private readonly managers = new Map<string, GuildAudioManager>()
 
   constructor(
-    private readonly sounds: SoundLibraryService,
-    private readonly snapshots: PlayerSnapshotService,
+    @Inject(SoundLibraryService) private readonly sounds: SoundLibraryService,
+    @Inject(PlayerSnapshotService) private readonly snapshots: PlayerSnapshotService,
+    @Inject(forwardRef(() => DiscordService)) private readonly discord: DiscordService,
   ) {}
 
   async connect(channel: VoiceBasedChannel) {
@@ -102,25 +104,52 @@ export class PlayerService {
     this.logger.debug(`getState: ${live.length} live guild(s)`)
     const liveGuilds = new Set(live.map(state => state.guildId))
     const snapshots = await this.snapshots.list()
-    const persistedFallbacks = snapshots
-      .filter(snapshot => !liveGuilds.has(snapshot.guildId))
-      .map<GuildPlaybackState>(snapshot => ({
-        guildId: snapshot.guildId,
-        connectedChannelId: snapshot.connectedChannelId ?? undefined,
-        connectedChannelName: snapshot.connectedChannelName ?? undefined,
-        isIdle: snapshot.isIdle,
-        track: snapshot.trackId
-          ? {
-              id: snapshot.trackId,
-              name: snapshot.trackName ?? 'Unknown',
-              filename: snapshot.trackFilename ?? 'unknown',
-              category: snapshot.trackCategory ?? 'music',
-            }
-          : null,
-        source: 'snapshot',
-        lastUpdated: snapshot.updatedAt.toISOString(),
-      }))
-
+    const persistedFallbacks: GuildPlaybackState[] = []
+    for (const snapshot of snapshots) {
+      if (liveGuilds.has(snapshot.guildId))
+        continue
+      const voice = this.discord.getBotVoiceStateForGuild(snapshot.guildId)
+      if (!voice.channelId) {
+        if (snapshot.connectedChannelId != null) {
+          this.logger.debug(`Snapshot guild ${snapshot.guildId}: Discord says not in voice, correcting DB`)
+          await this.snapshots.upsert({
+            guildId: snapshot.guildId,
+            connectedChannelId: null,
+            connectedChannelName: null,
+            trackId: null,
+            trackName: null,
+            trackFilename: null,
+            trackCategory: null,
+            isIdle: true,
+          })
+        }
+        persistedFallbacks.push({
+          guildId: snapshot.guildId,
+          isIdle: true,
+          track: null,
+          source: 'snapshot',
+          lastUpdated: snapshot.updatedAt.toISOString(),
+        })
+      }
+      else {
+        persistedFallbacks.push({
+          guildId: snapshot.guildId,
+          connectedChannelId: voice.channelId,
+          connectedChannelName: voice.channelName ?? undefined,
+          isIdle: snapshot.isIdle,
+          track: snapshot.trackId
+            ? {
+                id: snapshot.trackId,
+                name: snapshot.trackName ?? 'Unknown',
+                filename: snapshot.trackFilename ?? 'unknown',
+                category: snapshot.trackCategory ?? 'music',
+              }
+            : null,
+          source: 'snapshot',
+          lastUpdated: snapshot.updatedAt.toISOString(),
+        })
+      }
+    }
     return [...live, ...persistedFallbacks]
   }
 

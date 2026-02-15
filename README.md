@@ -127,6 +127,14 @@ Hibiki uses **SQLite** (one file, e.g. `storage/data/hibiki.sqlite`) for two thi
 
 Sound files are **not** in the database; they live on disk under `storage/music` and `storage/effects`. The bot discovers them by scanning those folders.
 
+## Crash recovery
+
+If the bot **crashes or restarts** while it was in a voice channel, Discord disconnects it — but the database might still say “joined” until the next write. To avoid showing stale “connected” state on the dashboard:
+
+- When the dashboard (or API) asks for player state, the bot **queries Discord** for its actual voice state in each guild that only has a persisted snapshot (no in-memory manager). If Discord reports that the bot is **not** in a voice channel, the returned state shows **disconnected** and the stale snapshot in the database is **corrected** (upserted as disconnected). If the bot is still in a channel (e.g. it reconnected elsewhere), the channel id and name come from Discord so the UI is accurate.
+
+So the dashboard always reflects the real connection state after a crash or restart; you don’t need to “join again” just to fix the display.
+
 ## Docs
 
 - **[apps/bot/README.md](apps/bot/README.md)** — Discord commands, REST API, permissions, persistence, Docker details

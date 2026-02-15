@@ -110,4 +110,82 @@ describe('discordService', () => {
       expect(message.reply).not.toHaveBeenCalled()
     })
   })
+
+  describe('getBotVoiceStateForGuild (crash recovery)', () => {
+    it('returns null when client is not ready', () => {
+      jest.spyOn(service.getClient(), 'isReady').mockReturnValue(false)
+      expect(service.getBotVoiceStateForGuild('guild-1')).toEqual({
+        channelId: null,
+        channelName: null,
+      })
+    })
+
+    it('returns null when guild is not in cache', () => {
+      const client = service.getClient() as any
+      client.guilds = { cache: { get: jest.fn().mockReturnValue(undefined) } }
+      expect(service.getBotVoiceStateForGuild('missing')).toEqual({
+        channelId: null,
+        channelName: null,
+      })
+    })
+
+    it('returns null when bot is not in a voice channel in that guild', () => {
+      const client = service.getClient() as any
+      client.guilds = {
+        cache: {
+          get: jest.fn().mockReturnValue({
+            members: { me: { voice: { channelId: null, channel: null } } },
+          }),
+        },
+      }
+      expect(service.getBotVoiceStateForGuild('guild-1')).toEqual({
+        channelId: null,
+        channelName: null,
+      })
+    })
+
+    it('returns channelId and channelName when bot is in voice', () => {
+      const client = service.getClient() as any
+      client.guilds = {
+        cache: {
+          get: jest.fn().mockReturnValue({
+            members: {
+              me: {
+                voice: {
+                  channelId: 'ch-123',
+                  channel: { id: 'ch-123', name: 'General' },
+                },
+              },
+            },
+          }),
+        },
+      }
+      expect(service.getBotVoiceStateForGuild('guild-1')).toEqual({
+        channelId: 'ch-123',
+        channelName: 'General',
+      })
+    })
+
+    it('uses voice.channel.id when channelId is missing', () => {
+      const client = service.getClient() as any
+      client.guilds = {
+        cache: {
+          get: jest.fn().mockReturnValue({
+            members: {
+              me: {
+                voice: {
+                  channelId: undefined,
+                  channel: { id: 'ch-456', name: 'Music' },
+                },
+              },
+            },
+          }),
+        },
+      }
+      expect(service.getBotVoiceStateForGuild('guild-1')).toEqual({
+        channelId: 'ch-456',
+        channelName: 'Music',
+      })
+    })
+  })
 })

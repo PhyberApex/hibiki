@@ -1,4 +1,5 @@
 import type { VoiceBasedChannel } from 'discord.js'
+import type { DiscordService } from '../discord/discord.service'
 import type { PlayerSnapshotService } from '../persistence/player-snapshot.service'
 import type { SoundLibraryService } from '../sound/sound.service'
 import { PlayerService } from './player.service'
@@ -7,6 +8,7 @@ describe('playerService', () => {
   let service: PlayerService
   let sounds: jest.Mocked<SoundLibraryService>
   let snapshots: jest.Mocked<PlayerSnapshotService>
+  let discord: jest.Mocked<Pick<DiscordService, 'getBotVoiceStateForGuild'>>
 
   const mockFile = {
     id: 'track',
@@ -41,7 +43,11 @@ describe('playerService', () => {
       list: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<PlayerSnapshotService>
 
-    service = new PlayerService(sounds, snapshots)
+    discord = {
+      getBotVoiceStateForGuild: jest.fn().mockReturnValue({ channelId: null, channelName: null }),
+    }
+
+    service = new PlayerService(sounds, snapshots, discord as DiscordService)
   })
 
   it('stops playback without throwing when no manager', async () => {
@@ -132,6 +138,7 @@ describe('playerService', () => {
   })
 
   it('getState merges live state with snapshot fallbacks', async () => {
+    discord.getBotVoiceStateForGuild.mockReturnValue({ channelId: null, channelName: null })
     const manager = {
       channelId: 'ch-1',
       channelLabel: 'General',
@@ -162,6 +169,66 @@ describe('playerService', () => {
     expect(live?.volume).toEqual({ music: 85, effects: 90 })
     const snapshot = state.find(s => s.source === 'snapshot')
     expect(snapshot?.guildId).toBe('guild-2')
+    expect(discord.getBotVoiceStateForGuild).toHaveBeenCalledWith('guild-2')
+  })
+
+  it('getState corrects snapshot when Discord says bot is not in voice', async () => {
+    discord.getBotVoiceStateForGuild.mockReturnValue({ channelId: null, channelName: null })
+    snapshots.list.mockResolvedValue([
+      {
+        guildId: 'guild-2',
+        connectedChannelId: 'ch-old',
+        connectedChannelName: 'Old Channel',
+        isIdle: false,
+        trackId: 't1',
+        trackName: 'Track',
+        trackFilename: 't.mp3',
+        trackCategory: 'music',
+        updatedAt: new Date('2024-01-01'),
+      },
+    ] as any)
+
+    const state = await service.getState()
+
+    expect(snapshots.upsert).toHaveBeenCalledWith({
+      guildId: 'guild-2',
+      connectedChannelId: null,
+      connectedChannelName: null,
+      trackId: null,
+      trackName: null,
+      trackFilename: null,
+      trackCategory: null,
+      isIdle: true,
+    })
+    const snapshot = state.find(s => s.guildId === 'guild-2')
+    expect(snapshot?.connectedChannelId).toBeUndefined()
+    expect(snapshot?.track).toBeNull()
+    expect(snapshot?.isIdle).toBe(true)
+  })
+
+  it('getState uses Discord channel when snapshot guild has bot in voice', async () => {
+    discord.getBotVoiceStateForGuild.mockReturnValue({ channelId: 'ch-discord', channelName: 'General' })
+    snapshots.list.mockResolvedValue([
+      {
+        guildId: 'guild-2',
+        connectedChannelId: 'ch-old',
+        connectedChannelName: 'Old Name',
+        isIdle: false,
+        trackId: 't1',
+        trackName: 'Track',
+        trackFilename: 't.mp3',
+        trackCategory: 'music',
+        updatedAt: new Date('2024-01-01'),
+      },
+    ] as any)
+
+    const state = await service.getState()
+
+    expect(snapshots.upsert).not.toHaveBeenCalled()
+    const snapshot = state.find(s => s.guildId === 'guild-2')
+    expect(snapshot?.connectedChannelId).toBe('ch-discord')
+    expect(snapshot?.connectedChannelName).toBe('General')
+    expect(snapshot?.track?.name).toBe('Track')
   })
 
   it('playMusic without channel throws when manager not connected', async () => {

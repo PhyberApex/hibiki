@@ -9,6 +9,8 @@ import type {
   VoiceBasedChannel,
 } from 'discord.js'
 import {
+  forwardRef,
+  Inject,
   Injectable,
   Logger,
 } from '@nestjs/common'
@@ -24,7 +26,7 @@ import {
   StringSelectMenuOptionBuilder,
 } from 'discord.js'
 import { PermissionConfigService } from '../permissions' // eslint-disable-line ts/consistent-type-imports
-import { PlayerService } from '../player/player.service' // eslint-disable-line ts/consistent-type-imports
+import { PlayerService } from '../player/player.service'
 import { SoundLibraryService } from '../sound/sound.service' // eslint-disable-line ts/consistent-type-imports
 
 export interface GuildDirectoryEntry {
@@ -41,6 +43,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly config: ConfigService,
+    @Inject(forwardRef(() => PlayerService))
     private readonly player: PlayerService,
     private readonly sounds: SoundLibraryService,
     private readonly permissions: PermissionConfigService,
@@ -94,6 +97,21 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
 
   getClient() {
     return this.client
+  }
+
+  /**
+   * Returns the bot's current voice state in a guild (from Discord).
+   * Use this to correct persisted state after a crash — if the bot is no longer in a channel, Discord will report null.
+   */
+  getBotVoiceStateForGuild(guildId: string): { channelId: string | null, channelName: string | null } {
+    if (!this.client.isReady()) {
+      return { channelId: null, channelName: null }
+    }
+    const guild = this.client.guilds.cache.get(guildId)
+    const voice = guild?.members.me?.voice
+    const channelId = voice?.channelId ?? voice?.channel?.id ?? null
+    const channelName = voice?.channel?.name ?? null
+    return { channelId, channelName }
   }
 
   /** Client connected and ready to join/play. */
