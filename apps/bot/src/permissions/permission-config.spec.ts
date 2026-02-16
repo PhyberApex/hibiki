@@ -63,4 +63,30 @@ describe('permissionConfigService', () => {
     expect(emptyService.isAllowed([], null)).toBe(false)
     expect(emptyService.isAllowed(['any'], 'anyone')).toBe(false)
   })
+
+  it('merges HIBIKI_E2E_ALLOW_BOT_ID and HIBIKI_ALLOWED_DISCORD_USER_IDS into allowlist', async () => {
+    const configWithE2E = {
+      get: jest.fn().mockImplementation((key: string) => {
+        if (key === 'discord.e2eAllowBotId')
+          return 'e2e-sidecar-id'
+        return undefined
+      }),
+    } as unknown as ConfigService
+    const origEnv = process.env.HIBIKI_ALLOWED_DISCORD_USER_IDS
+    process.env.HIBIKI_ALLOWED_DISCORD_USER_IDS = 'extra-user-1, extra-user-2 '
+    ;(appConfig.get as jest.Mock).mockResolvedValueOnce(
+      JSON.stringify({ allowedDiscordRoleIds: [], allowedDiscordUserIds: [] }),
+    )
+    const svc = new PermissionConfigService(configWithE2E, appConfig)
+    await svc.reload()
+    const config = svc.getConfig()
+    expect(config.allowedDiscordUserIds).toContain('e2e-sidecar-id')
+    expect(config.allowedDiscordUserIds).toContain('extra-user-1')
+    expect(config.allowedDiscordUserIds).toContain('extra-user-2')
+    expect(svc.isAllowed([], 'e2e-sidecar-id')).toBe(true)
+    expect(svc.isAllowed([], 'extra-user-1')).toBe(true)
+    if (origEnv !== undefined)
+      process.env.HIBIKI_ALLOWED_DISCORD_USER_IDS = origEnv
+    else delete process.env.HIBIKI_ALLOWED_DISCORD_USER_IDS
+  })
 })
