@@ -75,13 +75,17 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --dir e2e exec playwright install chromium --with-deps
 
+      - name: Create .env.e2e for tests
+        run: |
+          {
+            echo 'E2E_HIBIKI_API_URL=http://localhost:3000'
+            [ -n "${{ secrets.E2E_GUILD_ID }}" ] && echo "E2E_GUILD_ID=${{ secrets.E2E_GUILD_ID }}"
+            [ -n "${{ secrets.E2E_VOICE_CHANNEL_ID }}" ] && echo "E2E_VOICE_CHANNEL_ID=${{ secrets.E2E_VOICE_CHANNEL_ID }}"
+            [ -n "${{ secrets.E2E_TEXT_CHANNEL_ID }}" ] && echo "E2E_TEXT_CHANNEL_ID=${{ secrets.E2E_TEXT_CHANNEL_ID }}"
+            [ -n "${{ secrets.E2E_SIDECAR_TOKEN }}" ] && echo "E2E_SIDECAR_TOKEN=${{ secrets.E2E_SIDECAR_TOKEN }}"
+          } > .env.e2e
+
       - name: Run E2E tests
-        env:
-          E2E_HIBIKI_API_URL: http://localhost:3000
-          E2E_GUILD_ID: ${{ secrets.E2E_GUILD_ID }}
-          E2E_VOICE_CHANNEL_ID: ${{ secrets.E2E_VOICE_CHANNEL_ID }}
-          E2E_TEXT_CHANNEL_ID: ${{ secrets.E2E_TEXT_CHANNEL_ID }}
-          E2E_SIDECAR_TOKEN: ${{ secrets.E2E_SIDECAR_TOKEN }}
         run: pnpm run test:e2e
 
       - name: Docker Compose down

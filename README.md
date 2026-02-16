@@ -60,7 +60,7 @@ After the invite, the bot will appear in your server’s member list (offline un
 In the repo root, copy the sample env and fill in the values you copied:
 
 ```bash
-cp .env.sample .env
+cp .env.exmaple .env
 ```
 
 Edit `.env` and set:
@@ -76,7 +76,7 @@ Optional: `DISCORD_GUILD_ID` (a server ID for testing), `HIBIKI_PREFIX` (default
 git clone https://github.com/phyberapex/hibiki.git
 cd hibiki
 corepack enable && pnpm install
-cp .env.sample .env   # set DISCORD_TOKEN and DISCORD_CLIENT_ID (see above)
+cp .env.exmaple .env   # set DISCORD_TOKEN and DISCORD_CLIENT_ID (see above)
 pnpm dev
 ```
 
@@ -99,7 +99,7 @@ Dashboard is bundled and served by the bot at the same port (e.g. http://localho
 ### Run with Compose (local or server)
 
 ```bash
-cp .env.sample .env   # set DISCORD_TOKEN and DISCORD_CLIENT_ID
+cp .env.exmaple .env   # set DISCORD_TOKEN and DISCORD_CLIENT_ID
 mkdir -p storage
 docker compose up -d
 ```
