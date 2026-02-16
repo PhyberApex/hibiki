@@ -14,7 +14,7 @@ Be respectful and constructive. This is a hobby-friendly project; we’re here t
 
 1. **Fork and clone** the repo (or clone directly if you have write access).
 2. **Node and pnpm:** Use Node 20 or 22 (see [.nvmrc](.nvmrc); run `nvm use`). Enable pnpm: `corepack enable && pnpm install`.
-3. **Environment:** Copy [.env.sample](.env.sample) to `.env` and set `DISCORD_TOKEN` and `DISCORD_CLIENT_ID` (see [README](README.md#setting-up-a-discord-bot)).
+3. **Environment:** Copy [.env.exmaple](.env.exmaple) to `.env` and set `DISCORD_TOKEN` and `DISCORD_CLIENT_ID` (see [README](README.md#setting-up-a-discord-bot)).
 4. **Run the app:** `pnpm dev` starts the bot and web dashboard. The dashboard is at http://localhost:5173 and proxies `/api` to the bot.
 
 ## Before you submit

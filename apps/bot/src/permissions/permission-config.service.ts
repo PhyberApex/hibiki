@@ -76,21 +76,43 @@ export class PermissionConfigService implements OnModuleInit {
   }
 
   private async loadConfig(): Promise<AllowlistConfig> {
+    let base: AllowlistConfig
     const stored = await this.appConfig.get(PERMISSIONS_KEY)
     if (stored) {
       try {
-        return normalizeAllowlist(JSON.parse(stored))
+        base = normalizeAllowlist(JSON.parse(stored))
       }
       catch {
-        // invalid or missing; use file/defaults below
+        base = this.loadConfigFromFile()
       }
     }
-    const fromFile = this.loadConfigFromFile()
-    const hasAny = fromFile.allowedDiscordRoleIds.length > 0 || fromFile.allowedDiscordUserIds.length > 0
-    if (hasAny) {
-      await this.appConfig.set(PERMISSIONS_KEY, JSON.stringify(fromFile))
+    else {
+      base = this.loadConfigFromFile()
+      const hasAny = base.allowedDiscordRoleIds.length > 0 || base.allowedDiscordUserIds.length > 0
+      if (hasAny) {
+        await this.appConfig.set(PERMISSIONS_KEY, JSON.stringify(base))
+      }
     }
-    return fromFile
+    return this.mergeEnvAllowlist(base)
+  }
+
+  /**
+   * Merge user IDs from env into the allowlist so E2E/CI can allow the sidecar (or others)
+   * without using the web UI. HIBIKI_E2E_ALLOW_BOT_ID and HIBIKI_ALLOWED_DISCORD_USER_IDS are applied.
+   */
+  private mergeEnvAllowlist(base: AllowlistConfig): AllowlistConfig {
+    const e2eBotId = this.configService.get<string>('discord.e2eAllowBotId')
+    const fromEnvVar = process.env.HIBIKI_ALLOWED_DISCORD_USER_IDS
+      ? process.env.HIBIKI_ALLOWED_DISCORD_USER_IDS.split(',').map(s => s.trim()).filter(Boolean)
+      : []
+    const extraIds = [...(e2eBotId ? [e2eBotId] : []), ...fromEnvVar]
+    if (extraIds.length === 0)
+      return base
+    const merged = [...new Set([...base.allowedDiscordUserIds, ...extraIds])]
+    return {
+      allowedDiscordRoleIds: base.allowedDiscordRoleIds,
+      allowedDiscordUserIds: merged,
+    }
   }
 
   private loadConfigFromFile(): AllowlistConfig {

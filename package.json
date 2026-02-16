@@ -9,17 +9,19 @@
   },
   "workspaces": [
     "apps/bot",
-    "apps/web"
+    "apps/web",
+    "e2e"
   ],
   "scripts": {
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint:fix",
-    "dev": "concurrently \"pnpm --filter @hibiki/bot start:dev\" \"pnpm --filter web dev\"",
+    "dev": "concurrently \"turbo run start:dev --filter=@hibiki/bot\" \"turbo run dev --filter=web\"",
     "build": "turbo run build",
     "copy:web": "node scripts/copy-web-dist.cjs",
-    "start": "pnpm --filter @hibiki/bot start:prod",
+    "start": "turbo run start:prod --filter=@hibiki/bot",
     "test": "turbo run test",
-    "test:coverage": "turbo run test:coverage"
+    "test:coverage": "turbo run test:coverage",
+    "test:e2e": "turbo run test test:playwright --filter=e2e"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

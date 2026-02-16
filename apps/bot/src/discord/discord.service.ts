@@ -20,6 +20,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   Client,
+  Events,
   GatewayIntentBits,
   Partials,
   StringSelectMenuBuilder,
@@ -41,6 +42,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   private readonly client: Client
   private readonly prefix: string
 
+  private readonly e2eAllowBotId: string | undefined
+
   constructor(
     private readonly config: ConfigService,
     @Inject(forwardRef(() => PlayerService))
@@ -49,6 +52,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     private readonly permissions: PermissionConfigService,
   ) {
     this.prefix = this.config.get<string>('discord.commandPrefix', '!')
+    this.e2eAllowBotId = this.config.get<string>('discord.e2eAllowBotId')
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
@@ -69,7 +73,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       return
     }
 
-    this.client.once('ready', () => {
+    this.client.once(Events.ClientReady, () => {
       this.logger.log(`Logged in as ${this.client.user?.tag}`)
     })
 
@@ -146,12 +150,13 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Client connected and ready to join/play. */
-  getBotStatus(): { ready: boolean, userTag?: string } {
+  getBotStatus(): { ready: boolean, userTag?: string, userId?: string } {
     if (!this.client.isReady()) {
       return { ready: false }
     }
     const tag = this.client.user?.tag
-    return { ready: true, userTag: tag ?? undefined }
+    const userId = this.client.user?.id
+    return { ready: true, userTag: tag ?? undefined, userId: userId ?? undefined }
   }
 
   listGuildDirectory(): GuildDirectoryEntry[] {
@@ -174,7 +179,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleMessage(message: Message) {
-    if (!this.client.isReady() || message.author.bot || !message.inGuild()) {
+    const isAllowedE2EBot = this.e2eAllowBotId && message.author.id === this.e2eAllowBotId
+    if (!this.client.isReady() || (!isAllowedE2EBot && message.author.bot) || !message.inGuild()) {
       return
     }
 
