@@ -59,6 +59,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export interface BotStatus {
   ready: boolean
   userTag?: string
+  /** Bot's Discord user id (for E2E / sidecar verification). */
+  userId?: string
 }
 
 export function fetchPlayerState(signal?: AbortSignal): Promise<PlayerStateItem[]> {

@@ -136,6 +136,18 @@ If the bot **crashes or restarts** while it was in a voice channel, Discord disc
 
 So the dashboard always reflects the real connection state after a crash or restart; you don’t need to “join again” just to fix the display.
 
+## E2E tests (real Discord)
+
+The `e2e` workspace runs tests that **connect to a real Discord server** and drive the Hibiki API (join, play, effect, leave). Optional: a **sidecar** bot (second token) verifies voice state and runs **command tests** (`!join`, `!leave`, `!songs`, `!effects`) when Hibiki allows it. Check run results in the CLI; no start/end messages are posted to Discord.
+
+1. **Start Hibiki first** — e.g. `docker compose up -d` or `pnpm dev` — so the API is reachable at `E2E_HIBIKI_API_URL` (default `http://localhost:3000`).
+2. Copy `.env.e2e.example` to `.env.e2e` and set **E2E_GUILD_ID**, **E2E_VOICE_CHANNEL_ID**, and **E2E_TEXT_CHANNEL_ID**; optionally **E2E_SIDECAR_TOKEN** for sidecar checks.
+3. **Sidecar bot permissions** (invite URL → Bot Permissions): **View Channels**, **Send Messages**, **Read Message History**; for voice tests: **Connect**, **Speak**.
+4. **For command tests:** In the Hibiki process env (e.g. in `.env` or docker-compose), set **HIBIKI_E2E_ALLOW_BOT_ID** to the sidecar bot’s Discord user ID. The sidecar must be in Hibiki’s permissions allowlist (dashboard → Permissions).
+5. Run: `pnpm run test:e2e`.
+
+If `.env.e2e` is not configured, the Discord-dependent tests are skipped; the “bot is ready” check still runs if the API is up.
+
 ## Docs
 
 - **[apps/bot/README.md](apps/bot/README.md)** — Discord commands, REST API, permissions, persistence, Docker details

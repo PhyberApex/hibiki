@@ -5,6 +5,7 @@ export const validationSchema = Joi.object({
   DISCORD_CLIENT_ID: Joi.string().min(1).required(),
   DISCORD_GUILD_ID: Joi.string().optional(),
   HIBIKI_PREFIX: Joi.string().min(1).default('!'),
+  HIBIKI_E2E_ALLOW_BOT_ID: Joi.string().min(1).optional(),
   HIBIKI_STORAGE_PATH: Joi.string().default('storage'),
   HIBIKI_MUSIC_DIR: Joi.string().default('storage/music'),
   HIBIKI_EFFECTS_DIR: Joi.string().default('storage/effects'),

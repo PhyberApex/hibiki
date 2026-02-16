@@ -70,6 +70,13 @@ Music and effects volume are set **per server** (per guild):
 
 The bot must have **Message Content Intent** enabled or it cannot read your messages. In the [Discord Developer Portal](https://discord.com/developers/applications) → your application → **Bot** → **Privileged Gateway Intents**, turn **Message Content Intent** **ON**, then save. Restart Hibiki after changing. If it’s already on, check the **Permissions** allowlist in the dashboard — your Discord user or role must be allowed to use the bot.
 
+## E2E tests (real Discord)
+
+The repo includes an **E2E test suite** that talks to a running Hibiki instance and a real Discord server: it joins a voice channel via the API, plays a track and an effect, then leaves, and checks that the bot’s state and (optionally) Discord’s voice state match.
+
+- **Setup:** Copy `.env.e2e.example` to `.env.e2e` and set `E2E_HIBIKI_API_URL` (default `http://localhost:3000`), `E2E_GUILD_ID`, and `E2E_VOICE_CHANNEL_ID`. Optionally set `E2E_TEXT_CHANNEL_ID` and `E2E_SIDECAR_TOKEN` (a second bot in the same server). The sidecar verifies voice state and runs command tests when Hibiki allows it. Results are in the CLI; no Discord notifications. **Sidecar bot permissions:** View Channels, Send Messages, Read Message History; for voice tests also Connect and Speak.
+- **Run:** Start Hibiki, then from the repo root run `pnpm run test:e2e`. If the E2E env vars are not set, the Discord-dependent tests are skipped.
+
 ## About this project
 
 This project was created in large part with **AI-assisted coding tools**. We encourage human review, testing, and contributions.

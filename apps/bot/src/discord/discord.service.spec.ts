@@ -109,6 +109,38 @@ describe('discordService', () => {
       await (service as any).handleMessage(message)
       expect(message.reply).not.toHaveBeenCalled()
     })
+
+    it('ignores message when author.bot is true and e2eAllowBotId is not set', async () => {
+      const message = createMockMessage({ content: '!menu', author: { bot: true, tag: 'Bot#0', id: 'bot-1' } })
+      await (service as any).handleMessage(message)
+      expect(message.reply).not.toHaveBeenCalled()
+    })
+
+    it('processes command when author.bot is true but author.id matches e2eAllowBotId', async () => {
+      config.get = jest.fn().mockImplementation((key: string, def: unknown) => {
+        if (key === 'discord.commandPrefix') return '!'
+        if (key === 'discord.e2eAllowBotId') return 'e2e-sidecar-id'
+        return def
+      })
+      const moduleWithE2E = await Test.createTestingModule({
+        providers: [
+          DiscordService,
+          { provide: ConfigService, useValue: config },
+          { provide: PlayerService, useValue: player },
+          { provide: SoundLibraryService, useValue: sounds },
+          { provide: PermissionConfigService, useValue: permissions },
+        ],
+      }).compile()
+      const svc = moduleWithE2E.get(DiscordService)
+      jest.spyOn(svc.getClient(), 'isReady').mockReturnValue(true)
+      const message = createMockMessage({
+        content: '!menu',
+        author: { bot: true, tag: 'E2ESidecar#0', id: 'e2e-sidecar-id' },
+      })
+      await (svc as any).handleMessage(message)
+      expect(message.reply).toHaveBeenCalledTimes(1)
+      expect((message.reply as jest.Mock).mock.calls[0][0].content).toContain('control panel')
+    })
   })
 
   describe('getBotVoiceStateForGuild (crash recovery)', () => {

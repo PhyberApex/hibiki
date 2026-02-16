@@ -4,6 +4,7 @@ yarn.lock
 .DS_Store
 .env
 .env.local
+.env.e2e
 apps/bot/dist
 apps/web/dist
 apps/web/node_modules
@@ -20,3 +21,4 @@ npm-debug.log*
 .idea
 .turbo
 docs/_site
+e2e/test-results
