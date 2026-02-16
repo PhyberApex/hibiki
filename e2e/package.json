@@ -19,6 +19,6 @@
     "dotenv": "^17.0.0",
     "discord.js": "^14.16.3",
     "typescript": "^5.7.2",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.0"
   }
 }
