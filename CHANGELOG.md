@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/PhyberApex/hibiki/compare/hibiki-v0.2.0...hibiki-v0.3.0) (2026-02-16)
+
+
+### Features
+
+* **web:** Reworked UI for playback ([19b9a06](https://github.com/PhyberApex/hibiki/commit/19b9a06a1eddfcf80f9ea16f256c70b84849c9c7))
+* **web:** Reworked UI for playback ([#29](https://github.com/PhyberApex/hibiki/issues/29)) ([19b9a06](https://github.com/PhyberApex/hibiki/commit/19b9a06a1eddfcf80f9ea16f256c70b84849c9c7))
+
+
+### Bug Fixes
+
+* **deps:** update dependency multer to v2 ([#25](https://github.com/PhyberApex/hibiki/issues/25)) ([589c799](https://github.com/PhyberApex/hibiki/commit/589c799e3e76e0f216415f2cc5bdf5d4b9ba2939))
+* **deps:** update dependency uuid to v13 ([#26](https://github.com/PhyberApex/hibiki/issues/26)) ([1704a38](https://github.com/PhyberApex/hibiki/commit/1704a38046577a9243186e04502bf6e9c08040b0))
+
 ## [0.2.0](https://github.com/PhyberApex/hibiki/compare/hibiki-v0.1.1...hibiki-v0.2.0) (2026-02-15)
 
 
