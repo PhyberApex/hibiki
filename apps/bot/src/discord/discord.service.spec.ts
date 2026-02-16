@@ -118,8 +118,10 @@ describe('discordService', () => {
 
     it('processes command when author.bot is true but author.id matches e2eAllowBotId', async () => {
       config.get = jest.fn().mockImplementation((key: string, def: unknown) => {
-        if (key === 'discord.commandPrefix') return '!'
-        if (key === 'discord.e2eAllowBotId') return 'e2e-sidecar-id'
+        if (key === 'discord.commandPrefix')
+          return '!'
+        if (key === 'discord.e2eAllowBotId')
+          return 'e2e-sidecar-id'
         return def
       })
       const moduleWithE2E = await Test.createTestingModule({
