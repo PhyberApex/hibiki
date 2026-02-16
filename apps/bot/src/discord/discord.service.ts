@@ -100,6 +100,37 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Asks Discord to leave the voice channel in this guild (REST API).
+   * Use when there is no in-process VoiceConnection (e.g. after bot restart) but Discord still shows the bot in a channel.
+   */
+  async leaveVoiceChannel(guildId: string): Promise<boolean> {
+    if (!this.client.isReady()) {
+      this.logger.debug(`leaveVoiceChannel ${guildId}: client not ready`)
+      return false
+    }
+    const guild = this.client.guilds.cache.get(guildId)
+    if (!guild) {
+      this.logger.debug(`leaveVoiceChannel ${guildId}: guild not in cache`)
+      return false
+    }
+    const me = guild.members.me
+    const voice = me?.voice
+    if (!voice?.channelId) {
+      this.logger.debug(`leaveVoiceChannel ${guildId}: bot not in a voice channel (channelId=${voice?.channelId ?? 'none'})`)
+      return false
+    }
+    try {
+      await voice.setChannel(null)
+      this.logger.log(`Left voice channel via API for guild ${guildId}`)
+      return true
+    }
+    catch (err) {
+      this.logger.warn(`leaveVoiceChannel ${guildId} failed: ${err instanceof Error ? err.message : err}`)
+      return false
+    }
+  }
+
+  /**
    * Returns the bot's current voice state in a guild (from Discord).
    * Use this to correct persisted state after a crash — if the bot is no longer in a channel, Discord will report null.
    */

@@ -33,6 +33,7 @@ const channelId = ref('')
 const trackId = ref('')
 const effectId = ref('')
 const busy = ref(false)
+const channelJoinBusy = ref(false)
 
 type ToastType = 'success' | 'error'
 const toast = ref<{ type: ToastType, text: string } | null>(null)
@@ -59,9 +60,6 @@ const selectedGuildState = computed(() =>
 const isJoined = computed(() => !!selectedGuildState.value?.connectedChannelId)
 const isPlaying = computed(() => isJoined.value && !selectedGuildState.value?.isIdle)
 
-const canJoin = computed(
-  () => !busy.value && !!guildId.value && !!channelId.value && !isJoined.value,
-)
 const canLeave = computed(() => !busy.value && !!guildId.value && isJoined.value)
 const canStop = computed(() => !busy.value && !!guildId.value && isPlaying.value)
 const canPlay = computed(
@@ -81,9 +79,13 @@ function ensureChannelSelection() {
     channelId.value = ''
     return
   }
-  if (!channels.value.some(channel => channel.id === channelId.value)) {
-    channelId.value = channels.value[0]?.id ?? ''
+  const connectedId = selectedGuildState.value?.connectedChannelId
+  if (connectedId && channels.value.some(c => c.id === connectedId)) {
+    channelId.value = connectedId
+    return
   }
+  if (!channels.value.some(channel => channel.id === channelId.value))
+    channelId.value = ''
 }
 
 async function loadDirectory() {
@@ -121,37 +123,50 @@ async function loadSounds() {
 async function run(
   action: () => Promise<unknown>,
   successMessage: string = 'Done',
-) {
+): Promise<boolean> {
   busy.value = true
   toast.value = null
   try {
     await action()
     showToast('success', successMessage)
     emit('actionDone')
+    return true
   }
   catch (err) {
     showToast('error', err instanceof Error ? err.message : 'Action failed')
+    return false
   }
   finally {
     busy.value = false
   }
 }
 
-function onJoin() {
-  return run(() => {
-    if (!guildId.value || !channelId.value) {
-      throw new Error('Select a guild + channel')
-    }
-    return joinChannel(guildId.value, channelId.value)
-  }, 'Joined voice channel')
+async function onChannelChange() {
+  if (!guildId.value || !channelId.value)
+    return
+  const connected = selectedGuildState.value?.connectedChannelId
+  if (connected === channelId.value)
+    return
+  channelJoinBusy.value = true
+  try {
+    await run(
+      () => joinChannel(guildId.value, channelId.value),
+      connected ? 'Switched voice channel' : 'Joined voice channel',
+    )
+  }
+  finally {
+    channelJoinBusy.value = false
+  }
 }
 
-function onLeave() {
-  return run(() => {
+async function onLeave() {
+  const ok = await run(() => {
     if (!guildId.value)
       throw new Error('Select a guild first')
     return leaveGuild(guildId.value)
   }, 'Left voice channel')
+  if (ok)
+    channelId.value = ''
 }
 
 function onStop() {
@@ -214,6 +229,15 @@ watch(guildId, () => {
   ensureChannelSelection()
 })
 
+// Keep channel dropdown in sync with connected channel when joined
+watch(
+  () => selectedGuildState.value?.connectedChannelId,
+  (connectedId) => {
+    if (connectedId && channels.value.some(c => c.id === connectedId))
+      channelId.value = connectedId
+  },
+)
+
 watch(() => props.soundsVersion, () => {
   loadSounds()
 })
@@ -258,100 +282,126 @@ onMounted(() => {
       {{ directoryError }}
     </p>
 
-    <div class="control-grid">
-      <label class="field">
-        <span class="field-label">Guild</span>
-        <select v-model="guildId" class="field-input" @change="ensureChannelSelection">
-          <option disabled value="">Select a guild…</option>
-          <option v-for="guild in directory" :key="guild.guildId" :value="guild.guildId">
-            {{ guild.guildName }}
-          </option>
-        </select>
-      </label>
-      <label class="field">
-        <span class="field-label">Channel</span>
-        <select v-model="channelId" class="field-input">
-          <option value="">(Use connected channel)</option>
-          <option
-            v-for="channel in channels"
-            :key="channel.id"
-            :value="channel.id"
-          >
-            {{ channel.name }}
-          </option>
-        </select>
-      </label>
-      <label class="field">
-        <span class="field-label">Track</span>
-        <select v-model="trackId" class="field-input" :disabled="soundsLoading">
-          <option value="">Select a track…</option>
-          <option
-            v-for="track in musicTracks"
-            :key="track.id"
-            :value="track.id"
-          >
-            {{ track.name }}
-          </option>
-        </select>
-      </label>
-      <label class="field">
-        <span class="field-label">Effect</span>
-        <select v-model="effectId" class="field-input" :disabled="soundsLoading">
-          <option value="">Select an effect…</option>
-          <option
-            v-for="effect in effectsList"
-            :key="effect.id"
-            :value="effect.id"
-          >
-            {{ effect.name }}
-          </option>
-        </select>
-      </label>
-    </div>
+    <div class="control-rows">
+      <div class="row">
+        <label class="field field-grow">
+          <span class="field-label">Guild</span>
+          <select v-model="guildId" class="field-input" @change="ensureChannelSelection">
+            <option disabled value="">Select a guild…</option>
+            <option v-for="guild in directory" :key="guild.guildId" :value="guild.guildId">
+              {{ guild.guildName }}
+            </option>
+          </select>
+        </label>
+      </div>
 
-    <div v-if="guildVolume" class="volume-controls">
-      <label class="volume-field">
-        <span class="field-label">Music volume</span>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          :value="guildVolume.music"
-          class="volume-slider"
-          @change="onMusicVolumeChange(Number(($event.target as HTMLInputElement).value))"
+      <div class="row row-channel">
+        <label class="field field-grow">
+          <span class="field-label">Channel</span>
+          <select
+            v-model="channelId"
+            class="field-input"
+            :disabled="channelJoinBusy"
+            @change="onChannelChange"
+          >
+            <option value="">Select a channel…</option>
+            <option
+              v-for="channel in channels"
+              :key="channel.id"
+              :value="channel.id"
+            >
+              {{ channel.name }}
+            </option>
+          </select>
+        </label>
+        <span v-if="channelJoinBusy" class="channel-joining" aria-live="polite">
+          Joining…
+        </span>
+        <button
+          v-if="isJoined"
+          type="button"
+          class="btn btn-leave"
+          :disabled="!canLeave"
+          @click="onLeave"
         >
-        <span class="volume-value">{{ guildVolume.music }}%</span>
-      </label>
-      <label class="volume-field">
-        <span class="field-label">Effects volume</span>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          :value="guildVolume.effects"
-          class="volume-slider"
-          @change="onEffectsVolumeChange(Number(($event.target as HTMLInputElement).value))"
-        >
-        <span class="volume-value">{{ guildVolume.effects }}%</span>
-      </label>
-    </div>
+          Leave
+        </button>
+      </div>
 
-    <div class="actions">
-      <button type="button" class="btn btn-primary" :disabled="!canJoin" @click="onJoin">
-        Join
-      </button>
-      <button type="button" class="btn btn-secondary" :disabled="!canLeave" @click="onLeave">
-        Leave
-      </button>
-      <button type="button" class="btn btn-secondary" :disabled="!canStop" @click="onStop">
-        Stop
-      </button>
-      <button type="button" class="btn btn-primary" :disabled="!canPlay" @click="onPlay">
-        Play
-      </button>
-      <button type="button" class="btn btn-secondary" :disabled="!canEffect" @click="onEffect">
-        Effect
-      </button>
+      <div class="row row-actions">
+        <label class="field field-grow">
+          <span class="field-label">Track</span>
+          <select v-model="trackId" class="field-input" :disabled="soundsLoading">
+            <option value="">Select a track…</option>
+            <option
+              v-for="track in musicTracks"
+              :key="track.id"
+              :value="track.id"
+            >
+              {{ track.name }}
+            </option>
+          </select>
+        </label>
+        <div class="row-buttons">
+          <button type="button" class="btn btn-primary" :disabled="!canPlay" @click="onPlay">
+            Play
+          </button>
+          <button type="button" class="btn btn-secondary" :disabled="!canStop" @click="onStop">
+            Stop
+          </button>
+        </div>
+      </div>
+
+      <div class="row row-actions">
+        <label class="field field-grow">
+          <span class="field-label">Effect</span>
+          <select v-model="effectId" class="field-input" :disabled="soundsLoading">
+            <option value="">Select an effect…</option>
+            <option
+              v-for="effect in effectsList"
+              :key="effect.id"
+              :value="effect.id"
+            >
+              {{ effect.name }}
+            </option>
+          </select>
+        </label>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="!canEffect"
+          @click="onEffect"
+        >
+          Play effect
+        </button>
+      </div>
+
+      <div v-if="guildVolume" class="volume-controls">
+        <label class="volume-field">
+          <span class="field-label">Music volume</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            :value="guildVolume.music"
+            class="volume-slider"
+            @change="onMusicVolumeChange(Number(($event.target as HTMLInputElement).value))"
+          >
+          <span class="volume-value">{{ guildVolume.music }}%</span>
+        </label>
+        <label class="volume-field">
+          <span class="field-label">Effects volume</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            :value="guildVolume.effects"
+            class="volume-slider"
+            @change="onEffectsVolumeChange(Number(($event.target as HTMLInputElement).value))"
+          >
+          <span class="volume-value">{{ guildVolume.effects }}%</span>
+        </label>
+      </div>
     </div>
   </section>
 </template>
@@ -498,21 +548,62 @@ onMounted(() => {
   color: var(--color-text);
 }
 
+.btn-leave {
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+.btn-leave:hover:not(:disabled) {
+  background: var(--color-error);
+  color: #fff;
+  border-color: var(--color-error);
+}
+
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.control-grid {
-  display: grid;
+.control-rows {
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.row-channel .field-grow,
+.row-actions .field-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.channel-joining {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .field {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+.field-grow {
+  min-width: 0;
 }
 
 .field-label {
@@ -536,11 +627,5 @@ onMounted(() => {
 .field-input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
 }
 </style>

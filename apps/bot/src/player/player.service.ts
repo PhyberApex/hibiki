@@ -1,6 +1,7 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { SoundCategory } from '../sound/sound.types'
 import type { GuildPlaybackState } from './player.types'
+import { getVoiceConnection } from '@discordjs/voice'
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common'
 import { GuildAudioManager } from '../audio/guild-audio.manager'
 import { DiscordService } from '../discord/discord.service'
@@ -35,12 +36,27 @@ export class PlayerService {
   }
 
   async disconnect(guildId: string) {
-    const manager = this.managers.get(guildId)
-    if (!manager) {
+    if (!guildId) {
+      this.logger.warn('disconnect called with empty guildId')
       return
     }
-    manager.disconnect()
-    this.managers.delete(guildId)
+    const connection = getVoiceConnection(guildId)
+    if (connection) {
+      connection.destroy()
+      this.logger.log(`Destroyed voice connection for guild ${guildId}`)
+    }
+    else {
+      this.logger.log(`disconnect ${guildId}: no in-process voice connection (e.g. after restart), requesting leave via Discord API`)
+      const left = await this.discord.leaveVoiceChannel(guildId)
+      if (!left) {
+        this.logger.warn(`disconnect ${guildId}: Discord API leave returned false (client not ready, guild not in cache, or bot not in voice)`)
+      }
+    }
+    const manager = this.managers.get(guildId)
+    if (manager) {
+      manager.disconnect()
+      this.managers.delete(guildId)
+    }
     await this.snapshots.remove(guildId)
     this.logger.log(`Disconnected from guild ${guildId}`)
   }

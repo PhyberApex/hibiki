@@ -4,6 +4,7 @@ import type { SoundCategory } from '../sound/sound.types'
 import {
   AudioPlayerStatus,
   entersState,
+  getVoiceConnection,
   joinVoiceChannel,
   VoiceConnectionStatus,
 } from '@discordjs/voice'
@@ -48,7 +49,7 @@ export class GuildAudioManager {
 
   disconnect() {
     this.stopMusic()
-    this.connection?.destroy()
+    getVoiceConnection(this.guildId)?.destroy()
     this.connection = undefined
     this.channelName = undefined
   }

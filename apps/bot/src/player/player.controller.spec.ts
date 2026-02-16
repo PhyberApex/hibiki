@@ -86,8 +86,14 @@ describe('playerController', () => {
   })
 
   it('leave disconnects guild', async () => {
-    await controller.leave('guild-1')
+    await controller.leave({ guildId: 'guild-1' })
     expect(player.disconnect).toHaveBeenCalledWith('guild-1')
+  })
+
+  it('leave throws when guildId is missing', async () => {
+    await expect(controller.leave({} as any)).rejects.toThrow('guildId is required')
+    await expect(controller.leave({ guildId: undefined } as any)).rejects.toThrow('guildId is required')
+    expect(player.disconnect).not.toHaveBeenCalled()
   })
 
   it('stop stops playback', async () => {

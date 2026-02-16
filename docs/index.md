@@ -26,7 +26,7 @@ You need a Discord application and bot token before running Hibiki. Follow these
 
 1. **Create an application** — Go to [Discord Developer Portal](https://discord.com/developers/applications) → **New Application**. Name it (e.g. Hibiki) and create. On **General Information**, copy the **Application ID**; this is `DISCORD_CLIENT_ID`.
 2. **Create the bot and get the token** — In the sidebar, open **Bot** → **Add Bot**. Under **Token**, click **Reset Token** (or View Token), then copy it. This is `DISCORD_TOKEN`; keep it secret. Under **Privileged Gateway Intents**, turn on **Message Content Intent** (required for commands).
-3. **Invite the bot to your server** — Open **OAuth2** → **URL Generator**. Under **Scopes** choose **bot**. Under **Bot Permissions** select: **View Channels**, **Send Messages**, **Read Message History**; for voice enable **Connect** and **Speak**. Optionally **Manage Messages** (for `!delete`). Copy the generated URL, open it in a browser, pick your server, and authorize. The bot will show up in your server (offline until Hibiki is running).
+3. **Invite the bot to your server** — Open **OAuth2** → **URL Generator**. Under **Scopes** choose **bot**. Under **Bot Permissions** select: **View Channels**, **Send Messages**, **Read Message History**; for voice enable **Connect** and **Speak**; and **Move Members** (required so the bot can leave voice channels, e.g. from the dashboard or after a restart). Optionally **Manage Messages** (for `!delete`). Copy the generated URL, open it in a browser, pick your server, and authorize. The bot will show up in your server (offline until Hibiki is running).
 4. **Set environment variables** — In the repo root, copy the sample env and add the values you copied:
 
 {: .steps}

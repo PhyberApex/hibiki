@@ -49,6 +49,7 @@ Before running Hibiki, you need a Discord application and bot token.
 3. Under **Bot Permissions**, select at least:
    - **View Channels**, **Send Messages**, **Read Message History**
    - **Connect** (join voice channels) and **Speak** (transmit audio) — required for voice
+   - **Move Members** — required so the bot can leave voice channels (e.g. when you click Leave on the dashboard, or after a bot restart when Discord still shows it in a channel)
    - Optionally **Manage Messages** (for the `!delete` command to clear bot messages).
 4. Copy the **Generated URL** at the bottom, open it in a browser, choose your server, and authorize.
 
