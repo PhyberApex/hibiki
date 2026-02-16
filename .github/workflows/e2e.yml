@@ -1,6 +1,11 @@
 # E2E tests: build & run Hibiki via Docker Compose, then run Vitest + Playwright e2e.
 # Only one run at a time (concurrency). Env vars come from repo/organization secrets.
 #
+# Note: The bot must connect to Discord's gateway. GitHub Actions runners can sometimes
+# fail to reach Discord (timeouts, DNS, or network restrictions). If the bot never becomes
+# ready, check the "Hibiki logs" step output for connection errors; you may need to run
+# E2E locally or use a self-hosted runner with Discord access.
+#
 # Required secrets (for Hibiki to start):
 #   DISCORD_TOKEN, DISCORD_CLIENT_ID
 # Optional (for full e2e including sidecar/Playwright):
@@ -45,18 +50,23 @@ jobs:
           docker compose build
           docker compose up -d
 
-      - name: Wait for Hibiki API
+      - name: Wait for Hibiki API and Discord connection
         run: |
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:3000/api/player/bot-status > /dev/null; then
-              echo "Hibiki API ready"
+            if curl -sf http://localhost:3000/api/player/bot-status | grep -q '"ready":true'; then
+              echo "Hibiki API and Discord bot ready"
               exit 0
             fi
-            echo "Waiting for Hibiki API ($i/30)..."
+            echo "Waiting for Hibiki API and Discord connection ($i/30)..."
             sleep 5
           done
-          echo "Hibiki API did not become ready"
+          echo "Hibiki bot did not connect to Discord (API may be up but bot not ready)."
+          echo "This can happen if GitHub Actions cannot reach Discord's gateway (e.g. network restrictions)."
           exit 1
+
+      - name: Hibiki logs (on failure)
+        if: failure()
+        run: docker compose logs hibiki
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
