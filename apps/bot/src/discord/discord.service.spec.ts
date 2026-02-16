@@ -188,4 +188,83 @@ describe('discordService', () => {
       })
     })
   })
+
+  describe('leaveVoiceChannel', () => {
+    it('returns false when client is not ready', async () => {
+      jest.spyOn(service.getClient(), 'isReady').mockReturnValue(false)
+      const debugSpy = jest.spyOn((service as any).logger, 'debug')
+      expect(await service.leaveVoiceChannel('guild-1')).toBe(false)
+      expect(debugSpy).toHaveBeenCalledWith('leaveVoiceChannel guild-1: client not ready')
+    })
+
+    it('returns false when guild is not in cache', async () => {
+      const client = service.getClient() as any
+      client.guilds = { cache: { get: jest.fn().mockReturnValue(undefined) } }
+      const debugSpy = jest.spyOn((service as any).logger, 'debug')
+      expect(await service.leaveVoiceChannel('missing')).toBe(false)
+      expect(debugSpy).toHaveBeenCalledWith('leaveVoiceChannel missing: guild not in cache')
+    })
+
+    it('returns false when bot is not in a voice channel', async () => {
+      const client = service.getClient() as any
+      client.guilds = {
+        cache: {
+          get: jest.fn().mockReturnValue({
+            members: { me: { voice: { channelId: null, channel: null } } },
+          }),
+        },
+      }
+      const debugSpy = jest.spyOn((service as any).logger, 'debug')
+      expect(await service.leaveVoiceChannel('guild-1')).toBe(false)
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/leaveVoiceChannel guild-1: bot not in a voice channel/),
+      )
+    })
+
+    it('calls setChannel(null) and returns true on success', async () => {
+      const setChannelMock = jest.fn().mockResolvedValue(undefined)
+      const client = service.getClient() as any
+      client.guilds = {
+        cache: {
+          get: jest.fn().mockReturnValue({
+            members: {
+              me: {
+                voice: {
+                  channelId: 'ch-1',
+                  channel: { name: 'General' },
+                  setChannel: setChannelMock,
+                },
+              },
+            },
+          }),
+        },
+      }
+      const logSpy = jest.spyOn((service as any).logger, 'log')
+      expect(await service.leaveVoiceChannel('guild-1')).toBe(true)
+      expect(setChannelMock).toHaveBeenCalledWith(null)
+      expect(logSpy).toHaveBeenCalledWith('Left voice channel via API for guild guild-1')
+    })
+
+    it('returns false and logs warn when setChannel throws', async () => {
+      const setChannelMock = jest.fn().mockRejectedValue(new Error('Missing Permissions'))
+      const client = service.getClient() as any
+      client.guilds = {
+        cache: {
+          get: jest.fn().mockReturnValue({
+            members: {
+              me: {
+                voice: {
+                  channelId: 'ch-1',
+                  setChannel: setChannelMock,
+                },
+              },
+            },
+          }),
+        },
+      }
+      const warnSpy = jest.spyOn((service as any).logger, 'warn')
+      expect(await service.leaveVoiceChannel('guild-1')).toBe(false)
+      expect(warnSpy).toHaveBeenCalledWith('leaveVoiceChannel guild-1 failed: Missing Permissions')
+    })
+  })
 })
