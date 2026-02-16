@@ -628,5 +628,4 @@ onMounted(() => {
   opacity: 0.6;
   cursor: not-allowed;
 }
-
 </style>

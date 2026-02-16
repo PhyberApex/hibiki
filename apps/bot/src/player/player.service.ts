@@ -1,7 +1,7 @@
-import { getVoiceConnection } from '@discordjs/voice'
 import type { VoiceBasedChannel } from 'discord.js'
 import type { SoundCategory } from '../sound/sound.types'
 import type { GuildPlaybackState } from './player.types'
+import { getVoiceConnection } from '@discordjs/voice'
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common'
 import { GuildAudioManager } from '../audio/guild-audio.manager'
 import { DiscordService } from '../discord/discord.service'
