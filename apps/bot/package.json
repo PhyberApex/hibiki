@@ -30,8 +30,6 @@
     "@nestjs/serve-static": "^5.0.0",
     "@nestjs/typeorm": "^11.0.0",
     "@snazzah/davey": "^0.1.6",
-    "class-transformer": "^0.5.1",
-    "class-validator": "^0.14.1",
     "discord-api-types": "^0.38.0",
     "discord.js": "^14.22.0",
     "fast-glob": "^3.3.2",
@@ -43,8 +41,7 @@
     "rxjs": "^7.8.1",
     "slugify": "^1.6.6",
     "sqlite3": "^5.1.7",
-    "typeorm": "^0.3.28",
-    "uuid": "^13.0.0"
+    "typeorm": "^0.3.28"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^7.4.3",
