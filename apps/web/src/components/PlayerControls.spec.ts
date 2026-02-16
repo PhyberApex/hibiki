@@ -79,7 +79,8 @@ describe('playerControls', () => {
   })
 
   it('selecting a channel triggers join and shows Joining then clears', async () => {
-    const { joinChannel } = await import('@/api/player')
+    const api = await import('@/api/player')
+    const joinChannel = vi.mocked(api.joinChannel)
     let resolveJoin: () => void
     joinChannel.mockImplementation(() => new Promise<void>((r) => {
       resolveJoin = r
@@ -91,7 +92,8 @@ describe('playerControls', () => {
     await wrapper.find('select.field-input').setValue('g1')
     await flushPromises()
     const channelSelect = wrapper.findAll('select.field-input')[1]
-    await channelSelect.setValue('ch1')
+    expect(channelSelect).toBeDefined()
+    await channelSelect!.setValue('ch1')
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.channel-joining').exists()).toBe(true)
     resolveJoin!()
@@ -101,7 +103,8 @@ describe('playerControls', () => {
   })
 
   it('leave on success clears channel dropdown', async () => {
-    const { leaveGuild } = await import('@/api/player')
+    const api = await import('@/api/player')
+    const leaveGuild = vi.mocked(api.leaveGuild)
     const wrapper = mount(PlayerControls, {
       props: {
         playerState: [
@@ -123,15 +126,17 @@ describe('playerControls', () => {
     await flushPromises()
     expect(wrapper.find('.btn-leave').exists()).toBe(true)
     const channelSelect = wrapper.findAll('select.field-input')[1]
-    expect(channelSelect.element.value).toBe('ch1')
+    expect(channelSelect).toBeDefined()
+    expect((channelSelect!.element as HTMLSelectElement).value).toBe('ch1')
     await wrapper.find('.btn-leave').trigger('click')
     await flushPromises()
     expect(leaveGuild).toHaveBeenCalledWith('g1')
-    expect(channelSelect.element.value).toBe('')
+    expect((channelSelect!.element as HTMLSelectElement).value).toBe('')
   })
 
   it('shows error toast when leave fails', async () => {
-    const { leaveGuild } = await import('@/api/player')
+    const api = await import('@/api/player')
+    const leaveGuild = vi.mocked(api.leaveGuild)
     leaveGuild.mockRejectedValueOnce(new Error('Network error'))
     const wrapper = mount(PlayerControls, {
       props: {
@@ -159,7 +164,8 @@ describe('playerControls', () => {
   })
 
   it('reload guilds shows error when fetch fails', async () => {
-    const { fetchGuildDirectory } = await import('@/api/player')
+    const api = await import('@/api/player')
+    const fetchGuildDirectory = vi.mocked(api.fetchGuildDirectory)
     fetchGuildDirectory
       .mockResolvedValueOnce([{ guildId: 'g1', guildName: 'Test Guild', channels: [{ id: 'ch1', name: 'General' }] }])
       .mockRejectedValueOnce(new Error('Failed to load'))
@@ -175,7 +181,8 @@ describe('playerControls', () => {
   })
 
   it('volume sliders call setVolume and emit actionDone', async () => {
-    const { setVolume } = await import('@/api/player')
+    const api = await import('@/api/player')
+    const setVolume = vi.mocked(api.setVolume)
     const wrapper = mount(PlayerControls, {
       props: {
         playerState: [
@@ -196,16 +203,17 @@ describe('playerControls', () => {
     await wrapper.find('select.field-input').setValue('g1')
     await flushPromises()
     const musicSlider = wrapper.findAll('input.volume-slider')[0]
-    await musicSlider.setValue(75)
-    musicSlider.trigger('change')
+    expect(musicSlider).toBeDefined()
+    await musicSlider!.setValue(75)
+    musicSlider!.trigger('change')
     await flushPromises()
     expect(setVolume).toHaveBeenCalledWith({ guildId: 'g1', music: 75 })
     expect(wrapper.emitted('actionDone')).toBeTruthy()
   })
 
   it('volume change failure shows error toast', async () => {
-    const { setVolume } = await import('@/api/player')
-    setVolume.mockRejectedValueOnce(new Error('Set volume failed'))
+    const api = await import('@/api/player')
+    vi.mocked(api.setVolume).mockRejectedValueOnce(new Error('Set volume failed'))
     const wrapper = mount(PlayerControls, {
       props: {
         playerState: [
@@ -225,8 +233,9 @@ describe('playerControls', () => {
     await wrapper.find('select.field-input').setValue('g1')
     await flushPromises()
     const musicSlider = wrapper.findAll('input.volume-slider')[0]
-    await musicSlider.setValue(80)
-    musicSlider.trigger('change')
+    expect(musicSlider).toBeDefined()
+    await musicSlider!.setValue(80)
+    musicSlider!.trigger('change')
     await flushPromises()
     expect(wrapper.find('.toast-error').exists()).toBe(true)
     expect(wrapper.find('.toast').text()).toContain('Set volume failed')
