@@ -62,6 +62,90 @@ describe('discordService', () => {
     jest.spyOn(service.getClient(), 'isReady').mockReturnValue(true)
   })
 
+  describe('onModuleInit', () => {
+    it('logs warn and returns without logging in when token is not configured', async () => {
+      config.get = jest.fn().mockImplementation((key: string, def: unknown) => {
+        if (key === 'discord.commandPrefix')
+          return '!'
+        if (key === 'discord.token')
+          return undefined
+        return def
+      })
+      const moduleNoToken = await Test.createTestingModule({
+        providers: [
+          DiscordService,
+          { provide: ConfigService, useValue: config },
+          { provide: PlayerService, useValue: player },
+          { provide: SoundLibraryService, useValue: sounds },
+          { provide: PermissionConfigService, useValue: permissions },
+        ],
+      }).compile()
+      const svc = moduleNoToken.get(DiscordService)
+      const warnSpy = jest.spyOn((svc as any).logger, 'warn')
+      const loginSpy = jest.spyOn(svc.getClient(), 'login')
+      await svc.onModuleInit()
+      expect(warnSpy).toHaveBeenCalledWith('No Discord token configured. Skipping Discord client login.')
+      expect(loginSpy).not.toHaveBeenCalled()
+    })
+
+    it('logs error when login throws', async () => {
+      config.get = jest.fn().mockImplementation((key: string, def: unknown) => {
+        if (key === 'discord.commandPrefix')
+          return '!'
+        if (key === 'discord.token')
+          return 'fake-token'
+        return def
+      })
+      const moduleWithToken = await Test.createTestingModule({
+        providers: [
+          DiscordService,
+          { provide: ConfigService, useValue: config },
+          { provide: PlayerService, useValue: player },
+          { provide: SoundLibraryService, useValue: sounds },
+          { provide: PermissionConfigService, useValue: permissions },
+        ],
+      }).compile()
+      const svc = moduleWithToken.get(DiscordService)
+      jest.spyOn(svc.getClient(), 'login').mockRejectedValue(new Error('Invalid token'))
+      const errorSpy = jest.spyOn((svc as any).logger, 'error')
+      await svc.onModuleInit()
+      expect(errorSpy).toHaveBeenCalledWith('Failed to login to Discord', expect.any(Error))
+    })
+  })
+
+  describe('onModuleDestroy', () => {
+    it('calls destroy when client is ready', async () => {
+      jest.spyOn(service.getClient(), 'isReady').mockReturnValue(true)
+      const destroySpy = jest.spyOn(service.getClient(), 'destroy').mockResolvedValue(undefined)
+      await service.onModuleDestroy()
+      expect(destroySpy).toHaveBeenCalled()
+    })
+
+    it('does not call destroy when client is not ready', async () => {
+      jest.spyOn(service.getClient(), 'isReady').mockReturnValue(false)
+      const destroySpy = jest.spyOn(service.getClient(), 'destroy').mockResolvedValue(undefined)
+      await service.onModuleDestroy()
+      expect(destroySpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('getBotStatus', () => {
+    it('returns ready false when client is not ready', () => {
+      jest.spyOn(service.getClient(), 'isReady').mockReturnValue(false)
+      expect(service.getBotStatus()).toEqual({ ready: false })
+    })
+
+    it('returns ready true with userTag and userId when client is ready', () => {
+      const client = service.getClient() as any
+      client.user = { tag: 'Hibiki#1234', id: 'bot-user-id' }
+      expect(service.getBotStatus()).toEqual({
+        ready: true,
+        userTag: 'Hibiki#1234',
+        userId: 'bot-user-id',
+      })
+    })
+  })
+
   describe('handleMessage (menu/panel and new branches)', () => {
     it('logs command and replies with panel when user sends !menu', async () => {
       const logSpy = jest.spyOn((service as any).logger, 'log')
