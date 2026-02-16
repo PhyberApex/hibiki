@@ -19,6 +19,10 @@ interface EffectPayload {
   channelId?: string
 }
 
+interface LeavePayload {
+  guildId: string
+}
+
 interface VolumePayload {
   guildId: string
   music?: number
@@ -102,8 +106,12 @@ export class PlayerController {
   }
 
   @Post('leave')
-  async leave(@Body('guildId') guildId: string) {
-    this.logger.log(`POST /player/leave guild=${guildId}`)
+  async leave(@Body() body: LeavePayload) {
+    const guildId = body?.guildId
+    this.logger.log(`POST /player/leave guild=${guildId ?? '(missing)'}`)
+    if (!guildId) {
+      throw new Error('guildId is required')
+    }
     await this.player.disconnect(guildId)
     return { status: 'ok' }
   }

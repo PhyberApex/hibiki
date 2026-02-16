@@ -8,7 +8,7 @@ describe('playerService', () => {
   let service: PlayerService
   let sounds: jest.Mocked<SoundLibraryService>
   let snapshots: jest.Mocked<PlayerSnapshotService>
-  let discord: jest.Mocked<Pick<DiscordService, 'getBotVoiceStateForGuild'>>
+  let discord: jest.Mocked<Pick<DiscordService, 'getBotVoiceStateForGuild' | 'leaveVoiceChannel'>>
 
   const mockFile = {
     id: 'track',
@@ -45,6 +45,7 @@ describe('playerService', () => {
 
     discord = {
       getBotVoiceStateForGuild: jest.fn().mockReturnValue({ channelId: null, channelName: null }),
+      leaveVoiceChannel: jest.fn().mockResolvedValue(false),
     }
 
     service = new PlayerService(sounds, snapshots, discord as DiscordService)
@@ -110,6 +111,11 @@ describe('playerService', () => {
     expect(destroyMock).toHaveBeenCalled()
     expect(snapshots.remove).toHaveBeenCalledWith('guild-1')
     expect((service as any).managers.has('guild-1')).toBe(false)
+  })
+
+  it('disconnect still removes snapshot when no manager (e.g. after crash)', async () => {
+    await service.disconnect('guild-1')
+    expect(snapshots.remove).toHaveBeenCalledWith('guild-1')
   })
 
   it('getVolume returns null when no manager for guild', () => {

@@ -86,7 +86,7 @@ describe('playerController', () => {
   })
 
   it('leave disconnects guild', async () => {
-    await controller.leave('guild-1')
+    await controller.leave({ guildId: 'guild-1' })
     expect(player.disconnect).toHaveBeenCalledWith('guild-1')
   })
 
