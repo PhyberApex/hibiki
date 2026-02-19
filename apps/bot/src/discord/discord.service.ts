@@ -29,6 +29,7 @@ import {
 import { PermissionConfigService } from '../permissions' // eslint-disable-line ts/consistent-type-imports
 import { PlayerService } from '../player/player.service'
 import { SoundLibraryService } from '../sound/sound.service' // eslint-disable-line ts/consistent-type-imports
+import { FOURTEEN_DAYS_MS, MAX_LIST_ITEMS, MAX_MENU_OPTIONS } from './constants'
 
 export interface GuildDirectoryEntry {
   guildId: string
@@ -639,7 +640,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
               .setCustomId('hibiki_menu_play_music')
               .setPlaceholder('Choose a track…')
               .addOptions(
-                list.slice(0, 25).map(s =>
+                list.slice(0, MAX_MENU_OPTIONS).map(s =>
                   new StringSelectMenuOptionBuilder()
                     .setLabel(s.name.length > 100 ? `${s.name.slice(0, 97)}…` : s.name)
                     .setValue(s.id),
@@ -669,7 +670,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
               .setCustomId('hibiki_menu_play_effect')
               .setPlaceholder('Choose an effect…')
               .addOptions(
-                list.slice(0, 25).map(s =>
+                list.slice(0, MAX_MENU_OPTIONS).map(s =>
                   new StringSelectMenuOptionBuilder()
                     .setLabel(s.name.length > 100 ? `${s.name.slice(0, 97)}…` : s.name)
                     .setValue(s.id),
@@ -700,7 +701,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
         await send('No songs uploaded yet. Use the dashboard to add music.')
         return
       }
-      const lines = list.slice(0, 15).map((s, i) => `${i + 1}. **${s.name}**`)
+      const lines = list.slice(0, MAX_LIST_ITEMS).map((s, i) => `${i + 1}. **${s.name}**`)
       const text
         = lines.join('\n')
           + (list.length > 15 ? `\n… and ${list.length - 15} more.` : '')
@@ -725,7 +726,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
         await send('No effects uploaded yet. Use the dashboard to add effects.')
         return
       }
-      const lines = list.slice(0, 15).map((s, i) => `${i + 1}. **${s.name}**`)
+      const lines = list.slice(0, MAX_LIST_ITEMS).map((s, i) => `${i + 1}. **${s.name}**`)
       const text
         = lines.join('\n')
           + (list.length > 15 ? `\n… and ${list.length - 15} more.` : '')
@@ -804,7 +805,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       await message.reply('Bot not ready.')
       return
     }
-    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
+    const fourteenDaysAgo = Date.now() - FOURTEEN_DAYS_MS
     try {
       const fetched = await channel.messages.fetch({ limit: 100 })
       const toDelete = fetched.filter(
@@ -904,7 +905,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
         await message.reply('No songs uploaded yet. Use the dashboard to add music.')
         return
       }
-      const maxShow = 15
+      const maxShow = MAX_LIST_ITEMS
       const lines = list.slice(0, maxShow).map(
         (s, i) => `${i + 1}. **${s.name}** (\`${s.id}\`)`,
       )
@@ -926,7 +927,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
         await message.reply('No effects uploaded yet. Use the dashboard to add effects.')
         return
       }
-      const maxShow = 15
+      const maxShow = MAX_LIST_ITEMS
       const lines = list.slice(0, maxShow).map(
         (s, i) => `${i + 1}. **${s.name}** (\`${s.id}\`)`,
       )
