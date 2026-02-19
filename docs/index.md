@@ -32,7 +32,7 @@ You need a Discord application and bot token before running Hibiki. Follow these
 {: .steps}
 
 ```bash
-cp .env.exmaple .env
+cp .env.example .env
 # Edit .env and set:
 # DISCORD_TOKEN=your_bot_token
 # DISCORD_CLIENT_ID=your_application_id
@@ -50,7 +50,7 @@ After the Discord bot is set up, install dependencies and start the bot and dash
 git clone https://github.com/phyberapex/hibiki.git
 cd hibiki
 corepack enable && pnpm install
-cp .env.exmaple .env   # set DISCORD_TOKEN and DISCORD_CLIENT_ID
+cp .env.example .env   # set DISCORD_TOKEN and DISCORD_CLIENT_ID
 pnpm dev
 ```
 

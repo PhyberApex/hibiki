@@ -39,7 +39,7 @@ pnpm install
 
 ### Environment variables
 
-Copy `.env.exmaple` to `.env` at the workspace root (or use your shell env) with:
+Copy `.env.example` to `.env` at the workspace root (or use your shell env) with:
 
 ```bash
 DISCORD_TOKEN=...
@@ -123,7 +123,7 @@ When running in Docker, mount `./storage` to a volume so uploads + snapshots sur
 
 From the **repo root**:
 
-1. Copy `.env.exmaple` to `.env` and set `DISCORD_TOKEN` and `DISCORD_CLIENT_ID`.
+1. Copy `.env.example` to `.env` and set `DISCORD_TOKEN` and `DISCORD_CLIENT_ID`.
 2. Create a `storage` directory (or let Docker create it when the volume mounts):
    ```bash
    mkdir -p storage
