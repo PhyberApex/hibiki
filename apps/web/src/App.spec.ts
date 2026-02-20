@@ -64,10 +64,10 @@ describe('app', () => {
     })
     const links = wrapper.findAll('.nav-link')
     expect(links).toHaveLength(2)
-    expect(links[0].text()).toBe('Control center')
-    expect(links[1].text()).toBe('Permissions')
-    expect(links[0].attributes('href')).toBe('/')
-    expect(links[1].attributes('href')).toBe('/permissions')
+    expect(links[0]!.text()).toBe('Control center')
+    expect(links[1]!.text()).toBe('Permissions')
+    expect(links[0]!.attributes('href')).toBe('/')
+    expect(links[1]!.attributes('href')).toBe('/permissions')
   })
 
   it('renders RouterView in content area', async () => {

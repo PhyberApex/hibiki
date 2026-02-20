@@ -1,6 +1,6 @@
 import type { AllowlistConfig } from '@/api/permissions'
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PermissionsView from './PermissionsView.vue'
 
 const mockConfig: AllowlistConfig = {
@@ -26,8 +26,8 @@ describe('permissionsView', () => {
     await flushPromises()
     expect(fetchPermissionsConfig).toHaveBeenCalled()
     expect(wrapper.find('h1').text()).toBe('Who can use the bot')
-    const roleInputs = wrapper.findAll('.id-list')[0].findAll('input[type="text"]')
-    const userInputs = wrapper.findAll('.id-list')[1].findAll('input[type="text"]')
+    const roleInputs = wrapper.findAll('.id-list')[0]!.findAll('input[type="text"]')
+    const userInputs = wrapper.findAll('.id-list')[1]!.findAll('input[type="text"]')
     expect(roleInputs.length).toBeGreaterThanOrEqual(1)
     expect(userInputs.length).toBeGreaterThanOrEqual(1)
   })
@@ -50,7 +50,7 @@ describe('permissionsView', () => {
     expect(addRoleBtn).toBeDefined()
     await addRoleBtn!.trigger('click')
     await wrapper.vm.$nextTick()
-    const roleList = wrapper.findAll('.id-list')[0]
+    const roleList = wrapper.findAll('.id-list')[0]!
     expect(roleList.findAll('li').length).toBeGreaterThanOrEqual(2)
   })
 
@@ -64,19 +64,20 @@ describe('permissionsView', () => {
     const addUserBtn = wrapper.findAll('.btn').find(b => b.text().includes('Add user ID'))
     await addUserBtn!.trigger('click')
     await wrapper.vm.$nextTick()
-    const userList = wrapper.findAll('.id-list')[1]
+    const userList = wrapper.findAll('.id-list')[1]!
     expect(userList.findAll('li').length).toBeGreaterThanOrEqual(2)
   })
 
   it('remove role row removes the row', async () => {
     const wrapper = mount(PermissionsView)
     await flushPromises()
-    const removeBtns = wrapper.findAll('.id-list')[0].findAll('button.btn-icon')
+    const roleSection = wrapper.findAll('.id-list')[0]!
+    const removeBtns = roleSection.findAll('button.btn-icon')
     if (removeBtns.length > 0) {
-      await removeBtns[0].trigger('click')
+      await removeBtns[0]!.trigger('click')
       await wrapper.vm.$nextTick()
-      const roleList = wrapper.findAll('.id-list')[0]
-      expect(roleList.findAll('li').length).toBeLessThanOrEqual(2)
+      const roleListAfter = wrapper.findAll('.id-list')[0]!
+      expect(roleListAfter.findAll('li').length).toBeLessThanOrEqual(2)
     }
   })
 
