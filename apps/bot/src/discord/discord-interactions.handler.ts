@@ -125,7 +125,8 @@ export class DiscordInteractionHandler {
     value: string,
   ): Promise<void> {
     const guildId = interaction.guildId
-    if (!guildId) return
+    if (!guildId)
+      return
     switch (value) {
       case 'join':
         await this.showJoinMenu(interaction)
@@ -178,7 +179,8 @@ export class DiscordInteractionHandler {
     value: string,
   ): Promise<void> {
     const guildId = interaction.guildId
-    if (!guildId) return
+    if (!guildId)
+      return
     const channel = (interaction.member as { voice?: { channel?: VoiceBasedChannel } })?.voice?.channel
     try {
       const file = await this.deps.player.playMusic(
@@ -204,7 +206,8 @@ export class DiscordInteractionHandler {
     value: string,
   ): Promise<void> {
     const guildId = interaction.guildId
-    if (!guildId) return
+    if (!guildId)
+      return
     const channel = (interaction.member as { voice?: { channel?: VoiceBasedChannel } })?.voice?.channel
     try {
       const file = await this.deps.player.playEffect(
@@ -231,7 +234,8 @@ export class DiscordInteractionHandler {
     type: 'music' | 'effects',
   ): Promise<void> {
     const guildId = interaction.guildId
-    if (!guildId) return
+    if (!guildId)
+      return
     const num = Number.parseInt(value, 10)
     if (Number.isNaN(num) || num < 0 || num > 100) {
       await interaction.reply({ content: 'Invalid volume.', ephemeral: true }).catch(() => {})
