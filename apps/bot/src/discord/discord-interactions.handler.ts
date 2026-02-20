@@ -124,16 +124,18 @@ export class DiscordInteractionHandler {
     interaction: StringSelectMenuInteraction,
     value: string,
   ): Promise<void> {
+    const guildId = interaction.guildId
+    if (!guildId) return
     switch (value) {
       case 'join':
         await this.showJoinMenu(interaction)
         break
       case 'leave':
-        await this.deps.player.disconnect(interaction.guildId)
+        await this.deps.player.disconnect(guildId)
         await interaction.reply({ content: 'Disconnected from voice.', ephemeral: true }).catch(() => {})
         break
       case 'stop':
-        await this.deps.player.stop(interaction.guildId)
+        await this.deps.player.stop(guildId)
         await interaction.reply({ content: 'Playback stopped.', ephemeral: true }).catch(() => {})
         break
       case 'play_music':
@@ -175,10 +177,12 @@ export class DiscordInteractionHandler {
     interaction: StringSelectMenuInteraction,
     value: string,
   ): Promise<void> {
+    const guildId = interaction.guildId
+    if (!guildId) return
     const channel = (interaction.member as { voice?: { channel?: VoiceBasedChannel } })?.voice?.channel
     try {
       const file = await this.deps.player.playMusic(
-        interaction.guildId,
+        guildId,
         value,
         channel ?? undefined,
       )
@@ -199,10 +203,12 @@ export class DiscordInteractionHandler {
     interaction: StringSelectMenuInteraction,
     value: string,
   ): Promise<void> {
+    const guildId = interaction.guildId
+    if (!guildId) return
     const channel = (interaction.member as { voice?: { channel?: VoiceBasedChannel } })?.voice?.channel
     try {
       const file = await this.deps.player.playEffect(
-        interaction.guildId,
+        guildId,
         value,
         channel ?? undefined,
       )
@@ -224,6 +230,8 @@ export class DiscordInteractionHandler {
     value: string,
     type: 'music' | 'effects',
   ): Promise<void> {
+    const guildId = interaction.guildId
+    if (!guildId) return
     const num = Number.parseInt(value, 10)
     if (Number.isNaN(num) || num < 0 || num > 100) {
       await interaction.reply({ content: 'Invalid volume.', ephemeral: true }).catch(() => {})
@@ -231,8 +239,8 @@ export class DiscordInteractionHandler {
     }
 
     try {
-      this.deps.player.setVolume(interaction.guildId, type === 'music' ? { music: num } : { effects: num })
-      const vol = this.deps.player.getVolume(interaction.guildId)!
+      this.deps.player.setVolume(guildId, type === 'music' ? { music: num } : { effects: num })
+      const vol = this.deps.player.getVolume(guildId)!
       const message = type === 'music'
         ? `Music volume set to **${vol.music}%**. (Effects: ${vol.effects}%)`
         : `Effects volume set to **${vol.effects}%**. (Music: ${vol.music}%)`
