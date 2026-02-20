@@ -16,19 +16,16 @@ import {
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config' // eslint-disable-line ts/consistent-type-imports
 import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   Client,
   Events,
   GatewayIntentBits,
   Partials,
-  StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder,
 } from 'discord.js'
 import { PermissionConfigService } from '../permissions' // eslint-disable-line ts/consistent-type-imports
 import { PlayerService } from '../player/player.service'
 import { SoundLibraryService } from '../sound/sound.service' // eslint-disable-line ts/consistent-type-imports
+import { DiscordCommandHandler } from './discord-commands.handler'
+import { DiscordInteractionHandler } from './discord-interactions.handler'
 
 export interface GuildDirectoryEntry {
   guildId: string
@@ -41,8 +38,10 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DiscordService.name)
   private readonly client: Client
   private readonly prefix: string
-
   private readonly e2eAllowBotId: string | undefined
+
+  private readonly commandHandler: DiscordCommandHandler
+  private readonly interactionHandler: DiscordInteractionHandler
 
   constructor(
     private readonly config: ConfigService,
@@ -61,6 +60,22 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
         GatewayIntentBits.MessageContent,
       ],
       partials: [Partials.Channel],
+    })
+
+    // Initialize handlers
+    this.commandHandler = new DiscordCommandHandler({
+      player: this.player,
+      sounds: this.sounds,
+      prefix: this.prefix,
+      logger: this.logger,
+      getBotId: () => this.client.user?.id,
+    })
+
+    this.interactionHandler = new DiscordInteractionHandler({
+      player: this.player,
+      sounds: this.sounds,
+      client: this.client,
+      listGuildDirectory: () => this.listGuildDirectory(),
     })
   }
 
@@ -105,7 +120,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Asks Discord to leave the voice channel in this guild (REST API).
-   * Use when there is no in-process VoiceConnection (e.g. after bot restart) but Discord still shows the bot in a channel.
+   * Use when there is no in-process VoiceConnection (e.g. after bot restart)
+   * but Discord still shows the bot in a channel.
    */
   async leaveVoiceChannel(guildId: string): Promise<boolean> {
     if (!this.client.isReady()) {
@@ -136,7 +152,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Returns the bot's current voice state in a guild (from Discord).
-   * Use this to correct persisted state after a crash — if the bot is no longer in a channel, Discord will report null.
+   * Use this to correct persisted state after a crash — if the bot is no longer
+   * in a channel, Discord will report null.
    */
   getBotVoiceStateForGuild(guildId: string): { channelId: string | null, channelName: string | null } {
     if (!this.client.isReady()) {
@@ -149,7 +166,9 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     return { channelId, channelName }
   }
 
-  /** Client connected and ready to join/play. */
+  /**
+   * Client connected and ready to join/play.
+   */
   getBotStatus(): { ready: boolean, userTag?: string, userId?: string } {
     if (!this.client.isReady()) {
       return { ready: false }
@@ -159,6 +178,9 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     return { ready: true, userTag: tag ?? undefined, userId: userId ?? undefined }
   }
 
+  /**
+   * Lists all guilds and their voice channels.
+   */
   listGuildDirectory(): GuildDirectoryEntry[] {
     if (!this.client.isReady()) {
       return []
@@ -178,6 +200,9 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     }))
   }
 
+  /**
+   * Handles incoming Discord messages with command prefix.
+   */
   private async handleMessage(message: Message) {
     const isAllowedE2EBot = this.e2eAllowBotId && message.author.id === this.e2eAllowBotId
     if (!this.client.isReady() || (!isAllowedE2EBot && message.author.bot) || !message.inGuild()) {
@@ -215,211 +240,58 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       return
     }
 
+    // Delegate to command handler
     switch (command.toLowerCase()) {
       case 'join':
-        await this.handleJoin(message)
+        await this.commandHandler.handleJoin(message)
         break
       case 'leave':
-        await this.handleLeave(message)
+        await this.commandHandler.handleLeave(message)
         break
       case 'stop':
-        await this.handleStop(message)
+        await this.commandHandler.handleStop(message)
         break
       case 'play':
-        await this.handlePlayMusic(message, args)
+        await this.commandHandler.handlePlayMusic(message, args)
         break
       case 'effect':
-        await this.handlePlayEffect(message, args)
+        await this.commandHandler.handlePlayEffect(message, args)
         break
       case 'songs':
-        await this.handleListSongs(message)
+        await this.commandHandler.handleListSongs(message)
         break
       case 'effects':
-        await this.handleListEffects(message)
+        await this.commandHandler.handleListEffects(message)
         break
       case 'menu':
       case 'panel':
-        await this.handleMenuCommand(message)
+        await this.commandHandler.handleMenuCommand(message)
         break
       case 'help':
-        await this.handleHelp(message)
+        await this.commandHandler.handleHelp(message)
         break
       case 'volume':
-        await this.handleVolume(message, args)
+        await this.commandHandler.handleVolume(message, args)
         break
       case 'delete':
-        await this.handleDelete(message)
+        await this.commandHandler.handleDelete(message)
         break
       default:
         await message.reply('Unknown command.')
     }
   }
 
-  /** Panel message body and action rows (buttons, channel/track dropdowns). */
-  private buildPanelComponents(): {
-    content: string
-    components: (ActionRowBuilder<ButtonBuilder> | ActionRowBuilder<StringSelectMenuBuilder>)[]
-  } {
-    const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId('hibiki_btn_join')
-        .setLabel('Join voice')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji('🔊'),
-      new ButtonBuilder()
-        .setCustomId('hibiki_btn_leave')
-        .setLabel('Leave voice')
-        .setStyle(ButtonStyle.Secondary)
-        .setEmoji('🔇'),
-      new ButtonBuilder()
-        .setCustomId('hibiki_btn_stop')
-        .setLabel('Stop playback')
-        .setStyle(ButtonStyle.Danger)
-        .setEmoji('⏹️'),
-    )
-    const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId('hibiki_btn_play_music')
-        .setLabel('Play music')
-        .setStyle(ButtonStyle.Success)
-        .setEmoji('🎵'),
-      new ButtonBuilder()
-        .setCustomId('hibiki_btn_play_effect')
-        .setLabel('Play effect')
-        .setStyle(ButtonStyle.Success)
-        .setEmoji('🎶'),
-      new ButtonBuilder()
-        .setCustomId('hibiki_btn_songs')
-        .setLabel('List songs')
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId('hibiki_btn_effects')
-        .setLabel('List effects')
-        .setStyle(ButtonStyle.Secondary),
-    )
-    const row3 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('hibiki_menu_main')
-        .setPlaceholder('Or choose an action from dropdown…')
-        .addOptions(
-          new StringSelectMenuOptionBuilder()
-            .setLabel('Join voice channel')
-            .setDescription('Connect to a server and channel')
-            .setValue('join'),
-          new StringSelectMenuOptionBuilder()
-            .setLabel('Leave voice')
-            .setDescription('Disconnect from this server')
-            .setValue('leave'),
-          new StringSelectMenuOptionBuilder()
-            .setLabel('Stop playback')
-            .setDescription('Stop current music')
-            .setValue('stop'),
-          new StringSelectMenuOptionBuilder()
-            .setLabel('Play music')
-            .setDescription('Choose a track to play')
-            .setValue('play_music'),
-          new StringSelectMenuOptionBuilder()
-            .setLabel('Play effect')
-            .setDescription('Trigger a sound effect')
-            .setValue('play_effect'),
-          new StringSelectMenuOptionBuilder()
-            .setLabel('List songs')
-            .setDescription('Show available tracks')
-            .setValue('songs'),
-          new StringSelectMenuOptionBuilder()
-            .setLabel('List effects')
-            .setDescription('Show available effects')
-            .setValue('effects'),
-        ),
-    )
-    const volOpts = [0, 25, 50, 75, 100].map(n =>
-      new StringSelectMenuOptionBuilder()
-        .setLabel(`${n}%`)
-        .setValue(String(n)),
-    )
-    // One select menu per action row (Discord limit)
-    const row4 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('hibiki_menu_volume_music')
-        .setPlaceholder('Music volume…')
-        .addOptions(volOpts),
-    )
-    const row5 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('hibiki_menu_volume_effects')
-        .setPlaceholder('Effects volume…')
-        .addOptions(volOpts),
-    )
-    return {
-      content:
-        '**🎛️ Hibiki control panel** — Use the buttons or dropdown below. This message stays here until deleted.',
-      components: [row1, row2, row3, row4, row5],
-    }
-  }
-
-  private async handleMenuCommand(message: Message) {
-    const { content, components } = this.buildPanelComponents()
-    await message.reply({ content, components })
-  }
-
-  private getInteractionMemberRoleIds(interaction: ButtonInteraction | StringSelectMenuInteraction): string[] {
-    const member = interaction.member
-    if (!member?.roles)
-      return []
-    return member.roles && 'cache' in member.roles
-      ? Array.from((member.roles as { cache: Map<string, unknown> }).cache.keys())
-      : Array.isArray(member.roles)
-        ? (member.roles as string[])
-        : []
-  }
-
-  private getInteractionUserId(interaction: ButtonInteraction | StringSelectMenuInteraction): string | null {
-    const user = interaction.user ?? (interaction.member as { user?: { id?: string } } | null)?.user
-    return user?.id ?? null
-  }
-
-  private async handlePanelButton(interaction: ButtonInteraction) {
-    const reply = (content: string) =>
-      interaction.reply({ content, ephemeral: true }).catch(() => {})
-
-    switch (interaction.customId) {
-      case 'hibiki_btn_join':
-        await this.showJoinMenu(interaction)
-        break
-      case 'hibiki_btn_leave':
-        if (interaction.guildId) {
-          await this.player.disconnect(interaction.guildId)
-        }
-        await reply('Disconnected from voice.')
-        break
-      case 'hibiki_btn_stop':
-        if (interaction.guildId) {
-          await this.player.stop(interaction.guildId)
-        }
-        await reply('Playback stopped.')
-        break
-      case 'hibiki_btn_play_music':
-        await this.showPlayMusicMenu(interaction)
-        break
-      case 'hibiki_btn_play_effect':
-        await this.showPlayEffectMenu(interaction)
-        break
-      case 'hibiki_btn_songs':
-        await this.handleListSongsInteraction(interaction)
-        break
-      case 'hibiki_btn_effects':
-        await this.handleListEffectsInteraction(interaction)
-        break
-    }
-  }
-
+  /**
+   * Handles Discord button and select menu interactions.
+   */
   private async handleInteraction(interaction: import('discord.js').Interaction) {
     if (!interaction.inGuild() || !interaction.guild)
       return
 
     const i = interaction as ButtonInteraction | StringSelectMenuInteraction
-    const memberRoleIds = this.getInteractionMemberRoleIds(i)
-    const userId = this.getInteractionUserId(i)
+    const memberRoleIds = this.interactionHandler.getMemberRoleIds(i)
+    const userId = this.interactionHandler.getUserId(i)
+
     if (!this.permissions.isAllowed(memberRoleIds, userId)) {
       if (interaction.isButton() || interaction.isStringSelectMenu()) {
         await interaction.reply({
@@ -431,513 +303,12 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (interaction.isButton()) {
-      await this.handlePanelButton(interaction)
+      await this.interactionHandler.handlePanelButton(interaction)
       return
     }
 
-    if (!interaction.isStringSelectMenu())
-      return
-
-    const customId = interaction.customId
-    const value = interaction.values[0]
-
-    if (customId === 'hibiki_menu_main') {
-      if (value === 'join') {
-        await this.showJoinMenu(interaction)
-        return
-      }
-      if (value === 'leave') {
-        await this.player.disconnect(interaction.guildId)
-        await interaction.reply({
-          content: 'Disconnected from voice.',
-          ephemeral: true,
-        }).catch(() => {})
-        return
-      }
-      if (value === 'stop') {
-        await this.player.stop(interaction.guildId)
-        await interaction.reply({
-          content: 'Playback stopped.',
-          ephemeral: true,
-        }).catch(() => {})
-        return
-      }
-      if (value === 'play_music') {
-        await this.showPlayMusicMenu(interaction)
-        return
-      }
-      if (value === 'play_effect') {
-        await this.showPlayEffectMenu(interaction)
-        return
-      }
-      if (value === 'songs') {
-        await this.handleListSongsInteraction(interaction)
-        return
-      }
-      if (value === 'effects') {
-        await this.handleListEffectsInteraction(interaction)
-        return
-      }
-    }
-
-    if (customId === 'hibiki_menu_join') {
-      const [guildId, channelId] = value.split('_')
-      const guild = this.client.guilds.cache.get(guildId)
-      const channel = guild?.channels.cache.get(channelId)
-      if (!channel?.isVoiceBased()) {
-        await interaction.update({ content: 'Channel not found.', components: [] }).catch(() => {})
-        return
-      }
-      await this.player.connect(channel as VoiceBasedChannel)
-      await interaction.update({
-        content: `Connected to **${channel.name}**.`,
-        components: [],
-      }).catch(() => {})
-      return
-    }
-
-    if (customId === 'hibiki_menu_play_music') {
-      const channel = (interaction.member as { voice?: { channel?: VoiceBasedChannel } })?.voice?.channel
-      try {
-        const file = await this.player.playMusic(
-          interaction.guildId,
-          value,
-          channel ?? undefined,
-        )
-        await interaction.update({
-          content: `Playing **${file.name}**.`,
-          components: [],
-        }).catch(() => {})
-      }
-      catch (err) {
-        await interaction.update({
-          content: err instanceof Error ? err.message : 'Could not play that track.',
-          components: [],
-        }).catch(() => {})
-      }
-      return
-    }
-
-    if (customId === 'hibiki_menu_play_effect') {
-      const channel = (interaction.member as { voice?: { channel?: VoiceBasedChannel } })?.voice?.channel
-      try {
-        const file = await this.player.playEffect(
-          interaction.guildId,
-          value,
-          channel ?? undefined,
-        )
-        await interaction.update({
-          content: `Triggered **${file.name}**.`,
-          components: [],
-        }).catch(() => {})
-      }
-      catch (err) {
-        await interaction.update({
-          content: err instanceof Error ? err.message : 'Could not play that effect.',
-          components: [],
-        }).catch(() => {})
-      }
-      return
-    }
-
-    if (customId === 'hibiki_menu_volume_music') {
-      const num = Number.parseInt(value, 10)
-      if (Number.isNaN(num) || num < 0 || num > 100) {
-        await interaction.reply({ content: 'Invalid volume.', ephemeral: true }).catch(() => {})
-        return
-      }
-      try {
-        this.player.setVolume(interaction.guildId, { music: num })
-        const vol = this.player.getVolume(interaction.guildId)!
-        await interaction.reply({
-          content: `Music volume set to **${vol.music}%**. (Effects: ${vol.effects}%)`,
-          ephemeral: true,
-        }).catch(() => {})
-      }
-      catch (err) {
-        await interaction.reply({
-          content: err instanceof Error ? err.message : 'Join a voice channel first.',
-          ephemeral: true,
-        }).catch(() => {})
-      }
-      return
-    }
-
-    if (customId === 'hibiki_menu_volume_effects') {
-      const num = Number.parseInt(value, 10)
-      if (Number.isNaN(num) || num < 0 || num > 100) {
-        await interaction.reply({ content: 'Invalid volume.', ephemeral: true }).catch(() => {})
-        return
-      }
-      try {
-        this.player.setVolume(interaction.guildId, { effects: num })
-        const vol = this.player.getVolume(interaction.guildId)!
-        await interaction.reply({
-          content: `Effects volume set to **${vol.effects}%**. (Music: ${vol.music}%)`,
-          ephemeral: true,
-        }).catch(() => {})
-      }
-      catch (err) {
-        await interaction.reply({
-          content: err instanceof Error ? err.message : 'Join a voice channel first.',
-          ephemeral: true,
-        }).catch(() => {})
-      }
-    }
-  }
-
-  private async showJoinMenu(interaction: ButtonInteraction | StringSelectMenuInteraction) {
-    const directory = this.listGuildDirectory()
-    const options: StringSelectMenuOptionBuilder[] = []
-    for (const guild of directory) {
-      for (const ch of guild.channels.slice(0, 5)) {
-        if (options.length >= 25)
-          break
-        options.push(
-          new StringSelectMenuOptionBuilder()
-            .setLabel(`${guild.guildName}: #${ch.name}`)
-            .setValue(`${guild.guildId}_${ch.id}`),
-        )
-      }
-      if (options.length >= 25)
-        break
-    }
-    const payload = {
-      content: options.length === 0
-        ? 'No voice channels available.'
-        : '**Join** — select a server and voice channel:',
-      components: options.length === 0
-        ? []
-        : [
-            new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-              new StringSelectMenuBuilder()
-                .setCustomId('hibiki_menu_join')
-                .setPlaceholder('Select server and channel…')
-                .addOptions(options),
-            ),
-          ],
-      ephemeral: true as const,
-    }
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(payload).catch(() => {})
-    }
-    else {
-      await interaction.reply(payload).catch(() => {})
-    }
-  }
-
-  private async showPlayMusicMenu(interaction: ButtonInteraction | StringSelectMenuInteraction) {
-    const list = await this.sounds.list('music')
-    const content = list.length === 0
-      ? 'No songs uploaded yet. Use the dashboard to add music.'
-      : '**Play music** — select a track:'
-    const components = list.length === 0
-      ? []
-      : [
-          new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-            new StringSelectMenuBuilder()
-              .setCustomId('hibiki_menu_play_music')
-              .setPlaceholder('Choose a track…')
-              .addOptions(
-                list.slice(0, 25).map(s =>
-                  new StringSelectMenuOptionBuilder()
-                    .setLabel(s.name.length > 100 ? `${s.name.slice(0, 97)}…` : s.name)
-                    .setValue(s.id),
-                ),
-              ),
-          ),
-        ]
-    const payload = { content, components, ephemeral: true as const }
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(payload).catch(() => {})
-    }
-    else {
-      await interaction.reply(payload).catch(() => {})
-    }
-  }
-
-  private async showPlayEffectMenu(interaction: ButtonInteraction | StringSelectMenuInteraction) {
-    const list = await this.sounds.list('effects')
-    const content = list.length === 0
-      ? 'No effects uploaded yet. Use the dashboard to add effects.'
-      : '**Play effect** — select an effect:'
-    const components = list.length === 0
-      ? []
-      : [
-          new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-            new StringSelectMenuBuilder()
-              .setCustomId('hibiki_menu_play_effect')
-              .setPlaceholder('Choose an effect…')
-              .addOptions(
-                list.slice(0, 25).map(s =>
-                  new StringSelectMenuOptionBuilder()
-                    .setLabel(s.name.length > 100 ? `${s.name.slice(0, 97)}…` : s.name)
-                    .setValue(s.id),
-                ),
-              ),
-          ),
-        ]
-    const payload = { content, components, ephemeral: true as const }
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(payload).catch(() => {})
-    }
-    else {
-      await interaction.reply(payload).catch(() => {})
-    }
-  }
-
-  private async handleListSongsInteraction(
-    interaction: ButtonInteraction | StringSelectMenuInteraction,
-  ) {
-    const send = (content: string) =>
-      (interaction.replied || interaction.deferred
-        ? interaction.followUp({ content, ephemeral: true })
-        : interaction.reply({ content, ephemeral: true })
-      ).catch(() => {})
-    try {
-      const list = await this.sounds.list('music')
-      if (list.length === 0) {
-        await send('No songs uploaded yet. Use the dashboard to add music.')
-        return
-      }
-      const lines = list.slice(0, 15).map((s, i) => `${i + 1}. **${s.name}**`)
-      const text
-        = lines.join('\n')
-          + (list.length > 15 ? `\n… and ${list.length - 15} more.` : '')
-      await send(`**Songs:**\n${text}`)
-    }
-    catch {
-      await send('Failed to list songs.')
-    }
-  }
-
-  private async handleListEffectsInteraction(
-    interaction: ButtonInteraction | StringSelectMenuInteraction,
-  ) {
-    const send = (content: string) =>
-      (interaction.replied || interaction.deferred
-        ? interaction.followUp({ content, ephemeral: true })
-        : interaction.reply({ content, ephemeral: true })
-      ).catch(() => {})
-    try {
-      const list = await this.sounds.list('effects')
-      if (list.length === 0) {
-        await send('No effects uploaded yet. Use the dashboard to add effects.')
-        return
-      }
-      const lines = list.slice(0, 15).map((s, i) => `${i + 1}. **${s.name}**`)
-      const text
-        = lines.join('\n')
-          + (list.length > 15 ? `\n… and ${list.length - 15} more.` : '')
-      await send(`**Effects:**\n${text}`)
-    }
-    catch {
-      await send('Failed to list effects.')
-    }
-  }
-
-  private async handleHelp(message: Message) {
-    const p = this.prefix
-    const text = [
-      `**${p}help** — show this list`,
-      `**${p}menu** / **${p}panel** — control panel (buttons + dropdown)`,
-      `**${p}join** — join your voice channel`,
-      `**${p}leave** — disconnect from voice`,
-      `**${p}stop** — stop playback`,
-      `**${p}volume** [music|effects] [0-100] — show or set volume`,
-      `**${p}songs** — list music tracks`,
-      `**${p}effects** — list sound effects`,
-      `**${p}play** <name or id> — play a track`,
-      `**${p}effect** <name or id> — trigger an effect`,
-      `**${p}delete** — clear this channel's bot messages`,
-    ].join('\n')
-    await message.reply({ content: `**Commands:**\n${text}` })
-  }
-
-  private async handleVolume(message: Message, args: string[]) {
-    const guildId = message.guild!.id
-    const reply = (content: string) => message.reply(content).catch(() => {})
-
-    if (args.length === 0) {
-      const vol = this.player.getVolume(guildId)
-      if (!vol) {
-        await reply('Not connected here. Use `!join` first, then volume applies.')
-        return
-      }
-      await reply(`**Volume:** Music **${vol.music}%**, Effects **${vol.effects}%**. Use \`${this.prefix}volume music 80\` or \`${this.prefix}volume effects 90\` to change.`)
-      return
-    }
-
-    const which = args[0].toLowerCase()
-    if (which !== 'music' && which !== 'effects') {
-      await reply(`Use \`${this.prefix}volume music <0-100>\` or \`${this.prefix}volume effects <0-100>\`.`)
-      return
-    }
-    const num = args[1] ? Number.parseInt(args[1], 10) : Number.NaN
-    if (Number.isNaN(num) || num < 0 || num > 100) {
-      await reply('Give a number 0–100, e.g. `!volume music 80`.')
-      return
-    }
-    try {
-      this.player.setVolume(guildId, which === 'music' ? { music: num } : { effects: num })
-      const vol = this.player.getVolume(guildId)!
-      await reply(`**${which}** volume set to **${num}%**. (Music: ${vol.music}%, Effects: ${vol.effects}%)`)
-    }
-    catch (err) {
-      await reply(err instanceof Error ? err.message : 'Join a voice channel first.')
-    }
-  }
-
-  private async handleDelete(message: Message) {
-    if (!message.guild || !message.channel?.isTextBased()) {
-      await message.reply('This command only works in a server text channel.')
-      return
-    }
-    const channel = message.channel
-    if (typeof (channel as { bulkDelete?: unknown }).bulkDelete !== 'function' || typeof (channel as { send?: unknown }).send !== 'function') {
-      await message.reply('This command only works in a text channel.')
-      return
-    }
-    const textChannel = channel as { bulkDelete: (messages: unknown) => Promise<unknown>, send: (content: string) => Promise<Message> }
-    const botId = this.client.user?.id
-    if (!botId) {
-      await message.reply('Bot not ready.')
-      return
-    }
-    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
-    try {
-      const fetched = await channel.messages.fetch({ limit: 100 })
-      const toDelete = fetched.filter(
-        m => m.author.id === botId && m.createdTimestamp >= fourteenDaysAgo,
-      )
-      if (toDelete.size === 0) {
-        await message.reply('No bot messages to clear (or they\'re older than 14 days).')
-        return
-      }
-      await textChannel.bulkDelete(toDelete)
-      await message.delete().catch(() => {})
-      const reply = await textChannel.send(`Cleared **${toDelete.size}** bot message(s).`)
-      setTimeout(() => reply.delete().catch(() => {}), 4000)
-    }
-    catch (err) {
-      await message.reply(
-        err instanceof Error ? err.message : 'Could not delete messages.',
-      ).catch(() => {})
-    }
-  }
-
-  private async handleJoin(message: Message) {
-    const channel = message.member?.voice.channel as VoiceBasedChannel | null
-    if (!channel) {
-      await message.reply('Join a voice channel first.')
-      return
-    }
-
-    await this.player.connect(channel)
-    await message.reply(`Connected to ${channel.name}.`)
-  }
-
-  private async handleLeave(message: Message) {
-    await this.player.disconnect(message.guild!.id)
-    await message.reply('Disconnected.')
-  }
-
-  private async handleStop(message: Message) {
-    await this.player.stop(message.guild!.id)
-    await message.reply('Playback stopped.')
-  }
-
-  private async handlePlayMusic(message: Message, args: string[]) {
-    const idOrName = args[0]
-    if (!idOrName) {
-      await message.reply(
-        `Provide a track name or ID. Use \`${this.prefix}songs\` to list.`,
-      )
-      return
-    }
-
-    try {
-      const channel = message.member?.voice.channel as VoiceBasedChannel | null
-      const file = await this.player.playMusic(
-        message.guild!.id,
-        idOrName,
-        channel ?? undefined,
-      )
-      await message.reply(`Playing **${file.name}**.`)
-    }
-    catch (err) {
-      await message.reply(
-        err instanceof Error ? err.message : 'Could not play that track.',
-      )
-    }
-  }
-
-  private async handlePlayEffect(message: Message, args: string[]) {
-    const idOrName = args[0]
-    if (!idOrName) {
-      await message.reply(
-        `Provide an effect name or ID. Use \`${this.prefix}effects\` to list.`,
-      )
-      return
-    }
-
-    try {
-      const channel = message.member?.voice.channel as VoiceBasedChannel | null
-      const file = await this.player.playEffect(
-        message.guild!.id,
-        idOrName,
-        channel ?? undefined,
-      )
-      await message.reply(`Triggered **${file.name}**.`)
-    }
-    catch (err) {
-      await message.reply(
-        err instanceof Error ? err.message : 'Could not play that effect.',
-      )
-    }
-  }
-
-  private async handleListSongs(message: Message) {
-    try {
-      const list = await this.sounds.list('music')
-      if (list.length === 0) {
-        await message.reply('No songs uploaded yet. Use the dashboard to add music.')
-        return
-      }
-      const maxShow = 15
-      const lines = list.slice(0, maxShow).map(
-        (s, i) => `${i + 1}. **${s.name}** (\`${s.id}\`)`,
-      )
-      const text
-        = lines.join('\n')
-          + (list.length > maxShow ? `\n… and ${list.length - maxShow} more.` : '')
-      await message.reply(`**Songs:**\n${text}\n\nUse \`${this.prefix}play <name or id>\` to play.`)
-    }
-    catch (err) {
-      this.logger.warn('List songs failed', err)
-      await message.reply('Failed to list songs.')
-    }
-  }
-
-  private async handleListEffects(message: Message) {
-    try {
-      const list = await this.sounds.list('effects')
-      if (list.length === 0) {
-        await message.reply('No effects uploaded yet. Use the dashboard to add effects.')
-        return
-      }
-      const maxShow = 15
-      const lines = list.slice(0, maxShow).map(
-        (s, i) => `${i + 1}. **${s.name}** (\`${s.id}\`)`,
-      )
-      const text
-        = lines.join('\n')
-          + (list.length > maxShow ? `\n… and ${list.length - maxShow} more.` : '')
-      await message.reply(`**Effects:**\n${text}\n\nUse \`${this.prefix}effect <name or id>\` to trigger.`)
-    }
-    catch (err) {
-      this.logger.warn('List effects failed', err)
-      await message.reply('Failed to list effects.')
+    if (interaction.isStringSelectMenu()) {
+      await this.interactionHandler.handleSelectMenu(interaction)
     }
   }
 }

@@ -88,4 +88,26 @@ describe('permissions API', () => {
     } as Response)
     await expect(fetchPermissionsConfig()).rejects.toThrow('Server error')
   })
+
+  it('throws with status when body is invalid JSON and text empty', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: () => Promise.resolve(''),
+    } as Response)
+    await expect(fetchPermissionsConfig()).rejects.toThrow('Request failed (503)')
+  })
+
+  it('returns undefined for 204 response', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: () => Promise.resolve(undefined),
+    } as Response)
+    const result = await updatePermissionsConfig({
+      allowedDiscordRoleIds: [],
+      allowedDiscordUserIds: [],
+    })
+    expect(result).toBeUndefined()
+  })
 })

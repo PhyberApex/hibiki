@@ -158,4 +158,52 @@ describe('player API', () => {
       body: JSON.stringify({ guildId: 'g1', music: 80, effects: 90 }),
     })
   })
+
+  it('throws with status when response text is empty', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 502,
+      text: () => Promise.resolve(''),
+    } as Response)
+    await expect(fetchPlayerState()).rejects.toThrow('Request failed (502)')
+  })
+
+  it('throws with first message when response has message array', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: () => Promise.resolve(JSON.stringify({ message: ['First error', 'Second'] })),
+    } as Response)
+    await expect(fetchPlayerState()).rejects.toThrow('First error')
+  })
+
+  it('throws with error field when present', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve(JSON.stringify({ error: 'Internal Server Error' })),
+    } as Response)
+    await expect(fetchPlayerState()).rejects.toThrow('Internal Server Error: 500')
+  })
+
+  it('returns undefined for 204 No Content', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: () => Promise.resolve(undefined),
+    } as Response)
+    const result = await leaveGuild('g1')
+    expect(result).toBeUndefined()
+  })
+
+  it('fetchBotStatus passes signal', async () => {
+    const controller = new AbortController()
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ ready: false }),
+    } as Response)
+    await fetchBotStatus(controller.signal)
+    expect(fetch).toHaveBeenCalledWith('/api/player/bot-status', { signal: controller.signal })
+  })
 })
