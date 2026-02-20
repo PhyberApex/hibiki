@@ -8,8 +8,7 @@ config({ path: resolve(process.cwd(), '../.env.e2e') })
 const baseUrl = process.env.E2E_HIBIKI_API_URL ?? 'http://localhost:3000'
 const guildId = process.env.E2E_GUILD_ID
 const voiceChannelId = process.env.E2E_VOICE_CHANNEL_ID
-
-/** Hibiki command prefix (must match bot's HIBIKI_PREFIX when set). */
+/** Hibiki command prefix (must match bot HIBIKI_PREFIX when set). E2E uses prefix to drive commands. */
 const commandPrefix = process.env.E2E_HIBIKI_PREFIX ?? '!'
 
 export const e2eEnv = {

@@ -6,7 +6,7 @@
 
 **Discord audio companion bot** — play music and sound effects in voice channels, controlled from Discord or a web dashboard. Built with **Dungeons & Dragons** in mind (background music, ambience, sound effects at the table) but works for any server.
 
-- **Discord:** `!join`, `!leave`, `!play`, `!effect`, `!volume`, `!menu` (control panel), `!songs` / `!effects`
+- **Discord:** Slash commands `/join`, `/leave`, `/play`, `/effect`, `/volume`, `/menu` (control panel), `/songs`, `/effects`
 - **Web dashboard:** Control Center for player state, join/leave, play/effect, **volume (music & effects per server)**, upload and manage sounds, bot status, permissions
 - **Single Docker image:** One container, mount `storage/` for persistence (SQLite + uploads)
 
@@ -40,17 +40,17 @@ Before running Hibiki, you need a Discord application and bot token.
 1. In the left sidebar, go to **Bot**.
 2. Click **Add Bot** and confirm.
 3. Under **Token**, click **Reset Token** (or **View Token**), then **Copy**. This is your `DISCORD_TOKEN`. Store it securely and never commit it.
-4. Under **Privileged Gateway Intents**, enable **Message Content Intent** (required for the bot to read command messages).
+4. Slash commands do not require the Message Content intent; you can leave it off.
 
 ### 3. Invite the bot to your server
 
 1. Go to **OAuth2** → **URL Generator**.
-2. Under **Scopes**, select **bot**.
+2. Under **Scopes**, select **bot** and **applications.commands** (so slash commands appear).
 3. Under **Bot Permissions**, select at least:
    - **View Channels**, **Send Messages**, **Read Message History**
    - **Connect** (join voice channels) and **Speak** (transmit audio) — required for voice
    - **Move Members** — required so the bot can leave voice channels (e.g. when you click Leave on the dashboard, or after a bot restart when Discord still shows it in a channel)
-   - Optionally **Manage Messages** (for the `!delete` command to clear bot messages).
+   - Optionally **Manage Messages** (for the `/delete` command to clear bot messages).
 4. Copy the **Generated URL** at the bottom, open it in a browser, choose your server, and authorize.
 
 After the invite, the bot will appear in your server’s member list (offline until Hibiki is running).
@@ -68,7 +68,7 @@ Edit `.env` and set:
 - **DISCORD_TOKEN** — the bot token from step 2.
 - **DISCORD_CLIENT_ID** — the Application ID from step 1.
 
-Optional: `DISCORD_GUILD_ID` (a server ID for testing), `HIBIKI_PREFIX` (default `!`), and storage paths (defaults are under `storage/`).
+Optional: `DISCORD_GUILD_ID` (register slash commands to this guild only for faster updates), and storage paths (defaults are under `storage/`).
 
 ## Quick start
 
@@ -83,7 +83,7 @@ pnpm dev
 - **Dashboard:** http://localhost:5173 (proxies `/api` to the bot).
 - **Bot:** runs on port 3000; the Vue dev server talks to it via proxy.
 
-Open the dashboard, confirm the “Bot connected” indicator, then use the Control Center to join a voice channel and play music or effects. You can also use Discord commands (`!join`, `!play`, etc.) in any server where the bot was invited. **Permissions:** who can use the bot is controlled from the dashboard → Permissions (allowlist of role/user IDs).
+Open the dashboard, confirm the “Bot connected” indicator, then use the Control Center to join a voice channel and play music or effects. You can also use Discord slash commands (`/join`, `/play`, etc.) in any server where the bot was invited. **Permissions:** who can use the bot is controlled from the dashboard → Permissions (allowlist of role/user IDs).
 
 ### Production build
 
