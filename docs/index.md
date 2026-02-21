@@ -7,15 +7,15 @@ title: Home
 
 **Hibiki** (響) is a Discord bot for music and sound effects in voice channels. It’s built mainly for **Dungeons & Dragons**—background music, ambience, and sound effects at the table—but you can use it for any Discord server that needs voice-channel audio: streaming, community hangouts, or other games.
 
-Control it from Discord with commands (`!join`, `!play`, `!effect`, `!volume`) or the **control panel** (`!menu`), or from the **web dashboard**: join/leave, play tracks, trigger effects, adjust volume, upload and manage sounds, and see bot status at a glance. One Docker image; SQLite is used only for player snapshots and the permissions allowlist. Sound files live on disk.
+Control it from Discord with **slash commands** (`/join`, `/play`, `/effect`, `/volume`) or the **control panel** (`/menu`), or from the **web dashboard**: join/leave, play tracks, trigger effects, adjust volume, upload and manage sounds, and see bot status at a glance. One Docker image; SQLite is used only for player snapshots and the permissions allowlist. Sound files live on disk.
 
 ## Features
 
 <div class="features">
 <div class="feature"><h3>Web dashboard</h3>
 <p>Set the mood at the table: player state, join/leave, play music or effects, volume sliders (music and effects per server), upload and manage sounds. Bot connection status and permissions in one place.</p></div>
-<div class="feature"><h3>Discord commands</h3>
-<p><code>!join</code>, <code>!leave</code>, <code>!play</code>, <code>!effect</code>, <code>!volume</code>, <code>!menu</code> for a button panel. List songs and effects, then play by name or id. Volume dropdowns right in the panel.</p></div>
+<div class="feature"><h3>Discord slash commands</h3>
+<p><code>/join</code>, <code>/leave</code>, <code>/play</code>, <code>/effect</code>, <code>/volume</code>, <code>/menu</code> for a button panel. List songs and effects, then play by name or id. Volume dropdowns right in the panel.</p></div>
 <div class="feature"><h3>One container</h3>
 <p>Single Docker image. Mount a volume for storage; SQLite and uploaded sounds persist. Works for D&D night or 24/7 community servers.</p></div>
 </div>
@@ -25,8 +25,8 @@ Control it from Discord with commands (`!join`, `!play`, `!effect`, `!volume`) o
 You need a Discord application and bot token before running Hibiki. Follow these steps once.
 
 1. **Create an application** — Go to [Discord Developer Portal](https://discord.com/developers/applications) → **New Application**. Name it (e.g. Hibiki) and create. On **General Information**, copy the **Application ID**; this is `DISCORD_CLIENT_ID`.
-2. **Create the bot and get the token** — In the sidebar, open **Bot** → **Add Bot**. Under **Token**, click **Reset Token** (or View Token), then copy it. This is `DISCORD_TOKEN`; keep it secret. Under **Privileged Gateway Intents**, turn on **Message Content Intent** (required for commands).
-3. **Invite the bot to your server** — Open **OAuth2** → **URL Generator**. Under **Scopes** choose **bot**. Under **Bot Permissions** select: **View Channels**, **Send Messages**, **Read Message History**; for voice enable **Connect** and **Speak**; and **Move Members** (required so the bot can leave voice channels, e.g. from the dashboard or after a restart). Optionally **Manage Messages** (for `!delete`). Copy the generated URL, open it in a browser, pick your server, and authorize. The bot will show up in your server (offline until Hibiki is running).
+2. **Create the bot and get the token** — In the sidebar, open **Bot** → **Add Bot**. Under **Token**, click **Reset Token** (or View Token), then copy it. This is `DISCORD_TOKEN`; keep it secret. Slash commands do not require the Message Content intent.
+3. **Invite the bot to your server** — Open **OAuth2** → **URL Generator**. Under **Scopes** choose **bot** and **applications.commands** (so slash commands appear). Under **Bot Permissions** select: **View Channels**, **Send Messages**, **Read Message History**; for voice enable **Connect** and **Speak**; and **Move Members** (required so the bot can leave voice channels, e.g. from the dashboard or after a restart). Optionally **Manage Messages** (for `/delete`). Copy the generated URL, open it in a browser, pick your server, and authorize. The bot will show up in your server (offline until Hibiki is running).
 4. **Set environment variables** — In the repo root, copy the sample env and add the values you copied:
 
 {: .steps}
@@ -64,11 +64,11 @@ pnpm dev
 Music and effects volume are set **per server** (per guild):
 
 - **Dashboard:** When the bot is connected to a server, the Playback controls show **Music volume** and **Effects volume** sliders. Change them and the new volume applies to the next track or effect (and to already-playing music when you change music volume for future playback).
-- **Discord:** Use `!volume` to see current levels, or `!volume music 80` / `!volume effects 90` to set them. The control panel (`!menu`) has **Music volume** and **Effects volume** dropdowns (0%, 25%, 50%, 75%, 100%).
+- **Discord:** Use `/volume` to see current levels, or `/volume` with type **Music** or **Effects** and **value** 0–100 to set them. The control panel (`/menu`) has **Music volume** and **Effects volume** dropdowns (0%, 25%, 50%, 75%, 100%).
 
-## If text commands do nothing (!menu, !play, etc.)
+## If slash commands don’t appear or do nothing
 
-The bot must have **Message Content Intent** enabled or it cannot read your messages. In the [Discord Developer Portal](https://discord.com/developers/applications) → your application → **Bot** → **Privileged Gateway Intents**, turn **Message Content Intent** **ON**, then save. Restart Hibiki after changing. If it’s already on, check the **Permissions** allowlist in the dashboard — your Discord user or role must be allowed to use the bot.
+Slash commands are registered when the bot starts. If you don’t see them, wait a minute after inviting the bot (global commands can take up to an hour to propagate) or set `DISCORD_GUILD_ID` so commands register to one server and appear immediately. Check the **Permissions** allowlist in the dashboard — your Discord user or role must be allowed to use the bot.
 
 ## E2E tests (real Discord)
 

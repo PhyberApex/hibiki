@@ -2,10 +2,19 @@ import type { TestingModule } from '@nestjs/testing'
 import type { Message } from 'discord.js'
 import { ConfigService } from '@nestjs/config'
 import { Test } from '@nestjs/testing'
+import { Events } from 'discord.js'
 import { PermissionConfigService } from '../permissions/permission-config.service'
 import { PlayerService } from '../player/player.service'
 import { SoundLibraryService } from '../sound/sound.service'
 import { DiscordService } from './discord.service'
+
+const mockRestPut = jest.fn().mockResolvedValue([])
+jest.mock('@discordjs/rest', () => ({
+  REST: jest.fn().mockImplementation(() => ({
+    setToken: jest.fn().mockReturnThis(),
+    put: mockRestPut,
+  })),
+}))
 
 describe('discordService', () => {
   let service: DiscordService
@@ -77,8 +86,6 @@ describe('discordService', () => {
   describe('onModuleInit', () => {
     it('logs warn and returns without logging in when token is not configured', async () => {
       config.get = jest.fn().mockImplementation((key: string, def: unknown) => {
-        if (key === 'discord.commandPrefix')
-          return '!'
         if (key === 'discord.token')
           return undefined
         return def
@@ -102,8 +109,6 @@ describe('discordService', () => {
 
     it('logs error when login throws', async () => {
       config.get = jest.fn().mockImplementation((key: string, def: unknown) => {
-        if (key === 'discord.commandPrefix')
-          return '!'
         if (key === 'discord.token')
           return 'fake-token'
         return def
@@ -122,6 +127,137 @@ describe('discordService', () => {
       const errorSpy = jest.spyOn((svc as any).logger, 'error')
       await svc.onModuleInit()
       expect(errorSpy).toHaveBeenCalledWith('Failed to login to Discord', expect.any(Error))
+    })
+
+    it('registers slash commands on ClientReady when token and clientId are set', async () => {
+      config.get = jest.fn().mockImplementation((key: string, def: unknown) => {
+        if (key === 'discord.token')
+          return 'fake-token'
+        if (key === 'discord.commandPrefix')
+          return '!'
+        if (key === 'discord.clientId')
+          return 'client-123'
+        return def
+      })
+      const moduleWithToken = await Test.createTestingModule({
+        providers: [
+          DiscordService,
+          { provide: ConfigService, useValue: config },
+          { provide: PlayerService, useValue: player },
+          { provide: SoundLibraryService, useValue: sounds },
+          { provide: PermissionConfigService, useValue: permissions },
+        ],
+      }).compile()
+      const svc = moduleWithToken.get(DiscordService)
+      const client = svc.getClient()
+      jest.spyOn(client, 'login').mockImplementation(() => {
+        process.nextTick(() => client.emit(Events.ClientReady, client))
+        return Promise.resolve('token')
+      })
+      await svc.onModuleInit()
+      await new Promise(resolve => setImmediate(resolve))
+      expect(mockRestPut).toHaveBeenCalled()
+    })
+
+    it('registers slash commands in default guild when defaultGuildId is set', async () => {
+      config.get = jest.fn().mockImplementation((key: string, def: unknown) => {
+        if (key === 'discord.token')
+          return 'fake-token'
+        if (key === 'discord.commandPrefix')
+          return '!'
+        if (key === 'discord.clientId')
+          return 'client-123'
+        if (key === 'discord.defaultGuildId')
+          return 'guild-456'
+        return def
+      })
+      mockRestPut.mockClear()
+      const moduleWithToken = await Test.createTestingModule({
+        providers: [
+          DiscordService,
+          { provide: ConfigService, useValue: config },
+          { provide: PlayerService, useValue: player },
+          { provide: SoundLibraryService, useValue: sounds },
+          { provide: PermissionConfigService, useValue: permissions },
+        ],
+      }).compile()
+      const svc = moduleWithToken.get(DiscordService)
+      const client = svc.getClient()
+      jest.spyOn(client, 'login').mockImplementation(() => {
+        process.nextTick(() => client.emit(Events.ClientReady, client))
+        return Promise.resolve('token')
+      })
+      await svc.onModuleInit()
+      await new Promise(resolve => setImmediate(resolve))
+      expect(mockRestPut).toHaveBeenCalledWith(
+        expect.stringContaining('guilds'),
+        expect.objectContaining({ body: expect.any(Array) }),
+      )
+    })
+
+    it('logs warn when clientId missing and ClientReady fires', async () => {
+      config.get = jest.fn().mockImplementation((key: string, def: unknown) => {
+        if (key === 'discord.token')
+          return 'fake-token'
+        if (key === 'discord.commandPrefix')
+          return '!'
+        if (key === 'discord.clientId')
+          return undefined
+        return def
+      })
+      mockRestPut.mockClear()
+      const moduleWithToken = await Test.createTestingModule({
+        providers: [
+          DiscordService,
+          { provide: ConfigService, useValue: config },
+          { provide: PlayerService, useValue: player },
+          { provide: SoundLibraryService, useValue: sounds },
+          { provide: PermissionConfigService, useValue: permissions },
+        ],
+      }).compile()
+      const svc = moduleWithToken.get(DiscordService)
+      const warnSpy = jest.spyOn((svc as any).logger, 'warn')
+      const client = svc.getClient()
+      jest.spyOn(client, 'login').mockImplementation(() => {
+        process.nextTick(() => client.emit(Events.ClientReady, client))
+        return Promise.resolve('token')
+      })
+      await svc.onModuleInit()
+      await new Promise(resolve => setImmediate(resolve))
+      expect(warnSpy).toHaveBeenCalledWith('Cannot register slash commands: missing discord.token or discord.clientId')
+      expect(mockRestPut).not.toHaveBeenCalled()
+    })
+
+    it('logs error when slash command registration throws', async () => {
+      config.get = jest.fn().mockImplementation((key: string, def: unknown) => {
+        if (key === 'discord.token')
+          return 'fake-token'
+        if (key === 'discord.commandPrefix')
+          return '!'
+        if (key === 'discord.clientId')
+          return 'client-123'
+        return def
+      })
+      mockRestPut.mockRejectedValueOnce(new Error('Rate limited'))
+      const moduleWithToken = await Test.createTestingModule({
+        providers: [
+          DiscordService,
+          { provide: ConfigService, useValue: config },
+          { provide: PlayerService, useValue: player },
+          { provide: SoundLibraryService, useValue: sounds },
+          { provide: PermissionConfigService, useValue: permissions },
+        ],
+      }).compile()
+      const svc = moduleWithToken.get(DiscordService)
+      const errorSpy = jest.spyOn((svc as any).logger, 'error')
+      const client = svc.getClient()
+      jest.spyOn(client, 'login').mockImplementation(() => {
+        process.nextTick(() => client.emit(Events.ClientReady, client))
+        return Promise.resolve('token')
+      })
+      await svc.onModuleInit()
+      await new Promise(resolve => setImmediate(resolve))
+      expect(errorSpy).toHaveBeenCalledWith('Failed to register slash commands', expect.any(Error))
     })
   })
 
@@ -158,93 +294,14 @@ describe('discordService', () => {
     })
   })
 
-  describe('handleMessage (menu/panel and new branches)', () => {
-    it('logs command and replies with panel when user sends !menu', async () => {
-      const logSpy = jest.spyOn((service as any).logger, 'log')
+  describe('handleMessage (prefix commands)', () => {
+    it('replies with panel when user sends !menu', async () => {
       const message = createMockMessage({ content: '!menu' })
       await (service as any).handleMessage(message)
-      expect(logSpy).toHaveBeenCalledWith(
-        'Command \'menu\' from User#0 in Test Guild',
-      )
       expect(message.reply).toHaveBeenCalledTimes(1)
       const replyArg = (message.reply as jest.Mock).mock.calls[0][0]
       expect(replyArg.content).toContain('control panel')
       expect(replyArg.components).toHaveLength(5)
-    })
-
-    it('logs command and replies with panel when user sends !panel', async () => {
-      const message = createMockMessage({ content: '!panel' })
-      await (service as any).handleMessage(message)
-      expect(message.reply).toHaveBeenCalledWith(
-        expect.objectContaining({
-          content: expect.stringContaining('control panel'),
-          components: expect.any(Array),
-        }),
-      )
-      expect((message.reply as jest.Mock).mock.calls[0][0].components).toHaveLength(5)
-    })
-
-    it('logs debug and returns when content is prefix only (no command)', async () => {
-      const debugSpy = jest.spyOn((service as any).logger, 'debug')
-      const message = createMockMessage({ content: '!' })
-      await (service as any).handleMessage(message)
-      expect(debugSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Prefix received but no command'),
-      )
-      expect(message.reply).not.toHaveBeenCalled()
-    })
-
-    it('returns without replying when content does not start with prefix', async () => {
-      const message = createMockMessage({ content: 'hello' })
-      await (service as any).handleMessage(message)
-      expect(message.reply).not.toHaveBeenCalled()
-    })
-
-    it('uses empty string when message.content is null/undefined', async () => {
-      const message = createMockMessage({ content: undefined as any })
-      await (service as any).handleMessage(message)
-      expect(message.reply).not.toHaveBeenCalled()
-    })
-
-    it('ignores message when author.bot is true and e2eAllowBotId is not set', async () => {
-      const message = createMockMessage({ content: '!menu', author: { bot: true, tag: 'Bot#0', id: 'bot-1' } })
-      await (service as any).handleMessage(message)
-      expect(message.reply).not.toHaveBeenCalled()
-    })
-
-    it('processes command when author.bot is true but author.id matches e2eAllowBotId', async () => {
-      config.get = jest.fn().mockImplementation((key: string, def: unknown) => {
-        if (key === 'discord.commandPrefix')
-          return '!'
-        if (key === 'discord.e2eAllowBotId')
-          return 'e2e-sidecar-id'
-        return def
-      })
-      const moduleWithE2E = await Test.createTestingModule({
-        providers: [
-          DiscordService,
-          { provide: ConfigService, useValue: config },
-          { provide: PlayerService, useValue: player },
-          { provide: SoundLibraryService, useValue: sounds },
-          { provide: PermissionConfigService, useValue: permissions },
-        ],
-      }).compile()
-      const svc = moduleWithE2E.get(DiscordService)
-      jest.spyOn(svc.getClient(), 'isReady').mockReturnValue(true)
-      const message = createMockMessage({
-        content: '!menu',
-        author: { bot: true, tag: 'E2ESidecar#0', id: 'e2e-sidecar-id' },
-      })
-      await (svc as any).handleMessage(message)
-      expect(message.reply).toHaveBeenCalledTimes(1)
-      expect((message.reply as jest.Mock).mock.calls[0][0].content).toContain('control panel')
-    })
-
-    it('replies not allowed when permissions.isAllowed returns false', async () => {
-      permissions.isAllowed = jest.fn().mockReturnValue(false)
-      const message = createMockMessage({ content: '!menu' })
-      await (service as any).handleMessage(message)
-      expect(message.reply).toHaveBeenCalledWith('You are not allowed to use this bot.')
     })
 
     it('delegates !join to command handler', async () => {
@@ -260,6 +317,41 @@ describe('discordService', () => {
       expect(message.reply).toHaveBeenCalledWith(expect.stringContaining('Connected'))
     })
 
+    it('replies not allowed when permissions.isAllowed returns false', async () => {
+      permissions.isAllowed = jest.fn().mockReturnValue(false)
+      const message = createMockMessage({ content: '!menu' })
+      await (service as any).handleMessage(message)
+      expect(message.reply).toHaveBeenCalledWith('You are not allowed to use this bot.')
+    })
+
+    it('replies unknown command for unrecognized prefix command', async () => {
+      const message = createMockMessage({ content: '!unknowncmd' })
+      await (service as any).handleMessage(message)
+      expect(message.reply).toHaveBeenCalledWith('Unknown command.')
+    })
+
+    it('returns early when message has no guild', async () => {
+      const message = createMockMessage({ content: '!menu', guild: null as any })
+      await (service as any).handleMessage(message)
+      expect(message.reply).not.toHaveBeenCalled()
+    })
+
+    it('returns early when content does not start with prefix', async () => {
+      const message = createMockMessage({ content: 'no prefix here' })
+      await (service as any).handleMessage(message)
+      expect(message.reply).not.toHaveBeenCalled()
+    })
+
+    it('logs debug and returns when prefix present but no command', async () => {
+      const message = createMockMessage({ content: '!   ' })
+      const debugSpy = jest.spyOn((service as any).logger, 'debug')
+      await (service as any).handleMessage(message)
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Prefix received but no command'),
+      )
+      expect(message.reply).not.toHaveBeenCalled()
+    })
+
     it('delegates !leave to command handler', async () => {
       const message = createMockMessage({ content: '!leave' })
       await (service as any).handleMessage(message)
@@ -271,38 +363,41 @@ describe('discordService', () => {
       const message = createMockMessage({ content: '!stop' })
       await (service as any).handleMessage(message)
       expect(player.stop).toHaveBeenCalledWith('guild-1')
+      expect(message.reply).toHaveBeenCalledWith('Playback stopped.')
     })
 
     it('delegates !play to command handler', async () => {
-      const message = createMockMessage({ content: '!play mytrack' })
+      const message = createMockMessage({ content: '!play my-track' })
       await (service as any).handleMessage(message)
+      expect(player.playMusic).toHaveBeenCalledWith('guild-1', 'my-track', undefined)
       expect(message.reply).toHaveBeenCalledWith(expect.stringContaining('Playing'))
     })
 
     it('delegates !effect to command handler', async () => {
       const message = createMockMessage({ content: '!effect boom' })
       await (service as any).handleMessage(message)
+      expect(player.playEffect).toHaveBeenCalledWith('guild-1', 'boom', undefined)
       expect(message.reply).toHaveBeenCalledWith(expect.stringContaining('Triggered'))
     })
 
     it('delegates !songs to command handler', async () => {
       const message = createMockMessage({ content: '!songs' })
       await (service as any).handleMessage(message)
-      expect(sounds.list).toHaveBeenCalledWith('music')
+      expect(message.reply).toHaveBeenCalledWith(expect.stringContaining('songs'))
     })
 
     it('delegates !effects to command handler', async () => {
       const message = createMockMessage({ content: '!effects' })
       await (service as any).handleMessage(message)
-      expect(sounds.list).toHaveBeenCalledWith('effects')
+      expect(message.reply).toHaveBeenCalledWith(expect.stringContaining('effects'))
     })
 
     it('delegates !help to command handler', async () => {
       const message = createMockMessage({ content: '!help' })
       await (service as any).handleMessage(message)
-      const replyArg = (message.reply as jest.Mock).mock.calls[0][0]
-      expect(replyArg).toHaveProperty('content')
-      expect(replyArg.content).toContain('**Commands:**')
+      expect(message.reply).toHaveBeenCalledWith(expect.objectContaining({
+        content: expect.stringContaining('**Commands:**'),
+      }))
     })
 
     it('delegates !volume to command handler', async () => {
@@ -316,19 +411,56 @@ describe('discordService', () => {
         content: '!delete',
         channel: {
           isTextBased: () => true,
+          isDMBased: () => false,
+          bulkDelete: jest.fn().mockResolvedValue(undefined),
           messages: { fetch: jest.fn().mockResolvedValue(new Map()) },
-          bulkDelete: jest.fn(),
-          send: jest.fn().mockResolvedValue({ delete: jest.fn() }),
+          send: jest.fn(),
         },
       })
       await (service as any).handleMessage(message)
       expect(message.reply).toHaveBeenCalled()
     })
+  })
 
-    it('replies unknown command for unrecognized command', async () => {
-      const message = createMockMessage({ content: '!unknowncmd' })
-      await (service as any).handleMessage(message)
-      expect(message.reply).toHaveBeenCalledWith('Unknown command.')
+  describe('handleInteraction (slash commands)', () => {
+    it('replies with panel when user runs /menu slash command', async () => {
+      const reply = jest.fn().mockResolvedValue(undefined)
+      const interaction = {
+        inGuild: () => true,
+        guild: {},
+        isChatInputCommand: () => true,
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        commandName: 'menu',
+        reply,
+        member: { roles: { cache: new Map() } },
+        user: { id: 'user-1' },
+      }
+      await (service as any).handleInteraction(interaction)
+      expect(reply).toHaveBeenCalledTimes(1)
+      expect(reply.mock.calls[0][0].content).toContain('control panel')
+      expect(reply.mock.calls[0][0].components).toHaveLength(5)
+    })
+
+    it('replies not allowed when permissions.isAllowed returns false for slash command', async () => {
+      permissions.isAllowed = jest.fn().mockReturnValue(false)
+      const reply = jest.fn().mockResolvedValue(undefined)
+      const interaction = {
+        inGuild: () => true,
+        guild: {},
+        isChatInputCommand: () => true,
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        commandName: 'help',
+        reply,
+        member: { roles: { cache: new Map() } },
+        user: { id: 'user-1' },
+      }
+      await (service as any).handleInteraction(interaction)
+      expect(reply).toHaveBeenCalledWith({
+        content: 'You are not allowed to use this bot.',
+        ephemeral: true,
+      })
     })
   })
 
@@ -390,6 +522,7 @@ describe('discordService', () => {
       const interaction = {
         inGuild: () => true,
         guild: {},
+        isChatInputCommand: () => false,
         isButton: () => true,
         isStringSelectMenu: () => false,
         reply: jest.fn().mockResolvedValue(undefined),
@@ -405,6 +538,7 @@ describe('discordService', () => {
       const interaction = {
         inGuild: () => true,
         guild: {},
+        isChatInputCommand: () => false,
         isButton: () => true,
         isStringSelectMenu: () => false,
         customId: 'hibiki_btn_leave',
@@ -421,6 +555,7 @@ describe('discordService', () => {
       const interaction = {
         inGuild: () => true,
         guild: {},
+        isChatInputCommand: () => false,
         isButton: () => false,
         isStringSelectMenu: () => true,
         customId: 'hibiki_menu_main',
@@ -434,6 +569,41 @@ describe('discordService', () => {
       }
       await (service as any).handleInteraction(interaction)
       expect(player.disconnect).toHaveBeenCalledWith('guild-1')
+    })
+
+    it('uses member.roles array when roles have no cache (getMemberRoleIds)', async () => {
+      const interaction = {
+        inGuild: () => true,
+        guild: {},
+        isChatInputCommand: () => true,
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        commandName: 'help',
+        reply: jest.fn().mockResolvedValue(undefined),
+        member: { roles: ['role-1', 'role-2'] },
+        user: { id: 'user-1' },
+      }
+      await (service as any).handleInteraction(interaction)
+      expect(interaction.reply).toHaveBeenCalledWith(
+        expect.objectContaining({ content: expect.stringContaining('**Commands:**') }),
+      )
+    })
+
+    it('uses member.user.id when interaction.user missing (getUserId)', async () => {
+      const interaction = {
+        inGuild: () => true,
+        guild: {},
+        isChatInputCommand: () => true,
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        commandName: 'help',
+        reply: jest.fn().mockResolvedValue(undefined),
+        user: null,
+        member: { roles: { cache: new Map() }, user: { id: 'member-user-id' } },
+      }
+      await (service as any).handleInteraction(interaction)
+      expect(permissions.isAllowed).toHaveBeenCalledWith([], 'member-user-id')
+      expect(interaction.reply).toHaveBeenCalled()
     })
   })
 

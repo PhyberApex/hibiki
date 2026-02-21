@@ -100,9 +100,8 @@ describe('Hibiki sidecar E2E (Discord voice state + optional text)', () => {
     expect(membersAfter.has(hibikiUserId!)).toBe(false)
   })
 
-  /** Send a command in the text channel and return Hibiki's reply content (or throw on timeout).
-   *  Note: Discord does NOT deliver messages from one bot to another (messageCreate never fires).
-   *  So these command tests only work when a human sends the message; they are skipped in automation. */
+  /** Send a prefix command in the text channel and return Hibiki's reply content.
+   *  Requires Hibiki to be run with HIBIKI_E2E_ALLOW_BOT_ID set to the sidecar bot's user ID. */
   async function sendCommandAndGetReply(
     hibikiUserId: string,
     command: string,
@@ -111,7 +110,7 @@ describe('Hibiki sidecar E2E (Discord voice state + optional text)', () => {
     if (!sidecar || !textChannelId) throw new Error('Sidecar or text channel not configured')
     const channel = (await sidecar.channels.fetch(textChannelId)) as TextChannel
     const ourMessage = await channel.send({ content: command })
-    const reply = await new Promise<string>((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const collector = channel.createMessageCollector({
         filter: (m) =>
           m.author.id === hibikiUserId && m.reference?.messageId === ourMessage.id,
@@ -123,12 +122,8 @@ describe('Hibiki sidecar E2E (Discord voice state + optional text)', () => {
         if (collected.size === 0) reject(new Error(`No reply from Hibiki to "${command}" within ${timeoutMs}ms`))
       })
     })
-    return reply
   }
 
-  // When Hibiki is started with HIBIKI_E2E_ALLOW_BOT_ID set to the sidecar's Discord user ID, it will
-  // process prefix commands from that bot so these tests can run. Set HIBIKI_E2E_ALLOW_BOT_ID in the
-  // Hibiki process (e.g. in .env or docker-compose) to the sidecar bot's user ID.
   it('sidecar sends !join in text channel and Hibiki replies and joins voice', async function () {
     if (!sidecar || !textChannelId || !isE2eConfigured() || !isSidecarConfigured()) return
 
@@ -156,10 +151,9 @@ describe('Hibiki sidecar E2E (Discord voice state + optional text)', () => {
     try {
       const reply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}join`)
       expect(reply).toMatch(/connected/i)
-
-      const members = voiceChannel.members
-      expect(members.has(hibikiUserId)).toBe(true)
+      expect(voiceChannel.members.has(hibikiUserId)).toBe(true)
     } finally {
+      await post('/player/leave', { guildId })
       connection.destroy()
     }
   })
@@ -241,7 +235,7 @@ describe('Hibiki sidecar E2E (Discord voice state + optional text)', () => {
     expect(reply.toLowerCase()).toContain('control panel')
   })
 
-  it('full command flow via text: !join, !play 1, !effect 1, !leave', async function () {
+  it('full command flow via text: !join, !play, !effect, !leave', async function () {
     if (!sidecar || !textChannelId || !isE2eConfigured() || !isSidecarConfigured()) return
 
     let hibikiUserId: string

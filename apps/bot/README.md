@@ -44,8 +44,8 @@ Copy `.env.example` to `.env` at the workspace root (or use your shell env) with
 ```bash
 DISCORD_TOKEN=...
 DISCORD_CLIENT_ID=...
-DISCORD_GUILD_ID= (optional default guild)
-HIBIKI_PREFIX=!
+DISCORD_GUILD_ID= (optional; when set, slash commands are registered to this guild only for faster updates)
+HIBIKI_PREFIX=! (optional; prefix for message commands, default `!`. E2E can use prefix to drive commands when HIBIKI_E2E_ALLOW_BOT_ID is set.)
 HIBIKI_DB_PATH=storage/data/hibiki.sqlite
 HIBIKI_STORAGE_PATH=storage
 # Optional: add other env vars as needed (dashboard/API have no built-in auth; restrict access yourself)
@@ -75,25 +75,25 @@ pnpm --filter @hibiki/bot test
 pnpm run lint
 ```
 
-## Discord commands
+## Discord commands (slash and prefix)
 
-All commands use the configurable prefix (default `!`). Who can use the bot is set in the web UI (see **Permissions** below).
+You can use **slash commands** (e.g. `/help`, `/play`) or **prefix commands** (e.g. `!help`, `!play` with default prefix `!`). Who can use the bot is set in the web UI (see **Permissions** below). Slash commands are registered with Discord on bot startup (globally, or to one guild if `DISCORD_GUILD_ID` is set). Prefix commands require the Message Content intent.
 
 | Command | Description |
 | --- | --- |
-| `!help` | List all commands. |
-| `!delete` | Clear this channel's bot messages (last 100, under 14 days). |
-| `!menu` / `!panel` | Post a **control panel** (buttons + dropdown) in the channel. The message stays until deleted; use it anytime for join/leave, stop, play music/effect, list songs/effects. |
-| `!join` | Join your current voice channel. |
-| `!leave` | Disconnect from the guild. |
-| `!stop` | Stop playback. |
-| `!volume` [music or effects] [0-100] | Show or set music/effects volume for this server. |
-| `!songs` | List available music (name + id). |
-| `!effects` | List available sound effects. |
-| `!play <name or id>` | Play a song by name or id (e.g. `!play ambient` or `!play my-track-123`). |
-| `!effect <name or id>` | Trigger an effect by name or id. |
+| `/help` | List all commands. |
+| `/delete` | Clear this channel's bot messages (last 100, under 14 days). |
+| `/menu` / `/panel` | Post a **control panel** (buttons + dropdown) in the channel. The message stays until deleted; use it anytime for join/leave, stop, play music/effect, list songs/effects. |
+| `/join` | Join your current voice channel. |
+| `/leave` | Disconnect from the guild. |
+| `/stop` | Stop playback. |
+| `/volume` [type] [value] | Show or set music/effects volume (0–100). Options: `type` (Music/Effects), `value` (0–100). |
+| `/songs` | List available music (name + id). |
+| `/effects` | List available sound effects. |
+| `/play track:<name or id>` | Play a song by name or id. |
+| `/effect name:<name or id>` | Trigger an effect by name or id. |
 
-Use `!songs` and `!effects` to see what’s available, then `!play` / `!effect` with the name or id. Prefer `!menu` for a guided in-Discord UI. The control panel also has **Music volume** and **Effects volume** dropdowns.
+Use `/songs` and `/effects` to see what’s available, then `/play` and `/effect` with the name or id. Prefer `/menu` for a guided in-Discord UI. The control panel also has **Music volume** and **Effects volume** dropdowns.
 
 ## REST API quick reference
 

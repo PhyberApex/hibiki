@@ -2,12 +2,8 @@ import type {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common'
-import type {
-  ButtonInteraction,
-  Message,
-  StringSelectMenuInteraction,
-  VoiceBasedChannel,
-} from 'discord.js'
+import type { Message, VoiceBasedChannel } from 'discord.js'
+import { REST } from '@discordjs/rest'
 import {
   forwardRef,
   Inject,
@@ -15,6 +11,7 @@ import {
   Logger,
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config' // eslint-disable-line ts/consistent-type-imports
+import { Routes } from 'discord-api-types/v10'
 import {
   Client,
   Events,
@@ -26,6 +23,8 @@ import { PlayerService } from '../player/player.service'
 import { SoundLibraryService } from '../sound/sound.service' // eslint-disable-line ts/consistent-type-imports
 import { DiscordCommandHandler } from './discord-commands.handler'
 import { DiscordInteractionHandler } from './discord-interactions.handler'
+import { getSlashCommandsJSON } from './discord-slash.commands'
+import { DiscordSlashHandler } from './discord-slash.handler'
 
 export interface GuildDirectoryEntry {
   guildId: string
@@ -39,9 +38,9 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   private readonly client: Client
   private readonly prefix: string
   private readonly e2eAllowBotId: string | undefined
-
   private readonly commandHandler: DiscordCommandHandler
   private readonly interactionHandler: DiscordInteractionHandler
+  private readonly slashHandler: DiscordSlashHandler
 
   constructor(
     private readonly config: ConfigService,
@@ -62,7 +61,6 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       partials: [Partials.Channel],
     })
 
-    // Initialize handlers
     this.commandHandler = new DiscordCommandHandler({
       player: this.player,
       sounds: this.sounds,
@@ -77,6 +75,13 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       client: this.client,
       listGuildDirectory: () => this.listGuildDirectory(),
     })
+
+    this.slashHandler = new DiscordSlashHandler({
+      player: this.player,
+      sounds: this.sounds,
+      listGuildDirectory: () => this.listGuildDirectory(),
+      getBotId: () => this.client.user?.id,
+    })
   }
 
   async onModuleInit() {
@@ -88,8 +93,9 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       return
     }
 
-    this.client.once(Events.ClientReady, () => {
+    this.client.once(Events.ClientReady, async () => {
       this.logger.log(`Logged in as ${this.client.user?.tag}`)
+      await this.registerSlashCommands()
     })
 
     this.client.on('messageCreate', (message) => {
@@ -201,9 +207,10 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Handles incoming Discord messages with command prefix.
+   * Handles incoming Discord messages with command prefix (for !join, !play, etc.).
+   * Kept alongside slash commands so E2E can drive the same logic via prefix.
    */
-  private async handleMessage(message: Message) {
+  private async handleMessage(message: Message): Promise<void> {
     const isAllowedE2EBot = this.e2eAllowBotId && message.author.id === this.e2eAllowBotId
     if (!this.client.isReady() || (!isAllowedE2EBot && message.author.bot) || !message.inGuild()) {
       return
@@ -240,7 +247,6 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       return
     }
 
-    // Delegate to command handler
     switch (command.toLowerCase()) {
       case 'join':
         await this.commandHandler.handleJoin(message)
@@ -282,23 +288,57 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Handles Discord button and select menu interactions.
+   * Registers slash commands with Discord (global or guild).
    */
-  private async handleInteraction(interaction: import('discord.js').Interaction) {
+  private async registerSlashCommands(): Promise<void> {
+    const token = this.config.get<string>('discord.token')
+    const clientId = this.config.get<string>('discord.clientId')
+    const defaultGuildId = this.config.get<string>('discord.defaultGuildId')
+
+    if (!token || !clientId) {
+      this.logger.warn('Cannot register slash commands: missing discord.token or discord.clientId')
+      return
+    }
+
+    try {
+      const rest = new REST().setToken(token)
+      const body = getSlashCommandsJSON()
+      if (defaultGuildId) {
+        await rest.put(Routes.applicationGuildCommands(clientId, defaultGuildId), { body })
+        this.logger.log(`Registered ${(body as unknown[]).length} slash commands in guild ${defaultGuildId}`)
+      }
+      else {
+        await rest.put(Routes.applicationCommands(clientId), { body })
+        this.logger.log(`Registered ${(body as unknown[]).length} slash commands globally`)
+      }
+    }
+    catch (err) {
+      this.logger.error('Failed to register slash commands', err as Error)
+    }
+  }
+
+  /**
+   * Handles Discord slash commands, button and select menu interactions.
+   */
+  private async handleInteraction(interaction: import('discord.js').Interaction): Promise<void> {
     if (!interaction.inGuild() || !interaction.guild)
       return
 
-    const i = interaction as ButtonInteraction | StringSelectMenuInteraction
-    const memberRoleIds = this.interactionHandler.getMemberRoleIds(i)
-    const userId = this.interactionHandler.getUserId(i)
-
+    const memberRoleIds = this.getMemberRoleIds(interaction)
+    const userId = this.getUserId(interaction)
     if (!this.permissions.isAllowed(memberRoleIds, userId)) {
-      if (interaction.isButton() || interaction.isStringSelectMenu()) {
+      const canReply = interaction.isButton() || interaction.isStringSelectMenu() || interaction.isChatInputCommand()
+      if (canReply) {
         await interaction.reply({
           content: 'You are not allowed to use this bot.',
           ephemeral: true,
         }).catch(() => {})
       }
+      return
+    }
+
+    if (interaction.isChatInputCommand()) {
+      await this.slashHandler.handle(interaction)
       return
     }
 
@@ -310,5 +350,21 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     if (interaction.isStringSelectMenu()) {
       await this.interactionHandler.handleSelectMenu(interaction)
     }
+  }
+
+  private getMemberRoleIds(interaction: import('discord.js').Interaction): string[] {
+    const member = interaction.member
+    if (!member?.roles)
+      return []
+    return member.roles && 'cache' in member.roles
+      ? Array.from((member.roles as { cache: Map<string, unknown> }).cache.keys())
+      : Array.isArray(member.roles)
+        ? (member.roles as string[])
+        : []
+  }
+
+  private getUserId(interaction: import('discord.js').Interaction): string | null {
+    const user = interaction.user ?? (interaction.member as { user?: { id?: string } } | null)?.user
+    return user?.id ?? null
   }
 }
