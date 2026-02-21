@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/PhyberApex/hibiki/compare/hibiki-v0.3.0...hibiki-v0.4.0) (2026-02-21)
+
+
+### Features
+
+* Add slash-commands ([#44](https://github.com/PhyberApex/hibiki/issues/44)) ([ba7ef6b](https://github.com/PhyberApex/hibiki/commit/ba7ef6b9440384570429f0b102f89aae434eda6b))
+
 ## [0.3.0](https://github.com/PhyberApex/hibiki/compare/hibiki-v0.2.0...hibiki-v0.3.0) (2026-02-16)
 
 
