@@ -33,7 +33,7 @@ import { SoundModule } from './sound/sound.module'
         return [
           {
             rootPath: resolve(botRoot, distDir),
-            exclude: ['/api*'],
+            exclude: ['/api', '/api*path'],
           },
         ]
       },
