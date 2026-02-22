@@ -65,6 +65,7 @@ describe('discordCommandHandler', () => {
       prefix: '!',
       logger,
       getBotId: () => 'bot-id',
+      getVersion: () => '1.2.3',
     })
   })
 
@@ -227,7 +228,7 @@ describe('discordCommandHandler', () => {
   })
 
   describe('handleHelp', () => {
-    it('replies with commands list including prefix', async () => {
+    it('replies with commands list including prefix and version', async () => {
       const message = createMockMessage()
       await handler.handleHelp(message)
       expect(message.reply).toHaveBeenCalledWith(
@@ -240,6 +241,19 @@ describe('discordCommandHandler', () => {
           content: expect.stringContaining('!help'),
         }),
       )
+      expect(message.reply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining('!version'),
+        }),
+      )
+    })
+  })
+
+  describe('handleVersion', () => {
+    it('replies with Hibiki version from getVersion', async () => {
+      const message = createMockMessage()
+      await handler.handleVersion(message)
+      expect(message.reply).toHaveBeenCalledWith('**Hibiki** version **1.2.3**')
     })
   })
 
@@ -338,6 +352,7 @@ describe('discordCommandHandler', () => {
         prefix: '!',
         logger,
         getBotId: () => undefined,
+        getVersion: () => '1.2.3',
       })
       const message = createMockMessage()
       await handler.handleDelete(message)

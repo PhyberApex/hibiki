@@ -14,10 +14,11 @@ describe('discord-slash.commands', () => {
       }
     })
 
-    it('includes help, menu, panel, join, leave, stop, volume, songs, effects, play, effect, delete', () => {
+    it('includes help, version, menu, panel, join, leave, stop, volume, songs, effects, play, effect, delete', () => {
       const json = getSlashCommandsJSON() as { name: string }[]
       const names = json.map(c => c.name)
       expect(names).toContain('help')
+      expect(names).toContain('version')
       expect(names).toContain('menu')
       expect(names).toContain('panel')
       expect(names).toContain('join')

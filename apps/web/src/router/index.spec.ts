@@ -8,6 +8,12 @@ describe('router', () => {
     expect(home?.path).toBe('/')
   })
 
+  it('has media route', () => {
+    const media = router.getRoutes().find(r => r.name === 'media')
+    expect(media).toBeDefined()
+    expect(media?.path).toBe('/media')
+  })
+
   it('has permissions route', () => {
     const perm = router.getRoutes().find(r => r.name === 'permissions')
     expect(perm).toBeDefined()
@@ -20,7 +26,7 @@ describe('router', () => {
     expect(about?.path).toBe('/about')
   })
 
-  it('registers exactly three routes', () => {
-    expect(router.getRoutes()).toHaveLength(3)
+  it('registers exactly four routes', () => {
+    expect(router.getRoutes()).toHaveLength(4)
   })
 })

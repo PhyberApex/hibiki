@@ -8,6 +8,9 @@ export const slashCommands = [
     .setName('help')
     .setDescription('List all Hibiki commands'),
   new SlashCommandBuilder()
+    .setName('version')
+    .setDescription('Show Hibiki bot version'),
+  new SlashCommandBuilder()
     .setName('menu')
     .setDescription('Post the control panel (buttons + dropdown) in this channel'),
   new SlashCommandBuilder()

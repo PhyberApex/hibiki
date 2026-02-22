@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import App from './App.vue'
 import AboutView from './views/AboutView.vue'
 import HomeView from './views/HomeView.vue'
+import MediaManagementView from './views/MediaManagementView.vue'
 import PermissionsView from './views/PermissionsView.vue'
 
 vi.mock('@/api/player', () => ({
@@ -23,6 +24,7 @@ const router = createRouter({
   history: createMemoryHistory(),
   routes: [
     { path: '/', name: 'home', component: HomeView },
+    { path: '/media', name: 'media', component: MediaManagementView },
     { path: '/permissions', name: 'permissions', component: PermissionsView },
     { path: '/about', name: 'about', component: AboutView },
   ],
@@ -54,7 +56,7 @@ describe('app', () => {
     expect(wrapper.find('.brand-subtitle').text()).toBe('Echoes of Adventure')
   })
 
-  it('has nav links to Control center and Permissions', async () => {
+  it('has nav links to Control center, Media management, and Permissions', async () => {
     await router.push('/')
     await router.isReady()
     const wrapper = mount(App, {
@@ -63,11 +65,13 @@ describe('app', () => {
       },
     })
     const links = wrapper.findAll('.nav-link')
-    expect(links).toHaveLength(2)
+    expect(links).toHaveLength(3)
     expect(links[0]!.text()).toBe('Control center')
-    expect(links[1]!.text()).toBe('Permissions')
+    expect(links[1]!.text()).toBe('Media management')
+    expect(links[2]!.text()).toBe('Permissions')
     expect(links[0]!.attributes('href')).toBe('/')
-    expect(links[1]!.attributes('href')).toBe('/permissions')
+    expect(links[1]!.attributes('href')).toBe('/media')
+    expect(links[2]!.attributes('href')).toBe('/permissions')
   })
 
   it('renders RouterView in content area', async () => {
@@ -79,5 +83,18 @@ describe('app', () => {
       },
     })
     expect(wrapper.findComponent({ name: 'RouterView' }).exists()).toBe(true)
+  })
+
+  it('shows app version in sidebar', async () => {
+    await router.push('/')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [router],
+      },
+    })
+    const versionEl = wrapper.find('.version')
+    expect(versionEl.exists()).toBe(true)
+    expect(versionEl.text()).toMatch(/^v\d/)
   })
 })

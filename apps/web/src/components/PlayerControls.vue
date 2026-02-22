@@ -13,6 +13,7 @@ import {
   triggerEffect,
 } from '@/api/player'
 import { listEffects, listMusic } from '@/api/sounds'
+import SearchableSoundSelect from './SearchableSoundSelect.vue'
 
 const props = withDefaults(
   defineProps<{ playerState?: PlayerStateItem[], soundsVersion?: number }>(),
@@ -331,16 +332,12 @@ onMounted(() => {
       <div class="row row-actions">
         <label class="field field-grow">
           <span class="field-label">Track</span>
-          <select v-model="trackId" class="field-input" :disabled="soundsLoading">
-            <option value="">Select a track…</option>
-            <option
-              v-for="track in musicTracks"
-              :key="track.id"
-              :value="track.id"
-            >
-              {{ track.name }}
-            </option>
-          </select>
+          <SearchableSoundSelect
+            v-model="trackId"
+            :options="musicTracks"
+            placeholder="Search or select a track…"
+            :disabled="soundsLoading"
+          />
         </label>
         <div class="row-buttons">
           <button type="button" class="btn btn-primary" :disabled="!canPlay" @click="onPlay">
@@ -355,16 +352,12 @@ onMounted(() => {
       <div class="row row-actions">
         <label class="field field-grow">
           <span class="field-label">Effect</span>
-          <select v-model="effectId" class="field-input" :disabled="soundsLoading">
-            <option value="">Select an effect…</option>
-            <option
-              v-for="effect in effectsList"
-              :key="effect.id"
-              :value="effect.id"
-            >
-              {{ effect.name }}
-            </option>
-          </select>
+          <SearchableSoundSelect
+            v-model="effectId"
+            :options="effectsList"
+            placeholder="Search or select an effect…"
+            :disabled="soundsLoading"
+          />
         </label>
         <button
           type="button"

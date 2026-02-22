@@ -10,6 +10,7 @@ import { DiscordModule } from './discord/discord.module'
 import { AppConfig } from './persistence/app-config.entity'
 import { PersistenceModule } from './persistence/persistence.module'
 import { PlayerSnapshot } from './persistence/player-snapshot.entity'
+import { SoundDisplayName } from './persistence/sound-display-name.entity'
 import { SoundTag } from './persistence/sound-tag.entity'
 import { SoundModule } from './sound/sound.module'
 
@@ -45,7 +46,7 @@ import { SoundModule } from './sound/sound.module'
           process.cwd(),
           config.get<string>('database.path', 'storage/data/hibiki.sqlite'),
         ),
-        entities: [PlayerSnapshot, AppConfig, SoundTag],
+        entities: [PlayerSnapshot, AppConfig, SoundTag, SoundDisplayName],
         synchronize: true,
       }),
     }),

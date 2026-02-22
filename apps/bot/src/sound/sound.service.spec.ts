@@ -1,4 +1,5 @@
 import type { Express } from 'express'
+import type { SoundDisplayNameService } from '../persistence/sound-display-name.service'
 import type { SoundTagService } from '../persistence/sound-tag.service'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -34,6 +35,15 @@ function createMockSoundTagService(): jest.Mocked<SoundTagService> {
   } as unknown as jest.Mocked<SoundTagService>
 }
 
+function createMockSoundDisplayNameService(): jest.Mocked<SoundDisplayNameService> {
+  return {
+    getDisplayName: jest.fn().mockResolvedValue(null),
+    getDisplayNamesBySoundIds: jest.fn().mockResolvedValue(new Map()),
+    setDisplayName: jest.fn().mockResolvedValue(undefined),
+    deleteDisplayName: jest.fn().mockResolvedValue(undefined),
+  } as unknown as jest.Mocked<SoundDisplayNameService>
+}
+
 describe('soundLibraryService', () => {
   let tempRoot: string
   let musicDir: string
@@ -49,8 +59,9 @@ describe('soundLibraryService', () => {
       audio: { musicDir, effectsDir },
     })
     soundTags = createMockSoundTagService()
+    const soundDisplayNames = createMockSoundDisplayNameService()
 
-    service = new SoundLibraryService(config, soundTags)
+    service = new SoundLibraryService(config, soundTags, soundDisplayNames)
     await service.onModuleInit()
   })
 

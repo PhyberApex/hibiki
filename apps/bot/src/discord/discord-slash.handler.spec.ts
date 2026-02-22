@@ -35,6 +35,7 @@ describe('discordSlashHandler', () => {
   let sounds: jest.Mocked<SoundLibraryService>
   let listGuildDirectory: jest.Mock
   let getBotId: jest.Mock
+  let getVersion: jest.Mock
 
   beforeEach(() => {
     player = {
@@ -53,12 +54,14 @@ describe('discordSlashHandler', () => {
     } as unknown as jest.Mocked<SoundLibraryService>
     listGuildDirectory = jest.fn().mockReturnValue([])
     getBotId = jest.fn().mockReturnValue('bot-id')
+    getVersion = jest.fn().mockReturnValue('1.2.3')
 
     handler = new DiscordSlashHandler({
       player,
       sounds,
       listGuildDirectory,
       getBotId,
+      getVersion,
     })
   })
 
@@ -69,14 +72,21 @@ describe('discordSlashHandler', () => {
       expect(interaction.reply).toHaveBeenCalledWith({ content: 'Unknown command.', ephemeral: false })
     })
 
-    it('handleHelp: replies with commands list', async () => {
+    it('handleHelp: replies with commands list including /version', async () => {
       const interaction = createMockInteraction({ commandName: 'help' })
       await handler.handle(interaction)
       const content = (interaction.reply as jest.Mock).mock.calls[0][0].content
       expect(content).toContain('**Commands:**')
       expect(content).toContain('/help')
+      expect(content).toContain('/version')
       expect(content).toContain('/menu')
       expect(content).toContain('/play')
+    })
+
+    it('handleVersion: replies with Hibiki version from getVersion', async () => {
+      const interaction = createMockInteraction({ commandName: 'version' })
+      await handler.handle(interaction)
+      expect(interaction.reply).toHaveBeenCalledWith('**Hibiki** version **1.2.3**')
     })
 
     it('handleMenu: replies with panel content and components', async () => {

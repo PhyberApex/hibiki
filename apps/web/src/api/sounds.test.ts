@@ -8,6 +8,7 @@ import {
   setSoundTags,
   soundStreamUrl,
   uploadSound,
+  uploadSoundsBulk,
 } from './sounds'
 
 describe('sounds API', () => {
@@ -99,6 +100,25 @@ describe('sounds API', () => {
         body: expect.any(FormData),
       }),
     )
+  })
+
+  it('uploadSoundsBulk uploads each file and returns success and failed', async () => {
+    const file1 = new File(['a'], 'a.mp3', { type: 'audio/mpeg' })
+    const file2 = new File(['b'], 'b.mp3', { type: 'audio/mpeg' })
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () =>
+          Promise.resolve('{"id":"1","name":"a","filename":"a.mp3","category":"music"}'),
+      } as Response)
+      .mockRejectedValueOnce(new Error('Network error'))
+    const result = await uploadSoundsBulk('music', [file1, file2])
+    expect(result.success).toHaveLength(1)
+    expect(result.success[0]!.id).toBe('1')
+    expect(result.failed).toHaveLength(1)
+    expect(result.failed[0]!.file.name).toBe('b.mp3')
+    expect(result.failed[0]!.error.message).toBe('Network error')
   })
 
   it('deleteSound sends DELETE', async () => {

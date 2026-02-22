@@ -9,11 +9,6 @@ const state = ref<PlayerStateItem[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const botStatus = ref<BotStatus | null>(null)
-// Incremented when sound list changes so PlayerControls refetches track/effect options.
-const soundsVersion = ref(0)
-function onSoundsUpdated() {
-  soundsVersion.value += 1
-}
 
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
@@ -141,11 +136,11 @@ onMounted(() => {
       </ul>
     </section>
 
-    <PlayerControls :player-state="state" :sounds-version="soundsVersion" @action-done="loadState" />
+    <PlayerControls :player-state="state" :sounds-version="0" @action-done="loadState" />
 
     <div class="sound-grid">
-      <SoundList title="Music" type="music" @uploaded="onSoundsUpdated" />
-      <SoundList title="Effects" type="effects" @uploaded="onSoundsUpdated" />
+      <SoundList title="Music" type="music" />
+      <SoundList title="Effects" type="effects" />
     </div>
   </main>
 </template>

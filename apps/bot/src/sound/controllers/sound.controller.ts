@@ -77,6 +77,24 @@ export class SoundController {
     }))
   }
 
+  @Patch('music/:id/name')
+  setMusicName(
+    @Param('id') id: string,
+    @Body() body: { name: string },
+  ): Promise<{ name: string }> {
+    const name = typeof body?.name === 'string' ? body.name : ''
+    return this.sounds.setDisplayName('music', id, name).then(effective => ({ name: effective }))
+  }
+
+  @Patch('effects/:id/name')
+  setEffectName(
+    @Param('id') id: string,
+    @Body() body: { name: string },
+  ): Promise<{ name: string }> {
+    const name = typeof body?.name === 'string' ? body.name : ''
+    return this.sounds.setDisplayName('effects', id, name).then(effective => ({ name: effective }))
+  }
+
   @Get('music/:id/file')
   async streamMusic(@Param('id') id: string) {
     this.logger.log(`GET /sounds/music/${id}/file`)
