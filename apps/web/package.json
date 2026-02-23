@@ -15,7 +15,7 @@
     "lint": "eslint",
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage --reporter=junit --outputFile=test-report.junit.xml"
   },
   "dependencies": {
     "pinia": "^3.0.4",

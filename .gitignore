@@ -19,6 +19,9 @@ storage
 coverage
 npm-debug.log*
 .idea
+.vscode
 .turbo
 docs/_site
 e2e/test-results
+/apps/web/test-report.junit.xml
+/apps/bot/junit.xml
