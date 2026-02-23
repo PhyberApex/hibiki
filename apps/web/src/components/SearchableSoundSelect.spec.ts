@@ -8,20 +8,20 @@ const options = [
   { id: 'c3', name: 'Gamma' },
 ]
 
-describe('SearchableSoundSelect', () => {
+describe('searchableSoundSelect', () => {
   it('renders with placeholder when no value', () => {
     const wrapper = mount(SearchableSoundSelect, {
       props: { options, modelValue: '' },
     })
     expect(wrapper.find('.searchable-select-input').attributes('placeholder')).toBe('Select…')
-    expect(wrapper.find('.searchable-select-input').element).toHaveValue('')
+    expect((wrapper.find('.searchable-select-input').element as HTMLInputElement).value).toBe('')
   })
 
   it('shows selected option name when modelValue is set', () => {
     const wrapper = mount(SearchableSoundSelect, {
       props: { options, modelValue: 'b2' },
     })
-    expect(wrapper.find('.searchable-select-input').element).toHaveValue('Beta')
+    expect((wrapper.find('.searchable-select-input').element as HTMLInputElement).value).toBe('Beta')
   })
 
   it('opens dropdown on focus and shows options', async () => {
@@ -74,7 +74,9 @@ describe('SearchableSoundSelect', () => {
     })
     await wrapper.find('.searchable-select-input').trigger('focus')
     await flushPromises()
-    await wrapper.findAll('.searchable-select-option').at(1)!.trigger('mousedown')
+    const optionButtons = wrapper.findAll('.searchable-select-option')
+    expect(optionButtons[1]).toBeDefined()
+    await optionButtons[1]!.trigger('mousedown')
     await flushPromises()
     expect(wrapper.emitted('update:modelValue')).toEqual([['b2']])
   })
