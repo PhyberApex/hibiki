@@ -21,6 +21,7 @@ import {
 import { PermissionConfigService } from '../permissions' // eslint-disable-line ts/consistent-type-imports
 import { PlayerService } from '../player/player.service'
 import { SoundLibraryService } from '../sound/sound.service' // eslint-disable-line ts/consistent-type-imports
+import { getVersion } from '../version'
 import { DiscordCommandHandler } from './discord-commands.handler'
 import { DiscordInteractionHandler } from './discord-interactions.handler'
 import { getSlashCommandsJSON } from './discord-slash.commands'
@@ -67,6 +68,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       prefix: this.prefix,
       logger: this.logger,
       getBotId: () => this.client.user?.id,
+      getVersion,
     })
 
     this.interactionHandler = new DiscordInteractionHandler({
@@ -81,6 +83,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       sounds: this.sounds,
       listGuildDirectory: () => this.listGuildDirectory(),
       getBotId: () => this.client.user?.id,
+      getVersion,
     })
   }
 
@@ -275,6 +278,9 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
         break
       case 'help':
         await this.commandHandler.handleHelp(message)
+        break
+      case 'version':
+        await this.commandHandler.handleVersion(message)
         break
       case 'volume':
         await this.commandHandler.handleVolume(message, args)

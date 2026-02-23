@@ -14,6 +14,7 @@ export interface SlashHandlerDeps {
   sounds: SoundLibraryService
   listGuildDirectory: () => GuildDirectoryEntry[]
   getBotId: () => string | undefined
+  getVersion: () => string
 }
 
 /**
@@ -62,6 +63,9 @@ export class DiscordSlashHandler {
       case 'delete':
         await this.handleDelete(interaction)
         break
+      case 'version':
+        await this.handleVersion(interaction)
+        break
       default:
         await reply('Unknown command.')
     }
@@ -70,6 +74,7 @@ export class DiscordSlashHandler {
   private async handleHelp(interaction: ChatInputCommandInteraction): Promise<void> {
     const text = [
       '**/help** — show this list',
+      '**/version** — show bot version',
       '**/menu** or **/panel** — control panel (buttons + dropdown)',
       '**/join** — join your voice channel',
       '**/leave** — disconnect from voice',
@@ -82,6 +87,11 @@ export class DiscordSlashHandler {
       '**/delete** — clear this channel\'s bot messages',
     ].join('\n')
     await interaction.reply({ content: `**Commands:**\n${text}` }).catch(() => {})
+  }
+
+  private async handleVersion(interaction: ChatInputCommandInteraction): Promise<void> {
+    const version = this.deps.getVersion()
+    await interaction.reply(`**Hibiki** version **${version}**`).catch(() => {})
   }
 
   private async handleMenu(interaction: ChatInputCommandInteraction): Promise<void> {

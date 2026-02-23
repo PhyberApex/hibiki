@@ -4,6 +4,9 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [vue()],
+  define: {
+    __APP_VERSION__: JSON.stringify('99.0.0-test'),
+  },
   test: {
     environment: 'jsdom',
     globals: true,

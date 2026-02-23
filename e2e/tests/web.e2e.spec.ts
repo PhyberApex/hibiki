@@ -22,6 +22,25 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+/** Send command and get reply, retrying when reply indicates list failure (transient). */
+async function sendCommandAndGetReplyWithRetry(
+  sidecar: Client,
+  textChannelId: string,
+  hibikiUserId: string,
+  command: string,
+  maxAttempts = 3,
+): Promise<string> {
+  let lastReply = ''
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    lastReply = await sendCommandAndGetReply(sidecar, textChannelId, hibikiUserId, command)
+    if (!lastReply.toLowerCase().includes('failed to list'))
+      return lastReply
+    if (attempt < maxAttempts)
+      await new Promise(r => setTimeout(r, 3000))
+  }
+  return lastReply
+}
+
 test.describe('Hibiki web E2E (localhost:3000 + optional sidecar)', () => {
   let sidecar: Client | null = null
   let hibikiUserId: string | null = null
@@ -45,6 +64,13 @@ test.describe('Hibiki web E2E (localhost:3000 + optional sidecar)', () => {
   test('web loads Control Center', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByRole('heading', { name: 'Control Center' })).toBeVisible()
+  })
+
+  test('web loads Media Management', async ({ page }) => {
+    await page.goto('/media')
+    await expect(page.getByRole('heading', { name: 'Media Management' })).toBeVisible()
+    await expect(page.locator('section.sound-panel').filter({ hasText: 'Music' })).toBeVisible()
+    await expect(page.locator('section.sound-panel').filter({ hasText: 'Effects' })).toBeVisible()
   })
 
   test('web join voice channel', async ({ page }) => {
@@ -95,13 +121,33 @@ test.describe('Hibiki web E2E (localhost:3000 + optional sidecar)', () => {
     const effects = await get<Array<{ id: string; name: string }>>('/sounds/effects')
 
     if (music.length > 0) {
-      await page.getByLabel('Track').selectOption({ value: music[0].id })
+      const trackRow = page.locator('.row-actions').filter({ has: page.getByRole('button', { name: 'Play' }).first() })
+      const trackControl = trackRow.locator('select, [role="combobox"]').first()
+      const trackTag = await trackControl.evaluate(el => (el as HTMLElement).tagName)
+      if (trackTag === 'SELECT') {
+        await trackControl.selectOption({ value: music[0].id })
+      }
+      else {
+        await trackControl.click()
+        await trackControl.fill(music[0].name)
+        await page.getByRole('option', { name: music[0].name }).first().click()
+      }
       await page.getByRole('button', { name: 'Play' }).first().click()
       await expect(page.getByRole('alert').filter({ hasText: /playing|done/i })).toBeVisible({ timeout: 10_000 })
     }
 
     if (effects.length > 0) {
-      await page.getByRole('combobox', { name: 'Effect' }).selectOption({ value: effects[0].id })
+      const effectRow = page.locator('.row-actions').filter({ has: page.getByRole('button', { name: 'Play effect' }) })
+      const effectControl = effectRow.locator('select, [role="combobox"]').first()
+      const effectTag = await effectControl.evaluate(el => (el as HTMLElement).tagName)
+      if (effectTag === 'SELECT') {
+        await effectControl.selectOption({ value: effects[0].id })
+      }
+      else {
+        await effectControl.click()
+        await effectControl.fill(effects[0].name)
+        await page.getByRole('option', { name: effects[0].name }).first().click()
+      }
       await page.getByRole('button', { name: 'Play effect' }).click()
       await expect(page.getByRole('alert').filter({ hasText: /effect|done/i })).toBeVisible({ timeout: 10_000 })
     }
@@ -110,16 +156,19 @@ test.describe('Hibiki web E2E (localhost:3000 + optional sidecar)', () => {
   test('upload song on web, sidecar !songs shows it', async ({ page }) => {
     if (!isSidecarConfigured() || !textChannelId || !hibikiUserId || !sidecar) test.skip()
 
-    const unique = `e2e-upload-song-${Date.now()}`
+    const timestamp = String(Date.now())
+    const unique = `e2e-upload-song-${timestamp}`
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
-      await page.goto('/')
+      await page.goto('/media')
       const musicPanel = page.locator('section.sound-panel').filter({ hasText: 'Music' })
       await musicPanel.locator('input[type=file]').setInputFiles(wavPath)
-      await expect(musicPanel.locator('li').filter({ hasText: unique })).toBeVisible({ timeout: 15_000 })
-      await page.waitForTimeout(1000)
+      // Backend humanizes filename: "e2e-upload-song-123" -> "E2e Upload Song 123"; match by timestamp
+      await expect(musicPanel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
+      await expect(musicPanel.getByText('Uploaded.')).toBeVisible({ timeout: 5000 })
+      await page.waitForTimeout(2000)
 
-      const reply = await sendCommandAndGetReply(
+      const reply = await sendCommandAndGetReplyWithRetry(
         sidecar!,
         textChannelId,
         hibikiUserId!,
@@ -135,16 +184,18 @@ test.describe('Hibiki web E2E (localhost:3000 + optional sidecar)', () => {
   test('upload effect on web, sidecar !effects shows it', async ({ page }) => {
     if (!isSidecarConfigured() || !textChannelId || !hibikiUserId || !sidecar) test.skip()
 
-    const unique = `e2e-upload-effect-${Date.now()}`
+    const timestamp = String(Date.now())
+    const unique = `e2e-upload-effect-${timestamp}`
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
-      await page.goto('/')
+      await page.goto('/media')
       const effectsPanel = page.locator('section.sound-panel').filter({ hasText: 'Effects' })
       await effectsPanel.locator('input[type=file]').setInputFiles(wavPath)
-      await expect(effectsPanel.locator('li').filter({ hasText: unique })).toBeVisible({ timeout: 15_000 })
-      await page.waitForTimeout(1000)
+      await expect(effectsPanel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
+      await expect(effectsPanel.getByText('Uploaded.')).toBeVisible({ timeout: 5000 })
+      await page.waitForTimeout(2000)
 
-      const reply = await sendCommandAndGetReply(
+      const reply = await sendCommandAndGetReplyWithRetry(
         sidecar!,
         textChannelId,
         hibikiUserId!,
@@ -160,15 +211,17 @@ test.describe('Hibiki web E2E (localhost:3000 + optional sidecar)', () => {
   test('delete song on web, sidecar !songs does not show it', async ({ page }) => {
     if (!isSidecarConfigured() || !textChannelId || !hibikiUserId || !sidecar) test.skip()
 
-    const unique = `e2e-delete-song-${Date.now()}`
+    const timestamp = String(Date.now())
+    const unique = `e2e-delete-song-${timestamp}`
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
-      await page.goto('/')
+      await page.goto('/media')
       const musicPanel = page.locator('section.sound-panel').filter({ hasText: 'Music' })
       await musicPanel.locator('input[type=file]').setInputFiles(wavPath)
-      await expect(musicPanel.locator('li').filter({ hasText: unique })).toBeVisible({ timeout: 15_000 })
+      const listItem = musicPanel.locator('li').filter({ hasText: timestamp })
+      await expect(listItem).toBeVisible({ timeout: 15_000 })
 
-      await musicPanel.locator('li').filter({ hasText: unique }).getByRole('button', { name: 'Delete' }).click()
+      await listItem.getByRole('button', { name: 'Delete' }).click()
       await musicPanel.getByRole('button', { name: 'Yes' }).click()
       await expect(musicPanel.getByText('Deleted.')).toBeVisible({ timeout: 5000 })
 
@@ -187,15 +240,17 @@ test.describe('Hibiki web E2E (localhost:3000 + optional sidecar)', () => {
   test('delete effect on web, sidecar !effects does not show it', async ({ page }) => {
     if (!isSidecarConfigured() || !textChannelId || !hibikiUserId || !sidecar) test.skip()
 
-    const unique = `e2e-delete-effect-${Date.now()}`
+    const timestamp = String(Date.now())
+    const unique = `e2e-delete-effect-${timestamp}`
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
-      await page.goto('/')
+      await page.goto('/media')
       const effectsPanel = page.locator('section.sound-panel').filter({ hasText: 'Effects' })
       await effectsPanel.locator('input[type=file]').setInputFiles(wavPath)
-      await expect(effectsPanel.locator('li').filter({ hasText: unique })).toBeVisible({ timeout: 15_000 })
+      const listItem = effectsPanel.locator('li').filter({ hasText: timestamp })
+      await expect(listItem).toBeVisible({ timeout: 15_000 })
 
-      await effectsPanel.locator('li').filter({ hasText: unique }).getByRole('button', { name: 'Delete' }).click()
+      await listItem.getByRole('button', { name: 'Delete' }).click()
       await effectsPanel.getByRole('button', { name: 'Yes' }).click()
       await expect(effectsPanel.getByText('Deleted.')).toBeVisible({ timeout: 5000 })
 

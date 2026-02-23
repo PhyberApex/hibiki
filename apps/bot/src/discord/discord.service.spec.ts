@@ -400,6 +400,12 @@ describe('discordService', () => {
       }))
     })
 
+    it('delegates !version to command handler', async () => {
+      const message = createMockMessage({ content: '!version' })
+      await (service as any).handleMessage(message)
+      expect(message.reply).toHaveBeenCalledWith(expect.stringMatching(/^\*\*Hibiki\*\* version \*\*[\d.]+\*\*$/))
+    })
+
     it('delegates !volume to command handler', async () => {
       const message = createMockMessage({ content: '!volume' })
       await (service as any).handleMessage(message)
@@ -440,6 +446,23 @@ describe('discordService', () => {
       expect(reply).toHaveBeenCalledTimes(1)
       expect(reply.mock.calls[0][0].content).toContain('control panel')
       expect(reply.mock.calls[0][0].components).toHaveLength(5)
+    })
+
+    it('replies with version when user runs /version slash command', async () => {
+      const reply = jest.fn().mockResolvedValue(undefined)
+      const interaction = {
+        inGuild: () => true,
+        guild: {},
+        isChatInputCommand: () => true,
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        commandName: 'version',
+        reply,
+        member: { roles: { cache: new Map() } },
+        user: { id: 'user-1' },
+      }
+      await (service as any).handleInteraction(interaction)
+      expect(reply).toHaveBeenCalledWith(expect.stringMatching(/^\*\*Hibiki\*\* version \*\*[\d.]+\*\*$/))
     })
 
     it('replies not allowed when permissions.isAllowed returns false for slash command', async () => {

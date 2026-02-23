@@ -11,6 +11,7 @@ import {
 import { ConfigService } from '@nestjs/config' // eslint-disable-line ts/consistent-type-imports
 import fg from 'fast-glob'
 import slugify from 'slugify'
+import { SoundDisplayNameService } from '../persistence/sound-display-name.service' // eslint-disable-line ts/consistent-type-imports
 import { SoundTagService } from '../persistence/sound-tag.service' // eslint-disable-line ts/consistent-type-imports
 
 @Injectable()
@@ -22,6 +23,7 @@ export class SoundLibraryService implements OnModuleInit {
   constructor(
     private readonly configService: ConfigService,
     private readonly soundTags: SoundTagService,
+    private readonly soundDisplayNames: SoundDisplayNameService,
   ) {
     this.musicDir = this.configService.get<string>(
       'audio.musicDir',
@@ -48,8 +50,25 @@ export class SoundLibraryService implements OnModuleInit {
   }
 
   async list(category: SoundCategory, tagFilter?: string): Promise<SoundFile[]> {
+    try {
+      return await this.listInternal(category, tagFilter)
+    }
+    catch (err) {
+      this.logger.warn(`List ${category} failed`, err)
+      return []
+    }
+  }
+
+  private async listInternal(category: SoundCategory, tagFilter?: string): Promise<SoundFile[]> {
     const base = this.resolvePath(category)
-    const entries = await fg('*', { cwd: base, onlyFiles: true })
+    let entries: string[]
+    try {
+      entries = await fg('*', { cwd: base, onlyFiles: true })
+    }
+    catch {
+      this.logger.warn(`List ${category}: directory missing or unreadable: ${base}`)
+      return []
+    }
     const results: SoundFile[] = []
     for (const file of entries) {
       const filePath = this.resolvePath(category, file)
@@ -69,17 +88,35 @@ export class SoundLibraryService implements OnModuleInit {
       }
     }
     const soundIds = results.map(r => r.id)
-    const tagsMap = await this.soundTags.getTagsBySoundIds(category, soundIds)
+    let tagsMap = new Map<string, string[]>()
+    let displayNamesMap = new Map<string, string>()
+    try {
+      [tagsMap, displayNamesMap] = await Promise.all([
+        this.soundTags.getTagsBySoundIds(category, soundIds),
+        this.soundDisplayNames.getDisplayNamesBySoundIds(category, soundIds),
+      ])
+    }
+    catch (err) {
+      this.logger.warn(`List ${category}: metadata fetch failed, using filenames only`, err)
+    }
     for (const item of results) {
       item.tags = tagsMap.get(item.id) ?? []
+      const customName = displayNamesMap.get(item.id)
+      if (customName != null)
+        item.name = customName
     }
     let filtered = results
     if (tagFilter?.trim()) {
-      const allowedIds = await this.soundTags.getSoundIdsWithTag(
-        category,
-        tagFilter.trim().toLowerCase(),
-      )
-      filtered = results.filter(r => allowedIds.has(r.id))
+      try {
+        const allowedIds = await this.soundTags.getSoundIdsWithTag(
+          category,
+          tagFilter.trim().toLowerCase(),
+        )
+        filtered = results.filter(r => allowedIds.has(r.id))
+      }
+      catch (err) {
+        this.logger.warn(`List ${category}: tag filter failed`, err)
+      }
       this.logger.debug(`List ${category} tag=${tagFilter}: ${filtered.length} of ${results.length} items`)
     }
     else {
@@ -92,6 +129,18 @@ export class SoundLibraryService implements OnModuleInit {
     await this.findFilename(category, soundId)
     await this.soundTags.setTags(category, soundId, tags)
     this.logger.log(`Set tags for ${category}/${soundId}: [${tags.join(', ')}]`)
+  }
+
+  async setDisplayName(
+    category: SoundCategory,
+    soundId: string,
+    displayName: string,
+  ): Promise<string> {
+    const filename = await this.findFilename(category, soundId)
+    const trimmed = displayName.trim()
+    await this.soundDisplayNames.setDisplayName(category, soundId, trimmed)
+    this.logger.log(`Set display name for ${category}/${soundId}: ${trimmed || '(clear)'}`)
+    return trimmed || this.humanize(filename)
   }
 
   async getDistinctTags(category: SoundCategory): Promise<string[]> {
@@ -117,9 +166,16 @@ export class SoundLibraryService implements OnModuleInit {
     const filename = await this.findFilename(category, id)
     const path = this.resolvePath(category, filename)
     const stats = await stat(path)
+    let customName: string | null = null
+    try {
+      customName = await this.soundDisplayNames.getDisplayName(category, id)
+    }
+    catch {
+      // display name service unavailable (e.g. table missing); use humanized filename
+    }
     return {
       id,
-      name: this.humanize(filename),
+      name: customName ?? this.humanize(filename),
       filename,
       category,
       size: stats.size,
@@ -154,12 +210,18 @@ export class SoundLibraryService implements OnModuleInit {
     return this.getFile(category, match.id)
   }
 
+  /** Escape glob metacharacters so id (e.g. with parentheses) matches literally. */
+  private escapeGlob(id: string): string {
+    return id.replace(/[*?[\](){}!\\]/g, '\\$&')
+  }
+
   private async findFilename(
     category: SoundCategory,
     id: string,
   ): Promise<string> {
     const base = this.resolvePath(category)
-    const matches = await fg(`${id}.*`, {
+    const escaped = this.escapeGlob(id)
+    const matches = await fg(`${escaped}.*`, {
       cwd: base,
       onlyFiles: true,
       dot: false,
@@ -174,7 +236,10 @@ export class SoundLibraryService implements OnModuleInit {
     const file = await this.findFilename(category, id)
     const path = this.resolvePath(category, file)
     await unlink(path)
-    await this.soundTags.setTags(category, id, [])
+    await Promise.all([
+      this.soundTags.setTags(category, id, []),
+      this.soundDisplayNames.deleteDisplayName(category, id),
+    ])
     this.logger.log(`Removed ${category}/${id} (${file})`)
   }
 

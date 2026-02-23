@@ -20,23 +20,19 @@ jobs:
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
       - name: Test
         run: pnpm run test:coverage
 
-      - name: Upload api coverage to Codecov
-        uses: codecov/codecov-action@v5
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./apps/bot/coverage/lcov.info
-          flags: bot
-          name: bot-coverage
-          fail_ci_if_error: true
+          files: ./apps/web/test-report.junit.xml, ./apps/bot/junit.xml
 
-      - name: Upload ui coverage to Codecov
+      - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./apps/web/coverage/lcov.info
-          flags: web
-          name: web-coverage
-          fail_ci_if_error: true
+          files: ./apps/bot/coverage/lcov.info, ./apps/web/coverage/lcov.info

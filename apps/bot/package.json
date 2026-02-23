@@ -15,7 +15,7 @@
     "lint:fix": "eslint . --fix",
     "test": "jest --config jest.config.js",
     "test:watch": "jest --watch --config jest.config.js",
-    "test:coverage": "jest --coverage --config jest.config.js",
+    "test:coverage": "JEST_JUNIT_CLASSNAME=\"{filepath}\" jest --coverage --config jest.config.js --reporters=jest-junit",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
@@ -33,6 +33,7 @@
     "discord-api-types": "^0.38.0",
     "discord.js": "^14.22.0",
     "fast-glob": "^3.3.2",
+    "jest-junit": "^16.0.0",
     "joi": "^18.0.2",
     "multer": "^2.0.0",
     "node-audio-mixer": "^2.1.0",

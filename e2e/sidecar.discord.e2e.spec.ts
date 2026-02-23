@@ -235,6 +235,23 @@ describe('Hibiki sidecar E2E (Discord voice state + optional text)', () => {
     expect(reply.toLowerCase()).toContain('control panel')
   })
 
+  it('sidecar sends !version and Hibiki replies with version', async function () {
+    if (!sidecar || !textChannelId || !isSidecarConfigured()) return
+
+    let hibikiUserId: string
+    try {
+      const status = await get<{ ready: boolean; userId?: string }>('/player/bot-status')
+      if (!status.ready || !status.userId) throw new Error('Hibiki not ready')
+      hibikiUserId = status.userId
+    } catch (err: unknown) {
+      if (isServerUnreachable(err)) return
+      throw err
+    }
+
+    const reply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}version`)
+    expect(reply).toMatch(/Hibiki.*version.*\d+\.\d+\.\d+/i)
+  })
+
   it('full command flow via text: !join, !play, !effect, !leave', async function () {
     if (!sidecar || !textChannelId || !isE2eConfigured() || !isSidecarConfigured()) return
 

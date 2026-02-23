@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from 'vue-router'
+
+declare const __APP_VERSION__: string
+const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
 </script>
 
 <template>
@@ -20,10 +23,16 @@ import { RouterLink, RouterView } from 'vue-router'
         <RouterLink to="/" class="nav-link">
           Control center
         </RouterLink>
+        <RouterLink to="/media" class="nav-link">
+          Media management
+        </RouterLink>
         <RouterLink to="/permissions" class="nav-link">
           Permissions
         </RouterLink>
       </nav>
+      <p class="version" title="Hibiki version">
+        v{{ appVersion }}
+      </p>
     </aside>
     <section class="content">
       <RouterView />
@@ -98,6 +107,13 @@ import { RouterLink, RouterView } from 'vue-router'
 .nav-link.router-link-active {
   color: var(--color-accent);
   font-weight: 500;
+}
+
+.version {
+  margin: 0;
+  margin-top: auto;
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
 }
 
 .content {

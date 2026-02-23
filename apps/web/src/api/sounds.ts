@@ -55,6 +55,20 @@ export function setSoundTags(
   })
 }
 
+export function setSoundName(
+  type: 'music' | 'effects',
+  id: string,
+  name: string,
+  signal?: AbortSignal,
+) {
+  return request<{ name: string }>(`/api/sounds/${type}/${id}/name`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+    signal,
+  })
+}
+
 export async function uploadSound(
   type: 'music' | 'effects',
   file: File,
@@ -67,6 +81,26 @@ export async function uploadSound(
     body,
     signal,
   })
+}
+
+/** Upload multiple files sequentially; returns results and any error per file. */
+export async function uploadSoundsBulk(
+  type: 'music' | 'effects',
+  files: File[],
+  signal?: AbortSignal,
+): Promise<{ success: SoundFile[], failed: { file: File, error: Error }[] }> {
+  const success: SoundFile[] = []
+  const failed: { file: File, error: Error }[] = []
+  for (const file of files) {
+    try {
+      const result = await uploadSound(type, file, signal)
+      success.push(result)
+    }
+    catch (err) {
+      failed.push({ file, error: err instanceof Error ? err : new Error(String(err)) })
+    }
+  }
+  return { success, failed }
 }
 
 export function deleteSound(type: 'music' | 'effects', id: string, signal?: AbortSignal) {

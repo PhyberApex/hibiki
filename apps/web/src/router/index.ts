@@ -10,6 +10,11 @@ const router = createRouter({
       component: HomeView,
     },
     {
+      path: '/media',
+      name: 'media',
+      component: () => import('../views/MediaManagementView.vue'),
+    },
+    {
       path: '/permissions',
       name: 'permissions',
       component: () => import('../views/PermissionsView.vue'),

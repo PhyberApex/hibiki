@@ -15,7 +15,7 @@ export async function createSidecarClient(): Promise<Client | null> {
   })
   await client.login(sidecarToken)
   await new Promise<void>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('Sidecar login timeout')), 15_000)
+    const t = setTimeout(() => reject(new Error('Sidecar login timeout')), 25_000)
     client.once(Events.ClientReady, () => {
       clearTimeout(t)
       resolve()

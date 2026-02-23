@@ -11,6 +11,7 @@ export interface CommandHandlerDeps {
   prefix: string
   logger: Logger
   getBotId: () => string | undefined
+  getVersion: () => string
 }
 
 /**
@@ -130,6 +131,7 @@ export class DiscordCommandHandler {
     const p = this.deps.prefix
     const text = [
       `**${p}help** — show this list`,
+      `**${p}version** — show bot version`,
       `**${p}menu** / **${p}panel** — control panel (buttons + dropdown)`,
       `**${p}join** — join your voice channel`,
       `**${p}leave** — disconnect from voice`,
@@ -142,6 +144,11 @@ export class DiscordCommandHandler {
       `**${p}delete** — clear this channel's bot messages`,
     ].join('\n')
     await message.reply({ content: `**Commands:**\n${text}` })
+  }
+
+  async handleVersion(message: Message): Promise<void> {
+    const version = this.deps.getVersion()
+    await message.reply(`**Hibiki** version **${version}**`)
   }
 
   async handleVolume(message: Message, args: string[]): Promise<void> {
