@@ -140,4 +140,49 @@ describe('soundLibraryService', () => {
     expect(tags).toEqual(['a', 'b'])
     expect(soundTags.getDistinctTags).toHaveBeenCalledWith('music')
   })
+
+  it('list returns empty when directory does not exist', async () => {
+    const config = new ConfigService({
+      audio: {
+        musicDir: join(tempRoot, 'nonexistent'),
+        effectsDir: join(tempRoot, 'effects-missing'),
+      },
+    })
+    const svc = new SoundLibraryService(
+      config,
+      createMockSoundTagService(),
+      createMockSoundDisplayNameService(),
+    )
+    await svc.onModuleInit()
+    const list = await svc.list('music')
+    expect(list).toEqual([])
+  })
+
+  it('setDisplayName returns effective name and clears when empty', async () => {
+    writeFileSync(join(musicDir, 'track.mp3'), 'data')
+    const soundDisplayNames = createMockSoundDisplayNameService()
+    const svc = new SoundLibraryService(
+      new ConfigService({ audio: { musicDir, effectsDir } }),
+      createMockSoundTagService(),
+      soundDisplayNames,
+    )
+    await svc.onModuleInit()
+    const out = await svc.setDisplayName('music', 'track', '')
+    expect(out).toBe('Track')
+    expect(soundDisplayNames.setDisplayName).toHaveBeenCalledWith('music', 'track', '')
+  })
+
+  it('getFile uses custom name when display name service returns one', async () => {
+    writeFileSync(join(musicDir, 'track.mp3'), 'data')
+    const soundDisplayNames = createMockSoundDisplayNameService()
+    ;(soundDisplayNames.getDisplayName as jest.Mock).mockResolvedValue('My Custom Track')
+    const svc = new SoundLibraryService(
+      new ConfigService({ audio: { musicDir, effectsDir } }),
+      createMockSoundTagService(),
+      soundDisplayNames,
+    )
+    await svc.onModuleInit()
+    const file = await svc.getFile('music', 'track')
+    expect(file.name).toBe('My Custom Track')
+  })
 })

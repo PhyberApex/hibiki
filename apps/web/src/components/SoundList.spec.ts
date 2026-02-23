@@ -71,6 +71,20 @@ describe('soundList', () => {
     expect(wrapper.text()).not.toContain('Beta')
   })
 
+  it('shows No matching sounds when filter matches nothing', async () => {
+    const { listMusic } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockResolvedValue([
+      { id: 's1', name: 'Alpha', filename: 'a.mp3', category: 'music' },
+    ])
+    const wrapper = mount(SoundList, {
+      props: { title: 'Music', type: 'music' },
+    })
+    await flushPromises()
+    await wrapper.find('.filter-input').setValue('zzz')
+    await flushPromises()
+    expect(wrapper.find('.sound-message').text()).toBe('No matching sounds.')
+  })
+
   it('shows error when list fails', async () => {
     const { listMusic } = await import('@/api/sounds')
     vi.mocked(listMusic).mockRejectedValue(new Error('Network error'))
@@ -79,6 +93,16 @@ describe('soundList', () => {
     })
     await flushPromises()
     expect(wrapper.text()).toContain('Network error')
+  })
+
+  it('shows Unknown error when list rejects with non-Error', async () => {
+    const { listMusic } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockRejectedValue('string error')
+    const wrapper = mount(SoundList, {
+      props: { title: 'Music', type: 'music' },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Unknown error')
   })
 
   it('renders Play button for each item', async () => {

@@ -8,6 +8,7 @@ vi.mock('@/api/sounds', () => ({
   listMusicTags: vi.fn().mockResolvedValue([]),
   listEffectsTags: vi.fn().mockResolvedValue([]),
   setSoundTags: vi.fn().mockResolvedValue({ tags: [] }),
+  setSoundName: vi.fn().mockResolvedValue({ name: '' }),
   uploadSound: vi.fn().mockResolvedValue({}),
   uploadSoundsBulk: vi.fn().mockResolvedValue({ success: [], failed: [] }),
   deleteSound: vi.fn().mockResolvedValue(undefined),
@@ -66,5 +67,35 @@ describe('soundListManage', () => {
     const input = wrapper.find('input[type="file"]')
     expect(input.attributes('multiple')).toBeDefined()
     expect(input.attributes('accept')).toBe('audio/*')
+  })
+
+  it('rename: shows name input on Rename click and saves via setSoundName', async () => {
+    const { listMusic, setSoundName } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockResolvedValue([
+      {
+        id: 's1',
+        name: 'Track One',
+        filename: 't1.mp3',
+        category: 'music',
+        createdAt: '2024-01-01T00:00:00Z',
+        tags: [],
+      },
+    ])
+    vi.mocked(setSoundName).mockResolvedValue({ name: 'New Name' })
+    const wrapper = mount(SoundListManage, {
+      props: { title: 'Music', type: 'music' },
+    })
+    await flushPromises()
+    const renameBtn = wrapper.findAll('.btn-tag-edit').find(b => b.text() === 'Rename')
+    expect(renameBtn).toBeDefined()
+    await renameBtn!.trigger('click')
+    await flushPromises()
+    const nameInput = wrapper.find('.sound-name-input')
+    expect(nameInput.exists()).toBe(true)
+    await nameInput.setValue('New Name')
+    const nameEditSave = wrapper.find('.sound-name-edit').findAll('button').at(0)
+    await nameEditSave.trigger('click')
+    await flushPromises()
+    expect(setSoundName).toHaveBeenCalledWith('music', 's1', 'New Name')
   })
 })

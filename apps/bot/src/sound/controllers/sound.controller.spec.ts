@@ -26,6 +26,7 @@ describe('soundController', () => {
       list: jest.fn().mockResolvedValue(mockList),
       getDistinctTags: jest.fn().mockResolvedValue(['ambient']),
       setTags: jest.fn().mockResolvedValue(undefined),
+      setDisplayName: jest.fn().mockResolvedValue('Custom Name'),
       getStream: jest.fn().mockResolvedValue({
         stream: { destroy: jest.fn() },
         filename: 'track-1.mp3',
@@ -133,5 +134,19 @@ describe('soundController', () => {
   it('deleteEffect calls remove', async () => {
     await controller.deleteEffect('effect-1')
     expect(sounds.remove).toHaveBeenCalledWith('effects', 'effect-1')
+  })
+
+  it('setMusicName calls setDisplayName and returns effective name', async () => {
+    sounds.setDisplayName!.mockResolvedValue('My Song')
+    const result = await controller.setMusicName('track-1', { name: '  My Song  ' })
+    expect(result).toEqual({ name: 'My Song' })
+    expect(sounds.setDisplayName).toHaveBeenCalledWith('music', 'track-1', '  My Song  ')
+  })
+
+  it('setEffectName calls setDisplayName and returns effective name', async () => {
+    sounds.setDisplayName!.mockResolvedValue('Boom')
+    const result = await controller.setEffectName('effect-1', { name: 'Boom' })
+    expect(result).toEqual({ name: 'Boom' })
+    expect(sounds.setDisplayName).toHaveBeenCalledWith('effects', 'effect-1', 'Boom')
   })
 })

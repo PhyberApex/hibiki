@@ -5,6 +5,7 @@ import {
   listEffectsTags,
   listMusic,
   listMusicTags,
+  setSoundName,
   setSoundTags,
   soundStreamUrl,
   uploadSound,
@@ -80,6 +81,21 @@ describe('sounds API', () => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tags: ['a', 'b'] }),
+      signal: undefined,
+    })
+  })
+
+  it('setSoundName sends PATCH with name', async () => {
+    const mockFetch = vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve('{"name":"My Track"}'),
+    } as Response)
+    await setSoundName('music', 'id1', 'My Track')
+    expect(mockFetch).toHaveBeenCalledWith('/api/sounds/music/id1/name', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'My Track' }),
       signal: undefined,
     })
   })
