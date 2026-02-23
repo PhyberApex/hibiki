@@ -1,8 +1,12 @@
 # Hibiki (響)
 
-![Hibiki](logo.png)
+![GitHub License](https://img.shields.io/github/license/phyberapex/hibiki)
+[![Build and Push Next Docker Image](https://github.com/PhyberApex/hibiki/actions/workflows/docker-next.yml/badge.svg)](https://github.com/PhyberApex/hibiki/actions/workflows/docker-next.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/phyberapex/hibiki)](https://github.com/PhyberApex/hibiki/releases)
+[![codecov](https://codecov.io/gh/PhyberApex/hibiki/graph/badge.svg?token=XAZJ3X18SE)](https://codecov.io/gh/PhyberApex/hibiki)
+[![GitHub Repo stars](https://img.shields.io/github/stars/phyberapex/hibiki?style=social)](https://github.com/PhyberApex/hibiki/stargazers)
 
-![Banner](banner.png)
+![Hibiki](logo.png)
 
 **Discord audio companion bot** — play music and sound effects in voice channels, controlled from Discord or a web dashboard. Built with **Dungeons & Dragons** in mind (background music, ambience, sound effects at the table) but works for any server.
 
@@ -118,6 +122,8 @@ Images are built and pushed via GitHub Actions to **ghcr.io**:
 | `ghcr.io/phyberapex/hibiki:<sha>` | On every **push to main** | Pin to a specific commit (e.g. `a1b2c3d`). |
 
 Use version or `latest` for production; use `next` only for testing. See [apps/bot/README.md](apps/bot/README.md) for `docker run` and env vars.
+
+![Banner](banner.png)
 
 ## What the database is for
 
