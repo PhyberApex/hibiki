@@ -139,7 +139,8 @@ function scrollHighlightedIntoView() {
   if (!list)
     return
   const item = list.querySelector('[data-highlighted="true"]')
-  item?.scrollIntoView({ block: 'nearest' })
+  if (typeof item?.scrollIntoView === 'function')
+    item.scrollIntoView({ block: 'nearest' })
 }
 
 watch(() => props.options, () => {

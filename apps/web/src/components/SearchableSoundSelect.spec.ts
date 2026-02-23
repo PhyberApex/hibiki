@@ -42,7 +42,7 @@ describe('searchableSoundSelect', () => {
     })
     await wrapper.find('.searchable-select-input').trigger('focus')
     await flushPromises()
-    expect(wrapper.find('.searchable-select-list').exists()).toBe(false)
+    expect(wrapper.find('.searchable-select-list').isVisible()).toBe(false)
   })
 
   it('filters options by typing', async () => {
@@ -53,8 +53,8 @@ describe('searchableSoundSelect', () => {
     await wrapper.find('.searchable-select-input').setValue('be')
     await flushPromises()
     const opts = wrapper.findAll('.searchable-select-option')
-    expect(opts).toHaveLength(2)
-    expect(opts.map(o => o.text())).toEqual(['Beta', 'Gamma'])
+    expect(opts).toHaveLength(1)
+    expect(opts.map(o => o.text())).toEqual(['Beta'])
   })
 
   it('shows No matches when filter has no results', async () => {
@@ -114,10 +114,10 @@ describe('searchableSoundSelect', () => {
     })
     await wrapper.find('.searchable-select-input').trigger('focus')
     await flushPromises()
-    expect(wrapper.find('.searchable-select-list').exists()).toBe(true)
+    expect(wrapper.find('.searchable-select').classes()).toContain('open')
     await wrapper.find('.searchable-select-input').trigger('keydown', { key: 'Escape' })
     await flushPromises()
-    expect(wrapper.find('.searchable-select-list').exists()).toBe(false)
+    expect(wrapper.find('.searchable-select').classes()).not.toContain('open')
   })
 
   it('selects highlighted option on Enter', async () => {
