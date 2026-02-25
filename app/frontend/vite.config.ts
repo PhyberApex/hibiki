@@ -11,7 +11,7 @@ const appPkg = JSON.parse(
 ) as { version?: string }
 const appVersion = typeof appPkg.version === 'string' ? appPkg.version : '0.0.0'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   build: {
     outDir: join(dirname(fileURLToPath(import.meta.url)), '../web-dist'),
     emptyOutDir: true,
@@ -21,7 +21,7 @@ export default defineConfig({
   },
   plugins: [
     vue(),
-    vueDevTools(),
+    ...(mode === 'development' ? [vueDevTools()] : []),
   ],
   resolve: {
     alias: {
@@ -36,4 +36,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

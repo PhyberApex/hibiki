@@ -94,7 +94,13 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
   const discord = createDiscordClient(config, appConfig)
   const player = createPlayer(discord)
 
-  discord.login()
+  // Defer login to avoid blocking app startup
+  // Discord will connect in background after main window shows
+  setImmediate(() => {
+    discord.login().catch((err) => {
+      console.error('Discord login failed:', err)
+    })
+  })
 
   const api: EmbeddedApi = {
     player: {

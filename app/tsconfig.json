@@ -14,7 +14,7 @@
     "declaration": true,
     "outDir": "./dist",
     "removeComments": true,
-    "sourceMap": true,
+    "sourceMap": false,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,

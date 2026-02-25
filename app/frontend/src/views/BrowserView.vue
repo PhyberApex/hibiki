@@ -73,21 +73,39 @@ async function toggleBookmark() {
       favicon: tab.favicon ?? undefined,
     })
   }
-  await saveBookmarks(bookmarks.value).catch(() => {})
+  // Convert to plain objects before IPC to avoid serialization errors
+  const plainBookmarks = bookmarks.value.map(b => ({
+    name: b.name,
+    url: b.url,
+    favicon: b.favicon,
+  }))
+  await saveBookmarks(plainBookmarks).catch(() => {})
 }
 
 function removeBookmark(url: string) {
   if (editingBookmarkUrl.value === url)
     editingBookmarkUrl.value = null
   bookmarks.value = bookmarks.value.filter(b => b.url !== url)
-  saveBookmarks(bookmarks.value).catch(() => {})
+  // Convert to plain objects before IPC to avoid serialization errors
+  const plainBookmarks = bookmarks.value.map(b => ({
+    name: b.name,
+    url: b.url,
+    favicon: b.favicon,
+  }))
+  saveBookmarks(plainBookmarks).catch(() => {})
 }
 
 function renameBookmark(url: string, newName: string) {
   const b = bookmarks.value.find(bm => bm.url === url)
   if (b) {
     b.name = newName.trim() || url
-    saveBookmarks(bookmarks.value).catch(() => {})
+    // Convert to plain objects before IPC to avoid serialization errors
+    const plainBookmarks = bookmarks.value.map(bm => ({
+      name: bm.name,
+      url: bm.url,
+      favicon: bm.favicon,
+    }))
+    saveBookmarks(plainBookmarks).catch(() => {})
   }
 }
 

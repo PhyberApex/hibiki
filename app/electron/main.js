@@ -279,8 +279,9 @@ function serveSoundFile(request, filePath) {
     }
   }
 
-  const buffer = fs.readFileSync(filePath)
-  return new Response(buffer, {
+  // Use streaming instead of readFileSync to avoid blocking the main thread
+  const stream = fs.createReadStream(filePath)
+  return new Response(stream, {
     headers: {
       'Content-Type': mime,
       'Content-Length': String(totalSize),
