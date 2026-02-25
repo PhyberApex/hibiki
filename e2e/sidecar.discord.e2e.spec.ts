@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { Client, Events, GatewayIntentBits, type TextChannel, type VoiceChannel } from 'discord.js'
+import { Client, Events, GatewayIntentBits, type VoiceChannel } from 'discord.js'
 import { joinVoiceChannel } from '@discordjs/voice'
 import { e2eEnv, isE2eConfigured, isSidecarConfigured } from './setup.js'
 
-const { baseUrl, guildId, voiceChannelId, textChannelId, sidecarToken, commandPrefix } = e2eEnv
+const { baseUrl, guildId, voiceChannelId, sidecarToken } = e2eEnv
 const api = (path: string) => `${baseUrl}/api${path}`
 
 function isServerUnreachable(err: unknown): boolean {
@@ -33,7 +33,7 @@ async function post(path: string, body: object): Promise<unknown> {
   return res.json()
 }
 
-describe('Hibiki sidecar E2E (Discord voice state + optional text)', () => {
+describe('Hibiki sidecar E2E (Discord voice state via API)', () => {
   let sidecar: Client | null = null
 
   beforeAll(async function () {
@@ -46,8 +46,6 @@ describe('Hibiki sidecar E2E (Discord voice state + optional text)', () => {
         intents: [
           GatewayIntentBits.Guilds,
           GatewayIntentBits.GuildVoiceStates,
-          GatewayIntentBits.GuildMessages,
-          GatewayIntentBits.MessageContent,
         ],
       })
       await sidecar.login(sidecarToken)
@@ -69,7 +67,7 @@ describe('Hibiki sidecar E2E (Discord voice state + optional text)', () => {
     }
   })
 
-  it('after Hibiki joins, sidecar sees bot in voice channel', async function () {
+  it('after Hibiki joins via API, sidecar sees bot in voice channel', async function () {
     if (!sidecar || !isE2eConfigured() || !isSidecarConfigured()) return
 
     let status: { ready: boolean; userId?: string }
@@ -96,164 +94,12 @@ describe('Hibiki sidecar E2E (Discord voice state + optional text)', () => {
     await post('/player/leave', { guildId })
     await new Promise(r => setTimeout(r, 1500))
     const channelAfter = await guild.channels.fetch(voiceChannelId)
-    const membersAfter = (channelAfter as import('discord.js').VoiceChannel)?.members ?? new Map()
+    const membersAfter = (channelAfter as VoiceChannel)?.members ?? new Map()
     expect(membersAfter.has(hibikiUserId!)).toBe(false)
   })
 
-  /** Send a prefix command in the text channel and return Hibiki's reply content.
-   *  Requires Hibiki to be run with HIBIKI_E2E_ALLOW_BOT_ID set to the sidecar bot's user ID. */
-  async function sendCommandAndGetReply(
-    hibikiUserId: string,
-    command: string,
-    timeoutMs = 12_000,
-  ): Promise<string> {
-    if (!sidecar || !textChannelId) throw new Error('Sidecar or text channel not configured')
-    const channel = (await sidecar.channels.fetch(textChannelId)) as TextChannel
-    const ourMessage = await channel.send({ content: command })
-    return new Promise<string>((resolve, reject) => {
-      const collector = channel.createMessageCollector({
-        filter: (m) =>
-          m.author.id === hibikiUserId && m.reference?.messageId === ourMessage.id,
-        max: 1,
-        time: timeoutMs,
-      })
-      collector.on('collect', (m) => resolve(m.content))
-      collector.on('end', (collected) => {
-        if (collected.size === 0) reject(new Error(`No reply from Hibiki to "${command}" within ${timeoutMs}ms`))
-      })
-    })
-  }
-
-  it('sidecar sends !join in text channel and Hibiki replies and joins voice', async function () {
-    if (!sidecar || !textChannelId || !isE2eConfigured() || !isSidecarConfigured()) return
-
-    let hibikiUserId: string
-    try {
-      const status = await get<{ ready: boolean; userId?: string }>('/player/bot-status')
-      if (!status.ready || !status.userId) throw new Error('Hibiki not ready')
-      hibikiUserId = status.userId
-    } catch (err: unknown) {
-      if (isServerUnreachable(err)) return
-      throw err
-    }
-
-    const guild = await sidecar.guilds.fetch(guildId)
-    const voiceChannel = (await guild.channels.fetch(voiceChannelId)) as VoiceChannel
-    expect(voiceChannel?.isVoiceBased()).toBe(true)
-
-    const connection = joinVoiceChannel({
-      channelId: voiceChannel.id,
-      guildId: voiceChannel.guild.id,
-      adapterCreator: voiceChannel.guild.voiceAdapterCreator,
-      selfDeaf: false,
-      selfMute: true,
-    })
-    try {
-      const reply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}join`)
-      expect(reply).toMatch(/connected/i)
-      expect(voiceChannel.members.has(hibikiUserId)).toBe(true)
-    } finally {
-      await post('/player/leave', { guildId })
-      connection.destroy()
-    }
-  })
-
-  it('sidecar sends !leave in text channel and Hibiki replies and leaves voice', async function () {
-    if (!sidecar || !textChannelId || !isE2eConfigured() || !isSidecarConfigured()) return
-
-    let hibikiUserId: string
-    try {
-      const status = await get<{ ready: boolean; userId?: string }>('/player/bot-status')
-      if (!status.ready || !status.userId) throw new Error('Hibiki not ready')
-      hibikiUserId = status.userId
-    } catch (err: unknown) {
-      if (isServerUnreachable(err)) return
-      throw err
-    }
-
-    await post('/player/join', { guildId, channelId: voiceChannelId })
-    await new Promise(r => setTimeout(r, 500))
-
-    const reply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}leave`)
-    expect(reply).toMatch(/disconnected/i)
-
-    await new Promise(r => setTimeout(r, 1500))
-    const guild = await sidecar.guilds.fetch(guildId)
-    const channelAfter = (await guild.channels.fetch(voiceChannelId)) as VoiceChannel
-    expect(channelAfter.members.has(hibikiUserId)).toBe(false)
-  })
-
-  it('sidecar sends !songs and Hibiki replies with list or message', async function () {
-    if (!sidecar || !textChannelId || !isSidecarConfigured()) return
-
-    let hibikiUserId: string
-    try {
-      const status = await get<{ ready: boolean; userId?: string }>('/player/bot-status')
-      if (!status.ready || !status.userId) throw new Error('Hibiki not ready')
-      hibikiUserId = status.userId
-    } catch (err: unknown) {
-      if (isServerUnreachable(err)) return
-      throw err
-    }
-
-    const reply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}songs`)
-    expect(reply.length).toBeGreaterThan(0)
-    expect(reply.toLowerCase()).toMatch(/songs|no songs|music|upload/)
-  })
-
-  it('sidecar sends !effects and Hibiki replies with list or message', async function () {
-    if (!sidecar || !textChannelId || !isSidecarConfigured()) return
-    let hibikiUserId: string
-    try {
-      const status = await get<{ ready: boolean; userId?: string }>('/player/bot-status')
-      if (!status.ready || !status.userId) throw new Error('Hibiki not ready')
-      hibikiUserId = status.userId
-    } catch (err: unknown) {
-      if (isServerUnreachable(err)) return
-      throw err
-    }
-
-    const reply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}effects`)
-    expect(reply.length).toBeGreaterThan(0)
-    expect(reply.toLowerCase()).toMatch(/effects|no effects|upload/)
-  })
-
-  it('sidecar sends !panel and Hibiki replies with control panel message', async function () {
-    if (!sidecar || !textChannelId || !isSidecarConfigured()) return
-
-    let hibikiUserId: string
-    try {
-      const status = await get<{ ready: boolean; userId?: string }>('/player/bot-status')
-      if (!status.ready || !status.userId) throw new Error('Hibiki not ready')
-      hibikiUserId = status.userId
-    } catch (err: unknown) {
-      if (isServerUnreachable(err)) return
-      throw err
-    }
-
-    const reply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}panel`)
-    expect(reply.toLowerCase()).toContain('control panel')
-  })
-
-  it('sidecar sends !version and Hibiki replies with version', async function () {
-    if (!sidecar || !textChannelId || !isSidecarConfigured()) return
-
-    let hibikiUserId: string
-    try {
-      const status = await get<{ ready: boolean; userId?: string }>('/player/bot-status')
-      if (!status.ready || !status.userId) throw new Error('Hibiki not ready')
-      hibikiUserId = status.userId
-    } catch (err: unknown) {
-      if (isServerUnreachable(err)) return
-      throw err
-    }
-
-    const reply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}version`)
-    expect(reply).toMatch(/Hibiki.*version.*\d+\.\d+\.\d+/i)
-  })
-
-  it('full command flow via text: !join, !play, !effect, !leave', async function () {
-    if (!sidecar || !textChannelId || !isE2eConfigured() || !isSidecarConfigured()) return
+  it('full flow via API: join, play, effect, leave; sidecar verifies voice state', async function () {
+    if (!sidecar || !isE2eConfigured() || !isSidecarConfigured()) return
 
     let hibikiUserId: string
     try {
@@ -284,23 +130,18 @@ describe('Hibiki sidecar E2E (Discord voice state + optional text)', () => {
       selfMute: true,
     })
     try {
-      const joinReply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}join`)
-      expect(joinReply).toMatch(/connected/i)
+      await post('/player/join', { guildId, channelId: voiceChannelId })
+      await new Promise(r => setTimeout(r, 1500))
       expect(voiceChannel.members.has(hibikiUserId)).toBe(true)
 
       if (firstTrackId) {
-        const playReply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}play ${firstTrackId}`, 15_000)
-        expect(playReply).toMatch(/playing|now playing/i)
+        await post('/player/play', { guildId, trackId: firstTrackId, channelId: voiceChannelId })
       }
-
       if (firstEffectId) {
-        const effectReply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}effect ${firstEffectId}`, 10_000)
-        expect(effectReply).toMatch(/triggered|playing|effect/i)
+        await post('/player/effect', { guildId, effectId: firstEffectId, channelId: voiceChannelId })
       }
 
-      const leaveReply = await sendCommandAndGetReply(hibikiUserId, `${commandPrefix}leave`)
-      expect(leaveReply).toMatch(/disconnected/i)
-
+      await post('/player/leave', { guildId })
       await new Promise(r => setTimeout(r, 1500))
       const channelAfter = (await guild.channels.fetch(voiceChannelId)) as VoiceChannel
       expect(channelAfter.members.has(hibikiUserId)).toBe(false)

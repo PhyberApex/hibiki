@@ -1,11 +1,10 @@
 packages:
-  - apps/bot
-  - apps/web
+  - app
   - e2e
 
 onlyBuiltDependencies:
-  - '@discordjs/opus'
-  - '@nestjs/core'
+  - '@snazzah/davey'
+  - electron
   - esbuild
-  - sqlite3
+  - lzma-native
   - unrs-resolver

@@ -5,14 +5,13 @@ yarn.lock
 .env
 .env.local
 .env.e2e
-apps/bot/dist
-apps/web/dist
-apps/web/node_modules
-apps/bot/node_modules
-apps/web/.turbo
-apps/bot/.turbo
-apps/bot/storage
-apps/bot/web-dist
+app/dist
+app/web-dist
+app/release
+app/deploy
+app/frontend/dist
+app/coverage
+app/frontend/coverage
 storage
 .pnpm-store
 .tmp
@@ -23,5 +22,3 @@ npm-debug.log*
 .turbo
 docs/_site
 e2e/test-results
-/apps/web/test-report.junit.xml
-/apps/bot/junit.xml

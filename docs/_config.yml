@@ -1,6 +1,6 @@
 # Jekyll config for GitHub Pages (Settings → Pages → Deploy from branch → main → /docs)
 title: Hibiki
-description: Echoes of Adventure — A Discord Bot for Music and effects
+description: Echoes of Adventure. Your private bard bot for Discord.
 # When served at https://<user>.github.io/hibiki/ the base URL is /hibiki
 baseurl: "/hibiki"
 url: "https://phyberapex.github.io"

@@ -12,12 +12,12 @@ flag_management:
   default_rules:
     carryforward: true
   individual_flags:
-    - name: bot
+    - name: backend
       paths:
-        - apps/bot/
-    - name: web
+        - app/src/
+    - name: frontend
       paths:
-        - apps/web/
+        - app/frontend/src/
 
 comment:
   layout: "reach,diff,flags,tree"

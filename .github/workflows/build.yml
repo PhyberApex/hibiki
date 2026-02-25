@@ -1,0 +1,78 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  workflow_call:
+    inputs:
+      upload_release:
+        description: Upload artifacts to a GitHub Release
+        type: boolean
+        default: false
+      tag_name:
+        description: Release tag to upload assets to
+        type: string
+        default: ''
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            dist_script: dist:mac
+          - os: windows-latest
+            platform: win
+            dist_script: dist:win
+          - os: ubuntu-latest
+            platform: linux
+            dist_script: dist:linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.0'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and package
+        run: pnpm run ${{ matrix.dist_script }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hibiki-${{ matrix.platform }}
+          path: |
+            app/release/*.dmg
+            app/release/*.zip
+            app/release/*.exe
+            app/release/*.AppImage
+            app/release/*.deb
+          if-no-files-found: error
+
+      - name: Upload to GitHub Release
+        if: inputs.upload_release && inputs.tag_name
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name }}
+          files: |
+            app/release/*.dmg
+            app/release/*.zip
+            app/release/*.exe
+            app/release/*.AppImage
+            app/release/*.deb

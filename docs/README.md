@@ -5,7 +5,7 @@ The docs are built with **Jekyll** and published by **GitHub Pages** when you us
 ## How it works
 
 1. **Source files** (what you edit):
-   - **`index.md`** — Homepage content in Markdown. The front matter (`layout: default`, `title: ...`) tells Jekyll to wrap it in the default layout.
+   - **`index.md`** — Homepage content in Markdown (setup, features, Scenes, volume, E2E). The front matter (`layout: default`, `title: ...`) tells Jekyll to wrap it in the default layout.
    - **`_layouts/default.html`** — Shared layout: simple text header (title + tagline, no banner), main content area, footer. All CSS lives here.
    - **`_config.yml`** — Site title, description (tagline), and `baseurl` (e.g. `/hibiki` so links work when the site is at `https://<user>.github.io/hibiki/`).
    - **Assets** — `logo.png` and `banner.png` in `docs/` (favicon uses logo; layout shows banner at top and logo in header). Copy from repo root if you replace them.
