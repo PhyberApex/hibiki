@@ -294,11 +294,10 @@ onMounted(() => {
     if (tab)
       tab.title = (title as string) || tab.url || 'New tab'
   }))
-  cleanups.push(onBrowserViewEvent('browserView:faviconUpdated', (id: unknown, favicons: unknown) => {
+  cleanups.push(onBrowserViewEvent('browserView:faviconUpdated', (id: unknown, faviconUrl: unknown) => {
     const tab = tabById(id)
     if (tab) {
-      const icons = favicons as string[]
-      tab.favicon = icons.length > 0 ? icons[0]! : null
+      tab.favicon = typeof faviconUrl === 'string' ? faviconUrl : null
     }
   }))
   cleanups.push(onBrowserViewEvent('browserView:mediaPlaying', (id: unknown, playing: unknown) => {

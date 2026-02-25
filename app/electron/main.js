@@ -158,8 +158,12 @@ function registerBrowserViewHandlers() {
         mainWindow.webContents.send('browserView:titleUpdated', id, title)
     })
     view.webContents.on('page-favicon-updated', (_, favicons) => {
-      if (mainWindow)
-        mainWindow.webContents.send('browserView:faviconUpdated', id, favicons)
+      if (mainWindow) {
+        const faviconUrl = Array.isArray(favicons) && favicons.length > 0
+          ? favicons[0]
+          : null
+        mainWindow.webContents.send('browserView:faviconUpdated', id, faviconUrl)
+      }
     })
     view.webContents.on('media-started-playing', () => {
       if (mainWindow)
@@ -327,10 +331,10 @@ app.whenReady().then(async () => {
   process.env.HIBIKI_USER_DATA = userDataPath
 
   const dataDir = path.join(userDataPath, 'data')
-  fs.mkdirSync(dataDir, { recursive: true })
+  await fs.promises.mkdir(dataDir, { recursive: true })
   const appConfigPath = path.join(dataDir, 'app-config.json')
   try {
-    const raw = fs.readFileSync(appConfigPath, 'utf-8')
+    const raw = await fs.promises.readFile(appConfigPath, 'utf-8')
     const appConfig = JSON.parse(raw)
     if (appConfig && typeof appConfig['storage.path'] === 'string' && appConfig['storage.path'].trim()) {
       process.env.HIBIKI_STORAGE_PATH = appConfig['storage.path'].trim()

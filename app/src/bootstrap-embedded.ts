@@ -1,6 +1,6 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { SoundCategory } from './sound/sound.types'
-import { mkdirSync } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { getConfig } from './config'
 import { createDiscordClient } from './discord/discord-client'
@@ -11,12 +11,14 @@ import { importScene } from './scenes/scene-import'
 import { createSceneStore } from './scenes/scene-store'
 import { createSoundLibrary } from './sound/sound-library'
 
-function ensureStorageDirs(config: ReturnType<typeof getConfig>): void {
+async function ensureStorageDirs(config: ReturnType<typeof getConfig>): Promise<void> {
   const dbPath = config.database.path
-  mkdirSync(dirname(dbPath), { recursive: true })
-  mkdirSync(config.audio.musicDir, { recursive: true })
-  mkdirSync(config.audio.effectsDir, { recursive: true })
-  mkdirSync(config.audio.ambienceDir, { recursive: true })
+  await Promise.all([
+    mkdir(dirname(dbPath), { recursive: true }),
+    mkdir(config.audio.musicDir, { recursive: true }),
+    mkdir(config.audio.effectsDir, { recursive: true }),
+    mkdir(config.audio.ambienceDir, { recursive: true }),
+  ])
 }
 
 function resolveChannel(
@@ -85,7 +87,7 @@ export interface EmbeddedApp {
 export async function getEmbeddedApp(): Promise<EmbeddedApp> {
   process.env.HIBIKI_EMBEDDED = '1'
   const config = getConfig()
-  ensureStorageDirs(config)
+  await ensureStorageDirs(config)
   const appConfig = createAppConfig(config)
   const sounds = createSoundLibrary(config)
   const scenes = createSceneStore(config)
