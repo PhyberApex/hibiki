@@ -31,11 +31,13 @@ pnpm test               # Run Jest (backend) + Vitest (frontend) tests
 pnpm run build          # Build first
 pnpm test:e2e           # Playwright tests against Electron app
 
-# Distribution (electron-builder handles everything automatically)
-pnpm dist               # Package for current platform
-pnpm dist:mac           # macOS (.dmg + .zip)
-pnpm dist:win           # Windows (.exe NSIS)
-pnpm dist:linux         # Linux (.AppImage + .deb)
+# Distribution (Electron Forge handles everything automatically)
+pnpm dist               # Package for current platform (alias for pnpm make)
+pnpm dist:mac           # macOS (ZIP for x64 and arm64)
+pnpm dist:win           # Windows (Squirrel installer + ZIP)
+pnpm dist:linux         # Linux (DEB + ZIP)
+pnpm make               # Primary build command (same as pnpm dist)
+pnpm package            # Create unpacked app only (for testing)
 ```
 
 ### Testing Individual Components

@@ -94,10 +94,10 @@ All scripts are run from the **repo root**.
 |---------|-------------|
 | `pnpm dev` | Build everything and launch the Electron app |
 | `pnpm build` | Build backend (TypeScript) and frontend (Vite) without starting Electron |
-| `pnpm dist` | Build and package the app for the current platform |
-| `pnpm dist:mac` | Package for macOS (`.dmg` + `.zip`) |
-| `pnpm dist:win` | Package for Windows (`.exe` installer) |
-| `pnpm dist:linux` | Package for Linux (`.AppImage` + `.deb`) |
+| `pnpm dist` | Build and package the app for the current platform (uses Electron Forge) |
+| `pnpm dist:mac` | Package for macOS (`.zip`) |
+| `pnpm dist:win` | Package for Windows (Squirrel installer + `.zip`) |
+| `pnpm dist:linux` | Package for Linux (`.deb` + `.zip`) |
 | `pnpm lint` | Run ESLint across backend and frontend |
 | `pnpm test` | Run backend (Jest) and frontend (Vitest) tests |
 | `pnpm test:e2e` | Run E2E tests (requires a running Hibiki instance and Discord config — see below) |

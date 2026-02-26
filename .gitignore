@@ -9,6 +9,8 @@ app/dist
 app/web-dist
 app/release
 app/deploy
+app/out
+app/.vite
 app/frontend/dist
 app/coverage
 app/frontend/coverage

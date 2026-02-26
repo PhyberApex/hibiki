@@ -6,14 +6,19 @@
   "author": "PhyberApex",
   "license": "MIT",
   "main": "electron/main.js",
+  "config": {
+    "forge": "./forge.config.js"
+  },
   "scripts": {
-    "dev": "pnpm run build && electron .",
+    "dev": "pnpm run build && electron-forge start",
     "build": "pnpm run build:frontend && tsc",
     "build:frontend": "cd frontend && vite build",
-    "dist": "pnpm run build && electron-builder --publish never",
-    "dist:mac": "pnpm run build && electron-builder --mac --publish never",
-    "dist:win": "pnpm run build && electron-builder --win --publish never",
-    "dist:linux": "pnpm run build && electron-builder --linux --publish never",
+    "make": "pnpm run build && electron-forge make",
+    "package": "pnpm run build && electron-forge package",
+    "dist": "pnpm run make",
+    "dist:mac": "pnpm run make -- --platform=darwin",
+    "dist:win": "pnpm run make -- --platform=win32",
+    "dist:linux": "pnpm run make -- --platform=linux",
     "lint": "eslint . frontend/",
     "lint:fix": "eslint . frontend/ --fix",
     "test": "run-p test:backend test:frontend",
@@ -23,51 +28,6 @@
     "test:coverage": "run-p test:coverage:backend test:coverage:frontend",
     "test:coverage:backend": "jest --coverage --config jest.config.js",
     "test:coverage:frontend": "cd frontend && vitest run --coverage"
-  },
-  "build": {
-    "appId": "com.phyberapex.hibiki",
-    "productName": "Hibiki",
-    "npmRebuild": true,
-    "buildDependenciesFromSource": true,
-    "directories": {
-      "output": "release"
-    },
-    "asarUnpack": [
-      "**/*.node"
-    ],
-    "files": [
-      "electron/**/*",
-      "dist/**/*",
-      "web-dist/**/*",
-      "node_modules/**/*",
-      "package.json"
-    ],
-    "mac": {
-      "category": "public.app-category.music",
-      "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] },
-        { "target": "zip", "arch": ["x64", "arm64"] }
-      ],
-      "icon": "frontend/public/logo.png"
-    },
-    "win": {
-      "target": [
-        { "target": "nsis", "arch": ["x64"] }
-      ],
-      "icon": "frontend/public/logo.png"
-    },
-    "linux": {
-      "target": [
-        { "target": "AppImage", "arch": ["x64"] },
-        { "target": "deb", "arch": ["x64"] }
-      ],
-      "category": "Audio",
-      "icon": "frontend/public/logo.png"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
   },
   "dependencies": {
     "@discordjs/opus": "^0.10.0",
@@ -89,6 +49,12 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "^7.4.3",
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-deb": "^7.11.1",
+    "@electron-forge/maker-dmg": "^7.11.1",
+    "@electron-forge/maker-squirrel": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "@electron-forge/plugin-vite": "^7.11.1",
     "@tsconfig/node24": "^24.0.4",
     "@types/adm-zip": "^0.5.7",
     "@types/jest": "^30.0.0",
@@ -98,7 +64,6 @@
     "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.8.1",
     "electron": "^33.0.0",
-    "electron-builder": "^26.8.1",
     "eslint": "^10.0.0",
     "jest": "^30.2.0",
     "jest-junit": "^16.0.0",
