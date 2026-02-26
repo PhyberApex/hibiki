@@ -24,7 +24,7 @@ interface ElectronTestFixtures {
 }
 
 const test = base.extend<ElectronTestFixtures>({
-  electronApp: async ({}, use) => {
+  electronApp: async (_fixtures, use) => {
     const app = await launchElectronApp()
     await use(app)
     await app.close()

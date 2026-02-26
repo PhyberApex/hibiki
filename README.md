@@ -108,24 +108,31 @@ All scripts are run from the **repo root**.
 
 ```text
 hibiki/
-├── app/                    # Main application package (@hibiki/app)
-│   ├── electron/           # Electron main process + preload
-│   ├── frontend/           # Vue 3 + Vite (renderer process)
-│   │   └── src/
-│   │       ├── api/        # IPC wrappers (player, sounds, scenes, config, browser)
-│   │       ├── audio/      # Web Audio capture (AudioWorklet)
-│   │       ├── stores/     # Pinia stores
-│   │       └── views/      # Vue pages (Scenes, Browser, Media, Settings, Welcome)
-│   ├── src/                # Backend (runs in Electron main process)
-│   │   ├── discord/        # Discord.js client
-│   │   ├── player/         # Playback, volume, voice connections
-│   │   ├── sound/          # Sound library (music, effects, ambience)
-│   │   ├── scenes/         # Scene store + import/export
-│   │   └── bootstrap-embedded.ts  # Wires everything up, exposes the IPC API
-│   ├── web-dist/           # Built frontend (vite build output)
-│   └── dist/               # Compiled TypeScript (backend)
+├── electron/               # Electron main process + preload scripts
+│   ├── main.js             # Entry point, IPC handlers, protocol handler
+│   ├── preload.js          # Secure IPC bridge to renderer
+│   ├── splash.html         # Splash screen during initialization
+│   └── splash-logo.png     # Splash screen logo
+├── src/                    # Backend (runs in Electron main process)
+│   ├── discord/            # Discord.js client
+│   ├── player/             # Playback, volume, voice connections
+│   ├── sound/              # Sound library (music, effects, ambience)
+│   ├── scenes/             # Scene store + import/export
+│   ├── audio/              # Audio mixing (guild-specific managers)
+│   └── bootstrap-embedded.ts  # Wires everything up, exposes IPC API
+├── frontend/               # Vue 3 + Vite (renderer process)
+│   └── src/
+│       ├── api/            # IPC wrappers (player, sounds, scenes, config, browser)
+│       ├── audio/          # Web Audio capture (AudioWorklet)
+│       ├── stores/         # Pinia stores
+│       └── views/          # Vue pages (Scenes, Browser, Media, Settings)
 ├── e2e/                    # End-to-end tests (Playwright + Vitest)
-└── docs/                   # Jekyll docs site (GitHub Pages)
+├── docs/                   # Jekyll docs site (GitHub Pages)
+├── dist/                   # Compiled TypeScript backend (build output)
+├── web-dist/               # Built frontend (Vite output)
+├── out/                    # Packaged Electron apps (Electron Forge output)
+├── forge.config.js         # Electron Forge configuration
+└── package.json            # Single project package.json
 ```
 
 ## Storage
@@ -140,7 +147,7 @@ When running as the Electron app, data lives in the platform's user data directo
 
 ## E2E tests (real Discord)
 
-The `e2e` workspace runs tests that connect to a real Discord server and drive the Hibiki API.
+The `e2e` directory contains tests that connect to a real Discord server and drive the Hibiki API.
 
 1. **Start Hibiki first** — `pnpm dev` — so the API is reachable.
 2. Copy `.env.e2e.example` to `.env.e2e` and set **E2E_GUILD_ID**, **E2E_VOICE_CHANNEL_ID**.
@@ -150,7 +157,7 @@ See [e2e/README.md](e2e/README.md) for details on sidecar bot setup and optional
 
 ## Docs
 
-- **[app/README.md](app/README.md)** — Architecture, local development, backend details.
+- **Architecture** — See [CLAUDE.md](CLAUDE.md) for architecture, IPC patterns, and development guidelines.
 - **Docs website** — The [docs/](docs/) folder is a Jekyll site deployed via GitHub Pages. See [docs/README.md](docs/README.md).
 
 ## Contributing

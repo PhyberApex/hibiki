@@ -1,48 +1,32 @@
-# web
+# Hibiki Frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+Vue 3 frontend for the Hibiki Electron app. This is the renderer process that provides the desktop UI.
 
-## Recommended IDE Setup
+## Development
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+Run from repository root:
 
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
-npm install
+```bash
+pnpm dev           # Build and launch Electron app
+pnpm build         # Build frontend only (outputs to web-dist/)
 ```
 
-### Compile and Hot-Reload for Development
+## Architecture
 
-```sh
-npm run dev
-```
+- **Vue 3** with Composition API (`<script setup>`)
+- **Pinia** for state management
+- **Vue Router** for navigation
+- **Vite** for fast builds and HMR
 
-### Type-Check, Compile and Minify for Production
+### Key Directories
 
-```sh
-npm run build
-```
+- `src/api/` — IPC wrappers that call Electron main process
+- `src/audio/` — Web Audio API capture (AudioWorklet for browser streaming)
+- `src/stores/` — Pinia stores (player state, guild directory)
+- `src/views/` — Pages (Welcome, Scenes, Browser, Media, Settings)
 
-### Lint with [ESLint](https://eslint.org/)
+### Communication
 
-```sh
-npm run lint
-```
+All backend communication uses Electron IPC via the preload bridge. No HTTP API.
+
+See [CLAUDE.md](../CLAUDE.md) for detailed architecture.

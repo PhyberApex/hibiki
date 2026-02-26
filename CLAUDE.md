@@ -61,7 +61,7 @@ cd app && pnpm run test:coverage:frontend # Frontend only
 
 ### Electron Structure
 
-```
+```text
 app/
 ├── electron/          # Electron main process
 │   ├── main.js        # Entry point: boots backend, creates window, IPC handlers

@@ -58,11 +58,11 @@ jobs:
         with:
           name: hibiki-${{ matrix.platform }}
           path: |
-            app/out/make/**/*.dmg
-            app/out/make/**/*.zip
-            app/out/make/**/*.exe
-            app/out/make/**/*.AppImage
-            app/out/make/**/*.deb
+            out/make/**/*.dmg
+            out/make/**/*.zip
+            out/make/**/*.exe
+            out/make/**/*.AppImage
+            out/make/**/*.deb
           if-no-files-found: error
 
       - name: Upload to GitHub Release
@@ -71,8 +71,8 @@ jobs:
         with:
           tag_name: ${{ inputs.tag_name }}
           files: |
-            app/out/make/**/*.dmg
-            app/out/make/**/*.zip
-            app/out/make/**/*.exe
-            app/out/make/**/*.AppImage
-            app/out/make/**/*.deb
+            out/make/**/*.dmg
+            out/make/**/*.zip
+            out/make/**/*.exe
+            out/make/**/*.AppImage
+            out/make/**/*.deb

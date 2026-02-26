@@ -85,11 +85,14 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@discordjs/opus",
       "@snazzah/davey",
       "electron",
       "electron-winstaller",
       "esbuild",
+      "fs-xattr",
       "lzma-native",
+      "macos-alias",
       "unrs-resolver"
     ]
   }

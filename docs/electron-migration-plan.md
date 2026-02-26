@@ -1,6 +1,8 @@
 # Step-by-step plan: Hibiki → Electron app
 
-This document outlines the migration from a Dockerized backend + frontend (mono-repo) to a single Electron app that runs both the Discord bot and the web UI, with an eye toward future “stream from browser” audio (Kenku FM–style).
+> **Note:** This is historical documentation describing the migration plan from a Docker-based monorepo to an Electron app. The actual implementation superseded the planned "Phase 2" (creating an `app/` workspace package) and went directly to a fully flattened structure with all code at root level (`src/`, `frontend/`, `electron/`). See the current structure in [README.md](../README.md).
+
+This document outlines the migration from a Dockerized backend + frontend (mono-repo) to a single Electron app that runs both the Discord bot and the web UI, with an eye toward future "stream from browser" audio (Kenku FM–style).
 
 **Reference:** [Kenku FM](https://github.com/owlbear-rodeo/kenku-fm) — Electron app that shares tabletop audio to Discord; uses main process (Discord, HTTP server, browser views), renderer (React), and preload bridge. Audio from web content is captured via Electron’s APIs and sent to Discord.
 

@@ -29,9 +29,11 @@ We run these checks in CI; PRs are expected to pass lint and tests.
 
 ## Project layout
 
-- **app/** — Electron desktop app with Discord bot backend (`app/src/`) and Vue 3 frontend (`app/frontend/`). See [app/README.md](app/README.md).
-- **e2e/** — End-to-end tests (Playwright + Vitest, requires a running Hibiki instance).
-- **docs/** — Jekyll site for the docs (GitHub Pages). See [docs/README.md](docs/README.md).
+- **electron/** — Electron main process (IPC handlers, protocol handler, window management)
+- **src/** — Backend (Discord bot, audio player, scenes, sound library)
+- **frontend/** — Vue 3 UI (Electron renderer process)
+- **e2e/** — End-to-end tests (Playwright + Vitest, requires running Hibiki instance)
+- **docs/** — Jekyll site for documentation (GitHub Pages). See [docs/README.md](docs/README.md)
 
 ## Questions or issues?
 
