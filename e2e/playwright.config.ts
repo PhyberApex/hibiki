@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
-import { config } from 'dotenv'
 import { defineConfig } from '@playwright/test'
+import { config } from 'dotenv'
 
 config({ path: resolve(process.cwd(), '.env.e2e') })
 config({ path: resolve(process.cwd(), '../.env.e2e') })

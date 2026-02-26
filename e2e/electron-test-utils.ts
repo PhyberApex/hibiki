@@ -1,6 +1,6 @@
+import type { ElectronApplication, Page } from '@playwright/test'
 import { join } from 'node:path'
 import { _electron as electron } from '@playwright/test'
-import type { ElectronApplication, Page } from '@playwright/test'
 
 // When running from repo root: pnpm run test:e2e, cwd is repo root
 // When running from e2e: pnpm --filter e2e run test:playwright, cwd is e2e
@@ -58,7 +58,7 @@ export async function invokeApi<T>(
   args: unknown[] = [],
 ): Promise<T> {
   return page.evaluate(
-    async ({ d, m, a }: { d: string; m: string; a: unknown[] }) => {
+    async ({ d, m, a }: { d: string, m: string, a: unknown[] }) => {
       if (!(window as any).hibiki?.invoke)
         throw new Error('Electron API not available')
       return (window as any).hibiki.invoke('api', { domain: d, method: m, args: a }) as Promise<T>

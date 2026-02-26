@@ -1,6 +1,6 @@
 name: 🐞 Bug Report
 description: Report something that isn't working as expected
-labels: ["bug"]
+labels: [bug]
 body:
   - type: markdown
     attributes:
@@ -11,7 +11,7 @@ body:
     attributes:
       label: Description
       description: Describe the bug and what you expected to happen.
-      placeholder: "What went wrong?"
+      placeholder: What went wrong?
     validations:
       required: true
   - type: textarea
@@ -30,7 +30,7 @@ body:
     attributes:
       label: Environment
       description: e.g. OS, browser, device, app version
-      placeholder: "Windows 11, Chrome 125.0, v1.2.3"
+      placeholder: 'Windows 11, Chrome 125.0, v1.2.3'
   - type: textarea
     id: logs
     attributes:

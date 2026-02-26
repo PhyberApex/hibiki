@@ -1,9 +1,10 @@
 import type { Client, TextChannel } from 'discord.js'
-import { Client as DiscordClient, GatewayIntentBits, Events } from 'discord.js'
+import { Client as DiscordClient, Events, GatewayIntentBits } from 'discord.js'
 import { e2eEnv, isSidecarConfigured } from './setup.js'
 
 export async function createSidecarClient(): Promise<Client | null> {
-  if (!isSidecarConfigured()) return null
+  if (!isSidecarConfigured())
+    return null
   const { sidecarToken } = e2eEnv
   const client = new DiscordClient({
     intents: [
@@ -25,7 +26,8 @@ export async function createSidecarClient(): Promise<Client | null> {
 }
 
 export function destroySidecarClient(client: Client | null): void {
-  if (client) client.destroy()
+  if (client)
+    client.destroy()
 }
 
 /**
@@ -43,12 +45,12 @@ export async function sendCommandAndGetReply(
   const ourMessage = await channel.send({ content: command })
   return new Promise<string>((resolve, reject) => {
     const collector = channel.createMessageCollector({
-      filter: (m) =>
+      filter: m =>
         m.author.id === hibikiUserId && m.reference?.messageId === ourMessage.id,
       max: 1,
       time: timeoutMs,
     })
-    collector.on('collect', (m) => resolve(m.content))
+    collector.on('collect', m => resolve(m.content))
     collector.on('end', (collected) => {
       if (collected.size === 0)
         reject(new Error(`No reply from Hibiki to "${command}" within ${timeoutMs}ms`))

@@ -2,9 +2,9 @@ name: Coverage
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   coverage:
@@ -16,8 +16,8 @@ jobs:
         uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
-          node-version: '22.22.0'
-          cache: 'pnpm'
+          node-version: 22.22.0
+          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

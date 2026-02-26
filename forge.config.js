@@ -20,8 +20,11 @@ module.exports = {
     ignore: [
       /^\/src/, // Source TypeScript (compiled to dist/)
       /^\/frontend\/src/, // Frontend source (built to web-dist/)
+      /^\/e2e/, // E2E tests
+      /^\/docs/, // Documentation
       /^\/release/, // Old electron-builder output
       /^\/out/, // Forge output (don't recurse)
+      /^\/\.git/, // Git directory
       /\.map$/, // Source maps (production)
       /tsconfig/, // TS configs
       /vite\.config/, // Vite config

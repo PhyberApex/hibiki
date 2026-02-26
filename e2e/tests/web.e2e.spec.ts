@@ -1,25 +1,24 @@
-import { unlinkSync, existsSync } from 'node:fs'
-import { expect } from '@playwright/test'
-import { test as base } from '@playwright/test'
+import type { ElectronApplication, Page } from '@playwright/test'
+import type { Client } from 'discord.js'
+import { existsSync, unlinkSync } from 'node:fs'
+import { test as base, expect } from '@playwright/test'
+import {
+  getMainWindow,
+  invokeApi,
+  launchElectronApp,
+} from '../electron-test-utils.js'
 import { createMinimalWavPath } from '../fixtures/minimal-wav.js'
+import { e2eEnv, isE2eConfigured, isSidecarConfigured } from '../setup.js'
 import {
   createSidecarClient,
   destroySidecarClient,
 } from '../sidecar-helper.js'
-import type { Client } from 'discord.js'
-import { e2eEnv, isE2eConfigured, isSidecarConfigured } from '../setup.js'
-import {
-  launchElectronApp,
-  getMainWindow,
-  invokeApi,
-} from '../electron-test-utils.js'
-import type { ElectronApplication, Page } from '@playwright/test'
 
 type VoiceChannel = import('discord.js').VoiceChannel
 
 const { guildId, voiceChannelId } = e2eEnv
 
-type ElectronTestFixtures = {
+interface ElectronTestFixtures {
   electronApp: ElectronApplication
   page: Page
 }
@@ -41,7 +40,8 @@ test.describe('Hibiki Electron E2E', () => {
   let hibikiUserId: string | null = null
 
   test.beforeAll(async () => {
-    if (!isSidecarConfigured()) return
+    if (!isSidecarConfigured())
+      return
     sidecar = await createSidecarClient()
   })
 
@@ -50,16 +50,19 @@ test.describe('Hibiki Electron E2E', () => {
   })
 
   async function ensureHibikiUserId(page: Page): Promise<void> {
-    if (hibikiUserId) return
-    if (!sidecar) return
+    if (hibikiUserId)
+      return
+    if (!sidecar)
+      return
     try {
-      const status = await invokeApi<{ ready: boolean; userId?: string }>(
+      const status = await invokeApi<{ ready: boolean, userId?: string }>(
         page,
         'player',
         'getBotStatus',
         [],
       )
-      if (status.ready && status.userId) hibikiUserId = status.userId
+      if (status.ready && status.userId)
+        hibikiUserId = status.userId
     }
     catch {
       // API unreachable
@@ -80,7 +83,8 @@ test.describe('Hibiki Electron E2E', () => {
   })
 
   test('join voice channel', async ({ page }) => {
-    if (!isE2eConfigured()) test.skip()
+    if (!isE2eConfigured())
+      test.skip()
 
     await ensureHibikiUserId(page)
     await page.goto('hibiki://app/')
@@ -100,7 +104,8 @@ test.describe('Hibiki Electron E2E', () => {
   })
 
   test('leave voice channel', async ({ page }) => {
-    if (!isE2eConfigured()) test.skip()
+    if (!isE2eConfigured())
+      test.skip()
 
     await ensureHibikiUserId(page)
     await page.goto('hibiki://app/')
@@ -131,7 +136,7 @@ test.describe('Hibiki Electron E2E', () => {
       await expect(musicPanel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
       await expect(musicPanel.getByText('Uploaded.')).toBeVisible({ timeout: 5000 })
 
-      const music = await invokeApi<Array<{ id: string; name: string }>>(
+      const music = await invokeApi<Array<{ id: string, name: string }>>(
         page,
         'sounds',
         'listMusic',
@@ -140,7 +145,8 @@ test.describe('Hibiki Electron E2E', () => {
       expect(music.some(s => s.name.toLowerCase().includes(unique.toLowerCase()))).toBe(true)
     }
     finally {
-      if (existsSync(wavPath)) unlinkSync(wavPath)
+      if (existsSync(wavPath))
+        unlinkSync(wavPath)
     }
   })
 
@@ -155,7 +161,7 @@ test.describe('Hibiki Electron E2E', () => {
       await expect(effectsPanel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
       await expect(effectsPanel.getByText('Uploaded.')).toBeVisible({ timeout: 5000 })
 
-      const effects = await invokeApi<Array<{ id: string; name: string }>>(
+      const effects = await invokeApi<Array<{ id: string, name: string }>>(
         page,
         'sounds',
         'listEffects',
@@ -164,7 +170,8 @@ test.describe('Hibiki Electron E2E', () => {
       expect(effects.some(s => s.name.toLowerCase().includes(unique.toLowerCase()))).toBe(true)
     }
     finally {
-      if (existsSync(wavPath)) unlinkSync(wavPath)
+      if (existsSync(wavPath))
+        unlinkSync(wavPath)
     }
   })
 
@@ -183,7 +190,7 @@ test.describe('Hibiki Electron E2E', () => {
       await musicPanel.getByRole('button', { name: 'Yes' }).click()
       await expect(musicPanel.getByText('Deleted.')).toBeVisible({ timeout: 5000 })
 
-      const music = await invokeApi<Array<{ id: string; name: string }>>(
+      const music = await invokeApi<Array<{ id: string, name: string }>>(
         page,
         'sounds',
         'listMusic',
@@ -192,7 +199,8 @@ test.describe('Hibiki Electron E2E', () => {
       expect(music.some(s => s.name.toLowerCase().includes(unique.toLowerCase()))).toBe(false)
     }
     finally {
-      if (existsSync(wavPath)) unlinkSync(wavPath)
+      if (existsSync(wavPath))
+        unlinkSync(wavPath)
     }
   })
 
@@ -211,7 +219,7 @@ test.describe('Hibiki Electron E2E', () => {
       await effectsPanel.getByRole('button', { name: 'Yes' }).click()
       await expect(effectsPanel.getByText('Deleted.')).toBeVisible({ timeout: 5000 })
 
-      const effects = await invokeApi<Array<{ id: string; name: string }>>(
+      const effects = await invokeApi<Array<{ id: string, name: string }>>(
         page,
         'sounds',
         'listEffects',
@@ -220,7 +228,8 @@ test.describe('Hibiki Electron E2E', () => {
       expect(effects.some(s => s.name.toLowerCase().includes(unique.toLowerCase()))).toBe(false)
     }
     finally {
-      if (existsSync(wavPath)) unlinkSync(wavPath)
+      if (existsSync(wavPath))
+        unlinkSync(wavPath)
     }
   })
 })

@@ -2,8 +2,8 @@
 title: Hibiki
 description: Echoes of Adventure. Your private bard bot for Discord.
 # When served at https://<user>.github.io/hibiki/ the base URL is /hibiki
-baseurl: "/hibiki"
-url: "https://phyberapex.github.io"
+baseurl: /hibiki
+url: 'https://phyberapex.github.io'
 
 markdown: kramdown
 kramdown:

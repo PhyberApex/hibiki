@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { Client, Events, GatewayIntentBits, type VoiceChannel } from 'discord.js'
+import type { VoiceChannel } from 'discord.js'
 import { joinVoiceChannel } from '@discordjs/voice'
+import { Client, Events, GatewayIntentBits } from 'discord.js'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { e2eEnv, isE2eConfigured, isSidecarConfigured } from './setup.js'
 
 const { baseUrl, guildId, voiceChannelId, sidecarToken } = e2eEnv
@@ -8,10 +9,13 @@ const api = (path: string) => `${baseUrl}/api${path}`
 
 function isServerUnreachable(err: unknown): boolean {
   const check = (e: unknown): boolean => {
-    if (!e || typeof e !== 'object') return false
-    const o = e as { code?: string; errors?: Array<{ code?: string }> }
-    if (o.code === 'ECONNREFUSED' || o.code === 'EPERM') return true
-    if (Array.isArray(o.errors)) return o.errors.some((x: { code?: string }) => x.code === 'ECONNREFUSED' || x.code === 'EPERM')
+    if (!e || typeof e !== 'object')
+      return false
+    const o = e as { code?: string, errors?: Array<{ code?: string }> }
+    if (o.code === 'ECONNREFUSED' || o.code === 'EPERM')
+      return true
+    if (Array.isArray(o.errors))
+      return o.errors.some((x: { code?: string }) => x.code === 'ECONNREFUSED' || x.code === 'EPERM')
     return false
   }
   return check(err) || check((err as { cause?: unknown })?.cause)
@@ -19,7 +23,8 @@ function isServerUnreachable(err: unknown): boolean {
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(api(path))
-  if (!res.ok) throw new Error(`GET ${path} ${res.status}: ${await res.text()}`)
+  if (!res.ok)
+    throw new Error(`GET ${path} ${res.status}: ${await res.text()}`)
   return res.json() as Promise<T>
 }
 
@@ -29,14 +34,15 @@ async function post(path: string, body: object): Promise<unknown> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`POST ${path} ${res.status}: ${await res.text()}`)
+  if (!res.ok)
+    throw new Error(`POST ${path} ${res.status}: ${await res.text()}`)
   return res.json()
 }
 
-describe('Hibiki sidecar E2E (Discord voice state via API)', () => {
+describe('hibiki sidecar E2E (Discord voice state via API)', () => {
   let sidecar: Client | null = null
 
-  beforeAll(async function () {
+  beforeAll(async () => {
     if (!isSidecarConfigured() || !isE2eConfigured()) {
       console.warn('Sidecar E2E skipped: set E2E_SIDECAR_TOKEN, E2E_GUILD_ID, E2E_VOICE_CHANNEL_ID')
       return
@@ -56,7 +62,8 @@ describe('Hibiki sidecar E2E (Discord voice state via API)', () => {
           resolve()
         })
       })
-    } catch {
+    }
+    catch {
       sidecar = null
     }
   })
@@ -67,14 +74,17 @@ describe('Hibiki sidecar E2E (Discord voice state via API)', () => {
     }
   })
 
-  it('after Hibiki joins via API, sidecar sees bot in voice channel', async function () {
-    if (!sidecar || !isE2eConfigured() || !isSidecarConfigured()) return
+  it('after Hibiki joins via API, sidecar sees bot in voice channel', async () => {
+    if (!sidecar || !isE2eConfigured() || !isSidecarConfigured())
+      return
 
-    let status: { ready: boolean; userId?: string }
+    let status: { ready: boolean, userId?: string }
     try {
-      status = await get<{ ready: boolean; userId?: string }>('/player/bot-status')
-    } catch (err: unknown) {
-      if (isServerUnreachable(err)) return // Hibiki API not running or unreachable
+      status = await get<{ ready: boolean, userId?: string }>('/player/bot-status')
+    }
+    catch (err: unknown) {
+      if (isServerUnreachable(err))
+        return // Hibiki API not running or unreachable
       throw err
     }
     expect(status.ready).toBe(true)
@@ -98,22 +108,26 @@ describe('Hibiki sidecar E2E (Discord voice state via API)', () => {
     expect(membersAfter.has(hibikiUserId!)).toBe(false)
   })
 
-  it('full flow via API: join, play, effect, leave; sidecar verifies voice state', async function () {
-    if (!sidecar || !isE2eConfigured() || !isSidecarConfigured()) return
+  it('full flow via API: join, play, effect, leave; sidecar verifies voice state', async () => {
+    if (!sidecar || !isE2eConfigured() || !isSidecarConfigured())
+      return
 
     let hibikiUserId: string
     try {
-      const status = await get<{ ready: boolean; userId?: string }>('/player/bot-status')
-      if (!status.ready || !status.userId) throw new Error('Hibiki not ready')
+      const status = await get<{ ready: boolean, userId?: string }>('/player/bot-status')
+      if (!status.ready || !status.userId)
+        throw new Error('Hibiki not ready')
       hibikiUserId = status.userId
-    } catch (err: unknown) {
-      if (isServerUnreachable(err)) return
+    }
+    catch (err: unknown) {
+      if (isServerUnreachable(err))
+        return
       throw err
     }
 
     const [music, effects] = await Promise.all([
-      get<Array<{ id: string; name: string }>>('/sounds/music'),
-      get<Array<{ id: string; name: string }>>('/sounds/effects'),
+      get<Array<{ id: string, name: string }>>('/sounds/music'),
+      get<Array<{ id: string, name: string }>>('/sounds/effects'),
     ])
     const firstTrackId = music.length ? music[0].id : null
     const firstEffectId = effects.length ? effects[0].id : null
@@ -145,7 +159,8 @@ describe('Hibiki sidecar E2E (Discord voice state via API)', () => {
       await new Promise(r => setTimeout(r, 1500))
       const channelAfter = (await guild.channels.fetch(voiceChannelId)) as VoiceChannel
       expect(channelAfter.members.has(hibikiUserId)).toBe(false)
-    } finally {
+    }
+    finally {
       connection.destroy()
     }
   })

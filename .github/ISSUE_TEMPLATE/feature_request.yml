@@ -1,6 +1,6 @@
 name: ✨ Feature Request
 description: Suggest a new feature or improvement
-labels: ["enhancement"]
+labels: [enhancement]
 body:
   - type: markdown
     attributes:
@@ -11,7 +11,7 @@ body:
     attributes:
       label: Why is this needed?
       description: Explain the problem this solves or what benefit it brings.
-      placeholder: "It helps users work better at night by reducing eye strain."
+      placeholder: It helps users work better at night by reducing eye strain.
     validations:
       required: true
   - type: textarea
@@ -19,7 +19,7 @@ body:
     attributes:
       label: Proposed Solution
       description: Describe how the feature might work or be implemented.
-      placeholder: "Add a toggle in the header, store preference in localStorage..."
+      placeholder: 'Add a toggle in the header, store preference in localStorage...'
   - type: textarea
     id: alternatives
     attributes:

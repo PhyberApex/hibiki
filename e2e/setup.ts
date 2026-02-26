@@ -1,5 +1,5 @@
+import { resolve } from 'node:path'
 import { config } from 'dotenv'
-import { resolve } from 'path'
 
 // Load E2E env from repo root so one .env.e2e works for bot + e2e
 config({ path: resolve(process.cwd(), '.env.e2e') })
