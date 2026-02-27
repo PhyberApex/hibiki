@@ -4,10 +4,16 @@ import { _electron as electron } from '@playwright/test'
 
 // When running from repo root: pnpm run test:e2e, cwd is repo root
 // When running from e2e: pnpm --filter e2e run test:playwright, cwd is e2e
-const APP_ROOT = process.cwd().endsWith('e2e') ? join(process.cwd(), '..', 'app') : join(process.cwd(), 'app')
+// After project flattening, all code is at repo root (no app/ subdirectory)
+const APP_ROOT = process.cwd().endsWith('e2e') ? join(process.cwd(), '..') : process.cwd()
 
 /**
  * Launch the Hibiki Electron app for e2e tests.
+ *
+ * By default, launches in headless mode (no visible windows) for CI/CD.
+ * To watch tests run in headed mode, set: HIBIKI_E2E_HEADED=1
+ *
+ * Example: HIBIKI_E2E_HEADED=1 pnpm test:e2e
  */
 export async function launchElectronApp(): Promise<ElectronApplication> {
   const mainPath = join(APP_ROOT, 'electron', 'main.js')
@@ -21,6 +27,9 @@ export async function launchElectronApp(): Promise<ElectronApplication> {
       : join(electronPkg, 'dist', 'electron')
   const executablePath = electronBin
 
+  // Check if user wants to watch tests run (headed mode)
+  const headed = process.env.HIBIKI_E2E_HEADED === '1'
+
   const app = await electron.launch({
     executablePath,
     args: [mainPath],
@@ -29,6 +38,8 @@ export async function launchElectronApp(): Promise<ElectronApplication> {
       ...process.env,
       // Use test user data to avoid polluting dev data
       ELECTRON_IS_DEV: '0',
+      // Headless by default (ELECTRON_TEST_MODE=1), headed if HIBIKI_E2E_HEADED=1
+      ELECTRON_TEST_MODE: headed ? '0' : '1',
     },
     timeout: 60_000,
   })
@@ -44,6 +55,16 @@ export async function getMainWindow(app: ElectronApplication): Promise<Page> {
   // Wait for app to load (hibiki protocol)
   await window.waitForLoadState('domcontentloaded')
   await window.waitForLoadState('load')
+
+  // Wait for Discord bot to connect (sidebar won't show until bot is ready)
+  // The bot-status element appears when the app is initialized
+  try {
+    await window.locator('.bot-status').waitFor({ timeout: 30000 })
+  }
+  catch {
+    console.warn('Warning: bot-status element not found, tests may fail')
+  }
+
   return window
 }
 

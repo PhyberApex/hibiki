@@ -2,6 +2,9 @@ import { resolve } from 'node:path'
 import { defineConfig } from '@playwright/test'
 import { config } from 'dotenv'
 
+// Load root .env first (contains DISCORD_TOKEN)
+config({ path: resolve(process.cwd(), '../.env') })
+// Then load .env.e2e for E2E-specific variables (guild ID, channel ID)
 config({ path: resolve(process.cwd(), '.env.e2e') })
 config({ path: resolve(process.cwd(), '../.env.e2e') })
 

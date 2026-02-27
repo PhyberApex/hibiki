@@ -24,7 +24,8 @@ interface ElectronTestFixtures {
 }
 
 const test = base.extend<ElectronTestFixtures>({
-  electronApp: async (_fixtures, use) => {
+  // eslint-disable-next-line no-empty-pattern
+  electronApp: async ({}, use) => {
     const app = await launchElectronApp()
     await use(app)
     await app.close()
@@ -70,7 +71,7 @@ test.describe('Hibiki Electron E2E', () => {
   }
 
   test('app loads Scenes view', async ({ page }) => {
-    await page.goto('hibiki://app/')
+    await page.goto('hibiki://app/scenes')
     await expect(page.getByRole('link', { name: 'Scenes' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Media' })).toBeVisible()
   })
@@ -87,14 +88,13 @@ test.describe('Hibiki Electron E2E', () => {
       test.skip()
 
     await ensureHibikiUserId(page)
-    await page.goto('hibiki://app/')
+    await page.goto('hibiki://app/scenes')
     await expect(page.getByRole('link', { name: 'Scenes' })).toBeVisible()
 
-    // Expand guild selector and select guild/channel
-    await page.getByTitle('Select guild and channel').click()
-    await page.getByLabel('Guild').selectOption({ value: guildId })
-    await page.getByLabel('Channel').selectOption({ value: voiceChannelId })
-    await expect(page.getByRole('button', { name: 'Leave' })).toBeVisible({ timeout: 15_000 })
+    // Select guild/channel from sidebar
+    const firstGuildChannel = page.locator('.channel-item').first()
+    await firstGuildChannel.click()
+    await expect(page.getByRole('button', { name: /Disconnect/ })).toBeVisible({ timeout: 15_000 })
 
     if (sidecar && hibikiUserId && voiceChannelId) {
       const guild = await sidecar!.guilds.fetch(guildId)
@@ -108,14 +108,16 @@ test.describe('Hibiki Electron E2E', () => {
       test.skip()
 
     await ensureHibikiUserId(page)
-    await page.goto('hibiki://app/')
-    await page.getByTitle('Select guild and channel').click()
-    await page.getByLabel('Guild').selectOption({ value: guildId })
-    await page.getByLabel('Channel').selectOption({ value: voiceChannelId })
-    await expect(page.getByRole('button', { name: 'Leave' })).toBeVisible({ timeout: 15_000 })
+    await page.goto('hibiki://app/scenes')
 
-    await page.getByRole('button', { name: 'Leave' }).click()
-    await expect(page.getByRole('button', { name: 'Leave' })).not.toBeVisible({ timeout: 5000 })
+    // Join a channel first
+    const firstGuildChannel = page.locator('.channel-item').first()
+    await firstGuildChannel.click()
+    await expect(page.getByRole('button', { name: /Disconnect/ })).toBeVisible({ timeout: 15_000 })
+
+    // Now leave
+    await page.getByRole('button', { name: /Disconnect/ }).click()
+    await expect(page.getByRole('button', { name: /Disconnect/ })).not.toBeVisible({ timeout: 5000 })
 
     if (sidecar && hibikiUserId && voiceChannelId) {
       await page.waitForTimeout(1500)

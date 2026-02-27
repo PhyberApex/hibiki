@@ -12,6 +12,10 @@ let mainWindow = null
 let splashWindow = null
 
 function createSplashWindow() {
+  // Skip splash screen in test mode
+  if (process.env.ELECTRON_TEST_MODE === '1') {
+    return null
+  }
   const splash = new BrowserWindow({
     width: 500,
     height: 400,
@@ -31,6 +35,7 @@ function createSplashWindow() {
 }
 
 function createWindow(loadUrl) {
+  const isTestMode = process.env.ELECTRON_TEST_MODE === '1'
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -45,7 +50,10 @@ function createWindow(loadUrl) {
       splashWindow.close()
       splashWindow = null
     }
-    win.show()
+    // In test mode, keep window hidden (headless)
+    if (!isTestMode) {
+      win.show()
+    }
   })
   win.on('closed', () => {
     mainWindow = null
