@@ -2,6 +2,7 @@ import type { VoiceBasedChannel } from 'discord.js'
 import type { SoundCategory } from './sound/sound.types'
 import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { generateDependencyReport } from '@discordjs/voice'
 import { getConfig } from './config'
 import { createDiscordClient } from './discord/discord-client'
 import { createAppConfig } from './persistence'
@@ -86,6 +87,8 @@ export interface EmbeddedApp {
 
 export async function getEmbeddedApp(): Promise<EmbeddedApp> {
   process.env.HIBIKI_EMBEDDED = '1'
+  const report = generateDependencyReport()
+  console.warn('[Hibiki] Voice dependency report:\n', report)
   const config = getConfig()
   await ensureStorageDirs(config)
   const appConfig = createAppConfig(config)

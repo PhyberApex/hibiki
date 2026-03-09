@@ -60,6 +60,10 @@ export class AudioEngine {
       inputType: StreamType.Raw, // Raw PCM - let Discord.js handle Opus encoding
     })
     this.player.play(this.resource)
+
+    this.player.on('error', (error) => {
+      console.error('[AudioEngine] AudioPlayer error:', error.message)
+    })
   }
 
   get audioPlayer() {

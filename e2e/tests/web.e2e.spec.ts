@@ -43,7 +43,12 @@ test.describe('Hibiki Electron E2E', () => {
   test.beforeAll(async () => {
     if (!isSidecarConfigured())
       return
-    sidecar = await createSidecarClient()
+    try {
+      sidecar = await createSidecarClient()
+    }
+    catch (err) {
+      console.warn('Sidecar client failed to connect, voice verification tests will be limited:', (err as Error).message)
+    }
   })
 
   test.afterAll(() => {
@@ -76,11 +81,11 @@ test.describe('Hibiki Electron E2E', () => {
     await expect(page.getByRole('link', { name: 'Media' })).toBeVisible()
   })
 
-  test('app loads Media Management', async ({ page }) => {
+  test('app loads Media Library', async ({ page }) => {
     await page.goto('hibiki://app/media')
-    await expect(page.getByRole('heading', { name: 'Media Management' })).toBeVisible()
-    await expect(page.locator('section.sound-panel').filter({ hasText: 'Music' })).toBeVisible()
-    await expect(page.locator('section.sound-panel').filter({ hasText: 'Effects' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Media Library' })).toBeVisible()
+    await expect(page.locator('section.panel').filter({ hasText: 'Music' })).toBeVisible()
+    await expect(page.locator('section.panel').filter({ hasText: 'Effects' })).toBeVisible()
   })
 
   test('join voice channel', async ({ page }) => {
@@ -91,10 +96,13 @@ test.describe('Hibiki Electron E2E', () => {
     await page.goto('hibiki://app/scenes')
     await expect(page.getByRole('link', { name: 'Scenes' })).toBeVisible()
 
-    // Select guild/channel from sidebar
+    // Wait for bot to connect and guild directory to load
     const firstGuildChannel = page.locator('.channel-item').first()
+    await firstGuildChannel.waitFor({ timeout: 30_000 })
+
+    // Select guild/channel from sidebar
     await firstGuildChannel.click()
-    await expect(page.getByRole('button', { name: /Disconnect/ })).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('.btn-disconnect')).toBeVisible({ timeout: 15_000 })
 
     if (sidecar && hibikiUserId && voiceChannelId) {
       const guild = await sidecar!.guilds.fetch(guildId)
@@ -110,14 +118,17 @@ test.describe('Hibiki Electron E2E', () => {
     await ensureHibikiUserId(page)
     await page.goto('hibiki://app/scenes')
 
-    // Join a channel first
+    // Wait for bot to connect and guild directory to load
     const firstGuildChannel = page.locator('.channel-item').first()
+    await firstGuildChannel.waitFor({ timeout: 30_000 })
+
+    // Join a channel first
     await firstGuildChannel.click()
-    await expect(page.getByRole('button', { name: /Disconnect/ })).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('.btn-disconnect')).toBeVisible({ timeout: 15_000 })
 
     // Now leave
-    await page.getByRole('button', { name: /Disconnect/ }).click()
-    await expect(page.getByRole('button', { name: /Disconnect/ })).not.toBeVisible({ timeout: 5000 })
+    await page.locator('.btn-disconnect').click()
+    await expect(page.locator('.btn-disconnect')).not.toBeVisible({ timeout: 5000 })
 
     if (sidecar && hibikiUserId && voiceChannelId) {
       await page.waitForTimeout(1500)
@@ -133,7 +144,7 @@ test.describe('Hibiki Electron E2E', () => {
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
       await page.goto('hibiki://app/media')
-      const musicPanel = page.locator('section.sound-panel').filter({ hasText: 'Music' })
+      const musicPanel = page.locator('section.panel').filter({ hasText: 'Music' })
       await musicPanel.locator('input[type=file]').setInputFiles(wavPath)
       await expect(musicPanel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
       await expect(musicPanel.getByText('Uploaded.')).toBeVisible({ timeout: 5000 })
@@ -144,7 +155,7 @@ test.describe('Hibiki Electron E2E', () => {
         'listMusic',
         [],
       )
-      expect(music.some(s => s.name.toLowerCase().includes(unique.toLowerCase()))).toBe(true)
+      expect(music.some(s => s.id.toLowerCase().includes(unique.toLowerCase()))).toBe(true)
     }
     finally {
       if (existsSync(wavPath))
@@ -158,7 +169,7 @@ test.describe('Hibiki Electron E2E', () => {
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
       await page.goto('hibiki://app/media')
-      const effectsPanel = page.locator('section.sound-panel').filter({ hasText: 'Effects' })
+      const effectsPanel = page.locator('section.panel').filter({ hasText: 'Effects' })
       await effectsPanel.locator('input[type=file]').setInputFiles(wavPath)
       await expect(effectsPanel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
       await expect(effectsPanel.getByText('Uploaded.')).toBeVisible({ timeout: 5000 })
@@ -169,7 +180,7 @@ test.describe('Hibiki Electron E2E', () => {
         'listEffects',
         [],
       )
-      expect(effects.some(s => s.name.toLowerCase().includes(unique.toLowerCase()))).toBe(true)
+      expect(effects.some(s => s.id.toLowerCase().includes(unique.toLowerCase()))).toBe(true)
     }
     finally {
       if (existsSync(wavPath))
@@ -183,13 +194,14 @@ test.describe('Hibiki Electron E2E', () => {
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
       await page.goto('hibiki://app/media')
-      const musicPanel = page.locator('section.sound-panel').filter({ hasText: 'Music' })
+      const musicPanel = page.locator('section.panel').filter({ hasText: 'Music' })
       await musicPanel.locator('input[type=file]').setInputFiles(wavPath)
       const listItem = musicPanel.locator('li').filter({ hasText: timestamp })
       await expect(listItem).toBeVisible({ timeout: 15_000 })
 
-      await listItem.getByRole('button', { name: 'Delete' }).click()
-      await musicPanel.getByRole('button', { name: 'Yes' }).click()
+      // Click the × delete button, then confirm with "Delete"
+      await listItem.locator('.btn-delete').click()
+      await listItem.locator('.btn-confirm-delete').click()
       await expect(musicPanel.getByText('Deleted.')).toBeVisible({ timeout: 5000 })
 
       const music = await invokeApi<Array<{ id: string, name: string }>>(
@@ -198,7 +210,7 @@ test.describe('Hibiki Electron E2E', () => {
         'listMusic',
         [],
       )
-      expect(music.some(s => s.name.toLowerCase().includes(unique.toLowerCase()))).toBe(false)
+      expect(music.some(s => s.id.toLowerCase().includes(unique.toLowerCase()))).toBe(false)
     }
     finally {
       if (existsSync(wavPath))
@@ -212,13 +224,14 @@ test.describe('Hibiki Electron E2E', () => {
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
       await page.goto('hibiki://app/media')
-      const effectsPanel = page.locator('section.sound-panel').filter({ hasText: 'Effects' })
+      const effectsPanel = page.locator('section.panel').filter({ hasText: 'Effects' })
       await effectsPanel.locator('input[type=file]').setInputFiles(wavPath)
       const listItem = effectsPanel.locator('li').filter({ hasText: timestamp })
       await expect(listItem).toBeVisible({ timeout: 15_000 })
 
-      await listItem.getByRole('button', { name: 'Delete' }).click()
-      await effectsPanel.getByRole('button', { name: 'Yes' }).click()
+      // Click the × delete button, then confirm with "Delete"
+      await listItem.locator('.btn-delete').click()
+      await listItem.locator('.btn-confirm-delete').click()
       await expect(effectsPanel.getByText('Deleted.')).toBeVisible({ timeout: 5000 })
 
       const effects = await invokeApi<Array<{ id: string, name: string }>>(
@@ -227,7 +240,7 @@ test.describe('Hibiki Electron E2E', () => {
         'listEffects',
         [],
       )
-      expect(effects.some(s => s.name.toLowerCase().includes(unique.toLowerCase()))).toBe(false)
+      expect(effects.some(s => s.id.toLowerCase().includes(unique.toLowerCase()))).toBe(false)
     }
     finally {
       if (existsSync(wavPath))

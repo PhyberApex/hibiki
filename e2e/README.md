@@ -47,12 +47,16 @@ HIBIKI_E2E_HEADED=1  # Set to watch tests run (comment out for headless)
 
 **Tip**: Use headed mode when developing new tests or debugging test failures to see exactly what's happening in the UI.
 
-## Electron 33 + Playwright compatibility
+## First-time setup
 
-Playwright 1.58.x passes `--remote-debugging-port=0` as a CLI argument, which Electron 30+ rejects. A fix was merged in [Playwright #39012](https://github.com/microsoft/playwright/pull/39012) (Jan 2026). If you see `bad option: --remote-debugging-port=0`:
+The e2e package is standalone (not part of the pnpm workspace). You need to install its dependencies separately:
 
-1. **Upgrade Playwright**: `pnpm add -D @playwright/test@latest` in the e2e package
-2. **Or downgrade Electron**: Use `electron@^28.0.0` in the app package
+```bash
+cd e2e && pnpm install            # Install e2e dependencies
+pnpm exec playwright install chromium  # Install Playwright browser
+```
+
+The root `pnpm test:e2e` script handles `pnpm install` automatically, but you still need to install the Playwright browser once.
 
 ## Environment
 

@@ -32,12 +32,14 @@
     "test:coverage": "run-p test:coverage:backend test:coverage:frontend",
     "test:coverage:backend": "jest --coverage --config jest.config.js",
     "test:coverage:frontend": "cd frontend && vitest run --coverage",
-    "test:e2e": "cd e2e && pnpm test"
+    "test:e2e": "cd e2e && pnpm install --frozen-lockfile && pnpm test"
   },
   "dependencies": {
     "@discordjs/opus": "^0.10.0",
     "@discordjs/rest": "^2.3.0",
-    "@discordjs/voice": "^0.18.0",
+    "@discordjs/voice": "^0.19.0",
+    "@noble/ciphers": "^2.1.1",
+    "@snazzah/davey": "^0.1.10",
     "adm-zip": "^0.5.16",
     "discord-api-types": "^0.38.0",
     "discord.js": "^14.22.0",

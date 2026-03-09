@@ -25,6 +25,7 @@ module.exports = {
       /^\/release/, // Old electron-builder output
       /^\/out/, // Forge output (don't recurse)
       /^\/\.git/, // Git directory
+      /^\/\.pnpm-store/, // pnpm content-addressable store
       /\.map$/, // Source maps (production)
       /tsconfig/, // TS configs
       /vite\.config/, // Vite config

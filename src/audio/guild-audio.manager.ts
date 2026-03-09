@@ -43,6 +43,13 @@ export class GuildAudioManager {
       selfDeaf: false,
     })
     this.channelName = channel.name
+
+    this.connection.on('error', (error) => {
+      console.error(`[GuildAudioManager] VoiceConnection error (guild ${this.guildId}):`, error.message)
+    })
+    this.connection.on('stateChange', (oldState, newState) => {
+      console.warn(`[GuildAudioManager] VoiceConnection state: ${oldState.status} -> ${newState.status} (guild ${this.guildId})`)
+    })
     this.connection.subscribe(this.engine.audioPlayer)
     await entersState(this.connection, VoiceConnectionStatus.Ready, 20_000)
     return this.connection

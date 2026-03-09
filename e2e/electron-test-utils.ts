@@ -49,21 +49,41 @@ export async function launchElectronApp(): Promise<ElectronApplication> {
 
 /**
  * Get the main window page. Waits for the window to load hibiki://app/
+ *
+ * In headed mode (HIBIKI_E2E_HEADED=1), the app shows a splash screen first.
+ * firstWindow() may return the splash window which gets closed when the main
+ * window is ready. We detect this by checking the URL and waiting for the
+ * main window (hibiki://app/) to appear.
  */
 export async function getMainWindow(app: ElectronApplication): Promise<Page> {
-  const window = await app.firstWindow()
-  // Wait for app to load (hibiki protocol)
-  await window.waitForLoadState('domcontentloaded')
-  await window.waitForLoadState('load')
+  let window = await app.firstWindow()
 
-  // Wait for Discord bot to connect (sidebar won't show until bot is ready)
-  // The bot-status element appears when the app is initialized
-  try {
-    await window.locator('.bot-status').waitFor({ timeout: 30000 })
+  // In headed mode, the first window may be the splash screen (file:// URL).
+  // Wait for the main window (hibiki://app/) to appear instead.
+  if (!window.url().startsWith('hibiki://')) {
+    // The splash will be closed when the main window is ready.
+    // Wait for a new window with the hibiki:// protocol.
+    window = await new Promise<Page>((resolve) => {
+      const check = (page: Page) => {
+        if (page.url().startsWith('hibiki://')) {
+          app.off('window', check)
+          resolve(page)
+        }
+      }
+      // Check existing windows first
+      for (const w of app.windows()) {
+        if (w.url().startsWith('hibiki://')) {
+          resolve(w)
+          return
+        }
+      }
+      app.on('window', check)
+    })
   }
-  catch {
-    console.warn('Warning: bot-status element not found, tests may fail')
-  }
+
+  // Wait for the Vue app to mount and render content
+  await window.locator('#app').waitFor({ state: 'attached', timeout: 30000 })
+  await window.locator('#app h1, #app button, #app nav').first().waitFor({ timeout: 30000 })
 
   return window
 }

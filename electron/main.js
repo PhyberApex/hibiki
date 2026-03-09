@@ -318,9 +318,10 @@ function registerHibikiProtocol(api, webDistDir) {
     }
 
     if (host === 'app') {
-      const filePath = pathname === '/' ? path.join(webDistDir, 'index.html') : path.join(webDistDir, pathname)
+      let filePath = pathname === '/' ? path.join(webDistDir, 'index.html') : path.join(webDistDir, pathname)
+      // SPA fallback: serve index.html for routes that don't match a static file
       if (!fs.existsSync(filePath))
-        return new Response('Not Found', { status: 404 })
+        filePath = path.join(webDistDir, 'index.html')
       const stream = fs.createReadStream(filePath)
       const ext = path.extname(filePath).toLowerCase()
       const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.ico': 'image/x-icon', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2' }[ext] || 'application/octet-stream'
