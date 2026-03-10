@@ -30,9 +30,14 @@ export async function launchElectronApp(): Promise<ElectronApplication> {
   // Check if user wants to watch tests run (headed mode)
   const headed = process.env.HIBIKI_E2E_HEADED === '1'
 
+  // CI runners (GitHub Actions) can't use the SUID sandbox — chrome-sandbox
+  // must be root-owned with mode 4755, which isn't possible in containers.
+  const isCI = !!process.env.CI
+  const args = isCI ? ['--no-sandbox', mainPath] : [mainPath]
+
   const app = await electron.launch({
     executablePath,
-    args: [mainPath],
+    args,
     cwd: APP_ROOT,
     env: {
       ...process.env,
