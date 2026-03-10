@@ -58,7 +58,25 @@ pnpm exec playwright install chromium  # Install Playwright browser
 
 The root `pnpm test:e2e` script handles `pnpm install` automatically, but you still need to install the Playwright browser once.
 
+## Running CI locally with `act`
+
+[`nektos/act`](https://github.com/nektos/act) runs GitHub Actions workflows locally in Docker, reproducing the exact Linux CI environment. This is useful for debugging CI-specific failures (like Electron sandbox issues) without pushing to GitHub.
+
+1. Install: `brew install act`
+2. Copy `.secrets.example` to `.secrets` and fill in your values:
+   ```bash
+   cp .secrets.example .secrets
+   # Edit .secrets with your real tokens/IDs
+   ```
+3. Run the E2E workflow:
+   ```bash
+   act -j e2e
+   ```
+
+The `.actrc` file in the repo root configures `act` to use the correct Docker image and secrets file automatically.
+
 ## Environment
 
 - `.env.e2e` – optional; set `E2E_GUILD_ID`, `E2E_VOICE_CHANNEL_ID` for voice channel tests
 - `.env` in repo root – required for Discord; `DISCORD_TOKEN`
+- `.secrets` – used by `act` for local CI runs; copy from `.secrets.example`

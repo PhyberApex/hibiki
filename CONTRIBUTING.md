@@ -35,6 +35,26 @@ We run these checks in CI; PRs are expected to pass lint and tests.
 - **e2e/** — End-to-end tests (Playwright + Vitest, requires running Hibiki instance)
 - **docs/** — Jekyll site for documentation (GitHub Pages). See [docs/README.md](docs/README.md)
 
+## Running GitHub Actions locally
+
+You can run CI workflows locally with [`nektos/act`](https://github.com/nektos/act), which executes GitHub Actions in Docker. This is useful for debugging CI-specific failures (like Linux sandbox issues) without pushing and waiting for GitHub.
+
+1. **Install:** `brew install act` (macOS) or see [act installation docs](https://nektosact.com/installation/).
+2. **Set up secrets:**
+   ```bash
+   cp .secrets.example .secrets
+   # Fill in DISCORD_TOKEN and any other values you need
+   ```
+3. **Run a workflow job:**
+   ```bash
+   act -j e2e       # Run the E2E job
+   act -j lint       # Run the lint job
+   act -j test       # Run the test job
+   act               # Run all jobs triggered by push
+   ```
+
+The `.actrc` file configures defaults (Docker image and secrets file) so no extra flags are needed. Secrets in `.secrets` are gitignored.
+
 ## Questions or issues?
 
 Open a [GitHub issue](https://github.com/phyberapex/hibiki/issues) for bugs, feature ideas, or documentation improvements.

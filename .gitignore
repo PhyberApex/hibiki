@@ -23,3 +23,4 @@ npm-debug.log*
 .turbo
 docs/_site
 e2e/test-results
+.secrets
