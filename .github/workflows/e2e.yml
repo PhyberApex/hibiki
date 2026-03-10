@@ -5,8 +5,8 @@
 # fail to reach Discord (timeouts, DNS, or network restrictions). If the bot never becomes
 # ready, tests that require voice (join/leave) will be skipped.
 #
-# Required secrets: DISCORD_TOKEN
-# Optional (for voice/sidecar tests): E2E_GUILD_ID, E2E_VOICE_CHANNEL_ID, E2E_SIDECAR_TOKEN
+# Required secrets: DISCORD_TOKEN, E2E_GUILD_ID, E2E_VOICE_CHANNEL_ID
+# Optional secrets: E2E_TEXT_CHANNEL_ID, E2E_SIDECAR_TOKEN
 
 name: E2E
 
@@ -22,16 +22,30 @@ concurrency:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    env:
+      DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+      E2E_GUILD_ID: ${{ secrets.E2E_GUILD_ID }}
+      E2E_VOICE_CHANNEL_ID: ${{ secrets.E2E_VOICE_CHANNEL_ID }}
+      E2E_TEXT_CHANNEL_ID: ${{ secrets.E2E_TEXT_CHANNEL_ID }}
+      E2E_SIDECAR_TOKEN: ${{ secrets.E2E_SIDECAR_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Check required secrets
+      - name: Validate required secrets
         run: |
-          if [ -z "${{ secrets.DISCORD_TOKEN }}" ]; then
-            echo "::error::E2E workflow requires repository secret: DISCORD_TOKEN. Add it in Settings → Secrets and variables → Actions."
+          missing=()
+          [ -z "$DISCORD_TOKEN" ] && missing+=("DISCORD_TOKEN")
+          [ -z "$E2E_GUILD_ID" ] && missing+=("E2E_GUILD_ID")
+          [ -z "$E2E_VOICE_CHANNEL_ID" ] && missing+=("E2E_VOICE_CHANNEL_ID")
+          if [ ${#missing[@]} -gt 0 ]; then
+            for s in "${missing[@]}"; do
+              echo "::error::Missing required secret: $s. Add it in Settings > Secrets and variables > Actions."
+            done
             exit 1
           fi
+          [ -z "$E2E_SIDECAR_TOKEN" ] && echo "::notice::Optional secret E2E_SIDECAR_TOKEN not set — sidecar verification will be skipped"
+          [ -z "$E2E_TEXT_CHANNEL_ID" ] && echo "::notice::Optional secret E2E_TEXT_CHANNEL_ID not set — text channel tests will be skipped"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -53,24 +67,11 @@ jobs:
       - name: Install E2E dependencies
         run: pnpm --dir e2e install --frozen-lockfile
 
-      - name: Create .env for Hibiki
-        run: |
-          printf 'DISCORD_TOKEN=%s\n' "${{ secrets.DISCORD_TOKEN }}" >> .env
-
       - name: Build Hibiki
         run: pnpm run build
 
       - name: Install Playwright browsers (for Electron)
         run: pnpm --dir e2e exec playwright install chromium --with-deps
-
-      - name: Create .env.e2e for tests
-        run: |
-          {
-            [ -n "${{ secrets.E2E_GUILD_ID }}" ] && echo "E2E_GUILD_ID=${{ secrets.E2E_GUILD_ID }}"
-            [ -n "${{ secrets.E2E_VOICE_CHANNEL_ID }}" ] && echo "E2E_VOICE_CHANNEL_ID=${{ secrets.E2E_VOICE_CHANNEL_ID }}"
-            [ -n "${{ secrets.E2E_TEXT_CHANNEL_ID }}" ] && echo "E2E_TEXT_CHANNEL_ID=${{ secrets.E2E_TEXT_CHANNEL_ID }}"
-            [ -n "${{ secrets.E2E_SIDECAR_TOKEN }}" ] && echo "E2E_SIDECAR_TOKEN=${{ secrets.E2E_SIDECAR_TOKEN }}"
-          } > .env.e2e
 
       - name: Run E2E tests (Playwright + Electron)
         run: pnpm run test:e2e
