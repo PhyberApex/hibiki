@@ -9,52 +9,18 @@ protocol.registerSchemesAsPrivileged([
 
 let appHandle = null
 let mainWindow = null
-let splashWindow = null
-
-function createSplashWindow() {
-  // Skip splash screen in test mode
-  if (process.env.ELECTRON_TEST_MODE === '1') {
-    return null
-  }
-  const splash = new BrowserWindow({
-    width: 500,
-    height: 400,
-    transparent: true,
-    frame: false,
-    alwaysOnTop: true,
-    resizable: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  })
-  splash.loadFile(path.join(__dirname, 'splash.html'))
-  splash.center()
-  splashWindow = splash
-  return splash
-}
 
 function createWindow(loadUrl) {
   const isTestMode = process.env.ELECTRON_TEST_MODE === '1'
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
-    show: false,
+    show: !isTestMode,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
   })
   win.loadURL(loadUrl)
-  win.once('ready-to-show', () => {
-    if (splashWindow && !splashWindow.isDestroyed()) {
-      splashWindow.close()
-      splashWindow = null
-    }
-    // In test mode, keep window hidden (headless)
-    if (!isTestMode) {
-      win.show()
-    }
-  })
   win.on('closed', () => {
     mainWindow = null
   })
@@ -333,9 +299,6 @@ function registerHibikiProtocol(api, webDistDir) {
 }
 
 app.whenReady().then(async () => {
-  // Show splash screen immediately for better UX
-  createSplashWindow()
-
   const userDataPath = app.getPath('userData')
   const botRoot = path.join(__dirname, '..')
   process.env.HIBIKI_USER_DATA = userDataPath
@@ -364,8 +327,6 @@ app.whenReady().then(async () => {
   }
   catch (err) {
     console.error('Failed to start embedded app:', err)
-    if (splashWindow && !splashWindow.isDestroyed())
-      splashWindow.close()
     app.quit(1)
     return
   }
@@ -374,8 +335,6 @@ app.whenReady().then(async () => {
   const webDistDir = path.join(botRoot, 'web-dist')
   if (!fs.existsSync(path.join(webDistDir, 'index.html'))) {
     console.error('web-dist/index.html not found. Run: pnpm run build')
-    if (splashWindow && !splashWindow.isDestroyed())
-      splashWindow.close()
     app.quit(1)
     return
   }
@@ -440,8 +399,6 @@ app.whenReady().then(async () => {
   createWindow('hibiki://app/')
 }).catch((err) => {
   console.error('Electron app.whenReady failed:', err)
-  if (splashWindow && !splashWindow.isDestroyed())
-    splashWindow.close()
   app.quit(1)
 })
 
