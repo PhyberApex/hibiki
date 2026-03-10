@@ -54,7 +54,7 @@ jobs:
         run: pnpm run ${{ matrix.dist_script }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hibiki-${{ matrix.platform }}
           path: |
