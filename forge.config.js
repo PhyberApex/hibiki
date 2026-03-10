@@ -1,6 +1,35 @@
+const fs = require('node:fs')
 const path = require('node:path')
 
 module.exports = {
+  hooks: {
+    // @discordjs/opus uses @discordjs/node-pre-gyp which resolves to
+    // "electron-v{version}-napi-v3-{platform}-{arch}" in Electron runtime,
+    // but only "node-v{abi}-napi-v3-{platform}-{arch}" prebuilds ship.
+    // Since opus.node is an N-API module (ABI-stable), the node prebuild works
+    // fine in Electron. We copy it under the electron name so it's found at runtime.
+    packageAfterPrune: async (_config, buildPath) => {
+      const prebuildDir = path.join(buildPath, 'node_modules', '@discordjs', 'opus', 'prebuild')
+      if (!fs.existsSync(prebuildDir))
+        return
+      const dirs = fs.readdirSync(prebuildDir)
+      const nodeDir = dirs.find(d => d.startsWith('node-'))
+      if (!nodeDir)
+        return
+      // Already has an electron prebuild — nothing to do
+      if (dirs.some(d => d.startsWith('electron-')))
+        return
+      // Derive electron dir name: replace "node-v{abi}" with "electron-v{major.minor}"
+      const electronVersion = require('electron/package.json').version
+      const electronMinor = electronVersion.split('.').slice(0, 2).join('.')
+      const suffix = nodeDir.replace(/^node-v\d+/, '')
+      const electronDirName = `electron-v${electronMinor}${suffix}`
+      const src = path.join(prebuildDir, nodeDir)
+      const dst = path.join(prebuildDir, electronDirName)
+      fs.cpSync(src, dst, { recursive: true })
+      console.log(`[forge hook] Copied opus prebuild: ${nodeDir} -> ${electronDirName}`)
+    },
+  },
   packagerConfig: {
     name: 'Hibiki',
     executableName: 'hibiki',
