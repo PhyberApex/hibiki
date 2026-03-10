@@ -42,15 +42,15 @@ module.exports = {
       platforms: ['darwin', 'linux', 'win32'],
     },
 
-    // DMG maker - macOS disk images (standard UX) - Temporarily disabled due to native module build issues
-    // {
-    //   name: '@electron-forge/maker-dmg',
-    //   config: {
-    //     format: 'ULFO', // Compressed read-only
-    //     name: 'Hibiki',
-    //     icon: path.join(__dirname, 'frontend', 'public', 'logo.png')
-    //   }
-    // },
+    // DMG maker - macOS disk images (standard UX)
+    {
+      name: '@electron-forge/maker-dmg',
+      config: {
+        format: 'ULFO', // Compressed read-only
+        name: 'Hibiki',
+        icon: path.join(__dirname, 'frontend', 'public', 'logo.icns'),
+      },
+    },
 
     // Squirrel maker - Windows installer (lightweight, auto-updates)
     {
@@ -59,7 +59,7 @@ module.exports = {
         name: 'hibiki',
         authors: 'PhyberApex',
         description: 'Discord audio companion for D&D and TTRPG',
-        // Note: setupIcon requires .ico file - can be added later if needed
+        setupIcon: path.join(__dirname, 'frontend', 'public', 'logo.ico'),
       },
     },
 

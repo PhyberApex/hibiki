@@ -2,9 +2,7 @@
   "release-type": "node",
   "include-component-in-tag": false,
   "pull-request-header": ":sparkles: chore: prepare release",
-  "extra-files": [
-    "app/package.json"
-  ],
+  "extra-files": [],
   "packages": {
     ".": {}
   }
