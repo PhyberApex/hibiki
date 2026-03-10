@@ -1,169 +1,169 @@
 # Hibiki (響)
 
 ![GitHub License](https://img.shields.io/github/license/phyberapex/hibiki)
-[![Build and Push Next Docker Image](https://github.com/PhyberApex/hibiki/actions/workflows/docker-next.yml/badge.svg)](https://github.com/PhyberApex/hibiki/actions/workflows/docker-next.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/phyberapex/hibiki)](https://github.com/PhyberApex/hibiki/releases)
 [![codecov](https://codecov.io/gh/PhyberApex/hibiki/graph/badge.svg?token=XAZJ3X18SE)](https://codecov.io/gh/PhyberApex/hibiki)
 [![GitHub Repo stars](https://img.shields.io/github/stars/phyberapex/hibiki?style=social)](https://github.com/PhyberApex/hibiki/stargazers)
 
 ![Hibiki](logo.png)
 
-**Discord audio companion bot** — play music and sound effects in voice channels, controlled from Discord or a web dashboard. Built with **Dungeons & Dragons** in mind (background music, ambience, sound effects at the table) but works for any server.
+**Desktop audio companion for Discord** — play music, ambience, and sound effects in voice channels from an Electron app. Built with **Dungeons & Dragons** in mind (background music, ambient soundscapes, one-shot effects at the table) but works for any server.
 
-- **Discord:** Slash commands `/join`, `/leave`, `/play`, `/effect`, `/volume`, `/menu` (control panel), `/songs`, `/effects`
-- **Web dashboard:** Control Center for player state, join/leave, play/effect, **volume (music & effects per server)**, upload and manage sounds, bot status, permissions
-- **Single Docker image:** One container, mount `storage/` for persistence (SQLite + uploads)
+- **Scenes** — Build soundboards with music tracks, ambience loops (with random interval repeats), and one-shot effects. Play an entire scene or individual tracks.
+- **Browser** — Open any URL (YouTube, Spotify web, etc.) in a built-in browser tab and stream its audio to Discord. Bookmark your favourite sites.
+- **Media library** — Upload and manage your own sound files (music, effects, ambience). Import/export scenes as portable bundles.
+- **App-only control** — The bot has no slash or prefix commands; everything is driven from the desktop UI.
 
 ## Stack
 
-| Part        | Tech                    |
-|-------------|-------------------------|
-| Bot + API   | NestJS, Discord.js      |
-| Dashboard   | Vue 3, TypeScript, Vite |
-| Persistence | SQLite (snapshots)      |
-| Audio       | discord-player, ffmpeg  |
+| Part        | Tech                             |
+|-------------|----------------------------------|
+| Desktop app | Electron (main + renderer)       |
+| Backend     | Node.js, Discord.js, TypeScript  |
+| Frontend    | Vue 3, Pinia, Vue Router, Vite   |
+| Audio       | discord.js voice, Web Audio API (AudioWorklet) |
+| Persistence | JSON files (config, scenes, sounds on disk) |
 
 ## Requirements
 
-- **Node.js** 20 or 22 (see [.nvmrc](.nvmrc)). Use `nvm use` or the version in `.nvmrc`; the voice stack uses `@discordjs/opus`, which ships prebuilds only for these versions. Node 23+ can cause "Cannot find module ... opus.node" when joining voice.
-- **pnpm** (run `corepack enable` then `pnpm install`)
-- **ffmpeg** — required for audio playback. Install via your package manager (`brew install ffmpeg`, `apt install ffmpeg`, etc.)
+- **Node.js** 20 or 22 (see [.nvmrc](.nvmrc)). Use `nvm use` to activate.
+  The voice stack uses `@discordjs/opus`, which ships prebuilds only for these versions.
+- **pnpm** — `corepack enable && pnpm install`
+- **No ffmpeg** — audio processing uses the browser's Web Audio API.
 
 ## Setting up a Discord bot
 
-Before running Hibiki, you need a Discord application and bot token.
+Before running Hibiki you need a Discord bot token.
 
-### 1. Create an application
+### 1. Create an application and bot
 
 1. Open the [Discord Developer Portal](https://discord.com/developers/applications).
 2. Click **New Application**, name it (e.g. "Hibiki"), and create it.
-3. Open your application. In **General Information**, copy the **Application ID** — this is your `DISCORD_CLIENT_ID`.
+3. Go to **Bot** → **Add Bot** and confirm.
+4. Under **Token**, click **Reset Token** (or **View Token**), then **Copy**.
+   Store it securely — you can set it in the app's **Settings** page or via the `DISCORD_TOKEN` env var.
 
-### 2. Create the bot and get the token
-
-1. In the left sidebar, go to **Bot**.
-2. Click **Add Bot** and confirm.
-3. Under **Token**, click **Reset Token** (or **View Token**), then **Copy**. This is your `DISCORD_TOKEN`. Store it securely and never commit it.
-4. Slash commands do not require the Message Content intent; you can leave it off.
-
-### 3. Invite the bot to your server
+### 2. Invite the bot to your server
 
 1. Go to **OAuth2** → **URL Generator**.
-2. Under **Scopes**, select **bot** and **applications.commands** (so slash commands appear).
+2. Under **Scopes**, select **bot**.
 3. Under **Bot Permissions**, select at least:
-   - **View Channels**, **Send Messages**, **Read Message History**
-   - **Connect** (join voice channels) and **Speak** (transmit audio) — required for voice
-   - **Move Members** — required so the bot can leave voice channels (e.g. when you click Leave on the dashboard, or after a bot restart when Discord still shows it in a channel)
-   - Optionally **Manage Messages** (for the `/delete` command to clear bot messages).
-4. Copy the **Generated URL** at the bottom, open it in a browser, choose your server, and authorize.
+   **View Channels**, **Connect**, **Speak**, **Move Members**.
+4. Copy the **Generated URL**, open it in a browser, choose your server, and authorize.
 
-After the invite, the bot will appear in your server’s member list (offline until Hibiki is running).
+The bot will appear in your server's member list (offline until Hibiki is running).
 
-### 4. Environment variables
+## Download
 
-In the repo root, copy the sample env and fill in the values you copied:
+Pre-built binaries for **macOS**, **Windows**, and **Linux** are available on the [Releases](https://github.com/PhyberApex/hibiki/releases) page.
 
-```bash
-cp .env.example .env
-```
+| Platform | Format |
+|----------|--------|
+| macOS    | `.dmg`, `.zip` (x64 + Apple Silicon) |
+| Windows  | `.exe` (NSIS installer) |
+| Linux    | `.AppImage`, `.deb` |
 
-Edit `.env` and set:
+> **macOS note:** The app is not code-signed. macOS will quarantine it on first launch.
+> After downloading, remove the quarantine flag before opening:
+>
+> ```bash
+> xattr -cr /Applications/Hibiki.app
+> ```
+>
+> Or right-click the app → **Open** → confirm in the dialog.
 
-- **DISCORD_TOKEN** — the bot token from step 2.
-- **DISCORD_CLIENT_ID** — the Application ID from step 1.
-
-Optional: `DISCORD_GUILD_ID` (register slash commands to this guild only for faster updates), and storage paths (defaults are under `storage/`).
-
-## Quick start
+## Quick start (from source)
 
 ```bash
 git clone https://github.com/phyberapex/hibiki.git
 cd hibiki
+nvm use
 corepack enable && pnpm install
-cp .env.example .env   # set DISCORD_TOKEN and DISCORD_CLIENT_ID (see above)
+cp .env.example .env   # set DISCORD_TOKEN here, or configure it in Settings after starting
 pnpm dev
 ```
 
-- **Dashboard:** http://localhost:5173 (proxies `/api` to the bot).
-- **Bot:** runs on port 3000; the Vue dev server talks to it via proxy.
+This builds the backend and frontend, then launches the Electron app.
+Set the Discord token in **Settings** if you haven't set `DISCORD_TOKEN`, then use the sidebar to join a voice channel and start playing scenes or streaming browser audio.
 
-Open the dashboard, confirm the “Bot connected” indicator, then use the Control Center to join a voice channel and play music or effects. You can also use Discord slash commands (`/join`, `/play`, etc.) in any server where the bot was invited. **Permissions:** who can use the bot is controlled from the dashboard → Permissions (allowlist of role/user IDs).
+## Scripts
 
-### Production build
+All scripts are run from the **repo root**.
 
-```bash
-pnpm build
-pnpm --filter @hibiki/bot start:prod
-```
-
-Dashboard is bundled and served by the bot at the same port (e.g. http://localhost:3000).
-
-## Docker
-
-### Run with Compose (local or server)
-
-```bash
-cp .env.example .env   # set DISCORD_TOKEN and DISCORD_CLIENT_ID
-mkdir -p storage
-docker compose up -d
-```
-
-Dashboard + API at http://localhost:3000. Mount `./storage` so uploads and SQLite persist.
-
-### Pre-built images (GitHub Container Registry)
-
-Images are built and pushed via GitHub Actions to **ghcr.io**:
-
-| Tag | When | Use case |
-|-----|------|----------|
-| `ghcr.io/phyberapex/hibiki:latest` | On each **published release** | Stable; same as the latest version tag. |
-| `ghcr.io/phyberapex/hibiki:X.Y.Z` | On each **published release** | Pin to a specific version (e.g. `1.2.0`). |
-| `ghcr.io/phyberapex/hibiki:next` | On every **push to main** | Bleeding edge; may be unstable. |
-| `ghcr.io/phyberapex/hibiki:<sha>` | On every **push to main** | Pin to a specific commit (e.g. `a1b2c3d`). |
-
-Use version or `latest` for production; use `next` only for testing. See [apps/bot/README.md](apps/bot/README.md) for `docker run` and env vars.
+| Command | What it does |
+|---------|-------------|
+| `pnpm dev` | Build everything and launch the Electron app |
+| `pnpm build` | Build backend (TypeScript) and frontend (Vite) without starting Electron |
+| `pnpm dist` | Build and package the app for the current platform (uses Electron Forge) |
+| `pnpm dist:mac` | Package for macOS (`.zip`) |
+| `pnpm dist:win` | Package for Windows (Squirrel installer + `.zip`) |
+| `pnpm dist:linux` | Package for Linux (`.deb` + `.zip`) |
+| `pnpm lint` | Run ESLint across backend and frontend |
+| `pnpm test` | Run backend (Jest) and frontend (Vitest) tests |
+| `pnpm test:e2e` | Run E2E tests (requires a running Hibiki instance and Discord config — see below) |
 
 ![Banner](banner.png)
 
-## What the database is for
+## Project structure
 
-Hibiki uses **SQLite** (one file, e.g. `storage/data/hibiki.sqlite`) for two things only:
+```text
+hibiki/
+├── electron/               # Electron main process + preload scripts
+│   ├── main.js             # Entry point, IPC handlers, protocol handler
+│   ├── preload.js          # Secure IPC bridge to renderer
+│   ├── splash.html         # Splash screen during initialization
+│   └── splash-logo.png     # Splash screen logo
+├── src/                    # Backend (runs in Electron main process)
+│   ├── discord/            # Discord.js client
+│   ├── player/             # Playback, volume, voice connections
+│   ├── sound/              # Sound library (music, effects, ambience)
+│   ├── scenes/             # Scene store + import/export
+│   ├── audio/              # Audio mixing (guild-specific managers)
+│   └── bootstrap-embedded.ts  # Wires everything up, exposes IPC API
+├── frontend/               # Vue 3 + Vite (renderer process)
+│   └── src/
+│       ├── api/            # IPC wrappers (player, sounds, scenes, config, browser)
+│       ├── audio/          # Web Audio capture (AudioWorklet)
+│       ├── stores/         # Pinia stores
+│       └── views/          # Vue pages (Scenes, Browser, Media, Settings)
+├── e2e/                    # End-to-end tests (Playwright + Vitest)
+├── docs/                   # Jekyll docs site (GitHub Pages)
+├── dist/                   # Compiled TypeScript backend (build output)
+├── web-dist/               # Built frontend (Vite output)
+├── out/                    # Packaged Electron apps (Electron Forge output)
+├── forge.config.js         # Electron Forge configuration
+└── package.json            # Single project package.json
+```
 
-1. **Player snapshots** — Per-guild state (connected channel, current track, idle/playing) is written to the DB so the dashboard can show “last seen” status after a bot restart, even before the bot has reconnected to Discord.
-2. **Permissions allowlist** — The list of Discord role IDs and user IDs who are allowed to use the bot (set in the dashboard under Permissions) is stored in the DB and loaded on startup.
+## Storage
 
-Sound files are **not** in the database; they live on disk under `storage/music` and `storage/effects`. The bot discovers them by scanning those folders.
+Hibiki stores data as JSON files:
 
-## Crash recovery
+- **`app-config.json`** — Discord token (when set in Settings), bookmarks, custom storage path.
+- **`scenes.json`** — Scene definitions (soundboards with music, ambience, effects).
+- **Sound files** — stored on disk under `music/`, `effects/`, `ambience/` directories.
 
-If the bot **crashes or restarts** while it was in a voice channel, Discord disconnects it — but the database might still say “joined” until the next write. To avoid showing stale “connected” state on the dashboard:
-
-- When the dashboard (or API) asks for player state, the bot **queries Discord** for its actual voice state in each guild that only has a persisted snapshot (no in-memory manager). If Discord reports that the bot is **not** in a voice channel, the returned state shows **disconnected** and the stale snapshot in the database is **corrected** (upserted as disconnected). If the bot is still in a channel (e.g. it reconnected elsewhere), the channel id and name come from Discord so the UI is accurate.
-
-So the dashboard always reflects the real connection state after a crash or restart; you don’t need to “join again” just to fix the display.
+When running as the Electron app, data lives in the platform's user data directory (e.g. `~/Library/Application Support/hibiki` on macOS). You can override paths via environment variables — see [.env.example](.env.example).
 
 ## E2E tests (real Discord)
 
-The `e2e` workspace runs tests that **connect to a real Discord server** and drive the Hibiki API (join, play, effect, leave). Optional: a **sidecar** bot (second token) verifies voice state and runs **command tests** (`!join`, `!leave`, `!songs`, `!effects`) when Hibiki allows it. Check run results in the CLI; no start/end messages are posted to Discord.
+The `e2e` directory contains tests that connect to a real Discord server and drive the Hibiki API.
 
-1. **Start Hibiki first** — e.g. `docker compose up -d` or `pnpm dev` — so the API is reachable at `E2E_HIBIKI_API_URL` (default `http://localhost:3000`).
-2. Copy `.env.e2e.example` to `.env.e2e` and set **E2E_GUILD_ID**, **E2E_VOICE_CHANNEL_ID**, and **E2E_TEXT_CHANNEL_ID**; optionally **E2E_SIDECAR_TOKEN** for sidecar checks.
-3. **Sidecar bot permissions** (invite URL → Bot Permissions): **View Channels**, **Send Messages**, **Read Message History**; for voice tests: **Connect**, **Speak**.
-4. **For command tests:** In the Hibiki process env (e.g. in `.env` or docker-compose), set **HIBIKI_E2E_ALLOW_BOT_ID** to the sidecar bot’s Discord user ID. The sidecar must be in Hibiki’s permissions allowlist (dashboard → Permissions).
-5. Run: `pnpm run test:e2e`.
+1. **Start Hibiki first** — `pnpm dev` — so the API is reachable.
+2. Copy `.env.e2e.example` to `.env.e2e` and set **E2E_GUILD_ID**, **E2E_VOICE_CHANNEL_ID**.
+3. Run: `pnpm test:e2e`.
 
-If `.env.e2e` is not configured, the Discord-dependent tests are skipped; the “bot is ready” check still runs if the API is up.
+See [e2e/README.md](e2e/README.md) for details on sidecar bot setup and optional config.
 
 ## Docs
 
-- **[apps/bot/README.md](apps/bot/README.md)** — Discord commands, REST API, permissions, persistence, Docker details
-- **Docs website** — The [docs/](docs/) folder is a **Jekyll** site: edit [docs/index.md](docs/index.md) (Markdown) and push; GitHub Pages builds it when you use **Settings → Pages** → **Deploy from a branch** → **main** → folder **/docs**. See [docs/README.md](docs/README.md) for how it works and how to add pages.
+- **Architecture** — See [CLAUDE.md](CLAUDE.md) for architecture, IPC patterns, and development guidelines.
+- **Docs website** — The [docs/](docs/) folder is a Jekyll site deployed via GitHub Pages. See [docs/README.md](docs/README.md).
 
 ## Contributing
 
 Contributions are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, running lint and tests, and how to submit changes.
 
-## About this project
+## License
 
-This repository was created largely with the help of **AI-assisted coding tools**. The code and docs are maintained in the same way as any open-source project; we encourage human review, testing, and contributions.
-
+[MIT](LICENSE)

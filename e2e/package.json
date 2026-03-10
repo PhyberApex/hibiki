@@ -1,23 +1,19 @@
 {
   "name": "e2e",
+  "type": "module",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "test": "vitest run",
+    "test": "playwright test",
+    "test:api": "vitest run",
     "test:watch": "vitest",
     "test:playwright": "playwright test"
-  },
-  "turbo": {
-    "test": {
-      "outputs": []
-    }
   },
   "devDependencies": {
     "@discordjs/voice": "^0.19.0",
     "@playwright/test": "1.58.2",
-    "dotenv": "^17.0.0",
     "discord.js": "^14.16.3",
+    "dotenv": "^17.0.0",
     "typescript": "^5.7.2",
     "vitest": "^4.0.0"
   }

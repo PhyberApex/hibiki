@@ -2,9 +2,9 @@ name: Coverage
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   coverage:
@@ -16,23 +16,16 @@ jobs:
         uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
-          node-version: '22.22.0'
-          cache: 'pnpm'
+          node-version: 22.22.0
+          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Test
         run: pnpm run test:coverage
 
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./apps/web/test-report.junit.xml, ./apps/bot/junit.xml
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./apps/bot/coverage/lcov.info, ./apps/web/coverage/lcov.info
+          files: ./coverage/lcov.info, ./frontend/coverage/lcov.info

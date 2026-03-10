@@ -5,18 +5,18 @@ The docs are built with **Jekyll** and published by **GitHub Pages** when you us
 ## How it works
 
 1. **Source files** (what you edit):
-   - **`index.md`** — Homepage content in Markdown. The front matter (`layout: default`, `title: ...`) tells Jekyll to wrap it in the default layout.
+   - **`index.md`** — Homepage content in Markdown (setup, features, Scenes, volume, E2E). The front matter (`layout: default`, `title: ...`) tells Jekyll to wrap it in the default layout.
    - **`_layouts/default.html`** — Shared layout: simple text header (title + tagline, no banner), main content area, footer. All CSS lives here.
    - **`_config.yml`** — Site title, description (tagline), and `baseurl` (e.g. `/hibiki` so links work when the site is at `https://<user>.github.io/hibiki/`).
    - **Assets** — `logo.png` and `banner.png` in `docs/` (favicon uses logo; layout shows banner at top and logo in header). Copy from repo root if you replace them.
 
-2. **Build (on GitHub)**  
+2. **Build (on GitHub)**
    When you push to `main`, GitHub Pages runs Jekyll on the `docs/` folder. Jekyll:
    - Reads `_config.yml`.
    - Renders `index.md` with the `default` layout into HTML.
    - Outputs the site (e.g. to a temporary `_site`). GitHub serves that at `https://<owner>.github.io/hibiki/`.
 
-3. **No local build required**  
+3. **No local build required**
    You can edit `index.md` (and the layout or config) and push; GitHub builds and publishes. You don’t need to run Jekyll on your machine unless you want to preview.
 
 ## Editing content
