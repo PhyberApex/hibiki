@@ -45,6 +45,12 @@ module.exports = {
     // Use prebuilt binaries (don't rebuild from source)
     prune: true,
 
+    // macOS: required for desktopCapturer (Electron 39+) and audio capture
+    extendInfo: {
+      NSMicrophoneUsageDescription: 'Hibiki needs microphone access to capture audio for Discord streaming.',
+      NSAudioCaptureUsageDescription: 'Hibiki needs audio capture access to stream audio to Discord voice channels.',
+    },
+
     // Include all necessary files
     ignore: [
       /^\/src/, // Source TypeScript (compiled to dist/)
