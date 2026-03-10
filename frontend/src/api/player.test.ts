@@ -5,6 +5,7 @@ import {
   fetchPlayerState,
   joinChannel,
   leaveGuild,
+  reconnectBot,
   setVolume,
   stopPlayback,
 } from './player'
@@ -79,6 +80,16 @@ describe('player API', () => {
       domain: 'player',
       method: 'setVolume',
       args: ['g1', { music: 80, effects: 90 }],
+    })
+  })
+
+  it('reconnectBot uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await reconnectBot()
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'player',
+      method: 'reconnect',
+      args: [],
     })
   })
 

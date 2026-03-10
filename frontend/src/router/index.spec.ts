@@ -34,4 +34,10 @@ describe('router', () => {
     expect(scene).toBeDefined()
     expect(scene?.path).toBe('/scenes/:id')
   })
+
+  it('has browser route', () => {
+    const browser = router.getRoutes().find(r => r.name === 'browser')
+    expect(browser).toBeDefined()
+    expect(browser?.path).toBe('/browser')
+  })
 })

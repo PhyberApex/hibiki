@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -10,6 +10,9 @@ vi.mock('@/api/player', () => ({
   fetchPlayerState: vi.fn().mockResolvedValue([]),
   fetchBotStatus: vi.fn().mockResolvedValue({ ready: true, userTag: 'Bot#0' }),
   fetchGuildDirectory: vi.fn().mockResolvedValue([]),
+  joinChannel: vi.fn().mockResolvedValue(undefined),
+  leaveGuild: vi.fn().mockResolvedValue(undefined),
+  reconnectBot: vi.fn().mockResolvedValue(undefined),
 }))
 
 const router = createRouter({
@@ -92,5 +95,99 @@ describe('app', () => {
     const versionEl = wrapper.find('.version')
     expect(versionEl.exists()).toBe(true)
     expect(versionEl.text()).toMatch(/^v\d/)
+  })
+
+  it('isTabActive matches scenes sub-routes', async () => {
+    await router.push('/scenes/123')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    const scenesTab = wrapper.findAll('.sidebar-tab').find(t => t.text().includes('Scenes'))
+    expect(scenesTab?.classes()).toContain('sidebar-tab-active')
+  })
+
+  it('renders guild directory when available', async () => {
+    const { fetchBotStatus, fetchGuildDirectory } = await import('@/api/player')
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
+    vi.mocked(fetchGuildDirectory).mockResolvedValue([
+      {
+        guildId: 'g1',
+        guildName: 'Test Guild',
+        iconUrl: null,
+        channels: [{ id: 'ch1', name: 'General' }],
+      },
+    ])
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.guild-name').text()).toBe('Test Guild')
+    expect(wrapper.find('.channel-item').text()).toContain('General')
+  })
+
+  it('shows disconnect button when connected', async () => {
+    const { fetchPlayerState, fetchBotStatus, fetchGuildDirectory } = await import('@/api/player')
+    vi.mocked(fetchPlayerState).mockResolvedValue([
+      { guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const },
+    ])
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
+    vi.mocked(fetchGuildDirectory).mockResolvedValue([
+      {
+        guildId: 'g1',
+        guildName: 'Test Guild',
+        iconUrl: null,
+        channels: [{ id: 'ch1', name: 'General' }],
+      },
+    ])
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.btn-disconnect').exists()).toBe(true)
+    expect(wrapper.find('.btn-disconnect').text()).toContain('Test Guild')
+  })
+
+  it('renders welcome layout for root path', async () => {
+    const welcomeRouter = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', name: 'welcome', component: () => Promise.resolve({ template: '<div>Welcome</div>' }) },
+        { path: '/scenes', name: 'scenes', component: () => Promise.resolve({ template: '<div>Scenes</div>' }) },
+      ],
+    })
+    await welcomeRouter.push('/')
+    await welcomeRouter.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), welcomeRouter],
+      },
+    })
+    expect(wrapper.find('.welcome-layout').exists()).toBe(true)
+    expect(wrapper.find('.layout').exists()).toBe(false)
+  })
+
+  it('shows Disconnected when bot is not ready', async () => {
+    const { fetchBotStatus } = await import('@/api/player')
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: false })
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.bot-status').text()).toContain('Disconnected')
   })
 })

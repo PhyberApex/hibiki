@@ -79,4 +79,24 @@ describe('audio-stream API', () => {
     delete (window as any).hibiki
     expect(() => startAudioStream('g1')).toThrow('Electron')
   })
+
+  it('sendEffectChunk throws when not in Electron', () => {
+    delete (window as any).hibiki
+    expect(() => sendEffectChunk('g1', new ArrayBuffer(8))).toThrow('Electron')
+  })
+
+  it('stopEffectStream throws when not in Electron', () => {
+    delete (window as any).hibiki
+    expect(() => stopEffectStream('g1')).toThrow('Electron')
+  })
+
+  it('startEffectStream throws when not in Electron', () => {
+    delete (window as any).hibiki
+    expect(() => startEffectStream('g1')).toThrow('Electron')
+  })
+
+  it('sendAudioChunk throws when not in Electron', () => {
+    delete (window as any).hibiki
+    expect(() => sendAudioChunk('g1', new ArrayBuffer(8))).toThrow('Electron')
+  })
 })
