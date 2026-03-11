@@ -26,8 +26,8 @@
 
 ## Requirements
 
-- **Node.js** 20 or 22 (see [.nvmrc](.nvmrc)). Use `nvm use` to activate.
-  The voice stack uses `@discordjs/opus`, which ships prebuilds only for these versions.
+- **Node.js** 24 (see [.nvmrc](.nvmrc)). Use `nvm use` to activate.
+  The voice stack uses `@discordjs/opus` with N-API prebuilds (ABI-stable across Node versions).
 - **pnpm** — `corepack enable && pnpm install`
 - **No ffmpeg** — audio processing uses the browser's Web Audio API.
 

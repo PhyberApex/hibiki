@@ -9,7 +9,7 @@ Be respectful and constructive. This is a hobby-friendly project; we're here to 
 ## Getting started
 
 1. **Fork and clone** the repo (or clone directly if you have write access).
-2. **Node and pnpm:** Use Node 20 or 22 (see [.nvmrc](.nvmrc); run `nvm use`). Enable pnpm: `corepack enable && pnpm install`.
+2. **Node and pnpm:** Use Node 24 (see [.nvmrc](.nvmrc); run `nvm use`). Enable pnpm: `corepack enable && pnpm install`.
 3. **Environment:** Copy [.env.example](.env.example) to `.env` and set `DISCORD_TOKEN` (see [README](README.md#setting-up-a-discord-bot)). You can also set the token inside the app's **Settings** page after starting.
 4. **Run the app:** `pnpm dev` builds everything and launches the Electron app.
 

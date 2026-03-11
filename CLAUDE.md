@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Common Commands
 
-**IMPORTANT:** Always run `nvm use` before executing any pnpm commands to activate the correct Node.js version (22.22.0).
+**IMPORTANT:** Always run `nvm use` before executing any pnpm commands to activate the correct Node.js version (24.14.0).
 
 All commands run from the **repo root**:
 
@@ -173,9 +173,9 @@ The scene is a **template**, not a runtime object. Playback state lives in `Guil
 
 ### Node Version
 
-**Node.js 20 or 22 required** (see `.nvmrc`). **MUST run `nvm use` before any pnpm commands** to activate the correct version.
-- `@discordjs/opus` ships prebuilds only for these versions.
-- Electron 33+ requires Node 20+.
+**Node.js 24 required** (see `.nvmrc`). **MUST run `nvm use` before any pnpm commands** to activate the correct version.
+- `@discordjs/opus` uses N-API prebuilds (ABI-stable across Node versions).
+- Electron 41+ requires Node 24+.
 - Always use `source ~/.nvm/nvm.sh && nvm use && <command>` when running commands in new shells.
 
 ## Testing
@@ -219,7 +219,7 @@ The project is transitioning from a Docker-based monorepo to an Electron app. Se
 
 ## Tech Stack
 
-- **Electron 33** — Main + renderer processes
+- **Electron 41** — Main + renderer processes
 - **Discord.js 14** — Bot, voice connections
 - **Vue 3** — Frontend (Composition API, `<script setup>`)
 - **Pinia** — State management
