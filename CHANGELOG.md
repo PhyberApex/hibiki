@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.0](https://github.com/PhyberApex/hibiki/compare/v1.0.0...v1.1.0) (2026-03-14)
+
+
+### Features
+
+* Remove splash screen on the start of the app ([#81](https://github.com/PhyberApex/hibiki/issues/81)) ([1619fc1](https://github.com/PhyberApex/hibiki/commit/1619fc11f6286cd41ec954553c10f589f5954b1b))
+* Update electron to 39 ([#80](https://github.com/PhyberApex/hibiki/issues/80)) ([8c22680](https://github.com/PhyberApex/hibiki/commit/8c22680e63c314a19a4068fb9689813c2c5bc889))
+* Update electron to 41 and node to 24 ([#84](https://github.com/PhyberApex/hibiki/issues/84)) ([b425f56](https://github.com/PhyberApex/hibiki/commit/b425f56d8221020c8c8f7218fe3c336247c3cbd2))
+
+
+### Bug Fixes
+
+* Audio not working in streaming ([#78](https://github.com/PhyberApex/hibiki/issues/78)) ([e936043](https://github.com/PhyberApex/hibiki/commit/e9360433929540da0d5dc9a99cdc604c2adb6566))
+* **deps:** update dependency dotenv to v17 ([#77](https://github.com/PhyberApex/hibiki/issues/77)) ([6abcfae](https://github.com/PhyberApex/hibiki/commit/6abcfae3cab2ccf71fa5121934a06b621dbbf954))
+
 ## [1.0.0](https://github.com/PhyberApex/hibiki/compare/v0.4.0...v1.0.0) (2026-03-10)
 
 
