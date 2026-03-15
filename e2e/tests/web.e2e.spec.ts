@@ -81,9 +81,9 @@ test.describe('Hibiki Electron E2E', () => {
     await expect(page.getByRole('link', { name: 'Media' })).toBeVisible()
   })
 
-  test('app loads Media Library', async ({ page }) => {
+  test('app loads Sound library', async ({ page }) => {
     await page.goto('hibiki://app/media')
-    await expect(page.getByRole('heading', { name: 'Media Library' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Sound library' })).toBeVisible()
     await expect(page.locator('section.panel').filter({ hasText: 'Music' })).toBeVisible()
     await expect(page.locator('section.panel').filter({ hasText: 'Effects' })).toBeVisible()
   })

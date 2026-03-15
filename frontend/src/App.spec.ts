@@ -155,7 +155,8 @@ describe('app', () => {
     })
     await flushPromises()
     expect(wrapper.find('.btn-disconnect').exists()).toBe(true)
-    expect(wrapper.find('.btn-disconnect').text()).toContain('Test Guild')
+    expect(wrapper.find('.btn-disconnect').text()).toBe('Leave voice')
+    expect(wrapper.find('.btn-disconnect').attributes('title')).toContain('Test Guild')
   })
 
   it('renders welcome layout for root path', async () => {

@@ -49,7 +49,7 @@ async function loadSounds() {
         : await listEffects()
   }
   catch (err) {
-    error.value = err instanceof Error ? err.message : 'Unknown error'
+    error.value = err instanceof Error ? err.message : 'Couldn\'t load sounds. Try again.'
   }
   finally {
     loading.value = false
@@ -79,11 +79,12 @@ async function handleFiles(files: FileList | File[] | null) {
       await uploadSound(props.type, file)
       await loadSounds()
       emit('updated')
-      showToast('success', 'Uploaded.')
+      showToast('success', 'File uploaded.')
     }
     catch (err) {
-      error.value = err instanceof Error ? err.message : 'Upload failed'
-      showToast('error', err instanceof Error ? err.message : 'Upload failed')
+      const msg = err instanceof Error ? err.message : 'Could not upload file.'
+      error.value = msg
+      showToast('error', msg)
     }
     finally {
       uploading.value = false
@@ -97,14 +98,14 @@ async function handleFiles(files: FileList | File[] | null) {
     await loadSounds()
     emit('updated')
     if (failed.length === 0)
-      showToast('success', `Uploaded ${success.length} file(s).`)
+      showToast('success', `Uploaded ${success.length} ${success.length === 1 ? 'file' : 'files'}.`)
     else if (success.length > 0)
-      showToast('success', `Uploaded ${success.length}. ${failed.length} failed.`)
+      showToast('success', `Uploaded ${success.length}, but ${failed.length} failed.`)
     else
-      showToast('error', `All ${failed.length} upload(s) failed.`)
+      showToast('error', `All ${failed.length} uploads failed.`)
   }
   catch (err) {
-    showToast('error', err instanceof Error ? err.message : 'Bulk upload failed')
+    showToast('error', err instanceof Error ? err.message : 'Could not upload files.')
   }
   finally {
     uploading.value = false
@@ -185,10 +186,10 @@ async function confirmDelete(id: string) {
     await deleteSound(props.type, id)
     await loadSounds()
     emit('updated')
-    showToast('success', 'Deleted.')
+    showToast('success', 'Sound deleted.')
   }
   catch (err) {
-    showToast('error', err instanceof Error ? err.message : 'Delete failed')
+    showToast('error', err instanceof Error ? err.message : 'Could not delete sound.')
   }
 }
 
@@ -255,12 +256,12 @@ onActivated(() => {
     <p v-else-if="error" class="empty-state empty-state-error">
       {{ error }}
     </p>
-    <div v-else-if="items.length === 0" class="empty-state">
+    <div v-else-if="items.length === 0" class="empty-state empty-state-drop">
       <p>
         No {{ type }} yet.
       </p>
       <p class="empty-hint">
-        Click "+ Add" or drop audio files here.
+        Click + Add or drag audio files here.
       </p>
     </div>
 
@@ -281,7 +282,7 @@ onActivated(() => {
           <span v-else class="icon-play">▶</span>
         </button>
 
-        <span class="sound-name">{{ sound.name }}</span>
+        <span class="sound-name" :title="sound.name">{{ sound.name }}</span>
 
         <div v-if="pendingDeleteId === sound.id" class="delete-confirm">
           <button type="button" class="btn-confirm-delete" @click="confirmDelete(sound.id)">
@@ -297,6 +298,7 @@ onActivated(() => {
           class="btn-delete"
           :disabled="pendingDeleteId !== null"
           title="Delete"
+          :aria-label="`Delete ${sound.name}`"
           @click="askDelete(sound.id)"
         >
           ×
@@ -318,6 +320,8 @@ onActivated(() => {
 .panel-drop-active {
   border-color: var(--color-accent);
   background: var(--color-accent-muted);
+  box-shadow: var(--shadow-accent-sm);
+  border-style: solid;
 }
 
 .panel-header {
@@ -366,7 +370,7 @@ onActivated(() => {
   font-size: 0.8rem;
   font-weight: 500;
   background: var(--color-accent);
-  color: #0c0c0e;
+  color: var(--color-accent-text);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -382,24 +386,24 @@ onActivated(() => {
   cursor: wait;
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 .toast {
   margin: 0 0 0.75rem;
   padding: 0.4rem 0.7rem;
   border-radius: var(--radius-sm);
   font-size: 0.8rem;
   font-weight: 500;
+  animation: toast-in 0.25s ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .toast-success {
@@ -425,6 +429,12 @@ onActivated(() => {
 
 .empty-state-error {
   color: var(--color-error);
+}
+
+.empty-state-drop {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  margin: 0 -0.25rem;
 }
 
 .empty-hint {
@@ -457,6 +467,7 @@ onActivated(() => {
 
 .sound-item-playing {
   background: var(--color-accent-muted);
+  box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
 .sound-play-btn {
@@ -513,11 +524,13 @@ onActivated(() => {
   color: var(--color-text-dim);
   font-size: 1rem;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.35;
   transition: opacity var(--transition), color var(--transition), background var(--transition);
 }
 
-.sound-item:hover .btn-delete {
+.sound-item:hover .btn-delete,
+.sound-item:focus-within .btn-delete,
+.btn-delete:focus-visible {
   opacity: 1;
 }
 
@@ -527,7 +540,7 @@ onActivated(() => {
 }
 
 .btn-delete:disabled {
-  opacity: 0;
+  opacity: 0.2;
   cursor: not-allowed;
 }
 
@@ -539,8 +552,8 @@ onActivated(() => {
 }
 
 .btn-confirm-delete {
-  padding: 0.2rem 0.5rem;
-  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
   font-weight: 500;
   background: var(--color-error-muted);
   color: var(--color-error);
@@ -552,12 +565,12 @@ onActivated(() => {
 
 .btn-confirm-delete:hover {
   background: var(--color-error);
-  color: #fff;
+  color: var(--color-on-accent-bg);
 }
 
 .btn-cancel-delete {
-  padding: 0.2rem 0.5rem;
-  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
   font-weight: 500;
   background: var(--color-bg);
   color: var(--color-text-muted);

@@ -23,6 +23,8 @@ function isTabActive(path: string) {
   return route.path.startsWith(path)
 }
 
+const POLL_INTERVAL_MS = 800
+
 function startPollingWhenDisconnected() {
   if (pollTimer)
     return
@@ -35,7 +37,7 @@ function startPollingWhenDisconnected() {
       return
     }
     player.loadState()
-  }, 2000)
+  }, POLL_INTERVAL_MS)
 }
 
 onMounted(() => {
@@ -111,11 +113,11 @@ const isWelcome = computed(() => route.path === '/')
           v-if="player.connectedGuildId"
           type="button"
           class="btn-disconnect"
-          title="Leave voice channel"
-          aria-label="Leave"
+          :title="`Leave ${connectedGuild?.guildName ?? 'voice'}`"
+          aria-label="Leave voice channel"
           @click="player.doLeave(player.connectedGuildId)"
         >
-          Disconnect ({{ connectedGuild?.guildName ?? 'voice' }})
+          Leave voice
         </button>
       </nav>
 
@@ -131,7 +133,7 @@ const isWelcome = computed(() => route.path === '/')
           <span
             v-if="tab.path === '/scenes' && player.scenePlaying"
             class="streaming-badge"
-            title="Scene is playing"
+            title="Scene is playing in voice"
           >LIVE</span>
           <span
             v-if="tab.path === '/browser' && player.browserStreamingCount > 0"
@@ -154,10 +156,11 @@ const isWelcome = computed(() => route.path === '/')
           type="button"
           class="btn-reconnect"
           :disabled="player.reconnecting"
-          :title="player.reconnecting ? 'Reconnecting…' : 'Restart Discord bot'"
+          :title="player.reconnecting ? 'Reconnecting…' : 'Reconnect Discord bot'"
+          :aria-label="player.reconnecting ? 'Reconnecting' : 'Reconnect Discord bot'"
           @click="player.doReconnect"
         >
-          {{ player.reconnecting ? '↻' : '↻' }}
+          ↻
         </button>
       </div>
     </aside>
@@ -303,6 +306,8 @@ const isWelcome = computed(() => route.path === '/')
 .channel-item-connected {
   color: var(--color-accent);
   font-weight: 500;
+  background: var(--color-accent-muted);
+  box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
 .channel-dot {
@@ -362,15 +367,21 @@ const isWelcome = computed(() => route.path === '/')
 }
 
 .streaming-badge {
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   padding: 0.1rem 0.35rem;
   border-radius: var(--radius-full);
   background: var(--color-live);
-  color: #fff;
+  color: var(--color-on-accent-bg);
   margin-left: auto;
   line-height: 1;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 .sidebar-status {
@@ -381,8 +392,8 @@ const isWelcome = computed(() => route.path === '/')
 }
 
 .btn-reconnect {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.75rem;
+  height: 1.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -438,6 +449,13 @@ const isWelcome = computed(() => route.path === '/')
 
 .bot-status-connected .bot-status-dot {
   background: var(--color-live);
+  animation: heartbeat 2.5s ease-in-out infinite;
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  40% { transform: scale(1.3); opacity: 0.8; }
+  60% { transform: scale(1); opacity: 1; }
 }
 
 .bot-status-disconnected {
@@ -492,5 +510,39 @@ const isWelcome = computed(() => route.path === '/')
 .version {
   font-size: 0.75rem;
   color: var(--color-text-dim);
+}
+
+/* Narrow window: compact sidebar */
+@media (max-width: 960px) {
+  .sidebar {
+    width: 180px;
+    min-width: 180px;
+    padding: 0.75rem 0.5rem;
+    gap: 1rem;
+  }
+
+  .guild-header {
+    padding: 0.3rem 0.4rem;
+    font-size: 0.8rem;
+  }
+
+  .guild-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .channel-item {
+    padding: 0.25rem 0.4rem;
+    font-size: 0.75rem;
+  }
+
+  .sidebar-tab {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+  }
+
+  .content {
+    padding: 1rem;
+  }
 }
 </style>

@@ -172,6 +172,7 @@ export async function captureFromAudioElement(
       worklet.port.onmessage = null
       source.disconnect(worklet)
       worklet.disconnect()
+      source.connect(ctx.destination)
       if (entry.activeWorklet === worklet)
         entry.activeWorklet = undefined
     },

@@ -3,7 +3,7 @@ import type { Scene, SceneItem } from '@/api/scenes'
 import type { SoundFile } from '@/api/sounds'
 import type { CaptureSession } from '@/audio/browser-audio-capture'
 import { computed, onActivated, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
   sendAudioChunk,
   sendEffectChunk,
@@ -31,11 +31,13 @@ const musicSounds = ref<SoundFile[]>([])
 const effectsSounds = ref<SoundFile[]>([])
 const globalVolume = ref(80)
 const playingMusicId = ref<string | null>(null)
+const scenePlayingLocal = ref(false)
 const showCreateInput = ref(false)
 const newSceneName = ref('')
 const createSceneBusy = ref(false)
 const exportBusy = ref(false)
 const importBusy = ref(false)
+const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 const musicAudioEl = createAudioEl()
 const effectAudioEl = createAudioEl()
@@ -86,6 +88,9 @@ const sceneId = computed(() => {
 })
 const guildId = computed(() => player.guildId)
 const isJoined = computed(() => player.isJoined)
+const hasSounds = computed(() =>
+  ambienceSounds.value.length > 0 || musicSounds.value.length > 0 || effectsSounds.value.length > 0,
+)
 
 function resolveSoundName(category: 'ambience' | 'music' | 'effects', soundId: string): string {
   const list = category === 'ambience' ? ambienceSounds.value : category === 'music' ? musicSounds.value : effectsSounds.value
@@ -120,7 +125,12 @@ function updateAllVolumes() {
 watch(globalVolume, () => updateAllVolumes())
 
 async function loadScenes() {
-  scenes.value = await listScenes()
+  try {
+    scenes.value = await listScenes()
+  }
+  catch (err) {
+    loadError.value = err instanceof Error ? err.message : 'Couldn\'t load scenes. Try again.'
+  }
 }
 
 async function loadScene() {
@@ -128,18 +138,28 @@ async function loadScene() {
     scene.value = null
     return
   }
-  scene.value = await getScene(sceneId.value)
+  try {
+    scene.value = await getScene(sceneId.value)
+  }
+  catch (err) {
+    loadError.value = err instanceof Error ? err.message : 'Couldn\'t load this scene. Try again.'
+  }
 }
 
 async function loadSounds() {
-  const [ambience, music, effects] = await Promise.all([
-    listAmbience(),
-    listMusic(),
-    listEffects(),
-  ])
-  ambienceSounds.value = ambience
-  musicSounds.value = music
-  effectsSounds.value = effects
+  try {
+    const [ambience, music, effects] = await Promise.all([
+      listAmbience(),
+      listMusic(),
+      listEffects(),
+    ])
+    ambienceSounds.value = ambience
+    musicSounds.value = music
+    effectsSounds.value = effects
+  }
+  catch (err) {
+    loadError.value = err instanceof Error ? err.message : 'Couldn\'t load sounds. Try again.'
+  }
 }
 
 function toggleAmbience(item: SceneItem) {
@@ -169,6 +189,21 @@ function stopAmbience(soundId: string) {
     captureSessions.delete(`ambience-${soundId}`)
   }
   stopEffectStream(guildId.value!, `ambience-${soundId}`).catch(() => {})
+}
+
+function stopAmbienceLocal(soundId: string) {
+  const timer = ambienceTimers.get(soundId)
+  if (timer != null) {
+    clearTimeout(timer)
+    ambienceTimers.delete(soundId)
+  }
+  const el = ambienceAudioEls.get(soundId)
+  if (el) {
+    el.onended = null
+    el.pause()
+    el.removeAttribute('src')
+    el.load()
+  }
 }
 
 function isLooping(item: SceneItem): boolean {
@@ -214,6 +249,39 @@ async function playAmbience(item: SceneItem) {
   catch (e) {
     console.error('[scene] playAmbience failed:', e)
     stopAmbience(item.soundId)
+  }
+}
+
+async function playAmbienceLocal(item: SceneItem) {
+  try {
+    stopAmbienceLocal(item.soundId)
+    const el = getAmbienceAudio(item.soundId)
+    el.src = soundStreamUrl('ambience', item.soundId)
+    el.loop = isLooping(item)
+    el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
+    el.load()
+    await new Promise<void>((resolve, reject) => {
+      el.addEventListener('canplaythrough', () => resolve(), { once: true })
+      el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
+    })
+    if (!el.loop) {
+      el.onended = () => {
+        const min = (item.repeatMin ?? 0) * 1000
+        const max = (item.repeatMax ?? 0) * 1000
+        const delay = min + Math.random() * (max - min)
+        const timer = setTimeout(() => {
+          ambienceTimers.delete(item.soundId)
+          el.currentTime = 0
+          el.play().catch(() => {})
+        }, delay)
+        ambienceTimers.set(item.soundId, timer)
+      }
+    }
+    await el.play()
+  }
+  catch (e) {
+    console.error('[scene] playAmbienceLocal failed:', e)
+    stopAmbienceLocal(item.soundId)
   }
 }
 
@@ -270,6 +338,13 @@ function stopMusic() {
   }
   if (guildId.value)
     stopAudioStream(guildId.value).catch(() => {})
+}
+
+function stopMusicLocal() {
+  musicAudioEl.pause()
+  musicAudioEl.removeAttribute('src')
+  musicAudioEl.load()
+  playingMusicId.value = null
 }
 
 async function playEffect(item: SceneItem) {
@@ -329,9 +404,53 @@ async function removeFromScene(category: 'ambience' | 'music' | 'effects', sound
   }
 }
 
+async function playSceneLocal() {
+  if (!scene.value)
+    return
+  stopScene()
+  scenePlayingLocal.value = true
+  try {
+    for (const item of scene.value.ambience.filter(a => a.enabled))
+      await playAmbienceLocal(item)
+    const firstMusic = scene.value.music[0]
+    if (firstMusic) {
+      stopMusicLocal()
+      const el = musicAudioEl
+      playingMusicId.value = firstMusic.soundId
+      el.src = soundStreamUrl('music', firstMusic.soundId)
+      el.loop = firstMusic.loop ?? false
+      el.volume = (firstMusic.volume ?? 80) / 100 * (globalVolume.value / 100)
+      el.load()
+      await new Promise<void>((resolve, reject) => {
+        el.addEventListener('canplaythrough', () => resolve(), { once: true })
+        el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
+      })
+      el.onended = () => {
+        playingMusicId.value = null
+      }
+      el.onerror = () => {
+        playingMusicId.value = null
+      }
+      await el.play()
+    }
+  }
+  catch (e) {
+    console.error('[scene] playSceneLocal failed:', e)
+    stopSceneLocal()
+  }
+}
+
+function stopSceneLocal() {
+  for (const item of scene.value?.ambience ?? [])
+    stopAmbienceLocal(item.soundId)
+  stopMusicLocal()
+  scenePlayingLocal.value = false
+}
+
 async function playScene() {
   if (!scene.value || !isJoined.value || !guildId.value)
     return
+  stopSceneLocal()
   player.scenePlaying = true
   try {
     for (const item of scene.value.ambience.filter(a => a.enabled))
@@ -367,6 +486,7 @@ async function submitCreateScene() {
   if (!name)
     return
   createSceneBusy.value = true
+  exportImportMessage.value = null
   try {
     const newScene = await saveScene({ name, ambience: [], music: [], effects: [] })
     scenes.value = await listScenes()
@@ -375,7 +495,7 @@ async function submitCreateScene() {
     await router.push(`/scenes/${newScene.id}`)
   }
   catch (err) {
-    console.error('[scene] Failed to create scene:', err)
+    exportImportMessage.value = { type: 'error', text: err instanceof Error ? err.message : 'Couldn\'t create the scene. Try again.' }
   }
   finally {
     createSceneBusy.value = false
@@ -383,10 +503,11 @@ async function submitCreateScene() {
 }
 
 async function deleteCurrentScene() {
-  // eslint-disable-next-line no-alert -- simple confirm for delete
-  if (!scene.value || !confirm(`Delete "${scene.value.name}"?`))
+  // eslint-disable-next-line no-alert -- simple confirm for destructive action
+  if (!scene.value || !confirm(`Delete "${scene.value.name}"? This can't be undone.`))
     return
   stopScene()
+  stopSceneLocal()
   await deleteScene(scene.value.id)
   scenes.value = await listScenes()
   await router.push('/scenes')
@@ -414,7 +535,7 @@ async function doExportScene() {
     exportImportMessage.value = { type: 'success', text: `Exported to ${targetPath}` }
   }
   catch (e) {
-    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Export failed' }
+    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Export failed. Check that the folder is writable and try again.' }
   }
   finally {
     exportBusy.value = false
@@ -437,7 +558,7 @@ async function doImportScene() {
     exportImportMessage.value = { type: 'success', text: `Imported "${imported.name}"` }
   }
   catch (e) {
-    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Import failed' }
+    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Import failed. Make sure the file is a valid Hibiki scene (.zip) and try again.' }
   }
   finally {
     importBusy.value = false
@@ -458,23 +579,70 @@ onActivated(() => {
 watch(sceneId, (newId, oldId) => {
   const hadScene = oldId !== undefined && oldId !== ''
   const hasNoScene = newId === undefined || newId === ''
-  if (hadScene && (hasNoScene || newId !== oldId))
+  if (hadScene && (hasNoScene || newId !== oldId)) {
     stopScene()
+    stopSceneLocal()
+  }
   loadScene()
 }, { immediate: true })
 </script>
 
 <template>
   <main class="scene-view">
+    <h1 class="sr-only">
+      Scenes
+    </h1>
     <header class="scene-header">
+      <div v-if="scene" class="scene-controls">
+        <label class="global-volume">
+          <span class="volume-icon" aria-hidden="true">🔊</span>
+          <input
+            v-model.number="globalVolume"
+            type="range"
+            min="0"
+            max="100"
+            class="volume-slider"
+            aria-label="Global volume"
+          >
+        </label>
+        <template v-if="scenePlayingLocal || player.scenePlaying">
+          <button
+            type="button"
+            class="btn btn-stop-scene"
+            @click="scenePlayingLocal ? stopSceneLocal() : stopScene()"
+          >
+            Stop
+          </button>
+        </template>
+        <template v-else>
+          <button
+            type="button"
+            class="btn btn-ghost btn-play-local"
+            title="Play in this app only (no Discord)"
+            @click="playSceneLocal"
+          >
+            Play
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary btn-play-scene"
+            title="Stream this scene to your Discord voice channel"
+            :disabled="!isJoined"
+            @click="playScene"
+          >
+            Stream
+          </button>
+        </template>
+      </div>
       <div class="scene-title-row">
         <select
           :value="sceneId ?? ''"
           class="scene-select"
+          aria-label="Select scene"
           @change="(e) => router.push((e.target as HTMLSelectElement).value ? `/scenes/${(e.target as HTMLSelectElement).value}` : '/scenes')"
         >
           <option value="">
-            Select a scene…
+            Choose a scene…
           </option>
           <option v-for="s in scenes" :key="s.id" :value="s.id">
             {{ s.name }}
@@ -482,7 +650,7 @@ watch(sceneId, (newId, oldId) => {
         </select>
         <div class="scene-actions">
           <button type="button" class="btn btn-ghost" @click="openCreateScene">
-            New scene
+            New
           </button>
           <button
             type="button"
@@ -490,7 +658,7 @@ watch(sceneId, (newId, oldId) => {
             :disabled="importBusy"
             @click="doImportScene"
           >
-            {{ importBusy ? 'Importing…' : 'Import' }}
+            {{ importBusy ? '…' : 'Import' }}
           </button>
           <button
             v-if="scene"
@@ -499,7 +667,7 @@ watch(sceneId, (newId, oldId) => {
             :disabled="exportBusy"
             @click="doExportScene"
           >
-            {{ exportBusy ? 'Exporting…' : 'Export' }}
+            {{ exportBusy ? '…' : 'Export' }}
           </button>
           <button
             v-if="scene"
@@ -511,70 +679,11 @@ watch(sceneId, (newId, oldId) => {
           </button>
         </div>
       </div>
-      <div v-if="showCreateInput && scenes.length > 0" class="create-scene-form create-scene-form-inline create-scene-form-card">
-        <input
-          v-model="newSceneName"
-          type="text"
-          class="create-scene-input"
-          placeholder="Scene name"
-          @keydown.enter="submitCreateScene"
-          @keydown.escape="cancelCreateScene"
-        >
-        <div class="create-scene-buttons">
-          <button type="button" class="btn btn-ghost" @click="cancelCreateScene">
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="!newSceneName.trim() || createSceneBusy"
-            @click="submitCreateScene"
-          >
-            Create
-          </button>
-        </div>
-      </div>
-      <p v-if="exportImportMessage" class="export-import-message" :class="[exportImportMessage.type]">
-        {{ exportImportMessage.text }}
-      </p>
-      <div v-else-if="scene" class="scene-controls">
-        <label class="global-volume">
-          <span class="volume-icon" aria-hidden="true">🔊</span>
-          <input
-            v-model.number="globalVolume"
-            type="range"
-            min="0"
-            max="100"
-            class="volume-slider"
-          >
-        </label>
-        <button
-          v-if="player.scenePlaying"
-          type="button"
-          class="btn btn-stop-scene"
-          @click="stopScene"
-        >
-          Stop scene
-        </button>
-        <button
-          v-else
-          type="button"
-          class="btn btn-primary btn-play-scene"
-          :disabled="!isJoined"
-          @click="playScene"
-        >
-          Play scene
-        </button>
-      </div>
-    </header>
-
-    <div v-if="!scene && scenes.length === 0" class="scene-empty">
-      <p>No scenes yet. Create one to get started.</p>
       <div v-if="showCreateInput" class="create-scene-form create-scene-form-inline create-scene-form-card">
         <input
           v-model="newSceneName"
           type="text"
-          class="create-scene-input"
+          class="input create-scene-input"
           placeholder="Scene name"
           @keydown.enter="submitCreateScene"
           @keydown.escape="cancelCreateScene"
@@ -593,37 +702,33 @@ watch(sceneId, (newId, oldId) => {
           </button>
         </div>
       </div>
-      <button v-else type="button" class="btn btn-primary" @click="openCreateScene">
+      <p
+        v-if="exportImportMessage"
+        class="status-message"
+        :class="[exportImportMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
+        {{ exportImportMessage.text }}
+      </p>
+    </header>
+
+    <div v-if="!scene && scenes.length === 0" class="scene-empty">
+      <p v-if="!hasSounds">
+        <RouterLink to="/media" class="empty-link">
+          Add music, ambience, and effects in the sound library
+        </RouterLink>
+        first. Then come back here and create a scene.
+      </p>
+      <p v-else>
+        Create a scene to mix music, ambience, and effects for your session.
+      </p>
+      <button type="button" class="btn btn-primary" @click="openCreateScene">
         Create scene
       </button>
     </div>
 
     <div v-else-if="!scene && scenes.length > 0" class="scene-empty scene-empty-select">
-      <p>Select a scene from the dropdown above to edit it, or create a new one.</p>
-      <div v-if="showCreateInput" class="create-scene-form create-scene-form-inline create-scene-form-card">
-        <input
-          v-model="newSceneName"
-          type="text"
-          class="create-scene-input"
-          placeholder="Scene name"
-          @keydown.enter="submitCreateScene"
-          @keydown.escape="cancelCreateScene"
-        >
-        <div class="create-scene-buttons">
-          <button type="button" class="btn btn-ghost" @click="cancelCreateScene">
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="!newSceneName.trim() || createSceneBusy"
-            @click="submitCreateScene"
-          >
-            Create
-          </button>
-        </div>
-      </div>
-      <button v-else type="button" class="btn btn-primary" @click="openCreateScene">
+      <p>Select a scene from the dropdown above or create a new one.</p>
+      <button type="button" class="btn btn-primary" @click="openCreateScene">
         New scene
       </button>
     </div>
@@ -681,6 +786,7 @@ watch(sceneId, (newId, oldId) => {
                   type="button"
                   class="btn-icon btn-remove"
                   title="Remove"
+                  :aria-label="`Remove ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
                   @click="removeFromScene('ambience', item.soundId)"
                 >
                   ×
@@ -720,7 +826,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.ambience.length === 0" class="section-empty">
-          Add ambience from the media library.
+          No ambience in this scene. Use the dropdown above to add tracks.
         </p>
       </section>
 
@@ -760,6 +866,7 @@ watch(sceneId, (newId, oldId) => {
                 type="button"
                 class="btn-icon btn-icon-active"
                 title="Stop"
+                aria-label="Stop music"
                 @click="stopMusic"
               >
                 ■
@@ -770,6 +877,7 @@ watch(sceneId, (newId, oldId) => {
                 class="btn-icon"
                 :disabled="!isJoined"
                 title="Play"
+                :aria-label="`Play ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
                 @click="playMusic(item)"
               >
                 ▶
@@ -790,6 +898,7 @@ watch(sceneId, (newId, oldId) => {
                 type="button"
                 class="btn-icon btn-remove"
                 title="Remove"
+                :aria-label="`Remove ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
                 @click="removeFromScene('music', item.soundId)"
               >
                 ×
@@ -798,7 +907,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.music.length === 0" class="section-empty">
-          Add music from the media library.
+          No music in this scene. Use the dropdown above to add tracks.
         </p>
       </section>
 
@@ -845,6 +954,7 @@ watch(sceneId, (newId, oldId) => {
                 type="button"
                 class="btn-icon btn-remove"
                 title="Remove"
+                :aria-label="`Remove ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
                 @click="removeFromScene('effects', item.soundId)"
               >
                 ×
@@ -853,7 +963,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.effects.length === 0" class="section-empty">
-          Add effects from the media library.
+          No effects in this scene. Use the dropdown above to add sounds.
         </p>
       </section>
     </template>
@@ -865,19 +975,9 @@ watch(sceneId, (newId, oldId) => {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  max-width: 900px;
+  max-width: min(900px, 100%);
 }
 
-.export-import-message {
-  margin: 0;
-  font-size: 0.875rem;
-}
-.export-import-message.success {
-  color: var(--color-success, green);
-}
-.export-import-message.error {
-  color: var(--color-error, #c00);
-}
 .scene-header {
   display: flex;
   flex-direction: column;
@@ -887,7 +987,8 @@ watch(sceneId, (newId, oldId) => {
 .scene-title-row {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .scene-select {
@@ -905,6 +1006,7 @@ watch(sceneId, (newId, oldId) => {
 .scene-actions {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .scene-controls {
@@ -931,23 +1033,28 @@ watch(sceneId, (newId, oldId) => {
 .btn-play-scene {
   padding: 0.5rem 1.5rem;
   font-size: 1rem;
+  box-shadow: var(--shadow-accent-sm);
+}
+
+.btn-play-scene:hover:not(:disabled) {
+  box-shadow: var(--shadow-accent-md);
 }
 
 .btn-stop-scene {
   padding: 0.5rem 1.5rem;
   font-size: 1rem;
-  background: var(--color-error-muted, rgba(220, 38, 38, 0.15));
-  color: var(--color-error, #dc2626);
-  border: 1px solid var(--color-error, #dc2626);
-  border-radius: var(--radius-md);
+  background: var(--color-error-muted);
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-sm);
   font-weight: 500;
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
 }
 
 .btn-stop-scene:hover {
-  background: var(--color-error, #dc2626);
-  color: #fff;
+  background: var(--color-error);
+  color: var(--color-on-accent-bg);
 }
 
 .scene-empty {
@@ -984,64 +1091,15 @@ watch(sceneId, (newId, oldId) => {
 }
 
 .create-scene-input {
-  padding: 0.5rem 0.75rem;
   font-size: 0.95rem;
   font-weight: 500;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  color: var(--color-text);
   min-width: 200px;
-  transition: border-color var(--transition);
-}
-
-.create-scene-input::placeholder {
-  color: var(--color-text-dim);
-}
-
-.create-scene-input:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
 }
 
 .create-scene-buttons {
   display: flex;
   gap: 0.5rem;
-}
-
-/* Button styles */
-.btn {
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: background var(--transition), color var(--transition), border-color var(--transition), opacity var(--transition);
-}
-
-.btn-primary {
-  background: var(--color-accent);
-  color: #0c0c0e;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-}
-
-.btn-ghost:hover:not(:disabled) {
-  background: var(--color-bg-elevated);
-  color: var(--color-text);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .scene-section {
@@ -1155,13 +1213,13 @@ watch(sceneId, (newId, oldId) => {
 }
 
 .btn-icon-active {
-  background: var(--color-error-muted, rgba(220, 38, 38, 0.15));
-  color: var(--color-error, #dc2626);
+  background: var(--color-error-muted);
+  color: var(--color-error);
 }
 
 .btn-icon-active:hover {
-  background: var(--color-error, #dc2626);
-  color: #fff;
+  background: var(--color-error);
+  color: var(--color-on-accent-bg);
 }
 
 .btn-play {
@@ -1204,5 +1262,14 @@ watch(sceneId, (newId, oldId) => {
 
 .btn-danger:hover {
   color: var(--color-error);
+}
+
+.empty-link {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.empty-link:hover {
+  text-decoration: underline;
 }
 </style>

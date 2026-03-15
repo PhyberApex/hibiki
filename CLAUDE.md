@@ -248,3 +248,25 @@ The project is transitioning from a Docker-based monorepo to an Electron app. Se
 - **CONTRIBUTING.md** — Setup, lint/test requirements, PR workflow
 - **docs/electron-migration-plan.md** — Full migration roadmap
 - **e2e/README.md** — E2E test setup, Electron + Playwright compatibility
+
+## Design Context
+
+### Users
+D&D / TTRPG Game Masters running tabletop sessions. They're switching scenes, triggering sound effects, and managing ambience in real-time while simultaneously running a game. The UI must be quick to operate under pressure — one hand on the mouse, eyes mostly on the table. Clarity and speed matter more than exploration.
+
+### Brand Personality
+**Immersive, Crafted, Warm** — Like a well-made instrument or a tavern fireplace. The app should feel purposeful and inviting, not sterile or overly technical. It's a companion to storytelling, not a recording studio.
+
+### Aesthetic Direction
+- **Visual tone:** Dark, warm, atmospheric — a game companion aesthetic inspired by D&D Beyond. Rich but not gaudy.
+- **Theme:** Dark mode only. Deep backgrounds (`#0c0c0e`), elevated cards (`#161618`/`#1a1a1d`), warm accent opportunities.
+- **Accent color:** Cyan (`#06b6d4`) is the primary accent. Consider warm secondary accents (amber/gold) for adventure-themed elements — the welcome screen already uses `#fbbf24` gold.
+- **Typography:** Plus Jakarta Sans (400–800). Clean, modern, slightly rounded — fits the "crafted" personality.
+- **Anti-references:** Avoid sterile enterprise dashboards, neon-heavy gamer aesthetics, or clinical white-space minimalism. Should not look like a generic admin panel.
+
+### Design Principles
+1. **Session-ready** — Every interaction should be fast and confident. GMs use this mid-game; minimize clicks, maximize clarity. No ambiguity in controls.
+2. **Atmospheric, not decorative** — Design should evoke the feeling of a well-set game table. Use subtle depth, warm shadows, and muted textures rather than ornamental fantasy elements.
+3. **Sound-first hierarchy** — Audio controls (play, stop, volume) are the primary actions. They should be the most visually prominent and easiest to reach.
+4. **Quiet confidence** — The UI stays out of the way until needed. Subtle transitions, restrained color use, no unnecessary animation. Let the content (scenes, sounds) be the focus.
+5. **Accessible by default** — Good contrast ratios, keyboard navigation, semantic HTML. No specific WCAG target, but standard best practices throughout.

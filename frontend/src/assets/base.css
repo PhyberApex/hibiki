@@ -8,24 +8,32 @@
   background-color: var(--color-bg);
   -webkit-font-smoothing: antialiased;
 
-  /* Dark theme – control panel / studio vibe */
+  /* Dark theme – warm, crafted (D&D / bard companion) */
   --color-bg: #0c0c0e;
-  --color-bg-elevated: #161618;
-  --color-bg-card: #1a1a1d;
-  --color-border: #27272a;
-  --color-border-focus: #3f3f46;
-  --color-text: #f4f4f5;
-  --color-text-muted: #a1a1aa;
-  --color-text-dim: #71717a;
-  --color-accent: #06b6d4;
-  --color-accent-hover: #22d3ee;
-  --color-accent-muted: rgba(6, 182, 212, 0.15);
+  --color-bg-elevated: #171614;
+  --color-bg-card: #1c1a18;
+  --color-border: #2a2826;
+  --color-border-focus: #403d38;
+  --color-text: #f5f4f2;
+  --color-text-muted: #a8a29e;
+  --color-text-dim: #78716c;
+  --color-accent: #f59e0b;
+  --color-accent-hover: #fbbf24;
+  --color-accent-muted: rgba(245, 158, 11, 0.14);
+  --color-accent-text: #0c0c0e;
   --color-success: #22c55e;
   --color-success-muted: rgba(34, 197, 94, 0.15);
+  --color-warning: #f5a623;
   --color-error: #ef4444;
   --color-error-muted: rgba(239, 68, 68, 0.15);
   --color-live: #22c55e;
   --color-snapshot: #71717a;
+  /* Text on colored backgrounds (badge, error hover) – tinted, not pure white */
+  --color-on-accent-bg: #f5f4f2;
+  --shadow-accent-sm: 0 2px 12px rgba(245, 158, 11, 0.12);
+  --shadow-accent-md: 0 4px 16px rgba(245, 158, 11, 0.18);
+  --shadow-accent-glow: 0 4px 20px rgba(251, 191, 36, 0.3);
+  --shadow-accent-glow-hover: 0 6px 28px rgba(251, 191, 36, 0.45);
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -51,4 +59,121 @@ button {
 select,
 input {
   font: inherit;
+}
+
+/* Global focus-visible indicator */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Shared button styles ── */
+
+.btn {
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition),
+    border-color var(--transition), opacity var(--transition),
+    transform 0.1s ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Shared input styles ── */
+
+.input {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: border-color var(--transition);
+}
+
+.input::placeholder {
+  color: var(--color-text-dim);
+}
+
+.input:focus-visible {
+  border-color: var(--color-accent);
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* ── Shared status message styles ── */
+
+.status-message {
+  font-size: 0.875rem;
+  animation: fade-in 0.25s ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.status-message-success {
+  color: var(--color-success);
+}
+
+.status-message-error {
+  color: var(--color-error);
+}
+
+/* ── Utilities ── */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

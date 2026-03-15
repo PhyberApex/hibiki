@@ -89,7 +89,7 @@ describe('soundListManage', () => {
     await input.trigger('change')
     await flushPromises()
 
-    expect(wrapper.find('.toast-success').text()).toBe('Uploaded.')
+    expect(wrapper.find('.toast-success').text()).toBe('File uploaded.')
   })
 
   it('bulk upload shows count in toast', async () => {
@@ -115,7 +115,7 @@ describe('soundListManage', () => {
     await input.trigger('change')
     await flushPromises()
 
-    expect(wrapper.find('.toast-success').text()).toBe('Uploaded 2 file(s).')
+    expect(wrapper.find('.toast-success').text()).toBe('Uploaded 2 files.')
   })
 
   it('bulk upload partial failure shows mixed toast', async () => {
@@ -138,7 +138,7 @@ describe('soundListManage', () => {
     await input.trigger('change')
     await flushPromises()
 
-    expect(wrapper.find('.toast-success').text()).toBe('Uploaded 1. 1 failed.')
+    expect(wrapper.find('.toast-success').text()).toBe('Uploaded 1, but 1 failed.')
   })
 
   it('delete flow shows confirm and deletes', async () => {
@@ -166,7 +166,7 @@ describe('soundListManage', () => {
     await flushPromises()
 
     expect(deleteSound).toHaveBeenCalledWith('music', 's1')
-    expect(wrapper.find('.toast-success').text()).toBe('Deleted.')
+    expect(wrapper.find('.toast-success').text()).toBe('Sound deleted.')
   })
 
   it('delete cancel hides confirm buttons', async () => {

@@ -1,7 +1,9 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Config } from '../config'
-import { Client, GatewayIntentBits } from 'discord.js'
+import { Client, Events, GatewayIntentBits } from 'discord.js'
 import { createLogger } from '../logger'
+
+const READY_TIMEOUT_MS = 15_000
 
 const log = createLogger('discord')
 
@@ -17,10 +19,12 @@ export interface GuildDirectoryEntry {
   channels: { id: string, name: string }[]
 }
 
+const CLIENT_OPTIONS = {
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+} as const
+
 export function createDiscordClient(config: Config, appConfig: AppConfig) {
-  const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
-  })
+  let client = new Client(CLIENT_OPTIONS)
 
   async function login(): Promise<void> {
     let token = config.discord.token
@@ -33,7 +37,21 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
       return
     }
     log.info('Logging in…')
+
+    const readyPromise = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Discord client ready timeout')), READY_TIMEOUT_MS)
+      const onReady = () => {
+        clearTimeout(timeout)
+        client.off(Events.ClientReady, onReady)
+        resolve()
+      }
+      client.on(Events.ClientReady, onReady)
+    })
+
     await client.login(token)
+    if (!client.isReady())
+      await readyPromise
+
     log.info('Login complete')
   }
 
@@ -47,6 +65,7 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
   async function reconnect(): Promise<void> {
     log.info('Reconnecting…')
     await destroy()
+    client = new Client(CLIENT_OPTIONS)
     await login()
   }
 
