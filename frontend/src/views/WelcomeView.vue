@@ -23,7 +23,7 @@ function enter() {
         Hibiki
       </h1>
       <p class="welcome-tagline">
-        Echoes of Adventure. Your private bard bot for Discord.
+        Your private bard bot for Discord
       </p>
       <button type="button" class="btn-enter" @click.stop="enter">
         Get Started
@@ -79,6 +79,18 @@ function enter() {
   gap: 0.75rem;
   padding: 2rem;
   margin-top: 30vh;
+  animation: welcome-enter 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes welcome-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .welcome-logo {
@@ -110,7 +122,7 @@ function enter() {
   padding: 0.7rem 2.5rem;
   font-size: 1rem;
   font-weight: 600;
-  color: #0c0c0e;
+  color: var(--color-accent-text);
   background: var(--color-accent, #fbbf24);
   border: none;
   border-radius: 999px;

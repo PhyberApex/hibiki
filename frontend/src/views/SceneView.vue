@@ -3,7 +3,7 @@ import type { Scene, SceneItem } from '@/api/scenes'
 import type { SoundFile } from '@/api/sounds'
 import type { CaptureSession } from '@/audio/browser-audio-capture'
 import { computed, onActivated, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
   sendAudioChunk,
   sendEffectChunk,
@@ -36,6 +36,8 @@ const newSceneName = ref('')
 const createSceneBusy = ref(false)
 const exportBusy = ref(false)
 const importBusy = ref(false)
+const deleteBusy = ref(false)
+const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 const musicAudioEl = createAudioEl()
 const effectAudioEl = createAudioEl()
@@ -86,6 +88,9 @@ const sceneId = computed(() => {
 })
 const guildId = computed(() => player.guildId)
 const isJoined = computed(() => player.isJoined)
+const hasSounds = computed(() =>
+  ambienceSounds.value.length > 0 || musicSounds.value.length > 0 || effectsSounds.value.length > 0,
+)
 
 function resolveSoundName(category: 'ambience' | 'music' | 'effects', soundId: string): string {
   const list = category === 'ambience' ? ambienceSounds.value : category === 'music' ? musicSounds.value : effectsSounds.value
@@ -120,7 +125,12 @@ function updateAllVolumes() {
 watch(globalVolume, () => updateAllVolumes())
 
 async function loadScenes() {
-  scenes.value = await listScenes()
+  try {
+    scenes.value = await listScenes()
+  }
+  catch (err) {
+    loadError.value = err instanceof Error ? err.message : 'Could not load scenes.'
+  }
 }
 
 async function loadScene() {
@@ -128,18 +138,28 @@ async function loadScene() {
     scene.value = null
     return
   }
-  scene.value = await getScene(sceneId.value)
+  try {
+    scene.value = await getScene(sceneId.value)
+  }
+  catch (err) {
+    loadError.value = err instanceof Error ? err.message : 'Could not load scene.'
+  }
 }
 
 async function loadSounds() {
-  const [ambience, music, effects] = await Promise.all([
-    listAmbience(),
-    listMusic(),
-    listEffects(),
-  ])
-  ambienceSounds.value = ambience
-  musicSounds.value = music
-  effectsSounds.value = effects
+  try {
+    const [ambience, music, effects] = await Promise.all([
+      listAmbience(),
+      listMusic(),
+      listEffects(),
+    ])
+    ambienceSounds.value = ambience
+    musicSounds.value = music
+    effectsSounds.value = effects
+  }
+  catch (err) {
+    loadError.value = err instanceof Error ? err.message : 'Could not load sounds.'
+  }
 }
 
 function toggleAmbience(item: SceneItem) {
@@ -367,6 +387,7 @@ async function submitCreateScene() {
   if (!name)
     return
   createSceneBusy.value = true
+  exportImportMessage.value = null
   try {
     const newScene = await saveScene({ name, ambience: [], music: [], effects: [] })
     scenes.value = await listScenes()
@@ -375,7 +396,7 @@ async function submitCreateScene() {
     await router.push(`/scenes/${newScene.id}`)
   }
   catch (err) {
-    console.error('[scene] Failed to create scene:', err)
+    exportImportMessage.value = { type: 'error', text: err instanceof Error ? err.message : 'Could not create scene.' }
   }
   finally {
     createSceneBusy.value = false
@@ -383,8 +404,8 @@ async function submitCreateScene() {
 }
 
 async function deleteCurrentScene() {
-  // eslint-disable-next-line no-alert -- simple confirm for delete
-  if (!scene.value || !confirm(`Delete "${scene.value.name}"?`))
+  // eslint-disable-next-line no-alert -- simple confirm for destructive action
+  if (!scene.value || !confirm(`Delete "${scene.value.name}"? This can't be undone.`))
     return
   stopScene()
   await deleteScene(scene.value.id)
@@ -414,7 +435,7 @@ async function doExportScene() {
     exportImportMessage.value = { type: 'success', text: `Exported to ${targetPath}` }
   }
   catch (e) {
-    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Export failed' }
+    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not export scene.' }
   }
   finally {
     exportBusy.value = false
@@ -437,7 +458,7 @@ async function doImportScene() {
     exportImportMessage.value = { type: 'success', text: `Imported "${imported.name}"` }
   }
   catch (e) {
-    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Import failed' }
+    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not import scene.' }
   }
   finally {
     importBusy.value = false
@@ -466,11 +487,15 @@ watch(sceneId, (newId, oldId) => {
 
 <template>
   <main class="scene-view">
+    <h1 class="sr-only">
+      Scenes
+    </h1>
     <header class="scene-header">
       <div class="scene-title-row">
         <select
           :value="sceneId ?? ''"
           class="scene-select"
+          aria-label="Select scene"
           @change="(e) => router.push((e.target as HTMLSelectElement).value ? `/scenes/${(e.target as HTMLSelectElement).value}` : '/scenes')"
         >
           <option value="">
@@ -515,7 +540,7 @@ watch(sceneId, (newId, oldId) => {
         <input
           v-model="newSceneName"
           type="text"
-          class="create-scene-input"
+          class="input create-scene-input"
           placeholder="Scene name"
           @keydown.enter="submitCreateScene"
           @keydown.escape="cancelCreateScene"
@@ -534,7 +559,11 @@ watch(sceneId, (newId, oldId) => {
           </button>
         </div>
       </div>
-      <p v-if="exportImportMessage" class="export-import-message" :class="[exportImportMessage.type]">
+      <p
+        v-if="exportImportMessage"
+        class="status-message"
+        :class="[exportImportMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
         {{ exportImportMessage.text }}
       </p>
       <div v-else-if="scene" class="scene-controls">
@@ -546,6 +575,7 @@ watch(sceneId, (newId, oldId) => {
             min="0"
             max="100"
             class="volume-slider"
+            aria-label="Global volume"
           >
         </label>
         <button
@@ -569,12 +599,21 @@ watch(sceneId, (newId, oldId) => {
     </header>
 
     <div v-if="!scene && scenes.length === 0" class="scene-empty">
-      <p>No scenes yet. Create one to get started.</p>
+      <p v-if="!hasSounds">
+        No scenes yet. First,
+        <RouterLink to="/media" class="empty-link">
+          upload some sounds
+        </RouterLink>
+        in the Media Library, then come back to build a scene.
+      </p>
+      <p v-else>
+        No scenes yet. Create one to get started.
+      </p>
       <div v-if="showCreateInput" class="create-scene-form create-scene-form-inline create-scene-form-card">
         <input
           v-model="newSceneName"
           type="text"
-          class="create-scene-input"
+          class="input create-scene-input"
           placeholder="Scene name"
           @keydown.enter="submitCreateScene"
           @keydown.escape="cancelCreateScene"
@@ -599,12 +638,12 @@ watch(sceneId, (newId, oldId) => {
     </div>
 
     <div v-else-if="!scene && scenes.length > 0" class="scene-empty scene-empty-select">
-      <p>Select a scene from the dropdown above to edit it, or create a new one.</p>
+      <p>Pick a scene from the dropdown, or create a new one.</p>
       <div v-if="showCreateInput" class="create-scene-form create-scene-form-inline create-scene-form-card">
         <input
           v-model="newSceneName"
           type="text"
-          class="create-scene-input"
+          class="input create-scene-input"
           placeholder="Scene name"
           @keydown.enter="submitCreateScene"
           @keydown.escape="cancelCreateScene"
@@ -681,6 +720,7 @@ watch(sceneId, (newId, oldId) => {
                   type="button"
                   class="btn-icon btn-remove"
                   title="Remove"
+                  :aria-label="`Remove ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
                   @click="removeFromScene('ambience', item.soundId)"
                 >
                   ×
@@ -720,7 +760,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.ambience.length === 0" class="section-empty">
-          Add ambience from the media library.
+          No ambience yet. Use the dropdown above to add sounds.
         </p>
       </section>
 
@@ -760,6 +800,7 @@ watch(sceneId, (newId, oldId) => {
                 type="button"
                 class="btn-icon btn-icon-active"
                 title="Stop"
+                aria-label="Stop music"
                 @click="stopMusic"
               >
                 ■
@@ -770,6 +811,7 @@ watch(sceneId, (newId, oldId) => {
                 class="btn-icon"
                 :disabled="!isJoined"
                 title="Play"
+                :aria-label="`Play ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
                 @click="playMusic(item)"
               >
                 ▶
@@ -790,6 +832,7 @@ watch(sceneId, (newId, oldId) => {
                 type="button"
                 class="btn-icon btn-remove"
                 title="Remove"
+                :aria-label="`Remove ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
                 @click="removeFromScene('music', item.soundId)"
               >
                 ×
@@ -798,7 +841,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.music.length === 0" class="section-empty">
-          Add music from the media library.
+          No music yet. Use the dropdown above to add tracks.
         </p>
       </section>
 
@@ -845,6 +888,7 @@ watch(sceneId, (newId, oldId) => {
                 type="button"
                 class="btn-icon btn-remove"
                 title="Remove"
+                :aria-label="`Remove ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
                 @click="removeFromScene('effects', item.soundId)"
               >
                 ×
@@ -853,7 +897,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.effects.length === 0" class="section-empty">
-          Add effects from the media library.
+          No effects yet. Use the dropdown above to add sounds.
         </p>
       </section>
     </template>
@@ -865,19 +909,9 @@ watch(sceneId, (newId, oldId) => {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  max-width: 900px;
+  max-width: min(900px, 100%);
 }
 
-.export-import-message {
-  margin: 0;
-  font-size: 0.875rem;
-}
-.export-import-message.success {
-  color: var(--color-success, green);
-}
-.export-import-message.error {
-  color: var(--color-error, #c00);
-}
 .scene-header {
   display: flex;
   flex-direction: column;
@@ -887,7 +921,8 @@ watch(sceneId, (newId, oldId) => {
 .scene-title-row {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .scene-select {
@@ -905,6 +940,7 @@ watch(sceneId, (newId, oldId) => {
 .scene-actions {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .scene-controls {
@@ -931,22 +967,27 @@ watch(sceneId, (newId, oldId) => {
 .btn-play-scene {
   padding: 0.5rem 1.5rem;
   font-size: 1rem;
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.25);
+}
+
+.btn-play-scene:hover:not(:disabled) {
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
 }
 
 .btn-stop-scene {
   padding: 0.5rem 1.5rem;
   font-size: 1rem;
-  background: var(--color-error-muted, rgba(220, 38, 38, 0.15));
-  color: var(--color-error, #dc2626);
-  border: 1px solid var(--color-error, #dc2626);
-  border-radius: var(--radius-md);
+  background: var(--color-error-muted);
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-sm);
   font-weight: 500;
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
 }
 
 .btn-stop-scene:hover {
-  background: var(--color-error, #dc2626);
+  background: var(--color-error);
   color: #fff;
 }
 
@@ -984,64 +1025,15 @@ watch(sceneId, (newId, oldId) => {
 }
 
 .create-scene-input {
-  padding: 0.5rem 0.75rem;
   font-size: 0.95rem;
   font-weight: 500;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  color: var(--color-text);
   min-width: 200px;
-  transition: border-color var(--transition);
-}
-
-.create-scene-input::placeholder {
-  color: var(--color-text-dim);
-}
-
-.create-scene-input:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
 }
 
 .create-scene-buttons {
   display: flex;
   gap: 0.5rem;
-}
-
-/* Button styles */
-.btn {
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: background var(--transition), color var(--transition), border-color var(--transition), opacity var(--transition);
-}
-
-.btn-primary {
-  background: var(--color-accent);
-  color: #0c0c0e;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-}
-
-.btn-ghost:hover:not(:disabled) {
-  background: var(--color-bg-elevated);
-  color: var(--color-text);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .scene-section {
@@ -1155,12 +1147,12 @@ watch(sceneId, (newId, oldId) => {
 }
 
 .btn-icon-active {
-  background: var(--color-error-muted, rgba(220, 38, 38, 0.15));
-  color: var(--color-error, #dc2626);
+  background: var(--color-error-muted);
+  color: var(--color-error);
 }
 
 .btn-icon-active:hover {
-  background: var(--color-error, #dc2626);
+  background: var(--color-error);
   color: #fff;
 }
 
@@ -1204,5 +1196,14 @@ watch(sceneId, (newId, oldId) => {
 
 .btn-danger:hover {
   color: var(--color-error);
+}
+
+.empty-link {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.empty-link:hover {
+  text-decoration: underline;
 }
 </style>

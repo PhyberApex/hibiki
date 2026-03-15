@@ -29,14 +29,14 @@ async function load() {
     storagePath.value = storage.path
   }
   catch (e) {
-    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Failed to load' }
+    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not load settings.' }
   }
 }
 
 async function saveToken() {
   const token = tokenInput.value.trim()
   if (!token) {
-    message.value = { type: 'error', text: 'Enter a token to save.' }
+    message.value = { type: 'error', text: 'Paste a bot token first.' }
     return
   }
   saving.value = true
@@ -50,10 +50,10 @@ async function saveToken() {
     if (player.botStatus?.ready)
       message.value = { type: 'success', text: 'Token saved. Bot connected.' }
     else
-      message.value = { type: 'success', text: 'Token saved. If the bot did not connect, click Connect below.' }
+      message.value = { type: 'success', text: 'Token saved. Bot didn\'t connect — try the Connect button.' }
   }
   catch (e) {
-    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Failed to save' }
+    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not save token.' }
   }
   finally {
     saving.value = false
@@ -66,7 +66,7 @@ async function connectBot() {
   if (player.botStatus?.ready)
     message.value = { type: 'success', text: 'Bot connected.' }
   else
-    message.value = { type: 'error', text: 'Connection failed. Check the token and try again.' }
+    message.value = { type: 'error', text: 'Could not connect. Double-check your token and try again.' }
 }
 
 async function browseStorageFolder() {
@@ -77,11 +77,11 @@ async function browseStorageFolder() {
       savingStorage.value = true
       await updateStoragePath(path)
       storagePath.value = path
-      storageMessage.value = { type: 'success', text: 'Storage path saved. Restart the app to use the new location.' }
+      storageMessage.value = { type: 'success', text: 'Storage folder set. Restart Hibiki to use the new location.' }
     }
   }
   catch (e) {
-    storageMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Failed to set path' }
+    storageMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not set storage folder.' }
   }
   finally {
     savingStorage.value = false
@@ -94,10 +94,10 @@ async function clearStoragePath() {
   try {
     await updateStoragePath('')
     storagePath.value = null
-    storageMessage.value = { type: 'success', text: 'Using default storage. Restart the app to apply.' }
+    storageMessage.value = { type: 'success', text: 'Reverted to default storage. Restart Hibiki to apply.' }
   }
   catch (e) {
-    storageMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Failed to clear' }
+    storageMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not reset storage folder.' }
   }
   finally {
     savingStorage.value = false
@@ -128,7 +128,13 @@ onMounted(load)
           </button>
         </span>
         <span v-else>
-          No token configured. Set your Discord bot token below.
+          No token yet. Create a bot in the
+          <a
+            href="https://discord.com/developers/applications"
+            target="_blank"
+            rel="noopener"
+            class="settings-link"
+          >Discord Developer Portal</a>, copy its token, and paste it below.
         </span>
       </p>
       <div class="form-row">
@@ -150,7 +156,11 @@ onMounted(load)
       >
         {{ saving ? 'Saving…' : 'Save token' }}
       </button>
-      <p v-if="message" class="message" :class="[message.type]">
+      <p
+        v-if="message"
+        class="status-message settings-message"
+        :class="[message.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
         {{ message.text }}
       </p>
     </section>
@@ -158,7 +168,7 @@ onMounted(load)
     <section class="panel">
       <h2>Storage location</h2>
       <p class="status">
-        Sound files (music, effects, ambience) are stored in a folder. By default this is inside the app data directory. You can choose a custom folder (e.g. on an external drive).
+        Your sound files are stored locally. By default they live in the app data folder, but you can pick a custom location like an external drive.
       </p>
       <div class="form-row">
         <label for="storage-path">Current path</label>
@@ -189,7 +199,11 @@ onMounted(load)
           Use default
         </button>
       </div>
-      <p v-if="storageMessage" class="message" :class="[storageMessage.type]">
+      <p
+        v-if="storageMessage"
+        class="status-message settings-message"
+        :class="[storageMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
         {{ storageMessage.text }}
       </p>
     </section>
@@ -198,7 +212,7 @@ onMounted(load)
 
 <style scoped>
 .settings {
-  max-width: 32rem;
+  max-width: min(32rem, 100%);
 }
 .panel {
   background: var(--color-bg-elevated);
@@ -227,10 +241,10 @@ onMounted(load)
   flex-wrap: wrap;
 }
 .btn-inline {
-  padding: 0.2rem 0.5rem;
+  padding: 0.3rem 0.6rem;
   font-size: 0.85rem;
   background: var(--color-accent);
-  color: var(--color-bg);
+  color: var(--color-accent-text);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -254,12 +268,6 @@ onMounted(load)
 }
 .input {
   width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  color: var(--color-text);
 }
 .input-readonly {
   color: var(--color-text-muted);
@@ -270,36 +278,16 @@ onMounted(load)
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
-.btn-ghost {
-  background: transparent;
-  color: var(--color-text-muted);
+.settings-link {
+  color: var(--color-accent);
+  text-decoration: none;
 }
-.btn-ghost:hover:not(:disabled) {
-  color: var(--color-text);
+
+.settings-link:hover {
+  text-decoration: underline;
 }
-.btn {
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  border: none;
-}
-.btn-primary {
-  background: var(--color-accent);
-  color: var(--color-bg);
-}
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.message {
+
+.settings-message {
   margin-top: 1rem;
-  font-size: 0.875rem;
-}
-.message.success {
-  color: var(--color-success, green);
-}
-.message.error {
-  color: var(--color-error, #c00);
 }
 </style>

@@ -373,6 +373,9 @@ watch(activeTabId, async (newId, oldId) => {
 
 <template>
   <div class="browser-view">
+    <h1 class="sr-only">
+      Browser
+    </h1>
     <div class="browser-tabs-bar">
       <div class="browser-tabs-list">
         <button
@@ -396,31 +399,32 @@ watch(activeTabId, async (newId, oldId) => {
             type="button"
             class="browser-tab-close"
             title="Close tab"
+            aria-label="Close tab"
             @click.stop="closeTab(tab.id)"
           >
             ×
           </button>
         </button>
       </div>
-      <button type="button" class="browser-tab-new" title="New tab" @click="openTab('')">
+      <button type="button" class="browser-tab-new" title="New tab" aria-label="New tab" @click="openTab('')">
         +
       </button>
     </div>
 
     <div v-if="activeTabId != null" class="browser-toolbar">
-      <button type="button" class="toolbar-btn" title="Back" @click="goBack">
+      <button type="button" class="toolbar-btn" title="Back" aria-label="Go back" @click="goBack">
         ◀
       </button>
-      <button type="button" class="toolbar-btn" title="Forward" @click="goForward">
+      <button type="button" class="toolbar-btn" title="Forward" aria-label="Go forward" @click="goForward">
         ▶
       </button>
-      <button type="button" class="toolbar-btn" title="Reload" @click="reload">
+      <button type="button" class="toolbar-btn" title="Reload" aria-label="Reload page" @click="reload">
         ↻
       </button>
       <form class="url-form" @submit.prevent="navigateTo">
         <input
           v-model="urlInput"
-          class="url-input"
+          class="input url-input"
           type="text"
           placeholder="Enter URL…"
         >
@@ -429,7 +433,8 @@ watch(activeTabId, async (newId, oldId) => {
         type="button"
         class="toolbar-btn toolbar-btn-bookmark"
         :class="{ 'toolbar-btn-bookmark-active': isCurrentPageBookmarked }"
-        title="Bookmark this page"
+        :title="isCurrentPageBookmarked ? 'Remove bookmark' : 'Bookmark this page'"
+        :aria-label="isCurrentPageBookmarked ? 'Remove bookmark' : 'Bookmark this page'"
         @click="toggleBookmark"
       >
         {{ isCurrentPageBookmarked ? '★' : '☆' }}
@@ -477,6 +482,7 @@ watch(activeTabId, async (newId, oldId) => {
           type="button"
           class="bookmark-edit"
           title="Rename bookmark"
+          aria-label="Rename bookmark"
           @click.stop="startEditing(bm)"
         >
           ✎
@@ -485,6 +491,7 @@ watch(activeTabId, async (newId, oldId) => {
           type="button"
           class="bookmark-remove"
           title="Remove bookmark"
+          aria-label="Remove bookmark"
           @click.stop="removeBookmark(bm.url)"
         >
           ×
@@ -499,11 +506,11 @@ watch(activeTabId, async (newId, oldId) => {
     >
       <div v-if="tabs.length === 0" class="browser-empty">
         <p v-if="isInitializing" class="browser-empty-text">
-          Loading...
+          Loading…
         </p>
         <template v-else>
           <p class="browser-empty-text">
-            Open a tab to browse the web and stream audio to Discord.
+            Browse the web and stream audio to Discord. Pick a site below or open a new tab.
           </p>
           <div v-if="bookmarks.length > 0" class="empty-bookmarks">
             <div
@@ -542,7 +549,7 @@ watch(activeTabId, async (newId, oldId) => {
             </div>
           </div>
           <div class="empty-defaults">
-            <button type="button" class="btn-open-tab" @click="openTab()">
+            <button type="button" class="btn-open-tab" @click="openTab('https://www.youtube.com')">
               Open YouTube
             </button>
             <button type="button" class="btn-open-tab btn-open-tab-secondary" @click="openTab('https://open.spotify.com')">
@@ -624,6 +631,12 @@ watch(activeTabId, async (newId, oldId) => {
   color: var(--color-accent);
   font-size: 0.6rem;
   flex-shrink: 0;
+  animation: stream-pulse 2s ease-in-out infinite;
+}
+
+@keyframes stream-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .browser-tab-close {
@@ -669,6 +682,7 @@ watch(activeTabId, async (newId, oldId) => {
   background: var(--color-bg-elevated);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .toolbar-btn {
@@ -707,6 +721,7 @@ watch(activeTabId, async (newId, oldId) => {
   color: var(--color-accent);
   border-color: var(--color-accent);
   background: var(--color-accent-muted);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.3);
 }
 
 .toolbar-btn-bookmark {
@@ -714,7 +729,7 @@ watch(activeTabId, async (newId, oldId) => {
 }
 
 .toolbar-btn-bookmark-active {
-  color: #f5a623;
+  color: var(--color-warning);
 }
 
 .url-form {
@@ -726,15 +741,6 @@ watch(activeTabId, async (newId, oldId) => {
   width: 100%;
   padding: 0.35rem 0.6rem;
   font-size: 0.85rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  color: var(--color-text);
-}
-
-.url-input:focus {
-  outline: none;
-  border-color: var(--color-accent);
 }
 
 .bookmarks-bar {
@@ -790,8 +796,9 @@ watch(activeTabId, async (newId, oldId) => {
   padding: 0.1rem 0.25rem;
 }
 
-.bookmark-rename-input:focus {
-  outline: none;
+.bookmark-rename-input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 .bookmark-edit {
@@ -840,7 +847,9 @@ watch(activeTabId, async (newId, oldId) => {
 }
 
 .bookmark-item:hover .bookmark-edit,
-.bookmark-item:hover .bookmark-remove {
+.bookmark-item:hover .bookmark-remove,
+.bookmark-item:focus-within .bookmark-edit,
+.bookmark-item:focus-within .bookmark-remove {
   display: inline;
 }
 
@@ -915,8 +924,9 @@ watch(activeTabId, async (newId, oldId) => {
   padding: 0.25rem 0.4rem;
 }
 
-.empty-bookmark-rename-input:focus {
-  outline: none;
+.empty-bookmark-rename-input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 .empty-bookmark-edit {
@@ -962,7 +972,7 @@ watch(activeTabId, async (newId, oldId) => {
   border: none;
   border-radius: var(--radius-md);
   background: var(--color-accent);
-  color: #0c0c0e;
+  color: var(--color-accent-text);
   cursor: pointer;
   margin: 0.25rem;
   transition: background var(--transition);
