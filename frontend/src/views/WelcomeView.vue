@@ -26,7 +26,7 @@ function enter() {
         Your private bard bot for Discord
       </p>
       <button type="button" class="btn-enter" @click.stop="enter">
-        Get Started
+        Continue
       </button>
       <span class="welcome-version">v{{ appVersion }}</span>
     </div>

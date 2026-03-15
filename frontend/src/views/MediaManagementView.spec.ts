@@ -34,7 +34,7 @@ describe('mediaManagementView', () => {
     const wrapper = mount(MediaManagementView, {
       global: { plugins: [createPinia(), router] },
     })
-    expect(wrapper.find('h1').text()).toBe('Media Library')
+    expect(wrapper.find('h1').text()).toBe('Sound library')
   })
 
   it('renders SoundListManage for Music, Ambience, and Effects', () => {

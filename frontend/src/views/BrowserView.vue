@@ -426,7 +426,7 @@ watch(activeTabId, async (newId, oldId) => {
           v-model="urlInput"
           class="input url-input"
           type="text"
-          placeholder="Enter URL…"
+          placeholder="Paste or type a URL…"
         >
       </form>
       <button

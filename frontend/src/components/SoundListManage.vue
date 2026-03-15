@@ -49,7 +49,7 @@ async function loadSounds() {
         : await listEffects()
   }
   catch (err) {
-    error.value = err instanceof Error ? err.message : 'Something went wrong loading sounds.'
+    error.value = err instanceof Error ? err.message : 'Couldn\'t load sounds. Try again.'
   }
   finally {
     loading.value = false
@@ -261,7 +261,7 @@ onActivated(() => {
         No {{ type }} yet.
       </p>
       <p class="empty-hint">
-        Click Add or drop audio files here.
+        Click + Add or drag audio files here.
       </p>
     </div>
 

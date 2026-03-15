@@ -129,7 +129,7 @@ async function loadScenes() {
     scenes.value = await listScenes()
   }
   catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'Could not load scenes.'
+    loadError.value = err instanceof Error ? err.message : 'Couldn\'t load scenes. Try again.'
   }
 }
 
@@ -142,7 +142,7 @@ async function loadScene() {
     scene.value = await getScene(sceneId.value)
   }
   catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'Could not load scene.'
+    loadError.value = err instanceof Error ? err.message : 'Couldn\'t load this scene. Try again.'
   }
 }
 
@@ -158,7 +158,7 @@ async function loadSounds() {
     effectsSounds.value = effects
   }
   catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'Could not load sounds.'
+    loadError.value = err instanceof Error ? err.message : 'Couldn\'t load sounds. Try again.'
   }
 }
 
@@ -495,7 +495,7 @@ async function submitCreateScene() {
     await router.push(`/scenes/${newScene.id}`)
   }
   catch (err) {
-    exportImportMessage.value = { type: 'error', text: err instanceof Error ? err.message : 'Could not create scene.' }
+    exportImportMessage.value = { type: 'error', text: err instanceof Error ? err.message : 'Couldn\'t create the scene. Try again.' }
   }
   finally {
     createSceneBusy.value = false
@@ -535,7 +535,7 @@ async function doExportScene() {
     exportImportMessage.value = { type: 'success', text: `Exported to ${targetPath}` }
   }
   catch (e) {
-    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not export scene.' }
+    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Export failed. Check that the folder is writable and try again.' }
   }
   finally {
     exportBusy.value = false
@@ -558,7 +558,7 @@ async function doImportScene() {
     exportImportMessage.value = { type: 'success', text: `Imported "${imported.name}"` }
   }
   catch (e) {
-    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not import scene.' }
+    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Import failed. Make sure the file is a valid Hibiki scene (.zip) and try again.' }
   }
   finally {
     importBusy.value = false
@@ -618,7 +618,7 @@ watch(sceneId, (newId, oldId) => {
           <button
             type="button"
             class="btn btn-ghost btn-play-local"
-            title="Play in app only (no Discord)"
+            title="Play in this app only (no Discord)"
             @click="playSceneLocal"
           >
             Play
@@ -626,7 +626,7 @@ watch(sceneId, (newId, oldId) => {
           <button
             type="button"
             class="btn btn-primary btn-play-scene"
-            title="Mix into Discord voice"
+            title="Stream this scene to your Discord voice channel"
             :disabled="!isJoined"
             @click="playScene"
           >
@@ -642,7 +642,7 @@ watch(sceneId, (newId, oldId) => {
           @change="(e) => router.push((e.target as HTMLSelectElement).value ? `/scenes/${(e.target as HTMLSelectElement).value}` : '/scenes')"
         >
           <option value="">
-            Scene…
+            Choose a scene…
           </option>
           <option v-for="s in scenes" :key="s.id" :value="s.id">
             {{ s.name }}
@@ -714,11 +714,12 @@ watch(sceneId, (newId, oldId) => {
     <div v-if="!scene && scenes.length === 0" class="scene-empty">
       <p v-if="!hasSounds">
         <RouterLink to="/media" class="empty-link">
-          Add sounds in Media
-        </RouterLink>, then create a scene.
+          Add music, ambience, and effects in the sound library
+        </RouterLink>
+        first. Then come back here and create a scene.
       </p>
       <p v-else>
-        Create a scene to get started.
+        Create a scene to mix music, ambience, and effects for your session.
       </p>
       <button type="button" class="btn btn-primary" @click="openCreateScene">
         Create scene
@@ -726,7 +727,7 @@ watch(sceneId, (newId, oldId) => {
     </div>
 
     <div v-else-if="!scene && scenes.length > 0" class="scene-empty scene-empty-select">
-      <p>Select a scene above or create one.</p>
+      <p>Select a scene from the dropdown above or create a new one.</p>
       <button type="button" class="btn btn-primary" @click="openCreateScene">
         New scene
       </button>
@@ -825,7 +826,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.ambience.length === 0" class="section-empty">
-          None — add above.
+          No ambience in this scene. Use the dropdown above to add tracks.
         </p>
       </section>
 
@@ -906,7 +907,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.music.length === 0" class="section-empty">
-          None — add above.
+          No music in this scene. Use the dropdown above to add tracks.
         </p>
       </section>
 
@@ -962,7 +963,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.effects.length === 0" class="section-empty">
-          None — add above.
+          No effects in this scene. Use the dropdown above to add sounds.
         </p>
       </section>
     </template>

@@ -115,7 +115,7 @@ const isWelcome = computed(() => route.path === '/')
           aria-label="Leave voice channel"
           @click="player.doLeave(player.connectedGuildId)"
         >
-          Leave
+          Leave voice
         </button>
       </nav>
 
@@ -131,7 +131,7 @@ const isWelcome = computed(() => route.path === '/')
           <span
             v-if="tab.path === '/scenes' && player.scenePlaying"
             class="streaming-badge"
-            title="Scene is playing"
+            title="Scene is playing in voice"
           >LIVE</span>
           <span
             v-if="tab.path === '/browser' && player.browserStreamingCount > 0"
@@ -154,8 +154,8 @@ const isWelcome = computed(() => route.path === '/')
           type="button"
           class="btn-reconnect"
           :disabled="player.reconnecting"
-          :title="player.reconnecting ? 'Reconnecting…' : 'Restart Discord bot'"
-          :aria-label="player.reconnecting ? 'Reconnecting' : 'Restart Discord bot'"
+          :title="player.reconnecting ? 'Reconnecting…' : 'Reconnect Discord bot'"
+          :aria-label="player.reconnecting ? 'Reconnecting' : 'Reconnect Discord bot'"
           @click="player.doReconnect"
         >
           ↻

@@ -9,36 +9,41 @@ const player = usePlayerStore()
 <template>
   <main class="media-view">
     <h1 class="page-title">
-      Media Library
+      Sound library
     </h1>
+    <p class="page-subtitle">
+      Upload and manage music, ambience, and sound effects for your scenes.
+    </p>
 
     <section v-if="!player.botStatus?.ready" class="setup-guide">
       <h2 class="setup-guide-title">
-        Setup
+        Get started
       </h2>
       <ol class="setup-steps">
         <li class="setup-step">
           <span class="step-number">1</span>
           <div class="step-content">
+            Open
             <RouterLink to="/settings" class="step-link">
               Settings
             </RouterLink>
-            — paste your bot token.
+            and paste your Discord bot token so Hibiki can join your server.
           </div>
         </li>
         <li class="setup-step">
           <span class="step-number">2</span>
           <div class="step-content">
-            Upload sounds below (drag or Add).
+            Upload sounds below: drag files onto a panel or click + Add. Use Music for tracks, Ambience for loops, Effects for one-shots.
           </div>
         </li>
         <li class="setup-step">
           <span class="step-number">3</span>
           <div class="step-content">
+            Go to
             <RouterLink to="/scenes" class="step-link">
               Scenes
             </RouterLink>
-            — create a soundboard.
+            to build a soundboard — mix music, ambience, and effects, then stream to a voice channel.
           </div>
         </li>
       </ol>
@@ -64,6 +69,13 @@ const player = usePlayerStore()
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+}
+
+.page-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
 }
 
 .setup-guide {

@@ -29,14 +29,14 @@ async function load() {
     storagePath.value = storage.path
   }
   catch (e) {
-    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not load settings.' }
+    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t load settings. Try again.' }
   }
 }
 
 async function saveToken() {
   const token = tokenInput.value.trim()
   if (!token) {
-    message.value = { type: 'error', text: 'Paste a bot token first.' }
+    message.value = { type: 'error', text: 'Paste your Discord bot token in the field below first.' }
     return
   }
   saving.value = true
@@ -50,10 +50,10 @@ async function saveToken() {
     if (player.botStatus?.ready)
       message.value = { type: 'success', text: 'Token saved. Bot connected.' }
     else
-      message.value = { type: 'success', text: 'Token saved. Bot didn\'t connect — try the Connect button.' }
+      message.value = { type: 'success', text: 'Token saved. Bot didn\'t connect — click Connect below to try again.' }
   }
   catch (e) {
-    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not save token.' }
+    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t save token. Copy the full token from the Discord Developer Portal and try again.' }
   }
   finally {
     saving.value = false
@@ -117,7 +117,7 @@ onMounted(load)
           Connected as <strong>{{ player.botStatus.userTag }}</strong>
         </span>
         <span v-else-if="discordConfig.tokenConfigured" class="status-row">
-          Token is set but the bot is not connected.
+          Token is saved but the bot isn't connected.
           <button
             type="button"
             class="btn btn-inline"
@@ -138,12 +138,12 @@ onMounted(load)
         </span>
       </p>
       <div class="form-row">
-        <label for="token">Bot token</label>
+        <label for="token">Discord bot token</label>
         <input
           id="token"
           v-model="tokenInput"
           type="password"
-          placeholder="Paste your Discord bot token"
+          placeholder="Paste token from Discord Developer Portal"
           autocomplete="off"
           class="input"
         >
@@ -154,7 +154,7 @@ onMounted(load)
         :disabled="saving || !tokenInput.trim()"
         @click="saveToken"
       >
-        {{ saving ? 'Saving…' : 'Save token' }}
+        {{ saving ? 'Saving…' : 'Save and connect' }}
       </button>
       <p
         v-if="message"
@@ -196,7 +196,7 @@ onMounted(load)
           :disabled="savingStorage"
           @click="clearStoragePath"
         >
-          Use default
+          Use default location
         </button>
       </div>
       <p

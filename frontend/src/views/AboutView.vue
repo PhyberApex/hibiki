@@ -66,28 +66,4 @@ const repoUrl = 'https://github.com/PhyberApex/hibiki'
   font-size: 0.8rem;
   color: var(--color-text-dim);
 }
-
-.about-link,
-.about-back {
-  display: inline-block;
-  margin-right: 1rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--color-accent);
-  text-decoration: none;
-  transition: color var(--transition);
-}
-
-.about-link:hover,
-.about-back:hover {
-  color: var(--color-accent-hover);
-}
-
-.about-back {
-  color: var(--color-text-muted);
-}
-
-.about-back:hover {
-  color: var(--color-text);
-}
 </style>
