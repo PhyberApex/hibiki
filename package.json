@@ -1,6 +1,6 @@
 {
   "name": "hibiki",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "packageManager": "pnpm@10.32.1",
   "description": "Hibiki (響) – Echoes of Adventure. Your private bard bot for Discord.",
