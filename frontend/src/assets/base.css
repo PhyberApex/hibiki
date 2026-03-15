@@ -28,6 +28,12 @@
   --color-error-muted: rgba(239, 68, 68, 0.15);
   --color-live: #22c55e;
   --color-snapshot: #71717a;
+  /* Text on colored backgrounds (badge, error hover) – tinted, not pure white */
+  --color-on-accent-bg: #f5f4f2;
+  --shadow-accent-sm: 0 2px 12px rgba(245, 158, 11, 0.12);
+  --shadow-accent-md: 0 4px 16px rgba(245, 158, 11, 0.18);
+  --shadow-accent-glow: 0 4px 20px rgba(251, 191, 36, 0.3);
+  --shadow-accent-glow-hover: 0 6px 28px rgba(251, 191, 36, 0.45);
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;

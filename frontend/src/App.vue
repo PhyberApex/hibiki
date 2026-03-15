@@ -371,7 +371,7 @@ const isWelcome = computed(() => route.path === '/')
   padding: 0.1rem 0.35rem;
   border-radius: var(--radius-full);
   background: var(--color-live);
-  color: #fff;
+  color: var(--color-on-accent-bg);
   margin-left: auto;
   line-height: 1;
   animation: live-pulse 2s ease-in-out infinite;

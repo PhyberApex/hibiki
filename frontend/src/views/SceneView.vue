@@ -1032,11 +1032,11 @@ watch(sceneId, (newId, oldId) => {
 .btn-play-scene {
   padding: 0.5rem 1.5rem;
   font-size: 1rem;
-  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.12);
+  box-shadow: var(--shadow-accent-sm);
 }
 
 .btn-play-scene:hover:not(:disabled) {
-  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.18);
+  box-shadow: var(--shadow-accent-md);
 }
 
 .btn-stop-scene {
@@ -1053,7 +1053,7 @@ watch(sceneId, (newId, oldId) => {
 
 .btn-stop-scene:hover {
   background: var(--color-error);
-  color: #fff;
+  color: var(--color-on-accent-bg);
 }
 
 .scene-empty {
@@ -1218,7 +1218,7 @@ watch(sceneId, (newId, oldId) => {
 
 .btn-icon-active:hover {
   background: var(--color-error);
-  color: #fff;
+  color: var(--color-on-accent-bg);
 }
 
 .btn-play {

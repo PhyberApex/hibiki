@@ -320,7 +320,7 @@ onActivated(() => {
 .panel-drop-active {
   border-color: var(--color-accent);
   background: var(--color-accent-muted);
-  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.14);
+  box-shadow: var(--shadow-accent-sm);
   border-style: solid;
 }
 
@@ -565,7 +565,7 @@ onActivated(() => {
 
 .btn-confirm-delete:hover {
   background: var(--color-error);
-  color: #fff;
+  color: var(--color-on-accent-bg);
 }
 
 .btn-cancel-delete {

@@ -721,7 +721,7 @@ watch(activeTabId, async (newId, oldId) => {
   color: var(--color-accent);
   border-color: var(--color-accent);
   background: var(--color-accent-muted);
-  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.16);
+  box-shadow: var(--shadow-accent-sm);
 }
 
 .toolbar-btn-bookmark {

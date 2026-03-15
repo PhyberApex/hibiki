@@ -40,7 +40,7 @@ function enter() {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: #0c0c0e;
+  background: var(--color-bg);
   position: relative;
   overflow: hidden;
   cursor: pointer;
@@ -65,8 +65,8 @@ function enter() {
   background: linear-gradient(
     to bottom,
     transparent 30%,
-    rgba(12, 12, 14, 0.6) 60%,
-    rgba(12, 12, 14, 0.95) 85%
+    color-mix(in srgb, var(--color-bg) 60%, transparent) 60%,
+    color-mix(in srgb, var(--color-bg) 95%, transparent) 85%
   );
 }
 
@@ -98,21 +98,21 @@ function enter() {
   height: 72px;
   border-radius: 16px;
   object-fit: contain;
-  filter: drop-shadow(0 4px 24px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(var(--shadow-card));
 }
 
 .welcome-title {
   font-size: 2.5rem;
   font-weight: 800;
   letter-spacing: -0.03em;
-  color: #fff;
+  color: var(--color-text);
   margin: 0;
   text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
 }
 
 .welcome-tagline {
   font-size: 1.05rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-muted);
   margin: 0;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
 }
@@ -123,22 +123,22 @@ function enter() {
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-accent-text);
-  background: var(--color-accent, #fbbf24);
+  background: var(--color-accent);
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: 0 4px 20px rgba(251, 191, 36, 0.3);
+  box-shadow: var(--shadow-accent-glow);
 }
 
 .btn-enter:hover {
   transform: scale(1.04);
-  box-shadow: 0 6px 28px rgba(251, 191, 36, 0.45);
+  box-shadow: var(--shadow-accent-glow-hover);
 }
 
 .welcome-version {
   margin-top: 0.5rem;
   font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--color-text-dim);
 }
 </style>
