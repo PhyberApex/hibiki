@@ -320,7 +320,7 @@ onActivated(() => {
 .panel-drop-active {
   border-color: var(--color-accent);
   background: var(--color-accent-muted);
-  box-shadow: 0 0 16px rgba(6, 182, 212, 0.2);
+  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.14);
   border-style: solid;
 }
 

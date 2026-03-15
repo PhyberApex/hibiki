@@ -14,43 +14,31 @@ const player = usePlayerStore()
 
     <section v-if="!player.botStatus?.ready" class="setup-guide">
       <h2 class="setup-guide-title">
-        Getting started
+        Setup
       </h2>
-      <p class="setup-guide-desc">
-        Set up Hibiki in three steps and you'll be playing audio in Discord in no time.
-      </p>
       <ol class="setup-steps">
         <li class="setup-step">
           <span class="step-number">1</span>
           <div class="step-content">
-            <strong>Connect your Discord bot</strong>
-            <p>
-              Go to
-              <RouterLink to="/settings" class="step-link">
-                Settings
-              </RouterLink>
-              and paste your bot token.
-            </p>
+            <RouterLink to="/settings" class="step-link">
+              Settings
+            </RouterLink>
+            — paste your bot token.
           </div>
         </li>
         <li class="setup-step">
           <span class="step-number">2</span>
           <div class="step-content">
-            <strong>Upload some sounds</strong>
-            <p>Add music, ambience, or effects below — drag files or click Add.</p>
+            Upload sounds below (drag or Add).
           </div>
         </li>
         <li class="setup-step">
           <span class="step-number">3</span>
           <div class="step-content">
-            <strong>Build a scene</strong>
-            <p>
-              Head to
-              <RouterLink to="/scenes" class="step-link">
-                Scenes
-              </RouterLink>
-              to create a soundboard for your session.
-            </p>
+            <RouterLink to="/scenes" class="step-link">
+              Scenes
+            </RouterLink>
+            — create a soundboard.
           </div>
         </li>
       </ol>
@@ -87,15 +75,9 @@ const player = usePlayerStore()
 }
 
 .setup-guide-title {
-  margin: 0 0 0.25rem;
+  margin: 0 0 0.75rem;
   font-size: 1rem;
   font-weight: 600;
-}
-
-.setup-guide-desc {
-  margin: 0 0 1rem;
-  font-size: 0.9rem;
-  color: var(--color-text-muted);
 }
 
 .setup-steps {
@@ -130,14 +112,6 @@ const player = usePlayerStore()
 .step-content {
   font-size: 0.9rem;
   line-height: 1.5;
-}
-
-.step-content strong {
-  color: var(--color-text);
-}
-
-.step-content p {
-  margin: 0.15rem 0 0;
   color: var(--color-text-muted);
 }
 

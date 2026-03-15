@@ -31,12 +31,12 @@ const musicSounds = ref<SoundFile[]>([])
 const effectsSounds = ref<SoundFile[]>([])
 const globalVolume = ref(80)
 const playingMusicId = ref<string | null>(null)
+const scenePlayingLocal = ref(false)
 const showCreateInput = ref(false)
 const newSceneName = ref('')
 const createSceneBusy = ref(false)
 const exportBusy = ref(false)
 const importBusy = ref(false)
-const deleteBusy = ref(false)
 const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 const musicAudioEl = createAudioEl()
@@ -191,6 +191,21 @@ function stopAmbience(soundId: string) {
   stopEffectStream(guildId.value!, `ambience-${soundId}`).catch(() => {})
 }
 
+function stopAmbienceLocal(soundId: string) {
+  const timer = ambienceTimers.get(soundId)
+  if (timer != null) {
+    clearTimeout(timer)
+    ambienceTimers.delete(soundId)
+  }
+  const el = ambienceAudioEls.get(soundId)
+  if (el) {
+    el.onended = null
+    el.pause()
+    el.removeAttribute('src')
+    el.load()
+  }
+}
+
 function isLooping(item: SceneItem): boolean {
   return (item.repeatMin ?? 0) === 0 && (item.repeatMax ?? 0) === 0
 }
@@ -234,6 +249,39 @@ async function playAmbience(item: SceneItem) {
   catch (e) {
     console.error('[scene] playAmbience failed:', e)
     stopAmbience(item.soundId)
+  }
+}
+
+async function playAmbienceLocal(item: SceneItem) {
+  try {
+    stopAmbienceLocal(item.soundId)
+    const el = getAmbienceAudio(item.soundId)
+    el.src = soundStreamUrl('ambience', item.soundId)
+    el.loop = isLooping(item)
+    el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
+    el.load()
+    await new Promise<void>((resolve, reject) => {
+      el.addEventListener('canplaythrough', () => resolve(), { once: true })
+      el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
+    })
+    if (!el.loop) {
+      el.onended = () => {
+        const min = (item.repeatMin ?? 0) * 1000
+        const max = (item.repeatMax ?? 0) * 1000
+        const delay = min + Math.random() * (max - min)
+        const timer = setTimeout(() => {
+          ambienceTimers.delete(item.soundId)
+          el.currentTime = 0
+          el.play().catch(() => {})
+        }, delay)
+        ambienceTimers.set(item.soundId, timer)
+      }
+    }
+    await el.play()
+  }
+  catch (e) {
+    console.error('[scene] playAmbienceLocal failed:', e)
+    stopAmbienceLocal(item.soundId)
   }
 }
 
@@ -290,6 +338,13 @@ function stopMusic() {
   }
   if (guildId.value)
     stopAudioStream(guildId.value).catch(() => {})
+}
+
+function stopMusicLocal() {
+  musicAudioEl.pause()
+  musicAudioEl.removeAttribute('src')
+  musicAudioEl.load()
+  playingMusicId.value = null
 }
 
 async function playEffect(item: SceneItem) {
@@ -349,9 +404,53 @@ async function removeFromScene(category: 'ambience' | 'music' | 'effects', sound
   }
 }
 
+async function playSceneLocal() {
+  if (!scene.value)
+    return
+  stopScene()
+  scenePlayingLocal.value = true
+  try {
+    for (const item of scene.value.ambience.filter(a => a.enabled))
+      await playAmbienceLocal(item)
+    const firstMusic = scene.value.music[0]
+    if (firstMusic) {
+      stopMusicLocal()
+      const el = musicAudioEl
+      playingMusicId.value = firstMusic.soundId
+      el.src = soundStreamUrl('music', firstMusic.soundId)
+      el.loop = firstMusic.loop ?? false
+      el.volume = (firstMusic.volume ?? 80) / 100 * (globalVolume.value / 100)
+      el.load()
+      await new Promise<void>((resolve, reject) => {
+        el.addEventListener('canplaythrough', () => resolve(), { once: true })
+        el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
+      })
+      el.onended = () => {
+        playingMusicId.value = null
+      }
+      el.onerror = () => {
+        playingMusicId.value = null
+      }
+      await el.play()
+    }
+  }
+  catch (e) {
+    console.error('[scene] playSceneLocal failed:', e)
+    stopSceneLocal()
+  }
+}
+
+function stopSceneLocal() {
+  for (const item of scene.value?.ambience ?? [])
+    stopAmbienceLocal(item.soundId)
+  stopMusicLocal()
+  scenePlayingLocal.value = false
+}
+
 async function playScene() {
   if (!scene.value || !isJoined.value || !guildId.value)
     return
+  stopSceneLocal()
   player.scenePlaying = true
   try {
     for (const item of scene.value.ambience.filter(a => a.enabled))
@@ -408,6 +507,7 @@ async function deleteCurrentScene() {
   if (!scene.value || !confirm(`Delete "${scene.value.name}"? This can't be undone.`))
     return
   stopScene()
+  stopSceneLocal()
   await deleteScene(scene.value.id)
   scenes.value = await listScenes()
   await router.push('/scenes')
@@ -479,8 +579,10 @@ onActivated(() => {
 watch(sceneId, (newId, oldId) => {
   const hadScene = oldId !== undefined && oldId !== ''
   const hasNoScene = newId === undefined || newId === ''
-  if (hadScene && (hasNoScene || newId !== oldId))
+  if (hadScene && (hasNoScene || newId !== oldId)) {
     stopScene()
+    stopSceneLocal()
+  }
   loadScene()
 }, { immediate: true })
 </script>
@@ -491,6 +593,47 @@ watch(sceneId, (newId, oldId) => {
       Scenes
     </h1>
     <header class="scene-header">
+      <div v-if="scene" class="scene-controls">
+        <label class="global-volume">
+          <span class="volume-icon" aria-hidden="true">🔊</span>
+          <input
+            v-model.number="globalVolume"
+            type="range"
+            min="0"
+            max="100"
+            class="volume-slider"
+            aria-label="Global volume"
+          >
+        </label>
+        <template v-if="scenePlayingLocal || player.scenePlaying">
+          <button
+            type="button"
+            class="btn btn-stop-scene"
+            @click="scenePlayingLocal ? stopSceneLocal() : stopScene()"
+          >
+            Stop
+          </button>
+        </template>
+        <template v-else>
+          <button
+            type="button"
+            class="btn btn-ghost btn-play-local"
+            title="Play in app only (no Discord)"
+            @click="playSceneLocal"
+          >
+            Play
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary btn-play-scene"
+            title="Mix into Discord voice"
+            :disabled="!isJoined"
+            @click="playScene"
+          >
+            Stream
+          </button>
+        </template>
+      </div>
       <div class="scene-title-row">
         <select
           :value="sceneId ?? ''"
@@ -499,7 +642,7 @@ watch(sceneId, (newId, oldId) => {
           @change="(e) => router.push((e.target as HTMLSelectElement).value ? `/scenes/${(e.target as HTMLSelectElement).value}` : '/scenes')"
         >
           <option value="">
-            Select a scene…
+            Scene…
           </option>
           <option v-for="s in scenes" :key="s.id" :value="s.id">
             {{ s.name }}
@@ -507,7 +650,7 @@ watch(sceneId, (newId, oldId) => {
         </select>
         <div class="scene-actions">
           <button type="button" class="btn btn-ghost" @click="openCreateScene">
-            New scene
+            New
           </button>
           <button
             type="button"
@@ -515,7 +658,7 @@ watch(sceneId, (newId, oldId) => {
             :disabled="importBusy"
             @click="doImportScene"
           >
-            {{ importBusy ? 'Importing…' : 'Import' }}
+            {{ importBusy ? '…' : 'Import' }}
           </button>
           <button
             v-if="scene"
@@ -524,7 +667,7 @@ watch(sceneId, (newId, oldId) => {
             :disabled="exportBusy"
             @click="doExportScene"
           >
-            {{ exportBusy ? 'Exporting…' : 'Export' }}
+            {{ exportBusy ? '…' : 'Export' }}
           </button>
           <button
             v-if="scene"
@@ -536,7 +679,7 @@ watch(sceneId, (newId, oldId) => {
           </button>
         </div>
       </div>
-      <div v-if="showCreateInput && scenes.length > 0" class="create-scene-form create-scene-form-inline create-scene-form-card">
+      <div v-if="showCreateInput" class="create-scene-form create-scene-form-inline create-scene-form-card">
         <input
           v-model="newSceneName"
           type="text"
@@ -566,103 +709,25 @@ watch(sceneId, (newId, oldId) => {
       >
         {{ exportImportMessage.text }}
       </p>
-      <div v-else-if="scene" class="scene-controls">
-        <label class="global-volume">
-          <span class="volume-icon" aria-hidden="true">🔊</span>
-          <input
-            v-model.number="globalVolume"
-            type="range"
-            min="0"
-            max="100"
-            class="volume-slider"
-            aria-label="Global volume"
-          >
-        </label>
-        <button
-          v-if="player.scenePlaying"
-          type="button"
-          class="btn btn-stop-scene"
-          @click="stopScene"
-        >
-          Stop scene
-        </button>
-        <button
-          v-else
-          type="button"
-          class="btn btn-primary btn-play-scene"
-          :disabled="!isJoined"
-          @click="playScene"
-        >
-          Play scene
-        </button>
-      </div>
     </header>
 
     <div v-if="!scene && scenes.length === 0" class="scene-empty">
       <p v-if="!hasSounds">
-        No scenes yet. First,
         <RouterLink to="/media" class="empty-link">
-          upload some sounds
-        </RouterLink>
-        in the Media Library, then come back to build a scene.
+          Add sounds in Media
+        </RouterLink>, then create a scene.
       </p>
       <p v-else>
-        No scenes yet. Create one to get started.
+        Create a scene to get started.
       </p>
-      <div v-if="showCreateInput" class="create-scene-form create-scene-form-inline create-scene-form-card">
-        <input
-          v-model="newSceneName"
-          type="text"
-          class="input create-scene-input"
-          placeholder="Scene name"
-          @keydown.enter="submitCreateScene"
-          @keydown.escape="cancelCreateScene"
-        >
-        <div class="create-scene-buttons">
-          <button type="button" class="btn btn-ghost" @click="cancelCreateScene">
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="!newSceneName.trim() || createSceneBusy"
-            @click="submitCreateScene"
-          >
-            Create
-          </button>
-        </div>
-      </div>
-      <button v-else type="button" class="btn btn-primary" @click="openCreateScene">
+      <button type="button" class="btn btn-primary" @click="openCreateScene">
         Create scene
       </button>
     </div>
 
     <div v-else-if="!scene && scenes.length > 0" class="scene-empty scene-empty-select">
-      <p>Pick a scene from the dropdown, or create a new one.</p>
-      <div v-if="showCreateInput" class="create-scene-form create-scene-form-inline create-scene-form-card">
-        <input
-          v-model="newSceneName"
-          type="text"
-          class="input create-scene-input"
-          placeholder="Scene name"
-          @keydown.enter="submitCreateScene"
-          @keydown.escape="cancelCreateScene"
-        >
-        <div class="create-scene-buttons">
-          <button type="button" class="btn btn-ghost" @click="cancelCreateScene">
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="!newSceneName.trim() || createSceneBusy"
-            @click="submitCreateScene"
-          >
-            Create
-          </button>
-        </div>
-      </div>
-      <button v-else type="button" class="btn btn-primary" @click="openCreateScene">
+      <p>Select a scene above or create one.</p>
+      <button type="button" class="btn btn-primary" @click="openCreateScene">
         New scene
       </button>
     </div>
@@ -760,7 +825,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.ambience.length === 0" class="section-empty">
-          No ambience yet. Use the dropdown above to add sounds.
+          None — add above.
         </p>
       </section>
 
@@ -841,7 +906,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.music.length === 0" class="section-empty">
-          No music yet. Use the dropdown above to add tracks.
+          None — add above.
         </p>
       </section>
 
@@ -897,7 +962,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.effects.length === 0" class="section-empty">
-          No effects yet. Use the dropdown above to add sounds.
+          None — add above.
         </p>
       </section>
     </template>
@@ -967,11 +1032,11 @@ watch(sceneId, (newId, oldId) => {
 .btn-play-scene {
   padding: 0.5rem 1.5rem;
   font-size: 1rem;
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.25);
+  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.12);
 }
 
 .btn-play-scene:hover:not(:disabled) {
-  box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.18);
 }
 
 .btn-stop-scene {

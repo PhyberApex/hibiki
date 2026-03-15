@@ -111,11 +111,11 @@ const isWelcome = computed(() => route.path === '/')
           v-if="player.connectedGuildId"
           type="button"
           class="btn-disconnect"
-          title="Leave voice channel"
-          aria-label="Leave"
+          :title="`Leave ${connectedGuild?.guildName ?? 'voice'}`"
+          aria-label="Leave voice channel"
           @click="player.doLeave(player.connectedGuildId)"
         >
-          Disconnect ({{ connectedGuild?.guildName ?? 'voice' }})
+          Leave
         </button>
       </nav>
 
