@@ -23,6 +23,8 @@ function isTabActive(path: string) {
   return route.path.startsWith(path)
 }
 
+const POLL_INTERVAL_MS = 800
+
 function startPollingWhenDisconnected() {
   if (pollTimer)
     return
@@ -35,7 +37,7 @@ function startPollingWhenDisconnected() {
       return
     }
     player.loadState()
-  }, 2000)
+  }, POLL_INTERVAL_MS)
 }
 
 onMounted(() => {

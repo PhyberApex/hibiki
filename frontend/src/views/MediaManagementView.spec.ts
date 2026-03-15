@@ -10,6 +10,10 @@ const router = createRouter({
   routes: [{ path: '/', component: { template: '' } }],
 })
 
+vi.mock('@/api/config', () => ({
+  fetchDiscordConfig: vi.fn().mockResolvedValue({ tokenConfigured: false }),
+}))
+
 vi.mock('@/api/sounds', () => ({
   listMusic: vi.fn().mockResolvedValue([]),
   listAmbience: vi.fn().mockResolvedValue([]),

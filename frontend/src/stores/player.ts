@@ -36,12 +36,11 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function loadState() {
     try {
-      const [stateRes, botRes] = await Promise.all([
-        fetchPlayerState(),
-        fetchBotStatus().catch(() => ({ ready: false } as BotStatus)),
-      ])
-      playerState.value = stateRes
+      const botRes = await fetchBotStatus().catch(() => ({ ready: false } as BotStatus))
       botStatus.value = botRes
+
+      const stateRes = await fetchPlayerState().catch(() => [] as PlayerStateItem[])
+      playerState.value = stateRes
     }
     catch {
       // Expected when running outside Electron (e.g. tests or Vite dev)

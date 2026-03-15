@@ -1,9 +1,25 @@
 <script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { fetchDiscordConfig } from '@/api/config'
 import SoundListManage from '@/components/SoundListManage.vue'
 import { usePlayerStore } from '@/stores/player'
 
 const player = usePlayerStore()
+const tokenConfigured = ref<boolean | null>(null)
+
+onMounted(async () => {
+  try {
+    const config = await fetchDiscordConfig()
+    tokenConfigured.value = config.tokenConfigured
+  }
+  catch {
+    tokenConfigured.value = false
+  }
+})
+
+const showSetupGuide = computed(() => !player.botStatus?.ready && tokenConfigured.value === false)
+const showConnecting = computed(() => !player.botStatus?.ready && tokenConfigured.value !== false)
 </script>
 
 <template>
@@ -15,7 +31,13 @@ const player = usePlayerStore()
       Upload and manage music, ambience, and sound effects for your scenes.
     </p>
 
-    <section v-if="!player.botStatus?.ready" class="setup-guide">
+    <section v-if="showConnecting" class="setup-guide setup-guide-connecting">
+      <p class="connecting-message">
+        Connecting to Discord…
+      </p>
+    </section>
+
+    <section v-else-if="showSetupGuide" class="setup-guide">
       <h2 class="setup-guide-title">
         Get started
       </h2>
@@ -84,6 +106,19 @@ const player = usePlayerStore()
   border-radius: var(--radius-lg);
   padding: 1.25rem 1.5rem;
   animation: fade-in 0.25s ease-out;
+}
+
+.setup-guide-connecting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 4rem;
+}
+
+.connecting-message {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
 }
 
 .setup-guide-title {
