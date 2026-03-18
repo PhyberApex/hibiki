@@ -201,28 +201,28 @@ const isWelcome = computed(() => route.path === '/')
   min-width: 220px;
   background: var(--color-bg-elevated);
   border-right: 1px solid var(--color-border);
-  padding: 1rem 0.75rem;
-  gap: 1.25rem;
+  padding: 0.75rem;
 }
 
 .brand-mini {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.25rem 0.5rem;
+  padding: 0.2rem 0.4rem;
+  margin-bottom: 1rem;
   color: var(--color-text);
   flex-shrink: 0;
 }
 
 .brand-logo {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--radius-sm);
   object-fit: contain;
 }
 
 .brand-title {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
@@ -230,8 +230,11 @@ const isWelcome = computed(() => route.path === '/')
 .sidebar-guild {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
   overflow-y: auto;
+  padding-bottom: 1rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .guild-group {
@@ -244,15 +247,15 @@ const isWelcome = computed(() => route.path === '/')
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0.5rem;
-  font-size: 0.85rem;
+  padding: 0.35rem 0.4rem;
+  font-size: 0.8rem;
   color: var(--color-text);
   font-weight: 600;
 }
 
 .guild-icon {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
@@ -286,8 +289,8 @@ const isWelcome = computed(() => route.path === '/')
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.3rem 0.5rem;
-  font-size: 0.8rem;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.75rem;
   color: var(--color-text-muted);
   background: transparent;
   border: none;
@@ -320,9 +323,9 @@ const isWelcome = computed(() => route.path === '/')
 }
 
 .btn-disconnect {
-  margin-top: 0.25rem;
-  padding: 0.35rem 0.6rem;
-  font-size: 0.8rem;
+  margin-top: 0.35rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-text-muted);
   background: transparent;
@@ -341,14 +344,15 @@ const isWelcome = computed(() => route.path === '/')
 .sidebar-tabs {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.125rem;
+  margin-top: 0.75rem;
 }
 
 .sidebar-tab {
   display: flex;
   align-items: center;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
   color: var(--color-text-muted);
   text-decoration: none;
   border-radius: var(--radius-sm);
@@ -386,6 +390,8 @@ const isWelcome = computed(() => route.path === '/')
 
 .sidebar-status {
   margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -517,28 +523,35 @@ const isWelcome = computed(() => route.path === '/')
   .sidebar {
     width: 180px;
     min-width: 180px;
-    padding: 0.75rem 0.5rem;
-    gap: 1rem;
+    padding: 0.5rem;
+  }
+
+  .brand-mini {
+    margin-bottom: 0.75rem;
   }
 
   .guild-header {
-    padding: 0.3rem 0.4rem;
-    font-size: 0.8rem;
-  }
-
-  .guild-icon {
-    width: 22px;
-    height: 22px;
-  }
-
-  .channel-item {
-    padding: 0.25rem 0.4rem;
+    padding: 0.25rem 0.35rem;
     font-size: 0.75rem;
   }
 
+  .guild-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .channel-item {
+    padding: 0.2rem 0.35rem;
+    font-size: 0.7rem;
+  }
+
+  .sidebar-tabs {
+    margin-top: 0.5rem;
+  }
+
   .sidebar-tab {
-    padding: 0.4rem 0.6rem;
-    font-size: 0.85rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.8rem;
   }
 
   .content {
