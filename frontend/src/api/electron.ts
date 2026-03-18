@@ -18,3 +18,8 @@ export function apiCall<T>(domain: string, method: string, args: unknown[]): Pro
     throw new Error('Electron API not available')
   return window.hibiki.invoke('api', { domain, method, args }) as Promise<T>
 }
+
+export function openExternal(url: string): void {
+  if (window.hibiki?.invoke)
+    window.hibiki.invoke('shell:openExternal', url)
+}

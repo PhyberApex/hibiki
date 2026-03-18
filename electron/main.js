@@ -1,7 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { PassThrough } = require('node:stream')
-const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, protocol, session, WebContentsView } = require('electron')
+const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, protocol, session, shell, WebContentsView } = require('electron')
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'hibiki', privileges: { standard: true, secure: true, supportFetchAPI: true } },
@@ -396,6 +396,11 @@ app.whenReady().then(async () => {
     if (result.canceled || result.filePaths.length === 0)
       return null
     return result.filePaths[0]
+  })
+
+  ipcMain.handle('shell:openExternal', (_, url) => {
+    if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://')))
+      return shell.openExternal(url)
   })
 
   createWindow('hibiki://app/')
