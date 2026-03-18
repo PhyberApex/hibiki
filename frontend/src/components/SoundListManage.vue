@@ -14,6 +14,12 @@ import {
 const props = defineProps<{ title: string, type: 'music' | 'effects' | 'ambience' }>()
 const emit = defineEmits<{ updated: [] }>()
 
+const categoryHint: Record<string, string> = {
+  music: 'Background tracks that play one at a time — tavern themes, battle scores, travel music.',
+  ambience: 'Loops that layer together — rain, wind, crackling fire, crowd chatter.',
+  effects: 'One-shot sounds you trigger on demand — thunder, door slam, sword clash.',
+}
+
 const items = ref<SoundFile[]>([])
 const sortBy = ref<'name' | 'date'>('name')
 const loading = ref(true)
@@ -49,7 +55,7 @@ async function loadSounds() {
         : await listEffects()
   }
   catch (err) {
-    error.value = err instanceof Error ? err.message : 'Couldn\'t load sounds. Try again.'
+    error.value = err instanceof Error ? err.message : 'Couldn\'t load sounds. Try switching tabs and coming back.'
   }
   finally {
     loading.value = false
@@ -79,10 +85,10 @@ async function handleFiles(files: FileList | File[] | null) {
       await uploadSound(props.type, file)
       await loadSounds()
       emit('updated')
-      showToast('success', 'File uploaded.')
+      showToast('success', `Added to ${props.type}.`)
     }
     catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not upload file.'
+      const msg = err instanceof Error ? err.message : 'Upload failed. Check that the file is a supported audio format and try again.'
       error.value = msg
       showToast('error', msg)
     }
@@ -98,14 +104,14 @@ async function handleFiles(files: FileList | File[] | null) {
     await loadSounds()
     emit('updated')
     if (failed.length === 0)
-      showToast('success', `Uploaded ${success.length} ${success.length === 1 ? 'file' : 'files'}.`)
+      showToast('success', `Added ${success.length} ${success.length === 1 ? 'file' : 'files'} to ${props.type}.`)
     else if (success.length > 0)
-      showToast('success', `Uploaded ${success.length}, but ${failed.length} failed.`)
+      showToast('success', `Added ${success.length} ${success.length === 1 ? 'file' : 'files'}, but ${failed.length} couldn't be uploaded. Check that all files are audio.`)
     else
-      showToast('error', `All ${failed.length} uploads failed.`)
+      showToast('error', `None of the ${failed.length} files could be uploaded. Make sure they're audio files (MP3, WAV, OGG, etc).`)
   }
   catch (err) {
-    showToast('error', err instanceof Error ? err.message : 'Could not upload files.')
+    showToast('error', err instanceof Error ? err.message : 'Upload failed. Check that the files are supported audio formats and try again.')
   }
   finally {
     uploading.value = false
@@ -186,10 +192,10 @@ async function confirmDelete(id: string) {
     await deleteSound(props.type, id)
     await loadSounds()
     emit('updated')
-    showToast('success', 'Sound deleted.')
+    showToast('success', 'Removed from library.')
   }
   catch (err) {
-    showToast('error', err instanceof Error ? err.message : 'Could not delete sound.')
+    showToast('error', err instanceof Error ? err.message : 'Couldn\'t delete. The file may be in use — try again in a moment.')
   }
 }
 
@@ -257,11 +263,11 @@ onActivated(() => {
       {{ error }}
     </p>
     <div v-else-if="items.length === 0" class="empty-state empty-state-drop">
-      <p>
-        No {{ type }} yet.
+      <p class="empty-category-hint">
+        {{ categoryHint[type] }}
       </p>
-      <p class="empty-hint">
-        Click + Add or drag audio files here.
+      <p class="empty-action-hint">
+        Drag audio files here or click <strong>+ Add</strong> above.
       </p>
     </div>
 
@@ -310,11 +316,14 @@ onActivated(() => {
 
 <style scoped>
 .panel {
+  display: flex;
+  flex-direction: column;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: 1.25rem;
+  padding: 1rem 1.125rem;
   transition: border-color var(--transition), background var(--transition);
+  min-height: 0;
 }
 
 .panel-drop-active {
@@ -329,12 +338,13 @@ onActivated(() => {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
+  flex-shrink: 0;
 }
 
 .panel-title {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -342,9 +352,9 @@ onActivated(() => {
 }
 
 .panel-count {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 500;
-  padding: 0.1rem 0.4rem;
+  padding: 0.1rem 0.35rem;
   border-radius: var(--radius-full);
   background: var(--color-bg);
   color: var(--color-text-muted);
@@ -357,8 +367,8 @@ onActivated(() => {
 }
 
 .sort-select {
-  padding: 0.3rem 0.5rem;
-  font-size: 0.8rem;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.75rem;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -366,7 +376,7 @@ onActivated(() => {
 }
 
 .btn-upload {
-  padding: 0.35rem 0.7rem;
+  padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
   font-weight: 500;
   background: var(--color-accent);
@@ -387,11 +397,12 @@ onActivated(() => {
 }
 
 .toast {
-  margin: 0 0 0.75rem;
-  padding: 0.4rem 0.7rem;
+  margin: 0 0 0.5rem;
+  padding: 0.35rem 0.6rem;
   border-radius: var(--radius-sm);
   font-size: 0.8rem;
   font-weight: 500;
+  flex-shrink: 0;
   animation: toast-in 0.25s ease-out;
 }
 
@@ -418,9 +429,9 @@ onActivated(() => {
 
 .empty-state {
   text-align: center;
-  padding: 1.5rem 1rem;
+  padding: 1.25rem 1rem;
   color: var(--color-text-muted);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .empty-state p {
@@ -435,13 +446,27 @@ onActivated(() => {
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-md);
   margin: 0 -0.25rem;
+  padding: 1.5rem 1rem;
 }
 
-.empty-hint {
-  margin-top: 0.25rem;
+.empty-category-hint {
   font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.empty-action-hint {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
   color: var(--color-text-dim);
 }
+
+.empty-action-hint strong {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+/* ── Sound list: scrollable within panel ── */
 
 .sound-list {
   list-style: none;
@@ -449,14 +474,18 @@ onActivated(() => {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.125rem;
+  overflow-y: auto;
+  max-height: 50vh;
+  margin-inline: -0.375rem;
+  padding-inline: 0.375rem;
 }
 
 .sound-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.5rem;
+  gap: 0.4rem;
+  padding: 0.35rem 0.4rem;
   border-radius: var(--radius-sm);
   transition: background var(--transition);
 }
@@ -471,8 +500,8 @@ onActivated(() => {
 }
 
 .sound-play-btn {
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.5rem;
+  height: 1.5rem;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -481,7 +510,7 @@ onActivated(() => {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-muted);
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
 }
@@ -503,7 +532,7 @@ onActivated(() => {
 .sound-name {
   flex: 1;
   min-width: 0;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: var(--color-text);
   overflow: hidden;
@@ -512,8 +541,8 @@ onActivated(() => {
 }
 
 .btn-delete {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.35rem;
+  height: 1.35rem;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -522,9 +551,9 @@ onActivated(() => {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-dim);
-  font-size: 1rem;
+  font-size: 0.9rem;
   cursor: pointer;
-  opacity: 0.35;
+  opacity: 0;
   transition: opacity var(--transition), color var(--transition), background var(--transition);
 }
 
@@ -552,8 +581,8 @@ onActivated(() => {
 }
 
 .btn-confirm-delete {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8rem;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.75rem;
   font-weight: 500;
   background: var(--color-error-muted);
   color: var(--color-error);
@@ -569,8 +598,8 @@ onActivated(() => {
 }
 
 .btn-cancel-delete {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8rem;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.75rem;
   font-weight: 500;
   background: var(--color-bg);
   color: var(--color-text-muted);
@@ -583,5 +612,27 @@ onActivated(() => {
 .btn-cancel-delete:hover {
   background: var(--color-border);
   color: var(--color-text);
+}
+
+/* When panels stack (narrow content area), cap list height shorter
+   so all three panels remain visible without excessive scrolling */
+@media (max-width: 560px) {
+  .panel {
+    padding: 0.75rem 0.875rem;
+  }
+
+  .panel-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .sound-list {
+    max-height: 30vh;
+  }
+
+  .empty-state-drop {
+    padding: 1rem 0.75rem;
+  }
 }
 </style>

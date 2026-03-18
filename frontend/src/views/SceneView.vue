@@ -637,48 +637,6 @@ watch(sceneId, (newId, oldId) => {
       Scenes
     </h1>
     <header class="scene-header">
-      <div v-if="scene" class="scene-controls">
-        <label class="global-volume">
-          <span class="volume-icon" aria-hidden="true">🔊</span>
-          <input
-            v-model.number="globalVolume"
-            type="range"
-            min="0"
-            max="100"
-            class="volume-slider"
-            aria-label="Global volume"
-          >
-        </label>
-        <template v-if="scenePlayingLocal || player.scenePlaying">
-          <button
-            type="button"
-            class="btn btn-stop-scene"
-            @click="scenePlayingLocal ? stopSceneLocal() : stopScene()"
-          >
-            Stop
-          </button>
-        </template>
-        <template v-else>
-          <button
-            type="button"
-            class="btn btn-ghost btn-play-local"
-            :title="hasAnySoundMissing ? 'Some sounds are missing — add them to your library first' : 'Play in this app only (no Discord)'"
-            :disabled="hasAnySoundMissing"
-            @click="playSceneLocal"
-          >
-            Play
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary btn-play-scene"
-            :title="hasAnySoundMissing ? 'Some sounds are missing — add them to your library first' : 'Stream this scene to your Discord voice channel'"
-            :disabled="!isJoined || hasAnySoundMissing"
-            @click="playScene"
-          >
-            Stream
-          </button>
-        </template>
-      </div>
       <div class="scene-title-row">
         <select
           :value="sceneId ?? ''"
@@ -759,6 +717,51 @@ watch(sceneId, (newId, oldId) => {
       </p>
     </header>
 
+    <div v-if="scene" class="scene-playback-bar">
+      <label class="global-volume">
+        <span class="volume-icon" aria-hidden="true">🔊</span>
+        <input
+          v-model.number="globalVolume"
+          type="range"
+          min="0"
+          max="100"
+          class="volume-slider"
+          aria-label="Global volume"
+        >
+      </label>
+      <div class="playback-actions">
+        <template v-if="scenePlayingLocal || player.scenePlaying">
+          <button
+            type="button"
+            class="btn btn-stop-scene"
+            @click="scenePlayingLocal ? stopSceneLocal() : stopScene()"
+          >
+            Stop
+          </button>
+        </template>
+        <template v-else>
+          <button
+            type="button"
+            class="btn btn-ghost btn-play-local"
+            :title="hasAnySoundMissing ? 'Some sounds are missing — add them to your library first' : 'Play in this app only (no Discord)'"
+            :disabled="hasAnySoundMissing"
+            @click="playSceneLocal"
+          >
+            Play
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary btn-play-scene"
+            :title="hasAnySoundMissing ? 'Some sounds are missing — add them to your library first' : 'Stream this scene to your Discord voice channel'"
+            :disabled="!isJoined || hasAnySoundMissing"
+            @click="playScene"
+          >
+            Stream
+          </button>
+        </template>
+      </div>
+    </div>
+
     <RegistryBrowser
       v-if="showRegistryBrowser"
       @close="showRegistryBrowser = false"
@@ -811,11 +814,11 @@ watch(sceneId, (newId, oldId) => {
     </div>
 
     <template v-if="scene">
-      <section class="scene-section">
-        <h2 class="section-title">
-          Ambience
-        </h2>
-        <div class="add-sounds">
+      <section class="scene-section scene-section-ambience">
+        <div class="section-header">
+          <h2 class="section-title">
+            Ambience
+          </h2>
           <select
             class="add-select"
             @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = ambienceSounds.find(x => x.id === id); if (s) addToScene('ambience', s); (e.target as HTMLSelectElement).value = '' } }"
@@ -920,11 +923,11 @@ watch(sceneId, (newId, oldId) => {
         </p>
       </section>
 
-      <section class="scene-section">
-        <h2 class="section-title">
-          Music
-        </h2>
-        <div class="add-sounds">
+      <section class="scene-section scene-section-music">
+        <div class="section-header">
+          <h2 class="section-title">
+            Music
+          </h2>
           <select
             class="add-select"
             @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = musicSounds.find(x => x.id === id); if (s) addToScene('music', s); (e.target as HTMLSelectElement).value = '' } }"
@@ -1016,11 +1019,11 @@ watch(sceneId, (newId, oldId) => {
         </p>
       </section>
 
-      <section class="scene-section">
-        <h2 class="section-title">
-          Effects
-        </h2>
-        <div class="add-sounds">
+      <section class="scene-section scene-section-effects">
+        <div class="section-header">
+          <h2 class="section-title">
+            Effects
+          </h2>
           <select
             class="add-select"
             @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = effectsSounds.find(x => x.id === id); if (s) addToScene('effects', s); (e.target as HTMLSelectElement).value = '' } }"
@@ -1037,47 +1040,41 @@ watch(sceneId, (newId, oldId) => {
             </option>
           </select>
         </div>
-        <div class="sound-cards">
+        <div class="sound-cards effect-cards">
           <div
             v-for="item in scene.effects"
             :key="item.soundId"
-            class="sound-card"
-            :class="{ 'sound-card-has-hint': isSoundMissing('effects', item.soundId) }"
+            class="effect-card"
+            :class="{ 'effect-card-missing': isSoundMissing('effects', item.soundId) }"
           >
-            <div class="sound-card-main-row">
-              <div class="sound-card-info">
-                <span class="sound-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
-                <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing-badge">
-                  missing
-                </span>
-              </div>
-              <div class="sound-card-controls">
-                <button
-                  type="button"
-                  class="btn btn-play"
-                  :disabled="isSoundMissing('effects', item.soundId)"
-                  @click="isJoined ? playEffect(item) : playEffectLocal(item)"
-                >
-                  Play
-                </button>
-                <button
-                  type="button"
-                  class="btn-icon btn-remove"
-                  title="Remove"
-                  :aria-label="`Remove ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
-                  @click="removeFromScene('effects', item.soundId)"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            <div v-if="isSoundMissing('effects', item.soundId)" class="sound-source-hint">
+            <button
+              type="button"
+              class="effect-trigger"
+              :disabled="isSoundMissing('effects', item.soundId)"
+              :title="isSoundMissing('effects', item.soundId) ? 'Sound missing' : `Play ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
+              @click="isJoined ? playEffect(item) : playEffectLocal(item)"
+            >
+              <span class="effect-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
+              <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing-badge">
+                missing
+              </span>
+            </button>
+            <button
+              type="button"
+              class="btn-icon btn-remove effect-remove"
+              title="Remove"
+              :aria-label="`Remove ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
+              @click="removeFromScene('effects', item.soundId)"
+            >
+              ×
+            </button>
+            <div v-if="isSoundMissing('effects', item.soundId)" class="sound-source-hint effect-resolve-hint">
               <button
                 type="button"
                 class="btn-resolve"
                 @click="resolveTarget = { category: 'effects', item }"
               >
-                Resolve missing sound...
+                Resolve…
               </button>
             </div>
           </div>
@@ -1094,14 +1091,14 @@ watch(sceneId, (newId, oldId) => {
 .scene-view {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  max-width: min(900px, 100%);
 }
+
+/* ── Header: scene management ── */
 
 .scene-header {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .scene-title-row {
@@ -1129,10 +1126,17 @@ watch(sceneId, (newId, oldId) => {
   flex-wrap: wrap;
 }
 
-.scene-controls {
+/* ── Playback bar: the primary GM action area ── */
+
+.scene-playback-bar {
   display: flex;
   align-items: center;
   gap: 1rem;
+  margin-top: 1.25rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .global-volume {
@@ -1148,6 +1152,13 @@ watch(sceneId, (newId, oldId) => {
 .volume-slider {
   width: 120px;
   accent-color: var(--color-accent);
+}
+
+.playback-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
 }
 
 .btn-play-scene {
@@ -1177,8 +1188,11 @@ watch(sceneId, (newId, oldId) => {
   color: var(--color-on-accent-bg);
 }
 
+/* ── Empty states ── */
+
 .scene-empty {
   text-align: center;
+  margin-top: 2.5rem;
   padding: 3rem 2rem;
   background: var(--color-bg-card);
   border: 1px dashed var(--color-border);
@@ -1213,7 +1227,8 @@ watch(sceneId, (newId, oldId) => {
   font-size: 0.8rem;
 }
 
-/* Create scene form – matches scene-select and add-select */
+/* ── Create scene form ── */
+
 .create-scene-form {
   display: flex;
   flex-direction: column;
@@ -1249,30 +1264,56 @@ watch(sceneId, (newId, oldId) => {
   gap: 0.5rem;
 }
 
+/* ── Sections: Ambience / Music / Effects ── */
+
 .scene-section {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--section-color, var(--color-border));
   border-radius: var(--radius-lg);
-  padding: 1.25rem;
+  padding: 1rem 1.25rem;
+  margin-top: 1.5rem;
 }
 
-.section-desc {
-  margin: 0 0 1rem;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
+.scene-section:first-of-type {
+  margin-top: 2rem;
 }
+
+.scene-section-ambience {
+  --section-color: #2dd4bf;
+}
+
+.scene-section-music {
+  --section-color: #f59e0b;
+}
+
+.scene-section-effects {
+  --section-color: #fb7185;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
 .section-title {
-  margin: 0 0 1rem;
-  font-size: 0.9rem;
+  margin: 0;
+  font-size: 0.8rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-dim);
+  letter-spacing: 0.06em;
+  color: var(--section-color, var(--color-text-dim));
 }
 
+/* ── Sound cards (Ambience & Music) ── */
+
 .sound-cards {
-  display: grid;
-  gap: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .sound-card {
@@ -1280,7 +1321,7 @@ watch(sceneId, (newId, oldId) => {
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  padding: 0.75rem 1rem;
+  padding: 0.6rem 0.75rem;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -1289,7 +1330,7 @@ watch(sceneId, (newId, oldId) => {
 .sound-card-ambience {
   flex-direction: column;
   align-items: stretch;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .sound-card-row {
@@ -1303,8 +1344,9 @@ watch(sceneId, (newId, oldId) => {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--color-text-muted);
+  padding-left: 0.125rem;
 }
 
 .repeat-label {
@@ -1312,8 +1354,8 @@ watch(sceneId, (newId, oldId) => {
 }
 
 .repeat-select {
-  padding: 0.2rem 0.4rem;
-  font-size: 0.8rem;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.75rem;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -1322,11 +1364,18 @@ watch(sceneId, (newId, oldId) => {
 
 .sound-card-info {
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .sound-name {
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sound-card-has-hint {
@@ -1344,16 +1393,16 @@ watch(sceneId, (newId, oldId) => {
 
 .sound-missing-badge {
   display: inline-block;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  padding: 0.1rem 0.4rem;
-  margin-left: 0.4rem;
+  padding: 0.1rem 0.35rem;
   background: var(--color-error-muted, rgba(239, 68, 68, 0.15));
   color: var(--color-error, #ef4444);
   border-radius: var(--radius-sm);
   vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .sound-source-hint {
@@ -1385,7 +1434,7 @@ watch(sceneId, (newId, oldId) => {
 .sound-card-controls {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.6rem;
   flex-shrink: 0;
 }
 
@@ -1394,8 +1443,8 @@ watch(sceneId, (newId, oldId) => {
 }
 
 .btn-icon {
-  width: 2rem;
-  height: 2rem;
+  width: 1.75rem;
+  height: 1.75rem;
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
@@ -1422,22 +1471,13 @@ watch(sceneId, (newId, oldId) => {
   color: var(--color-on-accent-bg);
 }
 
-.btn-play {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.85rem;
-}
-
 .toggle input {
   accent-color: var(--color-accent);
 }
 
-.add-sounds {
-  margin-bottom: 0.75rem;
-}
-
 .add-select {
-  padding: 0.35rem 0.6rem;
-  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -1446,7 +1486,7 @@ watch(sceneId, (newId, oldId) => {
 
 .btn-remove {
   color: var(--color-text-muted);
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   line-height: 1;
 }
 
@@ -1454,10 +1494,91 @@ watch(sceneId, (newId, oldId) => {
   color: var(--color-error);
 }
 
+/* ── Effects: dense trigger grid ── */
+
+.effect-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.5rem;
+}
+
+.effect-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.effect-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  padding-right: 2rem;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.effect-trigger:hover:not(:disabled) {
+  background: rgba(251, 113, 133, 0.08);
+}
+
+.effect-trigger:active:not(:disabled) {
+  background: rgba(251, 113, 133, 0.15);
+}
+
+.effect-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.effect-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.effect-remove {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 1rem;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.effect-card:hover .effect-remove {
+  opacity: 1;
+}
+
+.effect-card-missing {
+  border-color: var(--color-error-muted);
+}
+
+.effect-resolve-hint {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+/* ── Shared ── */
+
 .section-empty {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--color-text-muted);
+  line-height: 1.5;
 }
 
 .btn-danger:hover {

@@ -214,32 +214,52 @@ onMounted(load)
 .settings {
   max-width: min(32rem, 100%);
 }
+
+/* ── Page title ── */
+
+.settings > h1 {
+  margin: 0 0 1.75rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ── Section panels ── */
+
 .panel {
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 1.5rem;
+  padding: 1.25rem;
 }
+
 .panel + .panel {
-  margin-top: 1.5rem;
+  margin-top: 1.25rem;
 }
+
 .panel h2 {
-  margin: 0 0 0.75rem;
-  font-size: 1rem;
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--color-text);
 }
+
+/* ── Status / description text ── */
+
 .status {
-  margin: 0 0 1rem;
-  font-size: 0.9rem;
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
   color: var(--color-text-muted);
+  line-height: 1.5;
 }
+
 .status-row {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+
 .btn-inline {
   padding: 0.3rem 0.6rem;
   font-size: 0.85rem;
@@ -249,35 +269,48 @@ onMounted(load)
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
+
 .btn-inline:hover:not(:disabled) {
   opacity: 0.9;
 }
+
 .btn-inline:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }
+
+/* ── Form fields ── */
+
 .form-row {
   margin-bottom: 1rem;
 }
+
 .form-row label {
   display: block;
-  margin-bottom: 0.35rem;
-  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.8rem;
   font-weight: 500;
-  color: var(--color-text);
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
+
 .input {
   width: 100%;
 }
+
 .input-readonly {
   color: var(--color-text-muted);
   cursor: default;
 }
+
+/* ── Actions ── */
+
 .form-actions {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
 }
+
 .settings-link {
   color: var(--color-accent);
   text-decoration: none;
@@ -288,6 +321,6 @@ onMounted(load)
 }
 
 .settings-message {
-  margin-top: 1rem;
+  margin: 0.75rem 0 0;
 }
 </style>

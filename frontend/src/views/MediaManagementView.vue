@@ -28,7 +28,7 @@ const showConnecting = computed(() => !player.botStatus?.ready && tokenConfigure
       Sound library
     </h1>
     <p class="page-subtitle">
-      Upload and manage music, ambience, and sound effects for your scenes.
+      Add audio files here, then combine them into scenes to play during your session.
     </p>
 
     <section v-if="showConnecting" class="setup-guide setup-guide-connecting">
@@ -45,30 +45,36 @@ const showConnecting = computed(() => !player.botStatus?.ready && tokenConfigure
         <li class="setup-step">
           <span class="step-number">1</span>
           <div class="step-content">
-            Open
             <RouterLink to="/settings" class="step-link">
-              Settings
+              Add your Discord bot token
             </RouterLink>
-            and paste your Discord bot token so Hibiki can join your server.
+            so Hibiki can join voice channels.
           </div>
         </li>
         <li class="setup-step">
           <span class="step-number">2</span>
           <div class="step-content">
-            Upload sounds below: drag files onto a panel or click + Add. Use Music for tracks, Ambience for loops, Effects for one-shots.
+            Upload sounds below — drag files onto a panel or click + Add.
           </div>
         </li>
         <li class="setup-step">
           <span class="step-number">3</span>
           <div class="step-content">
-            Go to
+            Build a
             <RouterLink to="/scenes" class="step-link">
-              Scenes
+              Scene
             </RouterLink>
-            to build a soundboard — mix music, ambience, and effects, then stream to a voice channel.
+            — combine sounds into a soundboard you can play in Discord.
           </div>
         </li>
       </ol>
+      <p class="setup-shortcut">
+        Want to skip setup?
+        <RouterLink to="/scenes" class="step-link">
+          Browse community scenes
+        </RouterLink>
+        — they include sounds and are ready to play.
+      </p>
     </section>
 
     <div class="sound-grid">
@@ -83,8 +89,9 @@ const showConnecting = computed(() => !player.botStatus?.ready && tokenConfigure
 .media-view {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
 }
+
+/* ── Page intro: tight unit ── */
 
 .page-title {
   margin: 0;
@@ -94,13 +101,16 @@ const showConnecting = computed(() => !player.botStatus?.ready && tokenConfigure
 }
 
 .page-subtitle {
-  margin: 0;
+  margin: 0.25rem 0 0;
   font-size: 0.9rem;
   color: var(--color-text-muted);
   line-height: 1.4;
 }
 
+/* ── Setup guide ── */
+
 .setup-guide {
+  margin-top: 1.5rem;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -171,9 +181,39 @@ const showConnecting = computed(() => !player.botStatus?.ready && tokenConfigure
   text-decoration: underline;
 }
 
+.setup-shortcut {
+  margin: 1rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.85rem;
+  color: var(--color-text-dim);
+}
+
+/* ── Sound grid ── */
+
 .sound-grid {
   display: grid;
-  gap: 1.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-top: 2rem;
+}
+
+/* Cap at 3 columns — one per category, never wider */
+@media (min-width: 840px) {
+  .sound-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Stacked layout: tighter spacing, shorter lists */
+@media (max-width: 560px) {
+  .sound-grid {
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+  }
+
+  .page-subtitle {
+    font-size: 0.85rem;
+  }
 }
 </style>

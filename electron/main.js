@@ -13,10 +13,10 @@ let mainWindow = null
 function createWindow(loadUrl) {
   const isTestMode = process.env.ELECTRON_TEST_MODE === '1'
   const win = new BrowserWindow({
-    width: 1200,
+    width: 1400,
     height: 800,
-    minWidth: 800,
-    minHeight: 500,
+    minWidth: 1400,
+    minHeight: 600,
     show: !isTestMode,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
