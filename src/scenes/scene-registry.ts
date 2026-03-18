@@ -1,15 +1,10 @@
 import type { Config } from '../config'
-import type { RegistryIndex } from './scene-package.types'
-import type { Scene } from './scene-store'
-import { randomUUID } from 'node:crypto'
-import { createWriteStream } from 'node:fs'
+import type { RegistryEntry, RegistryIndex } from './scene-package.types'
+import type { Scene, SceneItem } from './scene-store'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { Readable } from 'node:stream'
-import { pipeline } from 'node:stream/promises'
 import { createLogger } from '../logger'
-import { importScene } from './scene-import'
+import { createSceneStore } from './scene-store'
 
 const log = createLogger('scene-registry')
 
@@ -44,6 +39,32 @@ async function writeCache(cachePath: string, data: CachedIndex): Promise<void> {
   await writeFile(cachePath, JSON.stringify(data, null, 2), 'utf-8')
 }
 
+function registryEntryToScene(entry: RegistryEntry): Omit<Scene, 'id' | 'createdAt' | 'updatedAt'> {
+  return {
+    name: entry.name,
+    music: entry.scene.music.map(t => ({
+      soundId: t.soundName,
+      soundName: t.soundName,
+      volume: t.volume,
+      loop: t.loop,
+      source: t.source,
+    } satisfies SceneItem)),
+    ambience: entry.scene.ambience.map(t => ({
+      soundId: t.soundName,
+      soundName: t.soundName,
+      volume: t.volume,
+      enabled: t.enabled,
+      source: t.source,
+    } satisfies SceneItem)),
+    effects: entry.scene.effects.map(t => ({
+      soundId: t.soundName,
+      soundName: t.soundName,
+      volume: t.volume,
+      source: t.source,
+    } satisfies SceneItem)),
+  }
+}
+
 export function createSceneRegistry(config: Config) {
   const cachePath = getCachePath(config)
 
@@ -76,33 +97,24 @@ export function createSceneRegistry(config: Config) {
       return this.fetchIndex()
     },
 
-    async downloadAndInstall(downloadUrl: string): Promise<Scene> {
-      log.info(`Downloading scene from ${downloadUrl}`)
-      const response = await fetch(downloadUrl)
-      if (!response.ok)
-        throw new Error(`Download failed: ${response.status} ${response.statusText}`)
-      if (!response.body)
-        throw new Error('Download failed: empty response body')
-
-      const tmpPath = join(tmpdir(), `hibiki-download-${randomUUID()}.zip`)
-      const fileStream = createWriteStream(tmpPath)
-      await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), fileStream)
-
-      const scene = await importScene(config, tmpPath)
-      log.info(`Installed "${scene.name}" from registry`)
-      return scene
-    },
-
-    async installFromUrl(url: string): Promise<Scene> {
-      return this.downloadAndInstall(url)
-    },
-
     async installFromRegistry(slug: string): Promise<Scene> {
       const index = await this.getIndex()
       const entry = index.scenes.find(s => s.slug === slug)
       if (!entry)
         throw new Error(`Scene '${slug}' not found in registry`)
-      return this.downloadAndInstall(entry.downloadUrl)
+
+      const scenes = createSceneStore(config)
+      const existing = await scenes.list()
+      const existingNames = new Set(existing.map(s => s.name.toLowerCase()))
+
+      const sceneData = registryEntryToScene(entry)
+      while (existingNames.has(sceneData.name.toLowerCase())) {
+        sceneData.name = `${sceneData.name} (imported)`
+      }
+
+      const saved = await scenes.save(sceneData)
+      log.info(`Installed "${saved.name}" from registry (${saved.id})`)
+      return saved
     },
   }
 }

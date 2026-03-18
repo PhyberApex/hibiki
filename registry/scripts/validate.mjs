@@ -3,9 +3,9 @@
 /**
  * Validates all scene entries in registry/scenes/ against the JSON schema.
  * Checks: schema compliance, slug uniqueness, slug matches filename,
- * license required when audioBundled, and downloadUrl is reachable.
+ * scene tracks have required source blocks, and audioBundled is false.
  *
- * Usage: node registry/scripts/validate.mjs [--check-urls]
+ * Usage: node registry/scripts/validate.mjs
  */
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -15,7 +15,6 @@ const REGISTRY_DIR = resolve(import.meta.dirname, '..')
 const SCENES_DIR = join(REGISTRY_DIR, 'scenes')
 const SCHEMA_PATH = join(REGISTRY_DIR, 'schema', 'scene-entry.schema.json')
 
-const checkUrls = process.argv.includes('--check-urls')
 const errors = []
 
 function collectJsonFiles(dir) {
@@ -30,6 +29,22 @@ function collectJsonFiles(dir) {
     }
   }
   return files
+}
+
+function validateTrack(track, relative, category, index) {
+  const prefix = `${relative}: scene.${category}[${index}]`
+  if (!track.soundName || typeof track.soundName !== 'string') {
+    errors.push(`${prefix}: missing or invalid "soundName"`)
+  }
+  if (!track.source || typeof track.source !== 'object') {
+    errors.push(`${prefix}: missing "source" — all registry tracks must reference where to find the audio`)
+  }
+  else if (!track.source.name || typeof track.source.name !== 'string') {
+    errors.push(`${prefix}: source.name is required`)
+  }
+  if (track.volume !== undefined && (typeof track.volume !== 'number' || track.volume < 0 || track.volume > 100)) {
+    errors.push(`${prefix}: volume must be a number between 0 and 100`)
+  }
 }
 
 function validateEntry(filePath, schema) {
@@ -79,11 +94,6 @@ function validateEntry(filePath, schema) {
     errors.push(`${relative}: Tags array must have at least one entry`)
   }
 
-  // Download URL must be HTTPS
-  if (data.downloadUrl && !data.downloadUrl.startsWith('https://')) {
-    errors.push(`${relative}: downloadUrl must use HTTPS`)
-  }
-
   // audioBundled must be false — the registry only accepts reference-only scenes
   if (data.audioBundled !== false) {
     errors.push(`${relative}: "audioBundled" must be false — the registry does not accept scenes that bundle audio files`)
@@ -96,19 +106,22 @@ function validateEntry(filePath, schema) {
     }
   }
 
-  return data
-}
-
-async function checkUrl(url, relative) {
-  try {
-    const response = await fetch(url, { method: 'HEAD', redirect: 'follow' })
-    if (!response.ok) {
-      errors.push(`${relative}: downloadUrl returned HTTP ${response.status}`)
+  // Scene structure
+  if (data.scene && typeof data.scene === 'object') {
+    for (const category of ['music', 'ambience', 'effects']) {
+      if (!Array.isArray(data.scene[category])) {
+        errors.push(`${relative}: scene.${category} must be an array`)
+        continue
+      }
+      data.scene[category].forEach((track, i) => validateTrack(track, relative, category, i))
+    }
+    const totalTracks = (data.scene.music?.length ?? 0) + (data.scene.ambience?.length ?? 0) + (data.scene.effects?.length ?? 0)
+    if (totalTracks === 0) {
+      errors.push(`${relative}: Scene must have at least one track across music, ambience, or effects`)
     }
   }
-  catch (e) {
-    errors.push(`${relative}: downloadUrl unreachable — ${e.message}`)
-  }
+
+  return data
 }
 
 // Main
@@ -132,7 +145,6 @@ if (sceneFiles.length === 0) {
 
 // Validate all entries
 const slugs = new Map()
-const urlChecks = []
 
 for (const file of sceneFiles) {
   const data = validateEntry(file, schema)
@@ -149,15 +161,6 @@ for (const file of sceneFiles) {
       slugs.set(data.slug, relative)
     }
   }
-
-  // URL reachability (optional)
-  if (checkUrls && data.downloadUrl) {
-    urlChecks.push(checkUrl(data.downloadUrl, relative))
-  }
-}
-
-if (urlChecks.length > 0) {
-  await Promise.all(urlChecks)
 }
 
 // Report

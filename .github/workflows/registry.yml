@@ -28,7 +28,7 @@ jobs:
           node-version: 24.14.0
 
       - name: Validate registry entries
-        run: node registry/scripts/validate.mjs --check-urls
+        run: node registry/scripts/validate.mjs
 
   build-index:
     name: Build index
