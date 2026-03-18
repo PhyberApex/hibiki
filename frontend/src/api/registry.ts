@@ -1,5 +1,19 @@
 import { apiCall, useElectronApi } from './electron'
 
+export interface SoundSource {
+  name: string
+  url?: string
+  note?: string
+}
+
+export interface RegistryTrack {
+  soundName: string
+  volume?: number
+  enabled?: boolean
+  loop?: boolean
+  source: SoundSource
+}
+
 export interface RegistryEntry {
   name: string
   slug: string
@@ -9,10 +23,14 @@ export interface RegistryEntry {
   tags: string[]
   category: string
   license?: string
-  downloadUrl: string
-  audioBundled: boolean
+  audioBundled: false
   createdAt: string
   updatedAt: string
+  scene: {
+    music: RegistryTrack[]
+    ambience: RegistryTrack[]
+    effects: RegistryTrack[]
+  }
 }
 
 export interface RegistryIndex {
@@ -34,9 +52,4 @@ export function getRegistryIndex(forceRefresh?: boolean): Promise<RegistryIndex>
 export function installFromRegistry(slug: string): Promise<import('./scenes').Scene> {
   requireElectron()
   return apiCall<import('./scenes').Scene>('registry', 'installFromRegistry', [slug])
-}
-
-export function installFromUrl(url: string): Promise<import('./scenes').Scene> {
-  requireElectron()
-  return apiCall<import('./scenes').Scene>('registry', 'installFromUrl', [url])
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getRegistryIndex, installFromRegistry, installFromUrl } from './registry'
+import { getRegistryIndex, installFromRegistry } from './registry'
 
 describe('registry API', () => {
   const mockInvoke = vi.fn()
@@ -38,16 +38,6 @@ describe('registry API', () => {
       domain: 'registry',
       method: 'installFromRegistry',
       args: ['dark-tavern'],
-    })
-  })
-
-  it('installFromUrl uses apiCall', async () => {
-    mockInvoke.mockResolvedValue({ id: 'x', name: 'test' })
-    await installFromUrl('https://example.com/scene.zip')
-    expect(mockInvoke).toHaveBeenCalledWith('api', {
-      domain: 'registry',
-      method: 'installFromUrl',
-      args: ['https://example.com/scene.zip'],
     })
   })
 

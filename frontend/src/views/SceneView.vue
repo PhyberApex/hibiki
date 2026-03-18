@@ -13,7 +13,6 @@ import {
   stopEffectStream,
 } from '@/api/audio-stream'
 import { openFileDialog, saveFileDialog } from '@/api/config'
-import { installFromUrl } from '@/api/registry'
 import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
 import { listAmbience, listEffects, listMusic, soundStreamUrl } from '@/api/sounds'
 import {
@@ -40,9 +39,6 @@ const createSceneBusy = ref(false)
 const exportBusy = ref(false)
 const importBusy = ref(false)
 const showRegistryBrowser = ref(false)
-const showInstallUrl = ref(false)
-const installUrlValue = ref('')
-const installUrlBusy = ref(false)
 const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 const musicAudioEl = createAudioEl()
@@ -576,28 +572,6 @@ function isSoundMissing(category: 'ambience' | 'music' | 'effects', soundId: str
   return !list.some(s => s.id === soundId)
 }
 
-async function doInstallFromUrl() {
-  const url = installUrlValue.value.trim()
-  if (!url)
-    return
-  installUrlBusy.value = true
-  exportImportMessage.value = null
-  try {
-    const imported = await installFromUrl(url)
-    scenes.value = await listScenes()
-    showInstallUrl.value = false
-    installUrlValue.value = ''
-    await router.push(`/scenes/${imported.id}`)
-    exportImportMessage.value = { type: 'success', text: `Installed "${imported.name}"` }
-  }
-  catch (e) {
-    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Install from URL failed' }
-  }
-  finally {
-    installUrlBusy.value = false
-  }
-}
-
 async function onRegistryInstalled(sceneId: string) {
   scenes.value = await listScenes()
   showRegistryBrowser.value = false
@@ -699,9 +673,6 @@ watch(sceneId, (newId, oldId) => {
           >
             {{ importBusy ? '…' : 'Import' }}
           </button>
-          <button type="button" class="btn btn-ghost" @click="showInstallUrl = true">
-            From URL
-          </button>
           <button type="button" class="btn btn-ghost" @click="showRegistryBrowser = true">
             Browse
           </button>
@@ -744,29 +715,6 @@ watch(sceneId, (newId, oldId) => {
             @click="submitCreateScene"
           >
             Create
-          </button>
-        </div>
-      </div>
-      <div v-if="showInstallUrl" class="create-scene-form create-scene-form-inline create-scene-form-card">
-        <input
-          v-model="installUrlValue"
-          type="url"
-          class="input create-scene-input"
-          placeholder="https://.../.hibiki.zip"
-          @keydown.enter="doInstallFromUrl"
-          @keydown.escape="showInstallUrl = false"
-        >
-        <div class="create-scene-buttons">
-          <button type="button" class="btn btn-ghost" @click="showInstallUrl = false">
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="!installUrlValue.trim() || installUrlBusy"
-            @click="doInstallFromUrl"
-          >
-            {{ installUrlBusy ? '...' : 'Install' }}
           </button>
         </div>
       </div>

@@ -82,7 +82,6 @@ export interface EmbeddedApi {
   registry: {
     getIndex: (forceRefresh?: boolean) => Promise<import('./scenes/scene-package.types').RegistryIndex>
     installFromRegistry: (slug: string) => Promise<import('./scenes/scene-store').Scene>
-    installFromUrl: (url: string) => Promise<import('./scenes/scene-store').Scene>
   }
 }
 
@@ -204,7 +203,6 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
     registry: {
       getIndex: forceRefresh => registry.fetchIndex(forceRefresh ?? false),
       installFromRegistry: slug => registry.installFromRegistry(slug),
-      installFromUrl: url => registry.installFromUrl(url),
     },
   }
 

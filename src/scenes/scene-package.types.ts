@@ -34,6 +34,14 @@ export interface SceneManifest {
   }
 }
 
+export interface RegistryTrack {
+  soundName: string
+  volume?: number
+  enabled?: boolean
+  loop?: boolean
+  source: SoundSource
+}
+
 export interface RegistryEntry {
   name: string
   slug: string
@@ -43,10 +51,14 @@ export interface RegistryEntry {
   tags: string[]
   category: string
   license?: string
-  downloadUrl: string
-  audioBundled: boolean
+  audioBundled: false
   createdAt: string
   updatedAt: string
+  scene: {
+    music: RegistryTrack[]
+    ambience: RegistryTrack[]
+    effects: RegistryTrack[]
+  }
 }
 
 export interface RegistryIndex {
