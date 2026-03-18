@@ -3,7 +3,7 @@
   "slug": "cozy-tavern",
   "description": "A warm tavern with crackling fire, gentle chatter, and a bard playing in the corner. Perfect for social encounters and downtime.",
   "author": "PhyberApex",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "tags": ["tavern", "social", "ambient", "fantasy", "example"],
   "category": "environment",
   "audioBundled": false,
