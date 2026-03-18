@@ -84,8 +84,9 @@ test.describe('Hibiki Electron E2E', () => {
   test('app loads Sound library', async ({ page }) => {
     await page.goto('hibiki://app/media')
     await expect(page.getByRole('heading', { name: 'Sound library' })).toBeVisible()
-    await expect(page.locator('section.panel').filter({ hasText: 'Music' })).toBeVisible()
-    await expect(page.locator('section.panel').filter({ hasText: 'Effects' })).toBeVisible()
+    await expect(page.locator('.category-tab', { hasText: 'Music' })).toBeVisible()
+    await expect(page.locator('.category-tab', { hasText: 'Effects' })).toBeVisible()
+    await expect(page.locator('section.panel')).toBeVisible()
   })
 
   test('join voice channel', async ({ page }) => {
@@ -144,10 +145,11 @@ test.describe('Hibiki Electron E2E', () => {
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
       await page.goto('hibiki://app/media')
-      const musicPanel = page.locator('section.panel').filter({ hasText: 'Music' })
-      await musicPanel.locator('input[type=file]').setInputFiles(wavPath)
-      await expect(musicPanel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
-      await expect(musicPanel.getByText('Uploaded.')).toBeVisible({ timeout: 5000 })
+      await page.locator('.category-tab', { hasText: 'Music' }).click()
+      const panel = page.locator('section.panel')
+      await panel.locator('input[type=file]').setInputFiles(wavPath)
+      await expect(panel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
+      await expect(panel.getByText('Added to music.')).toBeVisible({ timeout: 5000 })
 
       const music = await invokeApi<Array<{ id: string, name: string }>>(
         page,
@@ -169,10 +171,11 @@ test.describe('Hibiki Electron E2E', () => {
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
       await page.goto('hibiki://app/media')
-      const effectsPanel = page.locator('section.panel').filter({ hasText: 'Effects' })
-      await effectsPanel.locator('input[type=file]').setInputFiles(wavPath)
-      await expect(effectsPanel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
-      await expect(effectsPanel.getByText('Uploaded.')).toBeVisible({ timeout: 5000 })
+      await page.locator('.category-tab', { hasText: 'Effects' }).click()
+      const panel = page.locator('section.panel')
+      await panel.locator('input[type=file]').setInputFiles(wavPath)
+      await expect(panel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
+      await expect(panel.getByText('Added to effects.')).toBeVisible({ timeout: 5000 })
 
       const effects = await invokeApi<Array<{ id: string, name: string }>>(
         page,
@@ -194,15 +197,16 @@ test.describe('Hibiki Electron E2E', () => {
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
       await page.goto('hibiki://app/media')
-      const musicPanel = page.locator('section.panel').filter({ hasText: 'Music' })
-      await musicPanel.locator('input[type=file]').setInputFiles(wavPath)
-      const listItem = musicPanel.locator('li').filter({ hasText: timestamp })
+      await page.locator('.category-tab', { hasText: 'Music' }).click()
+      const panel = page.locator('section.panel')
+      await panel.locator('input[type=file]').setInputFiles(wavPath)
+      const listItem = panel.locator('li').filter({ hasText: timestamp })
       await expect(listItem).toBeVisible({ timeout: 15_000 })
 
       // Click the × delete button, then confirm with "Delete"
       await listItem.locator('.btn-delete').click()
       await listItem.locator('.btn-confirm-delete').click()
-      await expect(musicPanel.getByText('Deleted.')).toBeVisible({ timeout: 5000 })
+      await expect(panel.getByText('Removed from library.')).toBeVisible({ timeout: 5000 })
 
       const music = await invokeApi<Array<{ id: string, name: string }>>(
         page,
@@ -224,15 +228,16 @@ test.describe('Hibiki Electron E2E', () => {
     const wavPath = createMinimalWavPath(`${unique}.wav`)
     try {
       await page.goto('hibiki://app/media')
-      const effectsPanel = page.locator('section.panel').filter({ hasText: 'Effects' })
-      await effectsPanel.locator('input[type=file]').setInputFiles(wavPath)
-      const listItem = effectsPanel.locator('li').filter({ hasText: timestamp })
+      await page.locator('.category-tab', { hasText: 'Effects' }).click()
+      const panel = page.locator('section.panel')
+      await panel.locator('input[type=file]').setInputFiles(wavPath)
+      const listItem = panel.locator('li').filter({ hasText: timestamp })
       await expect(listItem).toBeVisible({ timeout: 15_000 })
 
       // Click the × delete button, then confirm with "Delete"
       await listItem.locator('.btn-delete').click()
       await listItem.locator('.btn-confirm-delete').click()
-      await expect(effectsPanel.getByText('Deleted.')).toBeVisible({ timeout: 5000 })
+      await expect(panel.getByText('Removed from library.')).toBeVisible({ timeout: 5000 })
 
       const effects = await invokeApi<Array<{ id: string, name: string }>>(
         page,
