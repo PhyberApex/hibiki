@@ -5,6 +5,7 @@ export interface SoundFile {
   name: string
   filename: string
   category: string
+  size?: number
   path?: string
   createdAt?: string
 }

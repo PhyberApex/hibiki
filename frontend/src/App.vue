@@ -69,7 +69,7 @@ const isWelcome = computed(() => route.path === '/')
   <div v-else class="layout">
     <aside class="sidebar">
       <div class="brand-mini">
-        <img src="/logo.png" alt="Hibiki" class="brand-logo" width="28" height="28">
+        <img src="/logo.png" alt="Hibiki" class="brand-logo" width="24" height="24">
         <span class="brand-title">Hibiki</span>
       </div>
 
@@ -248,9 +248,11 @@ const isWelcome = computed(() => route.path === '/')
   align-items: center;
   gap: 0.5rem;
   padding: 0.35rem 0.4rem;
-  font-size: 0.8rem;
-  color: var(--color-text);
+  font-size: 0.7rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .guild-icon {
@@ -265,7 +267,7 @@ const isWelcome = computed(() => route.path === '/')
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   font-weight: 600;
   background: var(--color-accent-muted);
   color: var(--color-accent);
@@ -289,8 +291,8 @@ const isWelcome = computed(() => route.path === '/')
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.25rem 0.4rem;
-  font-size: 0.75rem;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.8rem;
   color: var(--color-text-muted);
   background: transparent;
   border: none;
@@ -306,11 +308,20 @@ const isWelcome = computed(() => route.path === '/')
   background: var(--color-bg);
 }
 
+.channel-item:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 .channel-item-connected {
   color: var(--color-accent);
   font-weight: 500;
   background: var(--color-accent-muted);
-  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.channel-item-connected .channel-dot {
+  background: var(--color-accent);
+  opacity: 1;
 }
 
 .channel-dot {
@@ -327,15 +338,17 @@ const isWelcome = computed(() => route.path === '/')
   padding: 0.3rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 500;
-  color: var(--color-text-muted);
+  color: var(--color-error);
+  opacity: 0.7;
   background: transparent;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  transition: background var(--transition), color var(--transition), border-color var(--transition), opacity var(--transition);
 }
 
 .btn-disconnect:hover {
+  opacity: 1;
   background: var(--color-error-muted);
   color: var(--color-error);
   border-color: var(--color-error);
@@ -353,6 +366,7 @@ const isWelcome = computed(() => route.path === '/')
   align-items: center;
   padding: 0.4rem 0.6rem;
   font-size: 0.85rem;
+  font-weight: 500;
   color: var(--color-text-muted);
   text-decoration: none;
   border-radius: var(--radius-sm);
@@ -366,7 +380,7 @@ const isWelcome = computed(() => route.path === '/')
 
 .sidebar-tab-active {
   color: var(--color-accent);
-  font-weight: 500;
+  font-weight: 600;
   background: var(--color-accent-muted);
 }
 
@@ -532,7 +546,7 @@ const isWelcome = computed(() => route.path === '/')
 
   .guild-header {
     padding: 0.25rem 0.35rem;
-    font-size: 0.75rem;
+    font-size: 0.65rem;
   }
 
   .guild-icon {
@@ -541,8 +555,8 @@ const isWelcome = computed(() => route.path === '/')
   }
 
   .channel-item {
-    padding: 0.2rem 0.35rem;
-    font-size: 0.7rem;
+    padding: 0.25rem 0.35rem;
+    font-size: 0.75rem;
   }
 
   .sidebar-tabs {

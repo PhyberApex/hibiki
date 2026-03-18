@@ -967,7 +967,7 @@ watch(activeTabId, async (newId, oldId) => {
 
 .btn-open-tab {
   padding: 0.6rem 1.5rem;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 500;
   border: none;
   border-radius: var(--radius-md);

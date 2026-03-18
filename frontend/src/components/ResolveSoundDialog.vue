@@ -129,7 +129,7 @@ function handleLinkSelected(event: Event) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--color-backdrop);
   backdrop-filter: blur(4px);
 }
 
@@ -192,7 +192,7 @@ function handleLinkSelected(event: Event) {
 
 .source-info {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--color-text);
 }
 
@@ -267,6 +267,6 @@ function handleLinkSelected(event: Event) {
 .resolve-error {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--color-error, #ef4444);
+  color: var(--color-error);
 }
 </style>

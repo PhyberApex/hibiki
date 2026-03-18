@@ -13,26 +13,33 @@ vi.mock('@/api/sounds', () => ({
 }))
 
 describe('soundListManage', () => {
-  it('renders title from prop', () => {
-    const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
-    })
-    expect(wrapper.find('.panel-title').text()).toContain('Music')
-  })
-
   it('renders Add button', () => {
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Effects', type: 'effects' },
+      props: { type: 'effects' },
     })
     expect(wrapper.find('.btn-upload').text()).toBe('+ Add')
   })
 
-  it('has sort select', () => {
+  it('shows sort select only with 2+ items', async () => {
+    const { listMusic } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockResolvedValue([
+      { id: 's1', name: 'Alpha', filename: 'a.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
+      { id: 's2', name: 'Beta', filename: 'b.mp3', category: 'music', createdAt: '2024-06-01T00:00:00Z' },
+    ])
+
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
-    const selects = wrapper.findAll('select.sort-select')
-    expect(selects.length).toBe(1)
+    await flushPromises()
+
+    expect(wrapper.findAll('select.sort-select').length).toBe(1)
+  })
+
+  it('hides sort select with 0 items', () => {
+    const wrapper = mount(SoundListManage, {
+      props: { type: 'music' },
+    })
+    expect(wrapper.findAll('select.sort-select').length).toBe(0)
   })
 
   it('renders sound list when listMusic returns items', async () => {
@@ -47,7 +54,7 @@ describe('soundListManage', () => {
       },
     ])
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
     await flushPromises()
     expect(wrapper.find('.sound-list').exists()).toBe(true)
@@ -56,7 +63,7 @@ describe('soundListManage', () => {
 
   it('file input accepts multiple', () => {
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
     const input = wrapper.find('input[type="file"]')
     expect(input.attributes('multiple')).toBeDefined()
@@ -67,7 +74,7 @@ describe('soundListManage', () => {
     const { listMusic } = await import('@/api/sounds')
     vi.mocked(listMusic).mockRejectedValue(new Error('Network error'))
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
     await flushPromises()
     expect(wrapper.find('.empty-state-error').text()).toBe('Network error')
@@ -79,7 +86,7 @@ describe('soundListManage', () => {
     vi.mocked(uploadSound).mockResolvedValue({ id: 's1', name: 'test.mp3', filename: 'test.mp3', category: 'music' })
 
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
     await flushPromises()
 
@@ -104,7 +111,7 @@ describe('soundListManage', () => {
     })
 
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
     await flushPromises()
 
@@ -127,7 +134,7 @@ describe('soundListManage', () => {
     })
 
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
     await flushPromises()
 
@@ -149,19 +156,16 @@ describe('soundListManage', () => {
     vi.mocked(deleteSound).mockResolvedValue(undefined)
 
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
     await flushPromises()
 
-    // Click delete button
     await wrapper.find('.btn-delete').trigger('click')
     await flushPromises()
 
-    // Should show confirm/cancel
     expect(wrapper.find('.btn-confirm-delete').exists()).toBe(true)
     expect(wrapper.find('.btn-cancel-delete').exists()).toBe(true)
 
-    // Click confirm
     await wrapper.find('.btn-confirm-delete').trigger('click')
     await flushPromises()
 
@@ -176,7 +180,7 @@ describe('soundListManage', () => {
     ])
 
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
     await flushPromises()
 
@@ -197,7 +201,7 @@ describe('soundListManage', () => {
     vi.mocked(deleteSound).mockRejectedValue(new Error('Delete failed'))
 
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
     await flushPromises()
 
@@ -217,21 +221,84 @@ describe('soundListManage', () => {
     ])
 
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
     await flushPromises()
 
-    // Default sort is name: Alpha, Beta
     let names = wrapper.findAll('.sound-name').map(n => n.text())
     expect(names).toEqual(['Alpha', 'Beta'])
 
-    // Change to date sort
     await wrapper.find('select.sort-select').setValue('date')
     await flushPromises()
 
-    // Date sort (newest first): Beta, Alpha
     names = wrapper.findAll('.sound-name').map(n => n.text())
     expect(names).toEqual(['Beta', 'Alpha'])
+  })
+
+  it('search filters items by name', async () => {
+    const { listMusic } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockResolvedValue([
+      { id: 's1', name: 'Alpha', filename: 'a.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
+      { id: 's2', name: 'Beta', filename: 'b.mp3', category: 'music', createdAt: '2024-06-01T00:00:00Z' },
+    ])
+
+    const wrapper = mount(SoundListManage, {
+      props: { type: 'music' },
+    })
+    await flushPromises()
+
+    expect(wrapper.findAll('.sound-name')).toHaveLength(2)
+
+    await wrapper.find('.search-input').setValue('alpha')
+    await flushPromises()
+
+    const names = wrapper.findAll('.sound-name').map(n => n.text())
+    expect(names).toEqual(['Alpha'])
+  })
+
+  it('shows no-match message when search finds nothing', async () => {
+    const { listMusic } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockResolvedValue([
+      { id: 's1', name: 'Alpha', filename: 'a.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
+    ])
+
+    const wrapper = mount(SoundListManage, {
+      props: { type: 'music' },
+    })
+    await flushPromises()
+
+    await wrapper.find('.search-input').setValue('zzz')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('No matches for "zzz"')
+  })
+
+  it('displays file extension badge', async () => {
+    const { listMusic } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockResolvedValue([
+      { id: 's1', name: 'Track', filename: 'track.ogg', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
+    ])
+
+    const wrapper = mount(SoundListManage, {
+      props: { type: 'music' },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.sound-ext').text()).toBe('OGG')
+  })
+
+  it('displays formatted file size', async () => {
+    const { listMusic } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockResolvedValue([
+      { id: 's1', name: 'Track', filename: 'track.mp3', category: 'music', size: 2_500_000, createdAt: '2024-01-01T00:00:00Z' },
+    ])
+
+    const wrapper = mount(SoundListManage, {
+      props: { type: 'music' },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('2.4 MB')
   })
 
   it('toast auto-dismisses after timeout', async () => {
@@ -241,7 +308,7 @@ describe('soundListManage', () => {
     vi.mocked(uploadSound).mockResolvedValue({ id: 's1', name: 'test.mp3', filename: 'test.mp3', category: 'music' })
 
     const wrapper = mount(SoundListManage, {
-      props: { title: 'Music', type: 'music' },
+      props: { type: 'music' },
     })
     await flushPromises()
 

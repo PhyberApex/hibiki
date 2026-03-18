@@ -96,7 +96,7 @@ function enter() {
 .welcome-logo {
   width: 72px;
   height: 72px;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   object-fit: contain;
   filter: drop-shadow(var(--shadow-card));
 }
@@ -111,7 +111,7 @@ function enter() {
 }
 
 .welcome-tagline {
-  font-size: 1.05rem;
+  font-size: 1rem;
   color: var(--color-text-muted);
   margin: 0;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);

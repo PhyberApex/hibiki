@@ -11,7 +11,7 @@ import {
   uploadSoundsBulk,
 } from '@/api/sounds'
 
-const props = defineProps<{ title: string, type: 'music' | 'effects' | 'ambience' }>()
+const props = defineProps<{ type: 'music' | 'effects' | 'ambience' }>()
 const emit = defineEmits<{ updated: [] }>()
 
 const categoryHint: Record<string, string> = {
@@ -21,6 +21,7 @@ const categoryHint: Record<string, string> = {
 }
 
 const items = ref<SoundFile[]>([])
+const searchQuery = ref('')
 const sortBy = ref<'name' | 'date'>('name')
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -44,6 +45,28 @@ function showToast(type: 'success' | 'error', text: string) {
   }, 4000)
 }
 
+function fileExt(filename: string): string {
+  const dot = filename.lastIndexOf('.')
+  return dot >= 0 ? filename.slice(dot + 1).toUpperCase() : ''
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024)
+    return `${bytes} B`
+  if (bytes < 1024 * 1024)
+    return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  if (d.getFullYear() === now.getFullYear())
+    return `${months[d.getMonth()]} ${d.getDate()}`
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
+}
+
 async function loadSounds() {
   loading.value = true
   error.value = null
@@ -62,8 +85,12 @@ async function loadSounds() {
   }
 }
 
-const sortedItems = computed(() => {
-  const list = [...items.value]
+const filteredItems = computed(() => {
+  let list = [...items.value]
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    list = list.filter(s => s.name.toLowerCase().includes(q))
+  }
   if (sortBy.value === 'name')
     list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
   else
@@ -216,13 +243,16 @@ onActivated(() => {
     @dragover="onDragOver"
     @dragleave="onDragLeave"
   >
-    <header class="panel-header">
-      <h2 class="panel-title">
-        {{ title }}
-        <span v-if="items.length > 0" class="panel-count">{{ items.length }}</span>
-      </h2>
+    <header class="panel-toolbar">
       <div class="panel-actions">
-        <select v-model="sortBy" class="sort-select">
+        <input
+          v-if="items.length > 0"
+          v-model="searchQuery"
+          type="text"
+          class="search-input input"
+          :placeholder="`Search ${type}…`"
+        >
+        <select v-if="items.length > 1" v-model="sortBy" class="sort-select">
           <option value="name">
             A–Z
           </option>
@@ -270,10 +300,13 @@ onActivated(() => {
         Drag audio files here or click <strong>+ Add</strong> above.
       </p>
     </div>
+    <div v-else-if="filteredItems.length === 0" class="empty-state">
+      No matches for "{{ searchQuery }}"
+    </div>
 
     <ul v-else class="sound-list">
       <li
-        v-for="sound in sortedItems"
+        v-for="sound in filteredItems"
         :key="sound.id"
         class="sound-item"
         :class="{ 'sound-item-playing': playingId === sound.id }"
@@ -289,6 +322,10 @@ onActivated(() => {
         </button>
 
         <span class="sound-name" :title="sound.name">{{ sound.name }}</span>
+
+        <span class="sound-ext">{{ fileExt(sound.filename) }}</span>
+        <span v-if="sound.size" class="sound-meta">{{ formatSize(sound.size) }}</span>
+        <span v-if="sound.createdAt" class="sound-meta sound-date">{{ formatDate(sound.createdAt) }}</span>
 
         <div v-if="pendingDeleteId === sound.id" class="delete-confirm">
           <button type="button" class="btn-confirm-delete" @click="confirmDelete(sound.id)">
@@ -318,52 +355,37 @@ onActivated(() => {
 .panel {
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 1rem 1.125rem;
-  transition: border-color var(--transition), background var(--transition);
+  flex: 1;
   min-height: 0;
+  transition: background var(--transition);
 }
 
 .panel-drop-active {
-  border-color: var(--color-accent);
   background: var(--color-accent-muted);
-  box-shadow: var(--shadow-accent-sm);
-  border-style: solid;
+  border-radius: var(--radius-md);
 }
 
-.panel-header {
+.panel-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
   flex-shrink: 0;
-}
-
-.panel-title {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.panel-count {
-  font-size: 0.7rem;
-  font-weight: 500;
-  padding: 0.1rem 0.35rem;
-  border-radius: var(--radius-full);
-  background: var(--color-bg);
-  color: var(--color-text-muted);
 }
 
 .panel-actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.search-input {
+  flex: 1;
+  max-width: 240px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
 }
 
 .sort-select {
@@ -385,6 +407,7 @@ onActivated(() => {
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background var(--transition);
+  white-space: nowrap;
 }
 
 .btn-upload:hover:not(:disabled) {
@@ -429,7 +452,7 @@ onActivated(() => {
 
 .empty-state {
   text-align: center;
-  padding: 1.25rem 1rem;
+  padding: 2rem 1rem;
   color: var(--color-text-muted);
   font-size: 0.85rem;
 }
@@ -445,19 +468,18 @@ onActivated(() => {
 .empty-state-drop {
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-md);
-  margin: 0 -0.25rem;
-  padding: 1.5rem 1rem;
+  padding: 2.5rem 1.5rem;
 }
 
 .empty-category-hint {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   line-height: 1.5;
   color: var(--color-text-muted);
 }
 
 .empty-action-hint {
-  margin-top: 0.5rem;
-  font-size: 0.75rem;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
   color: var(--color-text-dim);
 }
 
@@ -466,7 +488,7 @@ onActivated(() => {
   font-weight: 600;
 }
 
-/* ── Sound list: scrollable within panel ── */
+/* ── Sound list ── */
 
 .sound-list {
   list-style: none;
@@ -476,22 +498,21 @@ onActivated(() => {
   flex-direction: column;
   gap: 0.125rem;
   overflow-y: auto;
-  max-height: 50vh;
-  margin-inline: -0.375rem;
-  padding-inline: 0.375rem;
+  flex: 1;
+  min-height: 0;
 }
 
 .sound-item {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.4rem;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
   border-radius: var(--radius-sm);
   transition: background var(--transition);
 }
 
 .sound-item:hover {
-  background: var(--color-bg);
+  background: var(--color-bg-card);
 }
 
 .sound-item-playing {
@@ -532,11 +553,30 @@ onActivated(() => {
 .sound-name {
   flex: 1;
   min-width: 0;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 500;
   color: var(--color-text);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sound-ext {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
+
+.sound-meta {
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+  flex-shrink: 0;
   white-space: nowrap;
 }
 
@@ -614,25 +654,28 @@ onActivated(() => {
   color: var(--color-text);
 }
 
-/* When panels stack (narrow content area), cap list height shorter
-   so all three panels remain visible without excessive scrolling */
-@media (max-width: 560px) {
-  .panel {
-    padding: 0.75rem 0.875rem;
-  }
+/* ── Narrow ── */
 
-  .panel-header {
+@media (max-width: 560px) {
+  .panel-toolbar {
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin-bottom: 0.5rem;
   }
 
-  .sound-list {
-    max-height: 30vh;
+  .panel-actions {
+    flex-basis: 100%;
+  }
+
+  .search-input {
+    max-width: none;
+  }
+
+  .sound-meta {
+    display: none;
   }
 
   .empty-state-drop {
-    padding: 1rem 0.75rem;
+    padding: 1.5rem 1rem;
   }
 }
 </style>

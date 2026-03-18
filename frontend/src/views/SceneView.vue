@@ -106,6 +106,19 @@ const hasAnySoundMissing = computed(() => {
     ))
 })
 
+function sceneSoundCount(s: Scene): number {
+  return s.ambience.length + s.music.length + s.effects.length
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  if (d.getFullYear() === now.getFullYear())
+    return `${months[d.getMonth()]} ${d.getDate()}`
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
+}
+
 function resolveSoundName(category: 'ambience' | 'music' | 'effects', soundId: string): string {
   const list = category === 'ambience' ? ambienceSounds.value : category === 'music' ? musicSounds.value : effectsSounds.value
   return list.find(s => s.id === soundId)?.name ?? soundId
@@ -633,59 +646,36 @@ watch(sceneId, (newId, oldId) => {
 
 <template>
   <main class="scene-view">
-    <h1 class="sr-only">
-      Scenes
-    </h1>
-    <header class="scene-header">
-      <div class="scene-title-row">
-        <select
-          :value="sceneId ?? ''"
-          class="scene-select"
-          aria-label="Select scene"
-          @change="(e) => router.push((e.target as HTMLSelectElement).value ? `/scenes/${(e.target as HTMLSelectElement).value}` : '/scenes')"
-        >
-          <option value="">
-            Choose a scene…
-          </option>
-          <option v-for="s in scenes" :key="s.id" :value="s.id">
-            {{ s.name }}
-          </option>
-        </select>
-        <div class="scene-actions">
-          <button type="button" class="btn btn-ghost" @click="openCreateScene">
-            New
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost"
-            :disabled="importBusy"
-            @click="doImportScene"
-          >
-            {{ importBusy ? '…' : 'Import' }}
-          </button>
-          <button type="button" class="btn btn-ghost" @click="showRegistryBrowser = true">
-            Browse
-          </button>
-          <button
-            v-if="scene"
-            type="button"
-            class="btn btn-ghost"
-            :disabled="exportBusy"
-            @click="doExportScene"
-          >
-            {{ exportBusy ? '…' : 'Export' }}
-          </button>
-          <button
-            v-if="scene"
-            type="button"
-            class="btn btn-ghost btn-danger"
-            @click="deleteCurrentScene"
-          >
-            Delete
-          </button>
+    <!-- ═══════ LIST STATE ═══════ -->
+    <template v-if="!sceneId">
+      <header class="list-header">
+        <div class="list-title-row">
+          <h1 class="page-title">
+            Scenes
+          </h1>
+          <div class="list-actions">
+            <button type="button" class="btn btn-primary" @click="openCreateScene">
+              New scene
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              :disabled="importBusy"
+              @click="doImportScene"
+            >
+              {{ importBusy ? 'Importing…' : 'Import' }}
+            </button>
+            <button type="button" class="btn btn-ghost" @click="showRegistryBrowser = true">
+              Browse community
+            </button>
+          </div>
         </div>
-      </div>
-      <div v-if="showCreateInput" class="create-scene-form create-scene-form-inline create-scene-form-card">
+        <p class="page-subtitle">
+          Layer music, ambience, and effects into soundboards you can play during your session.
+        </p>
+      </header>
+
+      <div v-if="showCreateInput" class="create-scene-form">
         <input
           v-model="newSceneName"
           type="text"
@@ -708,6 +698,7 @@ watch(sceneId, (newId, oldId) => {
           </button>
         </div>
       </div>
+
       <p
         v-if="exportImportMessage"
         class="status-message"
@@ -715,53 +706,408 @@ watch(sceneId, (newId, oldId) => {
       >
         {{ exportImportMessage.text }}
       </p>
-    </header>
 
-    <div v-if="scene" class="scene-playback-bar">
-      <label class="global-volume">
-        <span class="volume-icon" aria-hidden="true">🔊</span>
-        <input
-          v-model.number="globalVolume"
-          type="range"
-          min="0"
-          max="100"
-          class="volume-slider"
-          aria-label="Global volume"
-        >
-      </label>
-      <div class="playback-actions">
-        <template v-if="scenePlayingLocal || player.scenePlaying">
-          <button
-            type="button"
-            class="btn btn-stop-scene"
-            @click="scenePlayingLocal ? stopSceneLocal() : stopScene()"
-          >
-            Stop
+      <!-- Scene list -->
+      <ul v-if="scenes.length > 0" class="scene-list">
+        <li v-for="s in scenes" :key="s.id">
+          <RouterLink :to="`/scenes/${s.id}`" class="scene-list-item">
+            <span class="scene-list-name">{{ s.name }}</span>
+            <span class="scene-list-counts">
+              <span v-if="s.music.length" class="count-badge count-badge-music">{{ s.music.length }} music</span>
+              <span v-if="s.ambience.length" class="count-badge count-badge-ambience">{{ s.ambience.length }} ambience</span>
+              <span v-if="s.effects.length" class="count-badge count-badge-effects">{{ s.effects.length }} effects</span>
+              <span v-if="sceneSoundCount(s) === 0" class="count-badge count-badge-empty">empty</span>
+            </span>
+            <span v-if="s.updatedAt" class="scene-list-date">{{ formatDate(s.updatedAt) }}</span>
+            <span class="scene-list-arrow" aria-hidden="true">›</span>
+          </RouterLink>
+        </li>
+      </ul>
+
+      <!-- Empty state: no scenes at all -->
+      <div v-else class="scene-empty">
+        <h2 class="empty-title">
+          Get started with scenes
+        </h2>
+        <p class="empty-desc">
+          Scenes let you layer music, ambience, and effects into a soundboard you can trigger during your session.
+        </p>
+        <div class="empty-actions">
+          <button type="button" class="btn btn-primary" @click="openCreateScene">
+            Create from scratch
           </button>
-        </template>
-        <template v-else>
-          <button
-            type="button"
-            class="btn btn-ghost btn-play-local"
-            :title="hasAnySoundMissing ? 'Some sounds are missing — add them to your library first' : 'Play in this app only (no Discord)'"
-            :disabled="hasAnySoundMissing"
-            @click="playSceneLocal"
-          >
-            Play
+          <button type="button" class="btn btn-ghost" @click="showRegistryBrowser = true">
+            Browse community scenes
           </button>
-          <button
-            type="button"
-            class="btn btn-primary btn-play-scene"
-            :title="hasAnySoundMissing ? 'Some sounds are missing — add them to your library first' : 'Stream this scene to your Discord voice channel'"
-            :disabled="!isJoined || hasAnySoundMissing"
-            @click="playScene"
-          >
-            Stream
-          </button>
-        </template>
+        </div>
+        <p v-if="!hasSounds" class="empty-hint">
+          You can also
+          <RouterLink to="/media" class="empty-link">
+            add sounds to your library
+          </RouterLink>
+          first, then build a scene with them.
+        </p>
       </div>
-    </div>
+    </template>
 
+    <!-- ═══════ DETAIL STATE ═══════ -->
+    <template v-else>
+      <header class="detail-header">
+        <RouterLink to="/scenes" class="back-link">
+          <span class="back-arrow" aria-hidden="true">‹</span>
+          Scenes
+        </RouterLink>
+        <div class="detail-title-row">
+          <h1 class="detail-title">
+            {{ scene?.name ?? 'Loading…' }}
+          </h1>
+          <div v-if="scene" class="detail-actions">
+            <button
+              type="button"
+              class="btn btn-ghost"
+              :disabled="exportBusy"
+              @click="doExportScene"
+            >
+              {{ exportBusy ? '…' : 'Export' }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-danger"
+              @click="deleteCurrentScene"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <p
+        v-if="exportImportMessage"
+        class="status-message"
+        :class="[exportImportMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
+        {{ exportImportMessage.text }}
+      </p>
+
+      <div v-if="scene" class="scene-playback-bar">
+        <label class="global-volume">
+          <span class="volume-icon" aria-hidden="true">🔊</span>
+          <input
+            v-model.number="globalVolume"
+            type="range"
+            min="0"
+            max="100"
+            class="volume-slider"
+            aria-label="Global volume"
+          >
+        </label>
+        <div class="playback-actions">
+          <template v-if="scenePlayingLocal || player.scenePlaying">
+            <button
+              type="button"
+              class="btn btn-stop-scene"
+              @click="scenePlayingLocal ? stopSceneLocal() : stopScene()"
+            >
+              Stop
+            </button>
+          </template>
+          <template v-else>
+            <button
+              type="button"
+              class="btn btn-ghost btn-play-local"
+              :title="hasAnySoundMissing ? 'Some sounds are missing — add them to your library first' : 'Play in this app only (no Discord)'"
+              :disabled="hasAnySoundMissing"
+              @click="playSceneLocal"
+            >
+              Play
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary btn-play-scene"
+              :title="hasAnySoundMissing ? 'Some sounds are missing — add them to your library first' : 'Stream this scene to your Discord voice channel'"
+              :disabled="!isJoined || hasAnySoundMissing"
+              @click="playScene"
+            >
+              Stream
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <template v-if="scene">
+        <section class="scene-section scene-section-ambience">
+          <div class="section-header">
+            <h2 class="section-title">
+              Ambience
+            </h2>
+            <select
+              class="add-select"
+              @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = ambienceSounds.find(x => x.id === id); if (s) addToScene('ambience', s); (e.target as HTMLSelectElement).value = '' } }"
+            >
+              <option value="">
+                Add ambience…
+              </option>
+              <option
+                v-for="s in ambienceSounds.filter(x => !scene.ambience.some(a => a.soundId === x.id))"
+                :key="s.id"
+                :value="s.id"
+              >
+                {{ s.name }}
+              </option>
+            </select>
+          </div>
+          <div class="sound-cards">
+            <div
+              v-for="item in scene.ambience"
+              :key="item.soundId"
+              class="sound-card sound-card-ambience"
+            >
+              <div class="sound-card-row">
+                <div class="sound-card-info">
+                  <span class="sound-name">{{ item.soundName ?? resolveSoundName('ambience', item.soundId) }}</span>
+                  <span v-if="isSoundMissing('ambience', item.soundId)" class="sound-missing-badge">
+                    missing
+                  </span>
+                </div>
+                <div class="sound-card-controls">
+                  <input
+                    v-model.number="item.volume"
+                    type="range"
+                    min="0"
+                    max="100"
+                    class="volume-slider"
+                    @input="updateAmbienceVolume(item)"
+                    @change="saveScene(scene)"
+                  >
+                  <label class="toggle">
+                    <input
+                      v-model="item.enabled"
+                      type="checkbox"
+                      :disabled="isSoundMissing('ambience', item.soundId)"
+                      @change="toggleAmbience(item)"
+                    >
+                  </label>
+                  <button
+                    type="button"
+                    class="btn-icon btn-remove"
+                    title="Remove"
+                    :aria-label="`Remove ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
+                    @click="removeFromScene('ambience', item.soundId)"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <div v-if="isSoundMissing('ambience', item.soundId)" class="sound-source-hint">
+                <button
+                  type="button"
+                  class="btn-resolve"
+                  @click="resolveTarget = { category: 'ambience', item }"
+                >
+                  Resolve missing sound...
+                </button>
+              </div>
+              <div class="ambience-repeat-row">
+                <span class="repeat-label">Repeat every</span>
+                <select
+                  class="repeat-select"
+                  :value="item.repeatMin ?? 0"
+                  @change="updateRepeat(item, 'repeatMin', Number(($event.target as HTMLSelectElement).value))"
+                >
+                  <option
+                    v-for="opt in INTERVAL_OPTIONS"
+                    :key="opt"
+                    :value="opt"
+                  >
+                    {{ formatInterval(opt) }}
+                  </option>
+                </select>
+                <span class="repeat-label">to</span>
+                <select
+                  class="repeat-select"
+                  :value="item.repeatMax ?? 0"
+                  @change="updateRepeat(item, 'repeatMax', Number(($event.target as HTMLSelectElement).value))"
+                >
+                  <option
+                    v-for="opt in INTERVAL_OPTIONS.filter(o => o >= (item.repeatMin ?? 0))"
+                    :key="opt"
+                    :value="opt"
+                  >
+                    {{ formatInterval(opt) }}
+                  </option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <p v-if="scene.ambience.length === 0" class="section-empty">
+            No ambience yet. Ambience loops continuously in the background — rain, wind, tavern chatter. Use the dropdown above to add tracks.
+          </p>
+        </section>
+
+        <section class="scene-section scene-section-music">
+          <div class="section-header">
+            <h2 class="section-title">
+              Music
+            </h2>
+            <select
+              class="add-select"
+              @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = musicSounds.find(x => x.id === id); if (s) addToScene('music', s); (e.target as HTMLSelectElement).value = '' } }"
+            >
+              <option value="">
+                Add music…
+              </option>
+              <option
+                v-for="s in musicSounds.filter(x => !scene.music.some(m => m.soundId === x.id))"
+                :key="s.id"
+                :value="s.id"
+              >
+                {{ s.name }}
+              </option>
+            </select>
+          </div>
+          <div class="sound-cards">
+            <div
+              v-for="item in scene.music"
+              :key="item.soundId"
+              class="sound-card"
+              :class="{ 'sound-card-has-hint': isSoundMissing('music', item.soundId) }"
+            >
+              <div class="sound-card-main-row">
+                <div class="sound-card-info">
+                  <span class="sound-name">{{ item.soundName ?? resolveSoundName('music', item.soundId) }}</span>
+                  <span v-if="isSoundMissing('music', item.soundId)" class="sound-missing-badge">
+                    missing
+                  </span>
+                </div>
+                <div class="sound-card-controls sound-card-controls-music">
+                  <button
+                    v-if="playingMusicId === item.soundId"
+                    type="button"
+                    class="btn-icon btn-icon-active"
+                    title="Stop"
+                    aria-label="Stop music"
+                    @click="stopMusic"
+                  >
+                    ■
+                  </button>
+                  <button
+                    v-else
+                    type="button"
+                    class="btn-icon"
+                    :disabled="!isJoined || isSoundMissing('music', item.soundId)"
+                    title="Play"
+                    :aria-label="`Play ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
+                    @click="playMusic(item)"
+                  >
+                    ▶
+                  </button>
+                  <input
+                    v-model.number="item.volume"
+                    type="range"
+                    min="0"
+                    max="100"
+                    class="volume-slider"
+                    @input="updateMusicVolume(item)"
+                    @change="saveScene(scene)"
+                  >
+                  <label class="toggle" title="Loop">
+                    <input v-model="item.loop" type="checkbox" @change="saveScene(scene)">
+                  </label>
+                  <button
+                    type="button"
+                    class="btn-icon btn-remove"
+                    title="Remove"
+                    :aria-label="`Remove ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
+                    @click="removeFromScene('music', item.soundId)"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <div v-if="isSoundMissing('music', item.soundId)" class="sound-source-hint">
+                <button
+                  type="button"
+                  class="btn-resolve"
+                  @click="resolveTarget = { category: 'music', item }"
+                >
+                  Resolve missing sound...
+                </button>
+              </div>
+            </div>
+          </div>
+          <p v-if="scene.music.length === 0" class="section-empty">
+            No music yet. Music plays one track at a time — great for background themes. Use the dropdown above to add tracks.
+          </p>
+        </section>
+
+        <section class="scene-section scene-section-effects">
+          <div class="section-header">
+            <h2 class="section-title">
+              Effects
+            </h2>
+            <select
+              class="add-select"
+              @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = effectsSounds.find(x => x.id === id); if (s) addToScene('effects', s); (e.target as HTMLSelectElement).value = '' } }"
+            >
+              <option value="">
+                Add effect…
+              </option>
+              <option
+                v-for="s in effectsSounds.filter(x => !scene.effects.some(ef => ef.soundId === x.id))"
+                :key="s.id"
+                :value="s.id"
+              >
+                {{ s.name }}
+              </option>
+            </select>
+          </div>
+          <div class="sound-cards effect-cards">
+            <div
+              v-for="item in scene.effects"
+              :key="item.soundId"
+              class="effect-card"
+              :class="{ 'effect-card-missing': isSoundMissing('effects', item.soundId) }"
+            >
+              <button
+                type="button"
+                class="effect-trigger"
+                :disabled="isSoundMissing('effects', item.soundId)"
+                :title="isSoundMissing('effects', item.soundId) ? 'Sound missing' : `Play ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
+                @click="isJoined ? playEffect(item) : playEffectLocal(item)"
+              >
+                <span class="effect-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
+                <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing-badge">
+                  missing
+                </span>
+              </button>
+              <button
+                type="button"
+                class="btn-icon btn-remove effect-remove"
+                title="Remove"
+                :aria-label="`Remove ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
+                @click="removeFromScene('effects', item.soundId)"
+              >
+                ×
+              </button>
+              <div v-if="isSoundMissing('effects', item.soundId)" class="sound-source-hint effect-resolve-hint">
+                <button
+                  type="button"
+                  class="btn-resolve"
+                  @click="resolveTarget = { category: 'effects', item }"
+                >
+                  Resolve…
+                </button>
+              </div>
+            </div>
+          </div>
+          <p v-if="scene.effects.length === 0" class="section-empty">
+            No effects yet. Effects are one-shot sounds you trigger on demand — a thunder clap, a door slam. Use the dropdown above to add some.
+          </p>
+        </section>
+      </template>
+    </template>
+
+    <!-- ═══════ OVERLAYS ═══════ -->
     <RegistryBrowser
       v-if="showRegistryBrowser"
       @close="showRegistryBrowser = false"
@@ -776,314 +1122,6 @@ watch(sceneId, (newId, oldId) => {
       @resolved="async (id: string, name: string) => { await relinkSound(resolveTarget!.category, resolveTarget!.item, id, name); resolveTarget = null }"
       @close="resolveTarget = null"
     />
-
-    <div v-if="!scene && scenes.length === 0" class="scene-empty">
-      <h2 class="empty-title">
-        Get started with scenes
-      </h2>
-      <p class="empty-desc">
-        Scenes let you layer music, ambience, and effects into a soundboard you can trigger during your session.
-      </p>
-      <div class="empty-actions">
-        <button type="button" class="btn btn-primary" @click="openCreateScene">
-          Create from scratch
-        </button>
-        <button type="button" class="btn btn-ghost" @click="showRegistryBrowser = true">
-          Browse community scenes
-        </button>
-      </div>
-      <p v-if="!hasSounds" class="empty-hint">
-        You can also
-        <RouterLink to="/media" class="empty-link">
-          add sounds to your library
-        </RouterLink>
-        first, then build a scene with them.
-      </p>
-    </div>
-
-    <div v-else-if="!scene && scenes.length > 0" class="scene-empty scene-empty-select">
-      <p>Select a scene from the dropdown above, or get more scenes by importing or browsing the community.</p>
-      <div class="empty-actions">
-        <button type="button" class="btn btn-primary" @click="openCreateScene">
-          New scene
-        </button>
-        <button type="button" class="btn btn-ghost" @click="showRegistryBrowser = true">
-          Browse community
-        </button>
-      </div>
-    </div>
-
-    <template v-if="scene">
-      <section class="scene-section scene-section-ambience">
-        <div class="section-header">
-          <h2 class="section-title">
-            Ambience
-          </h2>
-          <select
-            class="add-select"
-            @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = ambienceSounds.find(x => x.id === id); if (s) addToScene('ambience', s); (e.target as HTMLSelectElement).value = '' } }"
-          >
-            <option value="">
-              Add ambience…
-            </option>
-            <option
-              v-for="s in ambienceSounds.filter(x => !scene.ambience.some(a => a.soundId === x.id))"
-              :key="s.id"
-              :value="s.id"
-            >
-              {{ s.name }}
-            </option>
-          </select>
-        </div>
-        <div class="sound-cards">
-          <div
-            v-for="item in scene.ambience"
-            :key="item.soundId"
-            class="sound-card sound-card-ambience"
-          >
-            <div class="sound-card-row">
-              <div class="sound-card-info">
-                <span class="sound-name">{{ item.soundName ?? resolveSoundName('ambience', item.soundId) }}</span>
-                <span v-if="isSoundMissing('ambience', item.soundId)" class="sound-missing-badge">
-                  missing
-                </span>
-              </div>
-              <div class="sound-card-controls">
-                <input
-                  v-model.number="item.volume"
-                  type="range"
-                  min="0"
-                  max="100"
-                  class="volume-slider"
-                  @input="updateAmbienceVolume(item)"
-                  @change="saveScene(scene)"
-                >
-                <label class="toggle">
-                  <input
-                    v-model="item.enabled"
-                    type="checkbox"
-                    :disabled="isSoundMissing('ambience', item.soundId)"
-                    @change="toggleAmbience(item)"
-                  >
-                </label>
-                <button
-                  type="button"
-                  class="btn-icon btn-remove"
-                  title="Remove"
-                  :aria-label="`Remove ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
-                  @click="removeFromScene('ambience', item.soundId)"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            <div v-if="isSoundMissing('ambience', item.soundId)" class="sound-source-hint">
-              <button
-                type="button"
-                class="btn-resolve"
-                @click="resolveTarget = { category: 'ambience', item }"
-              >
-                Resolve missing sound...
-              </button>
-            </div>
-            <div class="ambience-repeat-row">
-              <span class="repeat-label">Repeat every</span>
-              <select
-                class="repeat-select"
-                :value="item.repeatMin ?? 0"
-                @change="updateRepeat(item, 'repeatMin', Number(($event.target as HTMLSelectElement).value))"
-              >
-                <option
-                  v-for="opt in INTERVAL_OPTIONS"
-                  :key="opt"
-                  :value="opt"
-                >
-                  {{ formatInterval(opt) }}
-                </option>
-              </select>
-              <span class="repeat-label">to</span>
-              <select
-                class="repeat-select"
-                :value="item.repeatMax ?? 0"
-                @change="updateRepeat(item, 'repeatMax', Number(($event.target as HTMLSelectElement).value))"
-              >
-                <option
-                  v-for="opt in INTERVAL_OPTIONS.filter(o => o >= (item.repeatMin ?? 0))"
-                  :key="opt"
-                  :value="opt"
-                >
-                  {{ formatInterval(opt) }}
-                </option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <p v-if="scene.ambience.length === 0" class="section-empty">
-          No ambience yet. Ambience loops continuously in the background — rain, wind, tavern chatter. Use the dropdown above to add tracks.
-        </p>
-      </section>
-
-      <section class="scene-section scene-section-music">
-        <div class="section-header">
-          <h2 class="section-title">
-            Music
-          </h2>
-          <select
-            class="add-select"
-            @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = musicSounds.find(x => x.id === id); if (s) addToScene('music', s); (e.target as HTMLSelectElement).value = '' } }"
-          >
-            <option value="">
-              Add music…
-            </option>
-            <option
-              v-for="s in musicSounds.filter(x => !scene.music.some(m => m.soundId === x.id))"
-              :key="s.id"
-              :value="s.id"
-            >
-              {{ s.name }}
-            </option>
-          </select>
-        </div>
-        <div class="sound-cards">
-          <div
-            v-for="item in scene.music"
-            :key="item.soundId"
-            class="sound-card"
-            :class="{ 'sound-card-has-hint': isSoundMissing('music', item.soundId) }"
-          >
-            <div class="sound-card-main-row">
-              <div class="sound-card-info">
-                <span class="sound-name">{{ item.soundName ?? resolveSoundName('music', item.soundId) }}</span>
-                <span v-if="isSoundMissing('music', item.soundId)" class="sound-missing-badge">
-                  missing
-                </span>
-              </div>
-              <div class="sound-card-controls sound-card-controls-music">
-                <button
-                  v-if="playingMusicId === item.soundId"
-                  type="button"
-                  class="btn-icon btn-icon-active"
-                  title="Stop"
-                  aria-label="Stop music"
-                  @click="stopMusic"
-                >
-                  ■
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  class="btn-icon"
-                  :disabled="!isJoined || isSoundMissing('music', item.soundId)"
-                  title="Play"
-                  :aria-label="`Play ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
-                  @click="playMusic(item)"
-                >
-                  ▶
-                </button>
-                <input
-                  v-model.number="item.volume"
-                  type="range"
-                  min="0"
-                  max="100"
-                  class="volume-slider"
-                  @input="updateMusicVolume(item)"
-                  @change="saveScene(scene)"
-                >
-                <label class="toggle" title="Loop">
-                  <input v-model="item.loop" type="checkbox" @change="saveScene(scene)">
-                </label>
-                <button
-                  type="button"
-                  class="btn-icon btn-remove"
-                  title="Remove"
-                  :aria-label="`Remove ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
-                  @click="removeFromScene('music', item.soundId)"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            <div v-if="isSoundMissing('music', item.soundId)" class="sound-source-hint">
-              <button
-                type="button"
-                class="btn-resolve"
-                @click="resolveTarget = { category: 'music', item }"
-              >
-                Resolve missing sound...
-              </button>
-            </div>
-          </div>
-        </div>
-        <p v-if="scene.music.length === 0" class="section-empty">
-          No music yet. Music plays one track at a time — great for background themes. Use the dropdown above to add tracks.
-        </p>
-      </section>
-
-      <section class="scene-section scene-section-effects">
-        <div class="section-header">
-          <h2 class="section-title">
-            Effects
-          </h2>
-          <select
-            class="add-select"
-            @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = effectsSounds.find(x => x.id === id); if (s) addToScene('effects', s); (e.target as HTMLSelectElement).value = '' } }"
-          >
-            <option value="">
-              Add effect…
-            </option>
-            <option
-              v-for="s in effectsSounds.filter(x => !scene.effects.some(ef => ef.soundId === x.id))"
-              :key="s.id"
-              :value="s.id"
-            >
-              {{ s.name }}
-            </option>
-          </select>
-        </div>
-        <div class="sound-cards effect-cards">
-          <div
-            v-for="item in scene.effects"
-            :key="item.soundId"
-            class="effect-card"
-            :class="{ 'effect-card-missing': isSoundMissing('effects', item.soundId) }"
-          >
-            <button
-              type="button"
-              class="effect-trigger"
-              :disabled="isSoundMissing('effects', item.soundId)"
-              :title="isSoundMissing('effects', item.soundId) ? 'Sound missing' : `Play ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
-              @click="isJoined ? playEffect(item) : playEffectLocal(item)"
-            >
-              <span class="effect-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
-              <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing-badge">
-                missing
-              </span>
-            </button>
-            <button
-              type="button"
-              class="btn-icon btn-remove effect-remove"
-              title="Remove"
-              :aria-label="`Remove ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
-              @click="removeFromScene('effects', item.soundId)"
-            >
-              ×
-            </button>
-            <div v-if="isSoundMissing('effects', item.soundId)" class="sound-source-hint effect-resolve-hint">
-              <button
-                type="button"
-                class="btn-resolve"
-                @click="resolveTarget = { category: 'effects', item }"
-              >
-                Resolve…
-              </button>
-            </div>
-          </div>
-        </div>
-        <p v-if="scene.effects.length === 0" class="section-empty">
-          No effects yet. Effects are one-shot sounds you trigger on demand — a thunder clap, a door slam. Use the dropdown above to add some.
-        </p>
-      </section>
-    </template>
   </main>
 </template>
 
@@ -1093,46 +1131,209 @@ watch(sceneId, (newId, oldId) => {
   flex-direction: column;
 }
 
-/* ── Header: scene management ── */
+/* ═══════ LIST STATE ═══════ */
 
-.scene-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+.list-header {
+  margin-bottom: 1.5rem;
 }
 
-.scene-title-row {
+.list-title-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
 }
 
-.scene-select {
-  flex: 1;
-  min-width: 0;
-  padding: 0.5rem 0.75rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text);
+.page-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
-.scene-actions {
+.page-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.list-actions {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
 
-/* ── Playback bar: the primary GM action area ── */
+/* ── Scene list ── */
+
+.scene-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.scene-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--color-text);
+  transition: background var(--transition);
+}
+
+.scene-list-item:hover {
+  background: var(--color-bg-card);
+}
+
+.scene-list-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.scene-list-counts {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.count-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.count-badge-music {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-music);
+}
+
+.count-badge-ambience {
+  background: rgba(45, 212, 191, 0.1);
+  color: var(--color-ambience);
+}
+
+.count-badge-effects {
+  background: var(--color-effects-muted);
+  color: var(--color-effects);
+}
+
+.count-badge-empty {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-dim);
+}
+
+.scene-list-date {
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.scene-list-arrow {
+  font-size: 1.1rem;
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* ═══════ DETAIL STATE ═══════ */
+
+.detail-header {
+  margin-bottom: 0.25rem;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+
+.back-link:hover {
+  color: var(--color-accent);
+}
+
+.back-arrow {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.detail-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.detail-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* ── Create scene form ── */
+
+.create-scene-form {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+
+.create-scene-input {
+  font-size: 1rem;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  min-width: 200px;
+  flex: 1;
+}
+
+.create-scene-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ── Playback bar ── */
 
 .scene-playback-bar {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-top: 1.25rem;
+  margin-top: 1rem;
   padding: 0.75rem 1rem;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
@@ -1188,7 +1389,7 @@ watch(sceneId, (newId, oldId) => {
   color: var(--color-on-accent-bg);
 }
 
-/* ── Empty states ── */
+/* ═══════ EMPTY STATE ═══════ */
 
 .scene-empty {
   text-align: center;
@@ -1209,7 +1410,7 @@ watch(sceneId, (newId, oldId) => {
 
 .empty-desc {
   margin: 0 0 1.25rem;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   max-width: 440px;
   margin-inline: auto;
   line-height: 1.5;
@@ -1227,44 +1428,16 @@ watch(sceneId, (newId, oldId) => {
   font-size: 0.8rem;
 }
 
-/* ── Create scene form ── */
-
-.create-scene-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-top: 1rem;
-  align-items: center;
+.empty-link {
+  color: var(--color-accent);
+  text-decoration: none;
 }
 
-.create-scene-form-inline {
-  margin-top: 0;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
+.empty-link:hover {
+  text-decoration: underline;
 }
 
-.create-scene-form-card {
-  padding: 0.75rem 1rem;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.create-scene-input {
-  font-size: 0.95rem;
-  font-weight: 500;
-  border-radius: var(--radius-md);
-  min-width: 200px;
-}
-
-.create-scene-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-/* ── Sections: Ambience / Music / Effects ── */
+/* ═══════ SCENE SECTIONS ═══════ */
 
 .scene-section {
   background: var(--color-bg-card);
@@ -1276,19 +1449,19 @@ watch(sceneId, (newId, oldId) => {
 }
 
 .scene-section:first-of-type {
-  margin-top: 2rem;
+  margin-top: 1.25rem;
 }
 
 .scene-section-ambience {
-  --section-color: #2dd4bf;
+  --section-color: var(--color-ambience);
 }
 
 .scene-section-music {
-  --section-color: #f59e0b;
+  --section-color: var(--color-music);
 }
 
 .scene-section-effects {
-  --section-color: #fb7185;
+  --section-color: var(--color-effects);
 }
 
 .section-header {
@@ -1301,10 +1474,10 @@ watch(sceneId, (newId, oldId) => {
 
 .section-title {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   color: var(--section-color, var(--color-text-dim));
 }
 
@@ -1370,7 +1543,7 @@ watch(sceneId, (newId, oldId) => {
 }
 
 .sound-name {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 500;
   color: var(--color-text);
   white-space: nowrap;
@@ -1396,10 +1569,10 @@ watch(sceneId, (newId, oldId) => {
   font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   padding: 0.1rem 0.35rem;
-  background: var(--color-error-muted, rgba(239, 68, 68, 0.15));
-  color: var(--color-error, #ef4444);
+  background: var(--color-error-muted);
+  color: var(--color-error);
   border-radius: var(--radius-sm);
   vertical-align: middle;
   flex-shrink: 0;
@@ -1411,7 +1584,7 @@ watch(sceneId, (newId, oldId) => {
   padding: 0.4rem 0.6rem;
   background: var(--color-bg);
   border-radius: var(--radius-sm);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .btn-resolve {
@@ -1529,11 +1702,11 @@ watch(sceneId, (newId, oldId) => {
 }
 
 .effect-trigger:hover:not(:disabled) {
-  background: rgba(251, 113, 133, 0.08);
+  background: var(--color-effects-muted);
 }
 
 .effect-trigger:active:not(:disabled) {
-  background: rgba(251, 113, 133, 0.15);
+  background: var(--color-effects-muted-hover);
 }
 
 .effect-trigger:disabled {
@@ -1585,12 +1758,38 @@ watch(sceneId, (newId, oldId) => {
   color: var(--color-error);
 }
 
-.empty-link {
-  color: var(--color-accent);
-  text-decoration: none;
-}
+/* ── Narrow ── */
 
-.empty-link:hover {
-  text-decoration: underline;
+@media (max-width: 560px) {
+  .list-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .detail-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .scene-list-counts {
+    display: none;
+  }
+
+  .scene-list-date {
+    display: none;
+  }
+
+  .scene-playback-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .playback-actions {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
 }
 </style>
