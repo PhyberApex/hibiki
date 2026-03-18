@@ -1,12 +1,6 @@
 name: Registry
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'registry/scenes/**'
-      - 'registry/schema/**'
-      - 'registry/scripts/**'
   pull_request:
     branches: [main]
     paths:
@@ -16,11 +10,15 @@ on:
 
 jobs:
   validate:
-    name: Validate scene entries
+    name: Validate and build index
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -29,22 +27,6 @@ jobs:
 
       - name: Validate registry entries
         run: node registry/scripts/validate.mjs
-
-  build-index:
-    name: Build index
-    needs: validate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24.14.0
 
       - name: Build index.json
         run: node registry/scripts/build-index.mjs
