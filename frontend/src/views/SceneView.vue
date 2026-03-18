@@ -19,6 +19,7 @@ import {
   captureFromAudioElement,
 } from '@/audio/browser-audio-capture'
 import RegistryBrowser from '@/components/RegistryBrowser.vue'
+import ResolveSoundDialog from '@/components/ResolveSoundDialog.vue'
 import { usePlayerStore } from '@/stores/player'
 
 const route = useRoute()
@@ -39,6 +40,7 @@ const createSceneBusy = ref(false)
 const exportBusy = ref(false)
 const importBusy = ref(false)
 const showRegistryBrowser = ref(false)
+const resolveTarget = ref<{ category: 'ambience' | 'music' | 'effects', item: SceneItem } | null>(null)
 const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 const musicAudioEl = createAudioEl()
@@ -93,6 +95,16 @@ const isJoined = computed(() => player.isJoined)
 const hasSounds = computed(() =>
   ambienceSounds.value.length > 0 || musicSounds.value.length > 0 || effectsSounds.value.length > 0,
 )
+
+const hasAnySoundMissing = computed(() => {
+  if (!scene.value)
+    return false
+  return [...scene.value.ambience, ...scene.value.music, ...scene.value.effects]
+    .some(item => isSoundMissing(
+      scene.value!.ambience.includes(item) ? 'ambience' : scene.value!.music.includes(item) ? 'music' : 'effects',
+      item.soundId,
+    ))
+})
 
 function resolveSoundName(category: 'ambience' | 'music' | 'effects', soundId: string): string {
   const list = category === 'ambience' ? ambienceSounds.value : category === 'music' ? musicSounds.value : effectsSounds.value
@@ -349,6 +361,14 @@ function stopMusicLocal() {
   playingMusicId.value = null
 }
 
+function playEffectLocal(item: SceneItem) {
+  const el = effectAudioEl
+  el.src = soundStreamUrl('effects', item.soundId)
+  el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
+  el.load()
+  el.play().catch(e => console.error('[scene] playEffectLocal failed:', e))
+}
+
 async function playEffect(item: SceneItem) {
   if (!guildId.value || !isJoined.value)
     return
@@ -572,6 +592,17 @@ function isSoundMissing(category: 'ambience' | 'music' | 'effects', soundId: str
   return !list.some(s => s.id === soundId)
 }
 
+async function relinkSound(category: 'ambience' | 'music' | 'effects', item: SceneItem, soundId: string, soundName: string) {
+  if (!scene.value)
+    return
+  item.soundId = soundId
+  item.soundName = soundName
+  await Promise.all([
+    saveScene(scene.value).catch(() => {}),
+    loadSounds(),
+  ])
+}
+
 async function onRegistryInstalled(sceneId: string) {
   scenes.value = await listScenes()
   showRegistryBrowser.value = false
@@ -631,7 +662,8 @@ watch(sceneId, (newId, oldId) => {
           <button
             type="button"
             class="btn btn-ghost btn-play-local"
-            title="Play in this app only (no Discord)"
+            :title="hasAnySoundMissing ? 'Some sounds are missing — add them to your library first' : 'Play in this app only (no Discord)'"
+            :disabled="hasAnySoundMissing"
             @click="playSceneLocal"
           >
             Play
@@ -639,8 +671,8 @@ watch(sceneId, (newId, oldId) => {
           <button
             type="button"
             class="btn btn-primary btn-play-scene"
-            title="Stream this scene to your Discord voice channel"
-            :disabled="!isJoined"
+            :title="hasAnySoundMissing ? 'Some sounds are missing — add them to your library first' : 'Stream this scene to your Discord voice channel'"
+            :disabled="!isJoined || hasAnySoundMissing"
             @click="playScene"
           >
             Stream
@@ -733,6 +765,15 @@ watch(sceneId, (newId, oldId) => {
       @installed="onRegistryInstalled"
     />
 
+    <ResolveSoundDialog
+      v-if="resolveTarget"
+      :item="resolveTarget.item"
+      :category="resolveTarget.category"
+      :sounds="resolveTarget.category === 'ambience' ? ambienceSounds : resolveTarget.category === 'music' ? musicSounds : effectsSounds"
+      @resolved="async (id: string, name: string) => { await relinkSound(resolveTarget!.category, resolveTarget!.item, id, name); resolveTarget = null }"
+      @close="resolveTarget = null"
+    />
+
     <div v-if="!scene && scenes.length === 0" class="scene-empty">
       <h2 class="empty-title">
         Get started with scenes
@@ -800,7 +841,7 @@ watch(sceneId, (newId, oldId) => {
             <div class="sound-card-row">
               <div class="sound-card-info">
                 <span class="sound-name">{{ item.soundName ?? resolveSoundName('ambience', item.soundId) }}</span>
-                <span v-if="isSoundMissing('ambience', item.soundId)" class="sound-missing" :title="item.source ? `Source: ${item.source.name}${item.source.note ? ` — ${item.source.note}` : ''}` : 'Sound file not found in your library'">
+                <span v-if="isSoundMissing('ambience', item.soundId)" class="sound-missing-badge">
                   missing
                 </span>
               </div>
@@ -818,6 +859,7 @@ watch(sceneId, (newId, oldId) => {
                   <input
                     v-model="item.enabled"
                     type="checkbox"
+                    :disabled="isSoundMissing('ambience', item.soundId)"
                     @change="toggleAmbience(item)"
                   >
                 </label>
@@ -831,6 +873,15 @@ watch(sceneId, (newId, oldId) => {
                   ×
                 </button>
               </div>
+            </div>
+            <div v-if="isSoundMissing('ambience', item.soundId)" class="sound-source-hint">
+              <button
+                type="button"
+                class="btn-resolve"
+                @click="resolveTarget = { category: 'ambience', item }"
+              >
+                Resolve missing sound...
+              </button>
             </div>
             <div class="ambience-repeat-row">
               <span class="repeat-label">Repeat every</span>
@@ -895,55 +946,67 @@ watch(sceneId, (newId, oldId) => {
             v-for="item in scene.music"
             :key="item.soundId"
             class="sound-card"
+            :class="{ 'sound-card-has-hint': isSoundMissing('music', item.soundId) }"
           >
-            <div class="sound-card-info">
-              <span class="sound-name">{{ item.soundName ?? resolveSoundName('music', item.soundId) }}</span>
-              <span v-if="isSoundMissing('music', item.soundId)" class="sound-missing" :title="item.source ? `Source: ${item.source.name}${item.source.note ? ` — ${item.source.note}` : ''}` : 'Sound file not found in your library'">
-                missing
-              </span>
+            <div class="sound-card-main-row">
+              <div class="sound-card-info">
+                <span class="sound-name">{{ item.soundName ?? resolveSoundName('music', item.soundId) }}</span>
+                <span v-if="isSoundMissing('music', item.soundId)" class="sound-missing-badge">
+                  missing
+                </span>
+              </div>
+              <div class="sound-card-controls sound-card-controls-music">
+                <button
+                  v-if="playingMusicId === item.soundId"
+                  type="button"
+                  class="btn-icon btn-icon-active"
+                  title="Stop"
+                  aria-label="Stop music"
+                  @click="stopMusic"
+                >
+                  ■
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="btn-icon"
+                  :disabled="!isJoined || isSoundMissing('music', item.soundId)"
+                  title="Play"
+                  :aria-label="`Play ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
+                  @click="playMusic(item)"
+                >
+                  ▶
+                </button>
+                <input
+                  v-model.number="item.volume"
+                  type="range"
+                  min="0"
+                  max="100"
+                  class="volume-slider"
+                  @input="updateMusicVolume(item)"
+                  @change="saveScene(scene)"
+                >
+                <label class="toggle" title="Loop">
+                  <input v-model="item.loop" type="checkbox" @change="saveScene(scene)">
+                </label>
+                <button
+                  type="button"
+                  class="btn-icon btn-remove"
+                  title="Remove"
+                  :aria-label="`Remove ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
+                  @click="removeFromScene('music', item.soundId)"
+                >
+                  ×
+                </button>
+              </div>
             </div>
-            <div class="sound-card-controls sound-card-controls-music">
-              <button
-                v-if="playingMusicId === item.soundId"
-                type="button"
-                class="btn-icon btn-icon-active"
-                title="Stop"
-                aria-label="Stop music"
-                @click="stopMusic"
-              >
-                ■
-              </button>
-              <button
-                v-else
-                type="button"
-                class="btn-icon"
-                :disabled="!isJoined"
-                title="Play"
-                :aria-label="`Play ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
-                @click="playMusic(item)"
-              >
-                ▶
-              </button>
-              <input
-                v-model.number="item.volume"
-                type="range"
-                min="0"
-                max="100"
-                class="volume-slider"
-                @input="updateMusicVolume(item)"
-                @change="saveScene(scene)"
-              >
-              <label class="toggle" title="Loop">
-                <input v-model="item.loop" type="checkbox" @change="saveScene(scene)">
-              </label>
+            <div v-if="isSoundMissing('music', item.soundId)" class="sound-source-hint">
               <button
                 type="button"
-                class="btn-icon btn-remove"
-                title="Remove"
-                :aria-label="`Remove ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
-                @click="removeFromScene('music', item.soundId)"
+                class="btn-resolve"
+                @click="resolveTarget = { category: 'music', item }"
               >
-                ×
+                Resolve missing sound...
               </button>
             </div>
           </div>
@@ -979,30 +1042,42 @@ watch(sceneId, (newId, oldId) => {
             v-for="item in scene.effects"
             :key="item.soundId"
             class="sound-card"
+            :class="{ 'sound-card-has-hint': isSoundMissing('effects', item.soundId) }"
           >
-            <div class="sound-card-info">
-              <span class="sound-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
-              <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing" :title="item.source ? `Source: ${item.source.name}${item.source.note ? ` — ${item.source.note}` : ''}` : 'Sound file not found in your library'">
-                missing
-              </span>
+            <div class="sound-card-main-row">
+              <div class="sound-card-info">
+                <span class="sound-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
+                <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing-badge">
+                  missing
+                </span>
+              </div>
+              <div class="sound-card-controls">
+                <button
+                  type="button"
+                  class="btn btn-play"
+                  :disabled="isSoundMissing('effects', item.soundId)"
+                  @click="isJoined ? playEffect(item) : playEffectLocal(item)"
+                >
+                  Play
+                </button>
+                <button
+                  type="button"
+                  class="btn-icon btn-remove"
+                  title="Remove"
+                  :aria-label="`Remove ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
+                  @click="removeFromScene('effects', item.soundId)"
+                >
+                  ×
+                </button>
+              </div>
             </div>
-            <div class="sound-card-controls">
+            <div v-if="isSoundMissing('effects', item.soundId)" class="sound-source-hint">
               <button
                 type="button"
-                class="btn btn-play"
-                :disabled="!isJoined"
-                @click="playEffect(item)"
+                class="btn-resolve"
+                @click="resolveTarget = { category: 'effects', item }"
               >
-                Play
-              </button>
-              <button
-                type="button"
-                class="btn-icon btn-remove"
-                title="Remove"
-                :aria-label="`Remove ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
-                @click="removeFromScene('effects', item.soundId)"
-              >
-                ×
+                Resolve missing sound...
               </button>
             </div>
           </div>
@@ -1254,7 +1329,20 @@ watch(sceneId, (newId, oldId) => {
   color: var(--color-text);
 }
 
-.sound-missing {
+.sound-card-has-hint {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.sound-card-main-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sound-missing-badge {
   display: inline-block;
   font-size: 0.7rem;
   font-weight: 600;
@@ -1265,8 +1353,33 @@ watch(sceneId, (newId, oldId) => {
   background: var(--color-error-muted, rgba(239, 68, 68, 0.15));
   color: var(--color-error, #ef4444);
   border-radius: var(--radius-sm);
-  cursor: help;
   vertical-align: middle;
+}
+
+.sound-source-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  padding: 0.4rem 0.6rem;
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+}
+
+.btn-resolve {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-accent);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-resolve:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-accent);
 }
 
 .sound-card-controls {
