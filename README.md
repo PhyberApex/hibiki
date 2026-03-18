@@ -9,7 +9,7 @@
 
 **Desktop audio companion for Discord** — play music, ambience, and sound effects in voice channels from an Electron app. Built with **Dungeons & Dragons** in mind (background music, ambient soundscapes, one-shot effects at the table) but works for any server.
 
-- **Scenes** — Build soundboards with music tracks, ambience loops (with random interval repeats), and one-shot effects. Play an entire scene or individual tracks.
+- **Scenes** — Build soundboards with music tracks, ambience loops (with random interval repeats), and one-shot effects. Play an entire scene or individual tracks. Share scenes with the community or install from a [public registry](docs/scene-sharing.md).
 - **Browser** — Open any URL (YouTube, Spotify web, etc.) in a built-in browser tab and stream its audio to Discord. Bookmark your favourite sites.
 - **Media library** — Upload and manage your own sound files (music, effects, ambience). Import/export scenes as portable bundles.
 - **App-only control** — The bot has no slash or prefix commands; everything is driven from the desktop UI.

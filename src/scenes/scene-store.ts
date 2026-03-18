@@ -3,12 +3,19 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
+export interface SoundSource {
+  name: string
+  url?: string
+  note?: string
+}
+
 export interface SceneItem {
   soundId: string
   soundName?: string
   volume?: number
   enabled?: boolean
   loop?: boolean
+  source?: SoundSource
 }
 
 export interface Scene {

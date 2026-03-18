@@ -9,6 +9,7 @@ import { createAppConfig } from './persistence'
 import { createPlayer } from './player/player'
 import { exportScene } from './scenes/scene-export'
 import { importScene } from './scenes/scene-import'
+import { createSceneRegistry } from './scenes/scene-registry'
 import { createSceneStore } from './scenes/scene-store'
 import { createSoundLibrary } from './sound/sound-library'
 
@@ -78,6 +79,11 @@ export interface EmbeddedApi {
     exportScene: (id: string, targetPath: string) => Promise<void>
     importScene: (sourcePath: string) => Promise<import('./scenes/scene-store').Scene>
   }
+  registry: {
+    getIndex: (forceRefresh?: boolean) => Promise<import('./scenes/scene-package.types').RegistryIndex>
+    installFromRegistry: (slug: string) => Promise<import('./scenes/scene-store').Scene>
+    installFromUrl: (url: string) => Promise<import('./scenes/scene-store').Scene>
+  }
 }
 
 export interface EmbeddedApp {
@@ -94,6 +100,7 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
   const appConfig = createAppConfig(config)
   const sounds = createSoundLibrary(config)
   const scenes = createSceneStore(config)
+  const registry = createSceneRegistry(config)
   const discord = createDiscordClient(config, appConfig)
   const player = createPlayer(discord)
 
@@ -193,6 +200,11 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
       remove: id => scenes.remove(id),
       exportScene: (id, targetPath) => exportScene(config, id, targetPath),
       importScene: sourcePath => importScene(config, sourcePath),
+    },
+    registry: {
+      getIndex: forceRefresh => registry.fetchIndex(forceRefresh ?? false),
+      installFromRegistry: slug => registry.installFromRegistry(slug),
+      installFromUrl: url => registry.installFromUrl(url),
     },
   }
 

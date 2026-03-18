@@ -13,7 +13,7 @@ Everything is controlled from the **Electron desktop app**: join/leave voice cha
 
 <div class="features">
 <div class="feature"><h3>Scenes</h3>
-<p>Build soundboards with music tracks, ambience loops (with random interval repeats), and one-shot effects. Play an entire scene or individual tracks. Export and import scenes as zip files.</p></div>
+<p>Build soundboards with music tracks, ambience loops (with random interval repeats), and one-shot effects. Play an entire scene or individual tracks. Export and import scenes as zip files. <a href="{{ site.baseurl }}/scene-sharing">Share scenes</a> with the community or install scenes from a public registry.</p></div>
 <div class="feature"><h3>Browser streaming</h3>
 <p>Open any URL (YouTube, Spotify web, etc.) in the built-in browser tab and stream its audio directly to Discord. Bookmark your favourite sites for quick access.</p></div>
 <div class="feature"><h3>Media library</h3>

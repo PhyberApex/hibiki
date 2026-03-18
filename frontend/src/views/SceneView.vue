@@ -13,11 +13,13 @@ import {
   stopEffectStream,
 } from '@/api/audio-stream'
 import { openFileDialog, saveFileDialog } from '@/api/config'
+import { installFromUrl } from '@/api/registry'
 import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
 import { listAmbience, listEffects, listMusic, soundStreamUrl } from '@/api/sounds'
 import {
   captureFromAudioElement,
 } from '@/audio/browser-audio-capture'
+import RegistryBrowser from '@/components/RegistryBrowser.vue'
 import { usePlayerStore } from '@/stores/player'
 
 const route = useRoute()
@@ -37,6 +39,10 @@ const newSceneName = ref('')
 const createSceneBusy = ref(false)
 const exportBusy = ref(false)
 const importBusy = ref(false)
+const showRegistryBrowser = ref(false)
+const showInstallUrl = ref(false)
+const installUrlValue = ref('')
+const installUrlBusy = ref(false)
 const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 const musicAudioEl = createAudioEl()
@@ -565,6 +571,39 @@ async function doImportScene() {
   }
 }
 
+function isSoundMissing(category: 'ambience' | 'music' | 'effects', soundId: string): boolean {
+  const list = category === 'ambience' ? ambienceSounds.value : category === 'music' ? musicSounds.value : effectsSounds.value
+  return !list.some(s => s.id === soundId)
+}
+
+async function doInstallFromUrl() {
+  const url = installUrlValue.value.trim()
+  if (!url)
+    return
+  installUrlBusy.value = true
+  exportImportMessage.value = null
+  try {
+    const imported = await installFromUrl(url)
+    scenes.value = await listScenes()
+    showInstallUrl.value = false
+    installUrlValue.value = ''
+    await router.push(`/scenes/${imported.id}`)
+    exportImportMessage.value = { type: 'success', text: `Installed "${imported.name}"` }
+  }
+  catch (e) {
+    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Install from URL failed' }
+  }
+  finally {
+    installUrlBusy.value = false
+  }
+}
+
+async function onRegistryInstalled(sceneId: string) {
+  scenes.value = await listScenes()
+  showRegistryBrowser.value = false
+  await router.push(`/scenes/${sceneId}`)
+}
+
 onMounted(() => {
   loadScenes()
   loadSounds()
@@ -660,6 +699,12 @@ watch(sceneId, (newId, oldId) => {
           >
             {{ importBusy ? '…' : 'Import' }}
           </button>
+          <button type="button" class="btn btn-ghost" @click="showInstallUrl = true">
+            From URL
+          </button>
+          <button type="button" class="btn btn-ghost" @click="showRegistryBrowser = true">
+            Browse
+          </button>
           <button
             v-if="scene"
             type="button"
@@ -702,6 +747,29 @@ watch(sceneId, (newId, oldId) => {
           </button>
         </div>
       </div>
+      <div v-if="showInstallUrl" class="create-scene-form create-scene-form-inline create-scene-form-card">
+        <input
+          v-model="installUrlValue"
+          type="url"
+          class="input create-scene-input"
+          placeholder="https://.../.hibiki.zip"
+          @keydown.enter="doInstallFromUrl"
+          @keydown.escape="showInstallUrl = false"
+        >
+        <div class="create-scene-buttons">
+          <button type="button" class="btn btn-ghost" @click="showInstallUrl = false">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="!installUrlValue.trim() || installUrlBusy"
+            @click="doInstallFromUrl"
+          >
+            {{ installUrlBusy ? '...' : 'Install' }}
+          </button>
+        </div>
+      </div>
       <p
         v-if="exportImportMessage"
         class="status-message"
@@ -710,6 +778,12 @@ watch(sceneId, (newId, oldId) => {
         {{ exportImportMessage.text }}
       </p>
     </header>
+
+    <RegistryBrowser
+      v-if="showRegistryBrowser"
+      @close="showRegistryBrowser = false"
+      @installed="onRegistryInstalled"
+    />
 
     <div v-if="!scene && scenes.length === 0" class="scene-empty">
       <p v-if="!hasSounds">
@@ -764,6 +838,9 @@ watch(sceneId, (newId, oldId) => {
             <div class="sound-card-row">
               <div class="sound-card-info">
                 <span class="sound-name">{{ item.soundName ?? resolveSoundName('ambience', item.soundId) }}</span>
+                <span v-if="isSoundMissing('ambience', item.soundId)" class="sound-missing" :title="item.source ? `Source: ${item.source.name}${item.source.note ? ` — ${item.source.note}` : ''}` : 'Sound file not found'">
+                  missing
+                </span>
               </div>
               <div class="sound-card-controls">
                 <input
@@ -859,6 +936,9 @@ watch(sceneId, (newId, oldId) => {
           >
             <div class="sound-card-info">
               <span class="sound-name">{{ item.soundName ?? resolveSoundName('music', item.soundId) }}</span>
+              <span v-if="isSoundMissing('music', item.soundId)" class="sound-missing" :title="item.source ? `Source: ${item.source.name}${item.source.note ? ` — ${item.source.note}` : ''}` : 'Sound file not found'">
+                missing
+              </span>
             </div>
             <div class="sound-card-controls sound-card-controls-music">
               <button
@@ -940,6 +1020,9 @@ watch(sceneId, (newId, oldId) => {
           >
             <div class="sound-card-info">
               <span class="sound-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
+              <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing" :title="item.source ? `Source: ${item.source.name}${item.source.note ? ` — ${item.source.note}` : ''}` : 'Sound file not found'">
+                missing
+              </span>
             </div>
             <div class="sound-card-controls">
               <button
@@ -1180,6 +1263,21 @@ watch(sceneId, (newId, oldId) => {
 .sound-name {
   font-weight: 500;
   color: var(--color-text);
+}
+
+.sound-missing {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.1rem 0.4rem;
+  margin-left: 0.4rem;
+  background: var(--color-error-muted, rgba(239, 68, 68, 0.15));
+  color: var(--color-error, #ef4444);
+  border-radius: var(--radius-sm);
+  cursor: help;
+  vertical-align: middle;
 }
 
 .sound-card-controls {
