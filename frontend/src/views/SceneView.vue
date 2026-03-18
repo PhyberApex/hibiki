@@ -13,11 +13,13 @@ import {
   stopEffectStream,
 } from '@/api/audio-stream'
 import { openFileDialog, saveFileDialog } from '@/api/config'
+import { installFromUrl } from '@/api/registry'
 import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
 import { listAmbience, listEffects, listMusic, soundStreamUrl } from '@/api/sounds'
 import {
   captureFromAudioElement,
 } from '@/audio/browser-audio-capture'
+import RegistryBrowser from '@/components/RegistryBrowser.vue'
 import { usePlayerStore } from '@/stores/player'
 
 const route = useRoute()
@@ -37,6 +39,10 @@ const newSceneName = ref('')
 const createSceneBusy = ref(false)
 const exportBusy = ref(false)
 const importBusy = ref(false)
+const showRegistryBrowser = ref(false)
+const showInstallUrl = ref(false)
+const installUrlValue = ref('')
+const installUrlBusy = ref(false)
 const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 const musicAudioEl = createAudioEl()
@@ -565,6 +571,39 @@ async function doImportScene() {
   }
 }
 
+function isSoundMissing(category: 'ambience' | 'music' | 'effects', soundId: string): boolean {
+  const list = category === 'ambience' ? ambienceSounds.value : category === 'music' ? musicSounds.value : effectsSounds.value
+  return !list.some(s => s.id === soundId)
+}
+
+async function doInstallFromUrl() {
+  const url = installUrlValue.value.trim()
+  if (!url)
+    return
+  installUrlBusy.value = true
+  exportImportMessage.value = null
+  try {
+    const imported = await installFromUrl(url)
+    scenes.value = await listScenes()
+    showInstallUrl.value = false
+    installUrlValue.value = ''
+    await router.push(`/scenes/${imported.id}`)
+    exportImportMessage.value = { type: 'success', text: `Installed "${imported.name}"` }
+  }
+  catch (e) {
+    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Install from URL failed' }
+  }
+  finally {
+    installUrlBusy.value = false
+  }
+}
+
+async function onRegistryInstalled(sceneId: string) {
+  scenes.value = await listScenes()
+  showRegistryBrowser.value = false
+  await router.push(`/scenes/${sceneId}`)
+}
+
 onMounted(() => {
   loadScenes()
   loadSounds()
@@ -660,6 +699,12 @@ watch(sceneId, (newId, oldId) => {
           >
             {{ importBusy ? '…' : 'Import' }}
           </button>
+          <button type="button" class="btn btn-ghost" @click="showInstallUrl = true">
+            From URL
+          </button>
+          <button type="button" class="btn btn-ghost" @click="showRegistryBrowser = true">
+            Browse
+          </button>
           <button
             v-if="scene"
             type="button"
@@ -702,6 +747,29 @@ watch(sceneId, (newId, oldId) => {
           </button>
         </div>
       </div>
+      <div v-if="showInstallUrl" class="create-scene-form create-scene-form-inline create-scene-form-card">
+        <input
+          v-model="installUrlValue"
+          type="url"
+          class="input create-scene-input"
+          placeholder="https://.../.hibiki.zip"
+          @keydown.enter="doInstallFromUrl"
+          @keydown.escape="showInstallUrl = false"
+        >
+        <div class="create-scene-buttons">
+          <button type="button" class="btn btn-ghost" @click="showInstallUrl = false">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="!installUrlValue.trim() || installUrlBusy"
+            @click="doInstallFromUrl"
+          >
+            {{ installUrlBusy ? '...' : 'Install' }}
+          </button>
+        </div>
+      </div>
       <p
         v-if="exportImportMessage"
         class="status-message"
@@ -711,26 +779,46 @@ watch(sceneId, (newId, oldId) => {
       </p>
     </header>
 
+    <RegistryBrowser
+      v-if="showRegistryBrowser"
+      @close="showRegistryBrowser = false"
+      @installed="onRegistryInstalled"
+    />
+
     <div v-if="!scene && scenes.length === 0" class="scene-empty">
-      <p v-if="!hasSounds">
+      <h2 class="empty-title">
+        Get started with scenes
+      </h2>
+      <p class="empty-desc">
+        Scenes let you layer music, ambience, and effects into a soundboard you can trigger during your session.
+      </p>
+      <div class="empty-actions">
+        <button type="button" class="btn btn-primary" @click="openCreateScene">
+          Create from scratch
+        </button>
+        <button type="button" class="btn btn-ghost" @click="showRegistryBrowser = true">
+          Browse community scenes
+        </button>
+      </div>
+      <p v-if="!hasSounds" class="empty-hint">
+        You can also
         <RouterLink to="/media" class="empty-link">
-          Add music, ambience, and effects in the sound library
+          add sounds to your library
         </RouterLink>
-        first. Then come back here and create a scene.
+        first, then build a scene with them.
       </p>
-      <p v-else>
-        Create a scene to mix music, ambience, and effects for your session.
-      </p>
-      <button type="button" class="btn btn-primary" @click="openCreateScene">
-        Create scene
-      </button>
     </div>
 
     <div v-else-if="!scene && scenes.length > 0" class="scene-empty scene-empty-select">
-      <p>Select a scene from the dropdown above or create a new one.</p>
-      <button type="button" class="btn btn-primary" @click="openCreateScene">
-        New scene
-      </button>
+      <p>Select a scene from the dropdown above, or get more scenes by importing or browsing the community.</p>
+      <div class="empty-actions">
+        <button type="button" class="btn btn-primary" @click="openCreateScene">
+          New scene
+        </button>
+        <button type="button" class="btn btn-ghost" @click="showRegistryBrowser = true">
+          Browse community
+        </button>
+      </div>
     </div>
 
     <template v-if="scene">
@@ -764,6 +852,9 @@ watch(sceneId, (newId, oldId) => {
             <div class="sound-card-row">
               <div class="sound-card-info">
                 <span class="sound-name">{{ item.soundName ?? resolveSoundName('ambience', item.soundId) }}</span>
+                <span v-if="isSoundMissing('ambience', item.soundId)" class="sound-missing" :title="item.source ? `Source: ${item.source.name}${item.source.note ? ` — ${item.source.note}` : ''}` : 'Sound file not found in your library'">
+                  missing
+                </span>
               </div>
               <div class="sound-card-controls">
                 <input
@@ -826,7 +917,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.ambience.length === 0" class="section-empty">
-          No ambience in this scene. Use the dropdown above to add tracks.
+          No ambience yet. Ambience loops continuously in the background — rain, wind, tavern chatter. Use the dropdown above to add tracks.
         </p>
       </section>
 
@@ -859,6 +950,9 @@ watch(sceneId, (newId, oldId) => {
           >
             <div class="sound-card-info">
               <span class="sound-name">{{ item.soundName ?? resolveSoundName('music', item.soundId) }}</span>
+              <span v-if="isSoundMissing('music', item.soundId)" class="sound-missing" :title="item.source ? `Source: ${item.source.name}${item.source.note ? ` — ${item.source.note}` : ''}` : 'Sound file not found in your library'">
+                missing
+              </span>
             </div>
             <div class="sound-card-controls sound-card-controls-music">
               <button
@@ -907,7 +1001,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.music.length === 0" class="section-empty">
-          No music in this scene. Use the dropdown above to add tracks.
+          No music yet. Music plays one track at a time — great for background themes. Use the dropdown above to add tracks.
         </p>
       </section>
 
@@ -940,6 +1034,9 @@ watch(sceneId, (newId, oldId) => {
           >
             <div class="sound-card-info">
               <span class="sound-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
+              <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing" :title="item.source ? `Source: ${item.source.name}${item.source.note ? ` — ${item.source.note}` : ''}` : 'Sound file not found in your library'">
+                missing
+              </span>
             </div>
             <div class="sound-card-controls">
               <button
@@ -963,7 +1060,7 @@ watch(sceneId, (newId, oldId) => {
           </div>
         </div>
         <p v-if="scene.effects.length === 0" class="section-empty">
-          No effects in this scene. Use the dropdown above to add sounds.
+          No effects yet. Effects are one-shot sounds you trigger on demand — a thunder clap, a door slam. Use the dropdown above to add some.
         </p>
       </section>
     </template>
@@ -1064,6 +1161,33 @@ watch(sceneId, (newId, oldId) => {
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-lg);
   color: var(--color-text-muted);
+}
+
+.empty-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.empty-desc {
+  margin: 0 0 1.25rem;
+  font-size: 0.9rem;
+  max-width: 440px;
+  margin-inline: auto;
+  line-height: 1.5;
+}
+
+.empty-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.empty-hint {
+  margin: 1rem 0 0;
+  font-size: 0.8rem;
 }
 
 /* Create scene form – matches scene-select and add-select */
@@ -1180,6 +1304,21 @@ watch(sceneId, (newId, oldId) => {
 .sound-name {
   font-weight: 500;
   color: var(--color-text);
+}
+
+.sound-missing {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.1rem 0.4rem;
+  margin-left: 0.4rem;
+  background: var(--color-error-muted, rgba(239, 68, 68, 0.15));
+  color: var(--color-error, #ef4444);
+  border-radius: var(--radius-sm);
+  cursor: help;
+  vertical-align: middle;
 }
 
 .sound-card-controls {

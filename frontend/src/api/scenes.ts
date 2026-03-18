@@ -1,5 +1,11 @@
 import { apiCall, useElectronApi } from './electron'
 
+export interface SoundSource {
+  name: string
+  url?: string
+  note?: string
+}
+
 export interface SceneItem {
   soundId: string
   soundName?: string
@@ -8,6 +14,7 @@ export interface SceneItem {
   loop?: boolean
   repeatMin?: number
   repeatMax?: number
+  source?: SoundSource
 }
 
 export interface Scene {

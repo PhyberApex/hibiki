@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hibiki Scene Registry Entry",
+  "type": "object",
+  "required": ["name", "slug", "description", "author", "version", "tags", "category", "downloadUrl", "audioBundled", "createdAt", "updatedAt"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable scene name"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "URL-safe identifier (lowercase, hyphens only)"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short description of the scene"
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Creator name or handle"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semver version string"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "description": "Keywords for discovery"
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Scene category (e.g. environment, combat, social)"
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier for the scene definition itself"
+    },
+    "downloadUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://",
+      "description": "HTTPS URL to the .hibiki.zip archive"
+    },
+    "audioBundled": {
+      "const": false,
+      "description": "Must be false — the registry only accepts reference-only scenes (no bundled audio)"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 last-update timestamp"
+    }
+  }
+}

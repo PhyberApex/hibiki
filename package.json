@@ -32,7 +32,9 @@
     "test:coverage": "run-p test:coverage:backend test:coverage:frontend",
     "test:coverage:backend": "jest --coverage --config jest.config.js",
     "test:coverage:frontend": "cd frontend && vitest run --coverage",
-    "test:e2e": "cd e2e && pnpm install --frozen-lockfile && pnpm test"
+    "test:e2e": "cd e2e && pnpm install --frozen-lockfile && pnpm test",
+    "registry:validate": "node registry/scripts/validate.mjs",
+    "registry:build-index": "node registry/scripts/build-index.mjs"
   },
   "dependencies": {
     "@discordjs/opus": "^0.10.0",

@@ -36,7 +36,7 @@ describe('exportScene', () => {
     )
   })
 
-  it('exports a zip containing scene.json and skips missing sounds', async () => {
+  it('exports a zip containing hibiki-scene.json and skips missing sounds', async () => {
     const { createSceneStore } = await import('./scene-store')
     const store = createSceneStore(config)
     const saved = await store.save({
@@ -49,10 +49,13 @@ describe('exportScene', () => {
     await exportScene(config, saved.id, targetZip)
 
     const zip = new AdmZip(targetZip)
-    const sceneEntry = zip.getEntry('scene.json')
-    expect(sceneEntry).toBeDefined()
-    const data = JSON.parse(sceneEntry!.getData().toString('utf-8'))
-    expect(data.name).toBe('Export Test')
-    expect(data.id).toBe(saved.id)
+    const manifestEntry = zip.getEntry('hibiki-scene.json')
+    expect(manifestEntry).toBeDefined()
+    const data = JSON.parse(manifestEntry!.getData().toString('utf-8'))
+    expect(data.formatVersion).toBe(1)
+    expect(data.displayName).toBe('Export Test')
+    expect(data.scene).toBeDefined()
+    expect(data.scene.ambience).toHaveLength(1)
+    expect(data.scene.ambience[0].bundled).toBe(false)
   })
 })
