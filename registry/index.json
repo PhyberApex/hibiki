@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "updatedAt": "2026-03-18T13:29:37.537Z",
+  "scenes": [
+    {
+      "name": "Cozy Tavern",
+      "slug": "cozy-tavern",
+      "description": "A warm tavern with crackling fire, gentle chatter, and a bard playing in the corner. Perfect for social encounters and downtime.",
+      "author": "PhyberApex",
+      "version": "1.0.1",
+      "tags": [
+        "tavern",
+        "social",
+        "ambient",
+        "fantasy",
+        "example"
+      ],
+      "category": "environment",
+      "audioBundled": false,
+      "createdAt": "2026-03-18T00:00:00Z",
+      "updatedAt": "2026-03-18T00:00:00Z",
+      "scene": {
+        "music": [
+          {
+            "soundName": "Tavern Bard",
+            "volume": 60,
+            "loop": true,
+            "source": {
+              "name": "Medieval Fantasy Tavern Music",
+              "url": "https://freesound.org/people/OllieOllie/sounds/423752/",
+              "note": "Any gentle bard or lute tavern music works"
+            }
+          }
+        ],
+        "ambience": [
+          {
+            "soundName": "Crackling Fireplace",
+            "volume": 45,
+            "enabled": true,
+            "source": {
+              "name": "Fireplace Crackle Loop",
+              "url": "https://freesound.org/people/inchadney/sounds/132534/",
+              "note": "Any fireplace or campfire loop"
+            }
+          },
+          {
+            "soundName": "Tavern Chatter",
+            "volume": 30,
+            "enabled": true,
+            "source": {
+              "name": "Bar Crowd Ambience",
+              "url": "https://freesound.org/people/Erokia/sounds/460578/",
+              "note": "Low background crowd murmur"
+            }
+          }
+        ],
+        "effects": [
+          {
+            "soundName": "Tavern Door",
+            "volume": 70,
+            "source": {
+              "name": "Wooden Door Open Close",
+              "url": "https://freesound.org/people/InspectorJ/sounds/339677/",
+              "note": "Heavy wooden door creak"
+            }
+          },
+          {
+            "soundName": "Mug Slam",
+            "volume": 65,
+            "source": {
+              "name": "Glass Slam on Table",
+              "url": "https://freesound.org/people/kwahmah_02/sounds/260115/",
+              "note": "Mug or tankard hitting a wooden table"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
