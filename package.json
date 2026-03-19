@@ -34,7 +34,8 @@
     "test:coverage:frontend": "cd frontend && vitest run --coverage",
     "test:e2e": "cd e2e && pnpm install --frozen-lockfile && pnpm test",
     "registry:validate": "node registry/scripts/validate.mjs",
-    "registry:build-index": "node registry/scripts/build-index.mjs"
+    "registry:build-index": "node registry/scripts/build-index.mjs",
+    "docs": "cd docs && bundle exec jekyll serve --baseurl \"\" --livereload"
   },
   "dependencies": {
     "@discordjs/opus": "^0.10.0",
