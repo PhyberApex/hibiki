@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0](https://github.com/PhyberApex/hibiki/compare/v1.1.0...v1.2.0) (2026-03-19)
+
+
+### Features
+
+* Plugin system ([#103](https://github.com/PhyberApex/hibiki/issues/103)) ([80e72cb](https://github.com/PhyberApex/hibiki/commit/80e72cb52691e9e9dbcfa02ffbe47c0dff300ef7)), closes [#102](https://github.com/PhyberApex/hibiki/issues/102)
+* Plugin system revamped ([#105](https://github.com/PhyberApex/hibiki/issues/105)) ([44f9e99](https://github.com/PhyberApex/hibiki/commit/44f9e999935f214188b12ec0c24dd30c25c99d65))
+* UX improvements for plugin system ([#108](https://github.com/PhyberApex/hibiki/issues/108)) ([26e7161](https://github.com/PhyberApex/hibiki/commit/26e716165570b49c21f2b27e6eb585d292533b53))
+
+
+### Bug Fixes
+
+* Build of index ([#106](https://github.com/PhyberApex/hibiki/issues/106)) ([c289852](https://github.com/PhyberApex/hibiki/commit/c289852f5822a67b5da0453e1af5210c1ee47c57))
+* UI improvements ([#109](https://github.com/PhyberApex/hibiki/issues/109)) ([0378ecb](https://github.com/PhyberApex/hibiki/commit/0378ecb09e73d75d71ad70066aacaca8fef47244))
+* Update cozy-tavern.json ([#107](https://github.com/PhyberApex/hibiki/issues/107)) ([fea40dd](https://github.com/PhyberApex/hibiki/commit/fea40ddb6de1adedb9aa47f587ed965770b5803b))
+
 ## [1.1.0](https://github.com/PhyberApex/hibiki/compare/v1.0.0...v1.1.0) (2026-03-15)
 
 
