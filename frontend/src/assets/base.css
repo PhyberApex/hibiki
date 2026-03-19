@@ -28,6 +28,14 @@
   --color-error-muted: rgba(239, 68, 68, 0.15);
   --color-live: #22c55e;
   --color-snapshot: #71717a;
+  /* Scene category colors */
+  --color-ambience: #2dd4bf;
+  --color-music: #f59e0b;
+  --color-effects: #fb7185;
+  --color-effects-muted: rgba(251, 113, 133, 0.08);
+  --color-effects-muted-hover: rgba(251, 113, 133, 0.15);
+  /* Overlay backdrop */
+  --color-backdrop: rgba(0, 0, 0, 0.6);
   /* Text on colored backgrounds (badge, error hover) – tinted, not pure white */
   --color-on-accent-bg: #f5f4f2;
   --shadow-accent-sm: 0 2px 12px rgba(245, 158, 11, 0.12);

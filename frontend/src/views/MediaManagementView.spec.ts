@@ -41,17 +41,30 @@ describe('mediaManagementView', () => {
     expect(wrapper.find('h1').text()).toBe('Sound library')
   })
 
-  it('renders SoundListManage for Music, Ambience, and Effects', () => {
+  it('renders category tabs and defaults to Music', () => {
     const wrapper = mount(MediaManagementView, {
       global: { plugins: [createPinia(), router] },
     })
-    const lists = wrapper.findAllComponents(SoundListManage)
-    expect(lists).toHaveLength(3)
-    expect(lists[0]!.props('title')).toBe('Music')
-    expect(lists[0]!.props('type')).toBe('music')
-    expect(lists[1]!.props('title')).toBe('Ambience')
-    expect(lists[1]!.props('type')).toBe('ambience')
-    expect(lists[2]!.props('title')).toBe('Effects')
-    expect(lists[2]!.props('type')).toBe('effects')
+    const tabs = wrapper.findAll('.category-tab')
+    expect(tabs).toHaveLength(3)
+    expect(tabs[0]!.text()).toContain('Music')
+    expect(tabs[1]!.text()).toContain('Ambience')
+    expect(tabs[2]!.text()).toContain('Effects')
+
+    // Default tab renders Music SoundListManage
+    const list = wrapper.findComponent(SoundListManage)
+    expect(list.exists()).toBe(true)
+    expect(list.props('type')).toBe('music')
+  })
+
+  it('switches tab to show different SoundListManage', async () => {
+    const wrapper = mount(MediaManagementView, {
+      global: { plugins: [createPinia(), router] },
+    })
+    const tabs = wrapper.findAll('.category-tab')
+
+    await tabs[1]!.trigger('click')
+    const list = wrapper.findComponent(SoundListManage)
+    expect(list.props('type')).toBe('ambience')
   })
 })

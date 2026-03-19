@@ -38,7 +38,7 @@ const repoUrl = 'https://github.com/PhyberApex/hibiki'
 
 .about-title {
   margin: 0 0 0.5rem;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--color-text);
@@ -54,9 +54,9 @@ const repoUrl = 'https://github.com/PhyberApex/hibiki'
 
 .about-desc {
   margin: 0 0 1.5rem;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--color-text-muted);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .about-version {

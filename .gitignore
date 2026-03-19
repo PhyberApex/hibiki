@@ -25,3 +25,10 @@ docs/_site
 e2e/test-results
 .secrets
 /tsconfig.tsbuildinfo
+
+# AI
+skills-lock.json
+.claude
+.windsurf
+.cursor
+.agents

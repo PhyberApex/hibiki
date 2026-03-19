@@ -152,14 +152,16 @@ export async function captureFromAudioElement(
   if (ctx.state === 'suspended')
     await ctx.resume()
 
-  // Disconnect old worklet before creating new one
-  // Otherwise, source splits signal across multiple worklets, weakening audio
+  // Disconnect all existing connections (old worklet or direct-to-destination
+  // left over from a previous stop()) before wiring the new capture graph.
+  // Without this, a lingering source→destination connection causes local playback
+  // when only streaming to Discord is intended.
   if (entry.activeWorklet) {
-    source.disconnect(entry.activeWorklet)
     entry.activeWorklet.disconnect()
     entry.activeWorklet.port.onmessage = null
     entry.activeWorklet = undefined
   }
+  source.disconnect()
 
   await ensureWorklet(ctx)
   const worklet = createWorkletNode(ctx, onChunk)
