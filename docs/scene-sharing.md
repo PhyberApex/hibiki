@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Scene Sharing
+description: Share and discover Hibiki scenes through the community registry or portable .hibiki.zip archives.
 ---
 
 ## Scene Sharing
@@ -27,17 +28,18 @@ If someone sends you a `.hibiki.zip` file:
 1. Open the **Scenes** tab.
 2. Click **Import** and select the zip file.
 
+---
+
 ### How the registry works
 
 The community registry lives in the [`registry/`](https://github.com/PhyberApex/hibiki/tree/main/registry) directory of the Hibiki repo. Each scene is a single JSON file containing the full scene definition — track names, volumes, and source references. **No audio files are stored or distributed.**
 
 When you click **Install** in the Browse modal, Hibiki reads the scene definition directly from the registry and creates a local scene. There is no zip download — the JSON entry *is* the scene.
 
-#### Reference-only policy
-
-**The registry only accepts reference-only scenes** (`audioBundled: false`). No audio files (MP3, WAV, OGG, etc.) are distributed through the registry. Scene entries are recipes describing which sounds to use, not the sounds themselves.
-
-This is enforced by schema validation and CI: any PR with bundled audio will be rejected automatically.
+<div class="callout">
+<p><strong>Reference-only policy.</strong> The registry only accepts reference-only scenes (<code>audioBundled: false</code>). No audio files (MP3, WAV, OGG, etc.) are distributed through the registry. Scene entries are recipes describing which sounds to use, not the sounds themselves.</p>
+<p>This is enforced by schema validation and CI: any PR with bundled audio will be rejected automatically.</p>
+</div>
 
 Each track includes a `source` block that tells the user where to find the audio:
 
@@ -55,6 +57,8 @@ Each track includes a `source` block that tells the user where to find the audio
 #### Bundled exports (personal use)
 
 When you export a scene from Hibiki for personal sharing (e.g. sending a zip to a friend), the export includes bundled audio files. This is fine for direct sharing — the registry restriction only applies to scenes submitted to the community registry.
+
+---
 
 ### Creating and sharing a scene
 
@@ -126,11 +130,15 @@ Key fields:
 3. Open a pull request against the Hibiki repo. The **Registry** CI workflow validates your entry automatically (schema check, slug uniqueness, track source blocks).
 4. Once merged, the index is rebuilt and the scene appears in the **Browse** modal for all Hibiki users.
 
+---
+
 ### Example scene
 
 The registry includes a reference example at [`registry/scenes/PhyberApex/cozy-tavern.json`](https://github.com/PhyberApex/hibiki/blob/main/registry/scenes/PhyberApex/cozy-tavern.json). It demonstrates all required fields and shows how to structure tracks with source blocks across music, ambience, and effects. Use it as a template when creating your own submission.
 
 ### Registry entry reference
+
+#### Scene fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -148,6 +156,8 @@ The registry includes a reference example at [`registry/scenes/PhyberApex/cozy-t
 | `scene.music` | array | Yes | Music track definitions |
 | `scene.ambience` | array | Yes | Ambience track definitions |
 | `scene.effects` | array | Yes | Effect definitions |
+
+#### Track fields
 
 Each track in `scene.music`, `scene.ambience`, or `scene.effects`:
 

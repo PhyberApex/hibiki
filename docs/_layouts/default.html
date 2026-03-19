@@ -3,30 +3,70 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% if page.title %}{{ page.title }} — {% endif %}{{ site.title }}</title>
+  <title>{% if page.title and page.title != "Home" %}{{ page.title }} — {% endif %}{{ site.title }}</title>
+  <meta name="description" content="{{ page.description | default: site.description }}">
+  <meta property="og:title" content="{% if page.title %}{{ page.title }} — {% endif %}{{ site.title }}">
+  <meta property="og:description" content="{{ page.description | default: site.description }}">
+  <meta property="og:image" content="{{ site.url }}{{ site.baseurl }}/banner.png">
+  <meta property="og:type" content="website">
   <link rel="icon" href="{{ site.baseurl }}/logo.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0f0f12;
-      --bg-card: #1a1a1f;
-      --bg-code: #16161a;
-      --text: #e4e4e7;
-      --text-muted: #a1a1aa;
-      --text-dim: #71717a;
-      --accent: #22d3ee;
-      --accent-dim: #0891b2;
-      --border: #27272a;
-      --radius: 8px;
+      --bg: #0c0c0e;
+      --bg-elevated: #171614;
+      --bg-card: #1c1a18;
+      --bg-code: #171614;
+      --text: #f5f4f2;
+      --text-muted: #a8a29e;
+      --text-dim: #78716c;
+      /* Primary accent — amber/gold */
+      --accent: #f59e0b;
+      --accent-hover: #fbbf24;
+      --accent-muted: rgba(245, 158, 11, 0.14);
+      --accent-text: #0c0c0e;
+      /* Secondary accents — from app category palette */
+      --color-teal: #2dd4bf;
+      --color-teal-muted: rgba(45, 212, 191, 0.12);
+      --color-rose: #fb7185;
+      --color-rose-muted: rgba(251, 113, 133, 0.10);
+      /* Inline code — warm but distinct from links */
+      --color-code: #d4a574;
+      --border: #2a2826;
+      --border-warm: #352f28;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      /* Spacing scale */
+      --space-xs: 0.25rem;
+      --space-sm: 0.5rem;
+      --space-md: 1rem;
+      --space-lg: 1.5rem;
+      --space-xl: 2.5rem;
+      --space-2xl: 4rem;
     }
+
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.7;
+      line-height: 1.6;
       font-size: 1rem;
+      -webkit-font-smoothing: antialiased;
     }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    /* ── Banner (homepage only) ── */
+
     .banner {
       width: 100%;
       max-height: 220px;
@@ -34,105 +74,185 @@
       display: block;
       background: var(--bg-card);
     }
+
+    /* ── Header ── */
+
     .site-header {
-      padding: 1.75rem 1.5rem;
+      padding: var(--space-lg);
       border-bottom: 1px solid var(--border);
       background: var(--bg-card);
     }
+
     .site-header .container {
       max-width: 720px;
       margin: 0 auto;
       display: flex;
       align-items: center;
-      gap: 1rem;
+      gap: var(--space-md);
     }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .header-brand:hover { text-decoration: none; }
+
     .site-header .logo {
-      width: 48px;
-      height: 48px;
+      width: 44px;
+      height: 44px;
       flex-shrink: 0;
-      border-radius: var(--radius);
+      border-radius: var(--radius-lg);
     }
+
     .site-header h1 {
       margin: 0;
-      font-size: 1.75rem;
+      font-size: 1.35rem;
       font-weight: 700;
       letter-spacing: -0.02em;
     }
+
     .site-header .tagline {
-      margin: 0.35rem 0 0;
-      color: var(--text-muted);
-      font-size: 1rem;
+      margin: 0.15rem 0 0;
+      color: var(--text-dim);
+      font-size: 0.8rem;
     }
+
+    .site-nav {
+      display: flex;
+      gap: var(--space-lg);
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .site-nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: color 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .site-nav a:hover { color: var(--text); text-decoration: none; }
+    .site-nav a[aria-current="page"] { color: var(--accent); }
+
+    /* ── Container ── */
+
     .container {
       max-width: 720px;
       margin: 0 auto;
-      padding: 0 1.5rem;
+      padding: 0 var(--space-lg);
     }
-    .page-content { padding: 2.5rem 0 3rem; }
-    .page-content > .container { padding: 0 1.5rem; }
+
+    /* ── Page content ── */
+
+    .page-content {
+      padding: var(--space-2xl) 0;
+    }
+
+    /* ── Section rhythm — generous gaps between h2 sections ── */
+
     main h2 {
-      margin: 2.25rem 0 1rem;
+      margin: var(--space-2xl) 0 var(--space-md);
+      padding-top: var(--space-lg);
+      border-top: 1px solid var(--border-warm);
       font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    main h2:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: none;
+    }
+
+    main h3 {
+      margin: var(--space-xl) 0 var(--space-sm);
+      font-size: 1.05rem;
       font-weight: 600;
+      letter-spacing: -0.01em;
       color: var(--text);
     }
-    main h2:first-child { margin-top: 0; }
-    main p {
-      margin: 0 0 1rem;
-      color: var(--text);
-    }
-    main p.lead {
-      font-size: 1.06rem;
+
+    main h4 {
+      margin: var(--space-lg) 0 var(--space-sm);
+      font-size: 0.9rem;
+      font-weight: 600;
       color: var(--text-muted);
-      margin-bottom: 1.25rem;
     }
-    main a {
-      color: var(--accent);
-      text-decoration: none;
+
+    main p {
+      margin: 0 0 var(--space-md);
+      color: var(--text);
     }
+
+    /* ── Links ── */
+
+    main a { color: var(--accent); text-decoration: none; }
     main a:hover { text-decoration: underline; }
+
+    /* ── Code ── */
+
     main code {
       font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
-      font-size: 0.9em;
-      padding: 0.15em 0.4em;
+      font-size: 0.88em;
+      padding: 0.12em 0.35em;
       background: var(--bg-code);
-      border-radius: 4px;
-      color: var(--accent);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--color-code);
     }
+
     main pre,
     main .highlight pre {
       background: var(--bg-code);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1rem 1.25rem;
+      border-radius: var(--radius-md);
+      padding: var(--space-md) 1.25rem;
       overflow: auto;
-      font-size: 0.875rem;
+      font-size: 0.85rem;
       line-height: 1.55;
       color: var(--text-muted);
     }
+
     main pre code {
       padding: 0;
       background: none;
       color: inherit;
     }
+
+    /* ── Lists ── */
+
     main ul, main ol {
-      margin: 0 0 1rem;
-      padding-left: 1.5rem;
+      margin: 0 0 var(--space-md);
+      padding-left: var(--space-lg);
       color: var(--text);
     }
-    main li { margin-bottom: 0.4rem; }
-    main ul ul, main ol ol { margin: 0.25rem 0; }
+
+    main li { margin-bottom: 0.35rem; }
+    main ul ul, main ol ol { margin: var(--space-xs) 0; }
+
+    /* ── Styled step lists ── */
+
     main .steps {
       list-style: none;
       padding-left: 0;
       counter-reset: step;
     }
+
     main .steps > li {
       counter-increment: step;
       margin-bottom: 1.25rem;
       padding-left: 2.75rem;
       position: relative;
     }
+
     main .steps > li::before {
       content: counter(step);
       position: absolute;
@@ -141,7 +261,7 @@
       width: 1.6rem;
       height: 1.6rem;
       background: var(--accent);
-      color: #0c1222;
+      color: var(--accent-text);
       border-radius: 50%;
       font-size: 0.8rem;
       font-weight: 700;
@@ -150,53 +270,260 @@
       justify-content: center;
       line-height: 1;
     }
-    main .steps > li strong { display: block; margin-bottom: 0.25rem; }
+
+    main .steps > li strong { display: block; margin-bottom: var(--space-xs); }
+
+    /* ── Feature cards ── */
+
     main .features {
       display: grid;
-      gap: 1.25rem;
+      gap: var(--space-md);
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      margin: 1.25rem 0;
+      margin: var(--space-lg) 0;
     }
+
     main .feature {
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-top: 2px solid var(--border);
+      border-radius: var(--radius-md);
       padding: 1.25rem;
     }
-    main .feature h3 { margin: 0 0 0.5rem; font-size: 1rem; font-weight: 600; }
-    main .feature p { margin: 0; font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; }
-    .cta {
+
+    main .feature:nth-child(1) { border-top-color: var(--accent); }
+    main .feature:nth-child(2) { border-top-color: var(--color-teal); }
+    main .feature:nth-child(3) { border-top-color: var(--color-rose); }
+    main .feature:nth-child(4) { border-top-color: var(--text-dim); }
+
+    main .feature h3 {
+      margin: 0 0 var(--space-sm);
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    main .feature:nth-child(1) h3 { color: var(--accent); }
+    main .feature:nth-child(2) h3 { color: var(--color-teal); }
+    main .feature:nth-child(3) h3 { color: var(--color-rose); }
+
+    main .feature p {
+      margin: 0;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ── Download callout card ── */
+
+    .download-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      margin: var(--space-lg) 0;
+    }
+
+    .download-card p { margin: 0; }
+
+    .download-card .platforms {
+      display: flex;
+      gap: var(--space-sm);
+      margin-top: var(--space-md);
+      flex-wrap: wrap;
+    }
+
+    .download-card .platforms a {
       display: inline-block;
-      margin-top: 0.5rem;
-      padding: 0.5rem 1rem;
+      padding: 0.45rem 1rem;
       background: var(--accent);
-      color: #0c1222;
+      color: var(--accent-text);
       text-decoration: none;
       font-weight: 600;
-      border-radius: 6px;
+      font-size: 0.85rem;
+      border-radius: var(--radius-sm);
+      transition: background 0.2s ease;
+    }
+
+    .download-card .platforms a:hover {
+      background: var(--accent-hover);
+      text-decoration: none;
+    }
+
+    .download-card .platforms .secondary {
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .download-card .platforms .secondary:hover {
+      background: var(--border);
+      color: var(--text);
+    }
+
+    /* ── Callout / admonition ── */
+
+    .callout {
+      margin: var(--space-lg) 0;
+      padding: var(--space-md) 1.25rem;
+      border-left: 3px solid var(--accent);
+      background: var(--accent-muted);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
       font-size: 0.9rem;
     }
-    .cta:hover { background: var(--accent-dim); text-decoration: none; color: #0c1222; }
+
+    .callout p { margin: 0; color: var(--text-muted); }
+    .callout p + p { margin-top: var(--space-sm); }
+    .callout strong { color: var(--accent); }
+
+    /* ── Blockquotes (fallback for markdown >) ── */
+
+    main blockquote {
+      margin: var(--space-md) 0;
+      padding: 0.75rem var(--space-md);
+      border-left: 3px solid var(--accent);
+      background: var(--bg-elevated);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    }
+
+    main blockquote p { margin: 0; color: var(--text-muted); font-size: 0.9rem; }
+
+    /* ── Tables (scrollable on mobile) ── */
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: var(--space-md) 0;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    main table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: var(--space-md) 0;
+      font-size: 0.85rem;
+    }
+
+    main th {
+      text-align: left;
+      padding: var(--space-sm) 0.75rem;
+      border-bottom: 2px solid var(--border-warm);
+      color: var(--text);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    main td {
+      padding: var(--space-sm) 0.75rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    main td code {
+      border: none;
+      color: var(--color-code);
+    }
+
+    /* ── CTA button ── */
+
+    .cta {
+      display: inline-block;
+      margin-top: var(--space-sm);
+      padding: 0.5rem 1.25rem;
+      background: var(--accent);
+      color: var(--accent-text);
+      text-decoration: none;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      transition: background 0.2s ease;
+    }
+
+    .cta:hover {
+      background: var(--accent-hover);
+      text-decoration: none;
+      color: var(--accent-text);
+    }
+
+    /* ── Section divider (used in markdown as <hr>) ── */
+
+    main hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: var(--space-2xl) 0;
+    }
+
+    /* ── Footer ── */
+
     footer {
-      padding: 2rem 1.5rem;
+      padding: var(--space-xl) var(--space-lg);
       text-align: center;
       color: var(--text-dim);
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       border-top: 1px solid var(--border);
     }
+
     footer a { color: var(--accent); text-decoration: none; }
     footer a:hover { text-decoration: underline; }
+
+    /* ── Responsive ── */
+
+    @media (max-width: 640px) {
+      .site-header .container {
+        flex-wrap: wrap;
+      }
+
+      .site-nav {
+        width: 100%;
+        margin-left: 0;
+        padding-top: var(--space-sm);
+        border-top: 1px solid var(--border);
+        gap: var(--space-md);
+      }
+
+      .banner { max-height: 140px; }
+
+      .site-header .tagline { display: none; }
+
+      main .features {
+        grid-template-columns: 1fr;
+      }
+
+      .download-card .platforms {
+        flex-direction: column;
+      }
+
+      .download-card .platforms a {
+        text-align: center;
+      }
+    }
+
+    /* ── Reduced motion ── */
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>
-  <img src="{{ site.baseurl }}/banner.png" alt="" class="banner" width="1200" height="220">
+  {% if page.url == "/" or page.url == "/index.html" %}
+  <img src="{{ site.baseurl }}/banner.png" alt="Hibiki bard robot playing music by a campfire" class="banner" width="1200" height="220">
+  {% endif %}
+
   <header class="site-header">
     <div class="container">
-      <img src="{{ site.baseurl }}/logo.png" alt="" class="logo" width="48" height="48">
-      <div>
-        <h1>Hibiki</h1>
-        <p class="tagline">{{ site.description }}</p>
-      </div>
+      <a href="{{ site.baseurl }}/" class="header-brand">
+        <img src="{{ site.baseurl }}/logo.png" alt="" class="logo" width="44" height="44">
+        <div>
+          <h1>Hibiki</h1>
+          <p class="tagline">{{ site.description }}</p>
+        </div>
+      </a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="{{ site.baseurl }}/"{% if page.url == "/" or page.url == "/index.html" %} aria-current="page"{% endif %}>Home</a>
+        <a href="{{ site.baseurl }}/scene-sharing"{% if page.url == "/scene-sharing" or page.url == "/scene-sharing.html" %} aria-current="page"{% endif %}>Scenes</a>
+        <a href="https://github.com/PhyberApex/hibiki">GitHub</a>
+      </nav>
     </div>
   </header>
 
@@ -208,7 +535,7 @@
 
   <footer>
     <div class="container">
-      <p>Hibiki — MIT. <a href="https://github.com/phyberapex/hibiki">Source</a></p>
+      <p>Hibiki — MIT. <a href="https://github.com/PhyberApex/hibiki">Source on GitHub</a></p>
     </div>
   </footer>
 </body>

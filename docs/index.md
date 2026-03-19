@@ -9,6 +9,20 @@ title: Home
 
 Everything is controlled from the **Electron desktop app**: join/leave voice channels, build scenes (soundboards), stream browser audio, manage your sound library, and adjust volume — all without any Discord slash or prefix commands.
 
+## Download
+
+Pre-built binaries for macOS, Windows, and Linux are available on the GitHub Releases page.
+
+<div class="download-card">
+<p>Get the latest version of Hibiki for your platform:</p>
+<div class="platforms">
+<a href="https://github.com/PhyberApex/hibiki/releases/latest">Download latest release</a>
+<a href="https://github.com/PhyberApex/hibiki/releases" class="secondary">All releases</a>
+</div>
+</div>
+
+> **macOS note:** The app is not code-signed. Remove the quarantine flag after downloading: `xattr -cr /Applications/Hibiki.app`
+
 ## Features
 
 <div class="features">
@@ -29,7 +43,6 @@ You need a Discord application and bot token before running Hibiki. Follow these
 1. **Create an application and bot** — Go to [Discord Developer Portal](https://discord.com/developers/applications) → **New Application**. Name it (e.g. Hibiki) and create. In the sidebar, open **Bot** → **Add Bot**. Under **Token**, click **Reset Token** (or View Token), then copy it. Keep it secret; set it in the app **Settings** or as `DISCORD_TOKEN` in `.env`.
 2. **Invite the bot to your server** — Open **OAuth2** → **URL Generator**. Under **Scopes** choose **bot**. Under **Bot Permissions** select: **View Channels**, **Connect**, **Speak**, **Move Members**. Copy the generated URL, open it in a browser, pick your server, and authorize. The bot will show up in your server (offline until Hibiki is running).
 3. **(Optional) Environment variables** — For development, copy the sample env and set the token:
-
 {: .steps}
 
 ```bash
@@ -37,18 +50,12 @@ cp .env.example .env
 # Edit .env and set DISCORD_TOKEN=your_bot_token
 ```
 
-## Download
-
-Pre-built binaries for **macOS**, **Windows**, and **Linux** are available on the [Releases](https://github.com/PhyberApex/hibiki/releases) page.
-
-> **macOS note:** The app is not code-signed. Remove the quarantine flag after downloading: `xattr -cr /Applications/Hibiki.app`
-
 ## Run from source
 
-**Requirements:** Node.js 20 or 22, pnpm (`corepack enable`). No ffmpeg required.
+**Requirements:** Node.js 24+, pnpm (`corepack enable`). No ffmpeg required.
 
 ```bash
-git clone https://github.com/phyberapex/hibiki.git
+git clone https://github.com/PhyberApex/hibiki.git
 cd hibiki
 corepack enable && pnpm install
 cp .env.example .env   # optional: set DISCORD_TOKEN (or set in Settings after starting)
@@ -57,8 +64,3 @@ pnpm dev
 
 This builds everything and launches the Electron app. Set the Discord token in **Settings** if you haven't set `DISCORD_TOKEN`, then use the sidebar to join a voice channel and start playing.
 
-[View on GitHub](https://github.com/phyberapex/hibiki){: .cta}
-
-## Known issues
-
-- **Playback crackling at start** — The first second or so of a track can sometimes crackle or pop. This is a known limitation of the current audio pipeline and may be improved in a future release.
