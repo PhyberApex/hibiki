@@ -19,7 +19,7 @@ importers:
         version: 0.19.2(@discordjs/opus@0.10.0(encoding@0.1.13))(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(opusscript@0.1.1)
       '@noble/ciphers':
         specifier: ^2.1.1
-        version: 2.1.1
+        version: 2.2.0
       '@snazzah/davey':
         specifier: ^0.1.10
         version: 0.1.11(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)
@@ -1159,8 +1159,8 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
-  '@noble/ciphers@2.1.1':
-    resolution: {integrity: sha512-bysYuiVfhxNJuldNXlFEitTVdNnYUc+XNJZd7Qm2a5j1vZHgY+fazadNFWFaMK/2vye0JVlxV3gHmC0WDfAOQw==}
+  '@noble/ciphers@2.2.0':
+    resolution: {integrity: sha512-Z6pjIZ/8IJcCGzb2S/0Px5J81yij85xASuk1teLNeg75bfT07MV3a/O2Mtn1I2se43k3lkVEcFaR10N4cgQcZA==}
     engines: {node: '>= 20.19.0'}
 
   '@nodelib/fs.scandir@2.1.5':
@@ -7166,7 +7166,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.1
     optional: true
 
-  '@noble/ciphers@2.1.1': {}
+  '@noble/ciphers@2.2.0': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
