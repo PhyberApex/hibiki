@@ -2,7 +2,7 @@
   "name": "hibiki",
   "version": "1.2.0",
   "private": true,
-  "packageManager": "pnpm@10.33.2",
+  "packageManager": "pnpm@10.33.3",
   "description": "Hibiki (響) – Echoes of Adventure. Your private bard bot for Discord.",
   "author": "PhyberApex",
   "license": "MIT",
