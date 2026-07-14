@@ -110,7 +110,7 @@ importers:
         version: 0.9.1(typescript@5.9.3)(vue@3.5.39(typescript@5.9.3))
       electron:
         specifier: ^41.0.0
-        version: 41.10.1
+        version: 41.10.2
       eslint:
         specifier: ^10.0.0
         version: 10.7.0(jiti@2.7.0)
@@ -2739,8 +2739,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@41.10.1:
-    resolution: {integrity: sha512-8BGbTyMWNCXZ2nErXqchO31CJsHlzD5joOiWbNerBi1EnGLXkiMEF3yUUN+T16duz3XYwLTcxOq38MMcWf0sQA==}
+  electron@41.10.2:
+    resolution: {integrity: sha512-vzSetbn05LPfg0gW0p9txpqmkkFyTXzdSHvKIXbtmsK362hkgUQJu+x19GSSS9v/VXeFi5UJI5TYJ1a+Os3CpA==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -8970,7 +8970,7 @@ snapshots:
       - supports-color
     optional: true
 
-  electron@41.10.1:
+  electron@41.10.2:
     dependencies:
       '@electron-internal/extract-zip': 1.0.4
       '@electron/get': 5.0.0
