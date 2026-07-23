@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.1](https://github.com/PhyberApex/hibiki/compare/v1.2.0...v1.2.1) (2026-07-23)
+
+
+### Bug Fixes
+
+* **deps:** update dependency adm-zip to ^0.6.0 ([#286](https://github.com/PhyberApex/hibiki/issues/286)) ([b5f6d9e](https://github.com/PhyberApex/hibiki/commit/b5f6d9e26b4f3b798877a9cd05272b7fe7bb3bdf))
+* **deps:** update dependency pinia to v4 ([#290](https://github.com/PhyberApex/hibiki/issues/290)) ([078643c](https://github.com/PhyberApex/hibiki/commit/078643c3234e0bdfe47d628221379211b76434bd))
+
 ## [1.2.0](https://github.com/PhyberApex/hibiki/compare/v1.1.0...v1.2.0) (2026-03-19)
 
 
