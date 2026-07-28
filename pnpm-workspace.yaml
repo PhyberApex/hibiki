@@ -1,0 +1,6 @@
+allowBuilds:
+  '@discordjs/opus': true
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  unrs-resolver: true
