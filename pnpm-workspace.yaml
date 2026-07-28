@@ -1,3 +1,15 @@
+nodeLinker: hoisted
+shamefullyHoist: true
+shellEmulator: true
+trustPolicy: no-downgrade
+# Old, pre-provenance versions pulled in transitively by unmaintained tooling deps
+# (electron-installer-dmg -> appdmg -> execa@1 -> cross-spawn@6; babel 7.x via
+# vite-plugin-vue-devtools; @electron-forge/cli's pinned @inquirer/* -> @types/node).
+# No upstream release avoids these; verified not exploitable, dev-only tooling.
+trustPolicyExclude:
+  - semver@5.7.2
+  - semver@6.3.1
+  - undici-types@6.21.0
 allowBuilds:
   '@discordjs/opus': true
   '@snazzah/davey': true
