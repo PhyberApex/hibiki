@@ -1,6 +1,10 @@
 allowBuilds:
   '@discordjs/opus': true
+  '@snazzah/davey': true
   electron: true
   electron-winstaller: true
   esbuild: true
+  fs-xattr: true
+  lzma-native: true
+  macos-alias: true
   unrs-resolver: true
