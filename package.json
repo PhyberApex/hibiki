@@ -87,18 +87,5 @@
     "vite-plugin-vue-devtools": "^8.0.5",
     "vitest": "^4.0.0",
     "vue-tsc": "^3.2.4"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@discordjs/opus",
-      "@snazzah/davey",
-      "electron",
-      "electron-winstaller",
-      "esbuild",
-      "fs-xattr",
-      "lzma-native",
-      "macos-alias",
-      "unrs-resolver"
-    ]
   }
 }
