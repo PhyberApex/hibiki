@@ -20,3 +20,12 @@ allowBuilds:
   lzma-native: true
   macos-alias: true
   unrs-resolver: true
+# @electron/rebuild@3.7.0 (via @electron-forge/cli -> @electron-forge/core-utils)
+# pins @electron/node-gyp to a git tarball instead of a registry range, which pnpm
+# treats as an exotic subdependency and refuses to re-resolve. @electron/rebuild@4.x
+# fixes this upstream by switching to registry node-gyp, but core-utils/cli only pick
+# up rebuild@^4.0.1 starting in the 8.0.0-alpha line (no stable release yet as of
+# electron-forge/cli@7.11.2). Force resolution to the equivalent registry-published
+# version so it stops being exotic; revisit once forge/cli ships stable on rebuild@4.
+overrides:
+  '@electron/node-gyp': npm:@electron/node-gyp@10.2.0-electron.2
