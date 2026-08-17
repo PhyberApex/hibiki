@@ -241,6 +241,20 @@ The project is transitioning from a Docker-based monorepo to an Electron app. Se
 - **Build before E2E** — E2E tests launch the built app, not dev mode.
 - **Audio streaming is chunked IPC** — High-volume data; use the existing `audio:chunk` pattern, not single IPC calls.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues (PhyberApex/hibiki), managed via the `gh` CLI. See `agent-docs/issue-tracker.md`.
+
+### Triage labels
+
+Default canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), used as-is. See `agent-docs/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — `CONTEXT.md` + `agent-docs/adr/` at the repo root (neither exists yet). See `agent-docs/domain.md`.
+
 ## References
 
 - **README.md** — User-facing setup, download, quick start
