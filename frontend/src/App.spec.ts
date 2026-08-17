@@ -3,8 +3,14 @@ import { createPinia } from 'pinia'
 import { describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import App from './App.vue'
+import { usePlayerStore } from './stores/player'
 import AboutView from './views/AboutView.vue'
 import MediaManagementView from './views/MediaManagementView.vue'
+
+vi.mock('@/api/config', () => ({
+  fetchAccessibilitySettings: vi.fn().mockResolvedValue({ luminancePulses: true, reduceMotion: null }),
+  updateAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
+}))
 
 vi.mock('@/api/player', () => ({
   fetchPlayerState: vi.fn().mockResolvedValue([]),
@@ -190,5 +196,117 @@ describe('app', () => {
     })
     await flushPromises()
     expect(wrapper.find('.bot-status').text()).toContain('Disconnected')
+  })
+
+  it('loads accessibility settings on mount', async () => {
+    const { fetchAccessibilitySettings } = await import('@/api/config')
+    vi.mocked(fetchAccessibilitySettings).mockClear()
+    await router.push('/scenes')
+    await router.isReady()
+    mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    expect(fetchAccessibilitySettings).toHaveBeenCalled()
+  })
+
+  it('pulses the bot status sharply while disconnected', async () => {
+    const { fetchBotStatus } = await import('@/api/player')
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: false })
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    const status = wrapper.find('.bot-status')
+    expect(status.classes()).toContain('pulse')
+    expect(status.classes()).toContain('pulse-alert')
+    expect(status.classes()).not.toContain('pulse-steady')
+  })
+
+  it('shows a steady glow on the bot status while connected', async () => {
+    const { fetchBotStatus } = await import('@/api/player')
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    const status = wrapper.find('.bot-status')
+    expect(status.classes()).toContain('pulse-steady')
+    expect(status.classes()).not.toContain('pulse-alert')
+  })
+
+  it('pulses the bot status at a busy rate while reconnecting', async () => {
+    const { fetchBotStatus, reconnectBot } = await import('@/api/player')
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: false })
+    let releaseReconnect: () => void = () => {}
+    vi.mocked(reconnectBot).mockReturnValue(new Promise<void>((resolve) => {
+      releaseReconnect = resolve
+    }))
+    await router.push('/scenes')
+    await router.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+    await flushPromises()
+    const player = usePlayerStore(pinia)
+    const reconnecting = player.doReconnect()
+    await flushPromises()
+    expect(wrapper.find('.bot-status').classes()).toContain('pulse-busy')
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
+    releaseReconnect()
+    await reconnecting
+    await flushPromises()
+    expect(wrapper.find('.bot-status').classes()).toContain('pulse-steady')
+  })
+
+  it('glows the connected channel dot and pulses a channel while joining', async () => {
+    const { fetchPlayerState, fetchBotStatus, fetchGuildDirectory, joinChannel } = await import('@/api/player')
+    vi.mocked(fetchPlayerState).mockResolvedValue([
+      { guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const },
+    ])
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
+    vi.mocked(fetchGuildDirectory).mockResolvedValue([
+      {
+        guildId: 'g1',
+        guildName: 'Test Guild',
+        iconUrl: null,
+        channels: [{ id: 'ch1', name: 'General' }, { id: 'ch2', name: 'Tavern' }],
+      },
+    ])
+    let releaseJoin: () => void = () => {}
+    vi.mocked(joinChannel).mockReturnValue(new Promise<void>((resolve) => {
+      releaseJoin = resolve
+    }))
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    const dots = wrapper.findAll('.channel-dot')
+    expect(dots[0]!.classes()).toContain('pulse-steady')
+    expect(dots[1]!.classes()).not.toContain('pulse')
+
+    await wrapper.findAll('.channel-item')[1]!.trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('.channel-dot')[1]!.classes()).toContain('pulse-busy')
+    releaseJoin()
+    await flushPromises()
+    expect(wrapper.findAll('.channel-dot')[1]!.classes()).not.toContain('pulse-busy')
   })
 })

@@ -75,16 +75,30 @@ input {
   outline-offset: 2px;
 }
 
-/* Respect reduced-motion preference */
+/*
+ * Respect reduced-motion preference. The Settings "Reduce motion" toggle
+ * (stores/accessibility.ts) layers on top via root classes: `reduce-motion`
+ * applies the same reset regardless of the OS, `allow-motion` marks an
+ * explicit opt-out that lets the OS preference be overridden.
+ */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  :root:not(.allow-motion) *,
+  :root:not(.allow-motion) *::before,
+  :root:not(.allow-motion) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
 
 /* ── Shared button styles ── */

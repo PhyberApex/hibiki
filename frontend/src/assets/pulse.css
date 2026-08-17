@@ -1,0 +1,75 @@
+/*
+ * Pulse layer — status indicators glow in rhythm so that rate and sharpness
+ * carry meaning alongside color:
+ *
+ *   pulse-steady   idle / connected       static soft glow
+ *   pulse-breathe  ambience looping       slow, soft breathing
+ *   pulse-busy     connecting / joining   medium, even
+ *   pulse-alert    error / disconnected   fast, sharp attack
+ *   pulse-flash    one-shot effect fired  single bright burst
+ *
+ * Set --pulse-color on the element to tint the glow. The `pulses-off` and
+ * `reduce-motion` root classes (see stores/accessibility.ts) switch the layer
+ * off, leaving indicators in their plain color-only appearance.
+ */
+
+.pulse {
+  --pulse-color: currentColor;
+  --pulse-spread: 8px;
+  --pulse-glow: color-mix(in srgb, var(--pulse-color) 55%, transparent);
+  --pulse-glow-soft: color-mix(in srgb, var(--pulse-color) 28%, transparent);
+}
+
+.pulse-steady {
+  box-shadow: 0 0 var(--pulse-spread) 0 var(--pulse-glow-soft);
+}
+
+.pulse-breathe {
+  animation: pulse-glow 4s ease-in-out infinite;
+}
+
+.pulse-busy {
+  animation: pulse-glow 1.4s ease-in-out infinite;
+}
+
+.pulse-alert {
+  animation: pulse-sharp 0.9s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+}
+
+.pulse-flash {
+  animation: pulse-flash 0.5s ease-out 1 both;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 var(--pulse-spread) calc(var(--pulse-spread) / 4) var(--pulse-glow);
+  }
+}
+
+@keyframes pulse-sharp {
+  0% {
+    box-shadow: 0 0 var(--pulse-spread) calc(var(--pulse-spread) / 2) var(--pulse-glow);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes pulse-flash {
+  0% {
+    box-shadow: 0 0 calc(var(--pulse-spread) * 2) calc(var(--pulse-spread) / 2) var(--pulse-color);
+    filter: brightness(1.5);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    filter: brightness(1);
+  }
+}
+
+.pulses-off .pulse {
+  animation: none;
+  box-shadow: none;
+}

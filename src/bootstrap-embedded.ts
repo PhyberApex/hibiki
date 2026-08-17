@@ -1,9 +1,11 @@
 import type { VoiceBasedChannel } from 'discord.js'
+import type { AccessibilitySettings } from './config/accessibility-settings'
 import type { SoundCategory } from './sound/sound.types'
 import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { generateDependencyReport } from '@discordjs/voice'
 import { getConfig } from './config'
+import { normalizeAccessibilitySettings, parseAccessibilitySettings } from './config/accessibility-settings'
 import { createDiscordClient } from './discord/discord-client'
 import { createAppConfig } from './persistence'
 import { createPlayer } from './player/player'
@@ -62,6 +64,8 @@ export interface EmbeddedApi {
     setStoragePath: (path: string) => Promise<void>
     getBookmarks: () => Promise<{ name: string, url: string, favicon?: string }[]>
     setBookmarks: (bookmarks: { name: string, url: string, favicon?: string }[]) => Promise<void>
+    getAccessibility: () => Promise<AccessibilitySettings>
+    setAccessibility: (settings: AccessibilitySettings) => Promise<void>
   }
   sounds: {
     listMusic: () => ReturnType<ReturnType<typeof createSoundLibrary>['list']>
@@ -175,6 +179,10 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
       },
       setBookmarks: async (bookmarks: { name: string, url: string, favicon?: string }[]) => {
         await appConfig.set('bookmarks', JSON.stringify(bookmarks))
+      },
+      getAccessibility: async () => parseAccessibilitySettings(await appConfig.get('accessibility')),
+      setAccessibility: async (settings) => {
+        await appConfig.set('accessibility', JSON.stringify(normalizeAccessibilitySettings(settings)))
       },
     },
     sounds: {

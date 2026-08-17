@@ -7,9 +7,11 @@ import {
   updateDiscordToken,
   updateStoragePath,
 } from '@/api/config'
+import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
 
 const player = usePlayerStore()
+const accessibility = useAccessibilityStore()
 const discordConfig = ref<{ tokenConfigured: boolean } | null>(null)
 const tokenInput = ref('')
 const saving = ref(false)
@@ -18,6 +20,8 @@ const message = ref<{ type: 'success' | 'error', text: string } | null>(null)
 const storagePath = ref<string | null>(null)
 const savingStorage = ref(false)
 const storageMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+
+const accessibilityMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
 async function load() {
   try {
@@ -102,6 +106,30 @@ async function clearStoragePath() {
   finally {
     savingStorage.value = false
   }
+}
+
+async function persistAccessibility(update: () => Promise<void>) {
+  accessibilityMessage.value = null
+  try {
+    await update()
+  }
+  catch (e) {
+    accessibilityMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not save accessibility settings.' }
+  }
+}
+
+function onLuminancePulsesChange(event: Event) {
+  const enabled = (event.target as HTMLInputElement).checked
+  persistAccessibility(() => accessibility.setLuminancePulses(enabled))
+}
+
+function onReduceMotionChange(event: Event) {
+  const enabled = (event.target as HTMLInputElement).checked
+  persistAccessibility(() => accessibility.setReduceMotion(enabled))
+}
+
+function useSystemMotion() {
+  persistAccessibility(() => accessibility.setReduceMotion(null))
 }
 
 onMounted(load)
@@ -230,6 +258,65 @@ onMounted(load)
         {{ storageMessage.text }}
       </p>
     </section>
+
+    <hr class="divider">
+
+    <section class="section">
+      <div class="section-header">
+        <h2 class="section-title">
+          Accessibility
+        </h2>
+      </div>
+      <p class="section-desc">
+        Status indicators glow in rhythm so you can catch changes from the corner of your eye — a slow breath while ambience loops, a sharp pulse when disconnected, a flash when an effect fires.
+      </p>
+      <div class="toggle-list">
+        <div class="toggle-row">
+          <input
+            id="luminance-pulses"
+            type="checkbox"
+            class="toggle-input"
+            :checked="accessibility.luminancePulses"
+            @change="onLuminancePulsesChange"
+          >
+          <div class="toggle-text">
+            <label for="luminance-pulses" class="toggle-title">Status pulses</label>
+            <span class="toggle-desc">Turn off to show status with color only — no glow or rhythm.</span>
+          </div>
+        </div>
+        <div class="toggle-row">
+          <input
+            id="reduce-motion"
+            type="checkbox"
+            class="toggle-input"
+            :checked="accessibility.reduceMotion"
+            @change="onReduceMotionChange"
+          >
+          <div class="toggle-text">
+            <label for="reduce-motion" class="toggle-title">Reduce motion</label>
+            <span class="toggle-desc">Stops pulses and other animations throughout the app.</span>
+            <span class="toggle-desc motion-source">
+              <template v-if="accessibility.followsSystemMotion">
+                Following your system preference ({{ accessibility.systemReducesMotion ? 'on' : 'off' }}).
+              </template>
+              <template v-else>
+                Overriding your system preference.
+                <button type="button" class="btn-motion-reset" @click="useSystemMotion">
+                  Use system setting
+                </button>
+              </template>
+            </span>
+          </div>
+        </div>
+      </div>
+      <p
+        v-if="accessibilityMessage"
+        class="status-message settings-message"
+        :class="[accessibilityMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
+        {{ accessibilityMessage.text }}
+      </p>
+    </section>
   </div>
 </template>
 
@@ -331,6 +418,68 @@ onMounted(load)
 .input-readonly {
   color: var(--color-text-muted);
   cursor: default;
+}
+
+/* ── Toggles ── */
+
+.toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition);
+}
+
+.toggle-row:hover {
+  border-color: var(--color-border-focus);
+}
+
+.toggle-input {
+  margin: 0.2rem 0 0;
+  accent-color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.toggle-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.toggle-desc {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.btn-motion-reset {
+  padding: 0;
+  font-size: inherit;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-motion-reset:hover {
+  text-decoration: underline;
 }
 
 /* ── Buttons ── */

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
 
 declare const __APP_VERSION__: string
@@ -8,6 +9,7 @@ const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0
 
 const route = useRoute()
 const player = usePlayerStore()
+const accessibility = useAccessibilityStore()
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const tabs = [
@@ -41,6 +43,7 @@ function startPollingWhenDisconnected() {
 }
 
 onMounted(() => {
+  accessibility.load()
   player.loadState().then(() => {
     if (player.botStatus?.ready)
       player.loadDirectory()
@@ -60,6 +63,21 @@ const connectedGuild = computed(() =>
   player.directory.find(g => g.guildId === player.connectedGuildId) ?? null,
 )
 const isWelcome = computed(() => route.path === '/')
+
+const botStatusPulse = computed(() => {
+  if (player.reconnecting)
+    return 'pulse-busy'
+  return player.botStatus?.ready ? 'pulse-steady' : 'pulse-alert'
+})
+
+function channelDotPulse(guildId: string, channelId: string): string[] {
+  const isSelected = player.guildId === guildId && player.channelId === channelId
+  if (player.channelJoinBusy && isSelected)
+    return ['pulse', 'pulse-busy']
+  if (player.connectedGuildId === guildId && player.channelId === channelId)
+    return ['pulse', 'pulse-steady']
+  return []
+}
 </script>
 
 <template>
@@ -104,7 +122,11 @@ const isWelcome = computed(() => route.path === '/')
               :title="ch.name"
               @click="player.selectChannel(guild.guildId, ch.id)"
             >
-              <span class="channel-dot" aria-hidden="true" />
+              <span
+                class="channel-dot"
+                :class="channelDotPulse(guild.guildId, ch.id)"
+                aria-hidden="true"
+              />
               {{ ch.name }}
             </button>
           </div>
@@ -145,8 +167,8 @@ const isWelcome = computed(() => route.path === '/')
 
       <div class="sidebar-status">
         <span
-          class="bot-status"
-          :class="[player.botStatus?.ready ? 'bot-status-connected' : 'bot-status-disconnected']"
+          class="bot-status pulse"
+          :class="[player.botStatus?.ready ? 'bot-status-connected' : 'bot-status-disconnected', botStatusPulse]"
           :title="player.botStatus?.ready ? `Connected as ${player.botStatus?.userTag ?? 'bot'}` : 'Discord bot not connected'"
         >
           <span class="bot-status-dot" aria-hidden="true" />
@@ -324,6 +346,11 @@ const isWelcome = computed(() => route.path === '/')
   opacity: 1;
 }
 
+.channel-dot.pulse {
+  --pulse-color: var(--color-accent);
+  --pulse-spread: 6px;
+}
+
 .channel-dot {
   width: 0.35rem;
   height: 0.35rem;
@@ -462,6 +489,7 @@ const isWelcome = computed(() => route.path === '/')
 }
 
 .bot-status-connected {
+  --pulse-color: var(--color-live);
   background: var(--color-success-muted);
   color: var(--color-live);
   border-color: var(--color-live);
@@ -479,6 +507,7 @@ const isWelcome = computed(() => route.path === '/')
 }
 
 .bot-status-disconnected {
+  --pulse-color: var(--color-error);
   background: var(--color-error-muted);
   color: var(--color-error);
   border-color: var(--color-error);

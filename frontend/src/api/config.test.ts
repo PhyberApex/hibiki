@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  fetchAccessibilitySettings,
   fetchDiscordConfig,
   fetchStoragePath,
   listBookmarks,
@@ -8,6 +9,7 @@ import {
   saveFileDialog,
   selectFolder,
   selectStorageFolder,
+  updateAccessibilitySettings,
   updateDiscordToken,
   updateStoragePath,
 } from './config'
@@ -132,6 +134,29 @@ describe('config API', () => {
       domain: 'config',
       method: 'setBookmarks',
       args: [bookmarks],
+    })
+  })
+
+  it('fetchAccessibilitySettings uses apiCall', async () => {
+    const settings = { luminancePulses: false, reduceMotion: true }
+    mockInvoke.mockResolvedValue(settings)
+    const result = await fetchAccessibilitySettings()
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'getAccessibility',
+      args: [],
+    })
+    expect(result).toEqual(settings)
+  })
+
+  it('updateAccessibilitySettings uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    const settings = { luminancePulses: true, reduceMotion: null }
+    await updateAccessibilitySettings(settings)
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'setAccessibility',
+      args: [settings],
     })
   })
 

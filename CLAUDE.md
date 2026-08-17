@@ -6,11 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Hibiki (響)** is a desktop audio companion for Discord, built as an Electron app. It plays music, ambience, and sound effects in Discord voice channels from a desktop UI. Originally designed for Dungeons & Dragons (background music, ambient soundscapes, one-shot effects) but works for any server.
 
-**Current state:** The project is mid-migration from a monorepo (with separate `apps/bot` and `apps/web`) to a unified Electron app. The old structure has been deleted (see git status). The new `app/` package is the single application.
+**Current state:** The project has migrated from a monorepo (separate `apps/bot` and `apps/web`) to a unified Electron app. The repo root is the single application package (`electron/`, `src/`, `frontend/`), with `e2e/` as a separate workspace for Playwright tests.
 
 ## Common Commands
 
-**IMPORTANT:** Always run `nvm use` before executing any pnpm commands to activate the correct Node.js version (24.14.0).
+**IMPORTANT:** Always run `nvm use` before executing any pnpm commands to activate the Node.js version pinned in `.nvmrc`.
 
 All commands run from the **repo root**:
 
@@ -44,17 +44,18 @@ pnpm package            # Create unpacked app only (for testing)
 
 ```bash
 # Backend tests (Jest)
-cd app && pnpm run test:backend           # All backend tests
-cd app && pnpm run test:watch             # Watch mode
+pnpm test:backend                         # All backend tests
+pnpm test:watch                           # Watch mode
+npx jest --config jest.config.js <file>   # Single test file
 
 # Frontend tests (Vitest)
-cd app && pnpm run test:frontend          # All frontend tests
-cd app/frontend && vitest run <file>      # Single test file
+pnpm test:frontend                        # All frontend tests
+cd frontend && npx vitest run <file>      # Single test file
 
 # Coverage
-pnpm run test:coverage                    # Both backend + frontend
-cd app && pnpm run test:coverage:backend  # Backend only
-cd app && pnpm run test:coverage:frontend # Frontend only
+pnpm test:coverage                        # Both backend + frontend
+pnpm test:coverage:backend                # Backend only
+pnpm test:coverage:frontend               # Frontend only
 ```
 
 ## Architecture
@@ -62,7 +63,7 @@ cd app && pnpm run test:coverage:frontend # Frontend only
 ### Electron Structure
 
 ```text
-app/
+.                      # Repo root = the application package
 ├── electron/          # Electron main process
 │   ├── main.js        # Entry point: boots backend, creates window, IPC handlers
 │   ├── preload.js     # Bridge: exposes safe IPC to renderer
@@ -81,8 +82,11 @@ app/
 │   └── src/
 │       ├── api/       # IPC wrappers (typed frontend API calling backend)
 │       ├── audio/     # Web Audio capture (AudioWorklet for browser streaming)
-│       ├── stores/    # Pinia stores (player state, guild directory)
+│       ├── composables/ # Reusable Vue composition helpers
+│       ├── stores/    # Pinia stores (player state, guild directory, accessibility)
 │       └── views/     # Pages (Welcome, Scenes, Browser, Media, Settings)
+├── e2e/               # Playwright E2E workspace (separate package)
+├── registry/          # Community scene registry (index + schema)
 ├── web-dist/          # Built frontend (Vite output)
 └── dist/              # Compiled backend (tsc output)
 ```
@@ -182,16 +186,16 @@ The scene is a **template**, not a runtime object. Playback state lives in `Guil
 
 ### Backend (Jest)
 
-- Config: `app/jest.config.js`
-- Test files: `app/src/**/*.spec.ts`
-- Run: `cd app && pnpm run test:backend`
-- Watch: `cd app && pnpm run test:watch`
+- Config: `jest.config.js`
+- Test files: `src/**/*.spec.ts`
+- Run: `pnpm test:backend`
+- Watch: `pnpm test:watch`
 
 ### Frontend (Vitest)
 
-- Config: `app/frontend/vitest.config.ts`
-- Test files: `app/frontend/src/**/*.spec.ts`
-- Run: `cd app && pnpm run test:frontend`
+- Config: `frontend/vitest.config.ts`
+- Test files: `frontend/src/**/*.{spec,test}.ts`
+- Run: `pnpm test:frontend`
 
 ### E2E (Playwright)
 
@@ -203,14 +207,14 @@ The scene is a **template**, not a runtime object. Playback state lives in `Guil
 
 ## Migration Context
 
-The project is transitioning from a Docker-based monorepo to an Electron app. See `docs/electron-migration-plan.md` for the full migration plan (phases 1-5). **Current status:** Phases 1-3 mostly complete (permissions and slash commands removed, repo flattened to `app/` + `e2e/`, Electron shell added).
+The project is transitioning from a Docker-based monorepo to an Electron app. See `docs/electron-migration-plan.md` for the full migration plan (phases 1-5). **Current status:** Phases 1-3 mostly complete (permissions and slash commands removed, repo flattened to a single root package + `e2e/`, Electron shell added).
 
 **What was removed:**
 - NestJS backend (replaced with plain TypeScript services in `src/`)
 - HTTP API (replaced with IPC)
 - Docker (Dockerfile, docker-compose)
 - Permission system and slash commands (app-only control now)
-- Monorepo `apps/bot` and `apps/web` (merged into `app/`)
+- Monorepo `apps/bot` and `apps/web` (merged into the root package)
 
 **Key differences from old structure:**
 - No HTTP server; all communication is IPC.
@@ -258,7 +262,7 @@ Single-context layout — `CONTEXT.md` + `agent-docs/adr/` at the repo root (nei
 ## References
 
 - **README.md** — User-facing setup, download, quick start
-- **app/README.md** — Architecture details, local dev instructions
+- **frontend/README.md** — Renderer (Vue) architecture, local dev instructions
 - **CONTRIBUTING.md** — Setup, lint/test requirements, PR workflow
 - **docs/electron-migration-plan.md** — Full migration roadmap
 - **e2e/README.md** — E2E test setup, Electron + Playwright compatibility
