@@ -8,6 +8,12 @@ export interface StorageConfig {
   path: string | null
 }
 
+export interface AccessibilitySettings {
+  luminancePulses: boolean
+  /** `null` follows the OS `prefers-reduced-motion` setting. */
+  reduceMotion: boolean | null
+}
+
 function requireElectron(): void {
   if (!useElectronApi())
     throw new Error('Hibiki runs as an Electron app. Open it via pnpm run electron.')
@@ -31,6 +37,16 @@ export function fetchStoragePath(): Promise<StorageConfig> {
 export function updateStoragePath(path: string): Promise<void> {
   requireElectron()
   return apiCall<void>('config', 'setStoragePath', [path])
+}
+
+export function fetchAccessibilitySettings(): Promise<AccessibilitySettings> {
+  requireElectron()
+  return apiCall<AccessibilitySettings>('config', 'getAccessibility', [])
+}
+
+export function updateAccessibilitySettings(settings: AccessibilitySettings): Promise<void> {
+  requireElectron()
+  return apiCall<void>('config', 'setAccessibility', [settings])
 }
 
 export async function selectStorageFolder(): Promise<string | null> {

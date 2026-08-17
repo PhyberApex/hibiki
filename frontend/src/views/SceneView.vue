@@ -20,6 +20,7 @@ import {
 } from '@/audio/browser-audio-capture'
 import RegistryBrowser from '@/components/RegistryBrowser.vue'
 import ResolveSoundDialog from '@/components/ResolveSoundDialog.vue'
+import { useFlashSet } from '@/composables/useFlashSet'
 import { usePlayerStore } from '@/stores/player'
 
 const route = useRoute()
@@ -48,6 +49,10 @@ const effectAudioEl = createAudioEl()
 const ambienceAudioEls = new Map<string, HTMLAudioElement>()
 const captureSessions = new Map<string, CaptureSession>()
 const ambienceTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const playingAmbienceIds = ref(new Set<string>())
+const effectFlash = useFlashSet()
+const sceneTransitionFlash = useFlashSet()
+const SCENE_START_FLASH = 'start'
 
 function createAudioEl(): HTMLAudioElement {
   const el = new Audio()
@@ -198,6 +203,7 @@ function toggleAmbience(item: SceneItem) {
 }
 
 function stopAmbience(soundId: string) {
+  playingAmbienceIds.value.delete(soundId)
   const timer = ambienceTimers.get(soundId)
   if (timer != null) {
     clearTimeout(timer)
@@ -219,6 +225,7 @@ function stopAmbience(soundId: string) {
 }
 
 function stopAmbienceLocal(soundId: string) {
+  playingAmbienceIds.value.delete(soundId)
   const timer = ambienceTimers.get(soundId)
   if (timer != null) {
     clearTimeout(timer)
@@ -272,6 +279,7 @@ async function playAmbience(item: SceneItem) {
     }
 
     await el.play()
+    playingAmbienceIds.value.add(item.soundId)
   }
   catch (e) {
     console.error('[scene] playAmbience failed:', e)
@@ -305,6 +313,7 @@ async function playAmbienceLocal(item: SceneItem) {
       }
     }
     await el.play()
+    playingAmbienceIds.value.add(item.soundId)
   }
   catch (e) {
     console.error('[scene] playAmbienceLocal failed:', e)
@@ -375,6 +384,7 @@ function stopMusicLocal() {
 }
 
 function playEffectLocal(item: SceneItem) {
+  effectFlash.trigger(item.soundId)
   const el = effectAudioEl
   el.src = soundStreamUrl('effects', item.soundId)
   el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
@@ -385,6 +395,7 @@ function playEffectLocal(item: SceneItem) {
 async function playEffect(item: SceneItem) {
   if (!guildId.value || !isJoined.value)
     return
+  effectFlash.trigger(item.soundId)
   try {
     const el = effectAudioEl
     const streamId = `effect-${item.soundId}`
@@ -444,6 +455,7 @@ async function playSceneLocal() {
     return
   stopScene()
   scenePlayingLocal.value = true
+  sceneTransitionFlash.trigger(SCENE_START_FLASH)
   try {
     for (const item of scene.value.ambience.filter(a => a.enabled))
       await playAmbienceLocal(item)
@@ -487,6 +499,7 @@ async function playScene() {
     return
   stopSceneLocal()
   player.scenePlaying = true
+  sceneTransitionFlash.trigger(SCENE_START_FLASH)
   try {
     for (const item of scene.value.ambience.filter(a => a.enabled))
       await playAmbience(item)
@@ -789,7 +802,11 @@ watch(sceneId, (newId, oldId) => {
         {{ exportImportMessage.text }}
       </p>
 
-      <div v-if="scene" class="scene-playback-bar">
+      <div
+        v-if="scene"
+        class="scene-playback-bar"
+        :class="{ 'pulse pulse-flash': sceneTransitionFlash.has(SCENE_START_FLASH) }"
+      >
         <label class="global-volume">
           <span class="volume-icon" aria-hidden="true">🔊</span>
           <input
@@ -861,6 +878,7 @@ watch(sceneId, (newId, oldId) => {
               v-for="item in scene.ambience"
               :key="item.soundId"
               class="sound-card sound-card-ambience"
+              :class="{ 'pulse pulse-breathe': playingAmbienceIds.has(item.soundId) }"
             >
               <div class="sound-card-row">
                 <div class="sound-card-info">
@@ -1066,7 +1084,10 @@ watch(sceneId, (newId, oldId) => {
               v-for="item in scene.effects"
               :key="item.soundId"
               class="effect-card"
-              :class="{ 'effect-card-missing': isSoundMissing('effects', item.soundId) }"
+              :class="{
+                'effect-card-missing': isSoundMissing('effects', item.soundId),
+                'pulse pulse-flash': effectFlash.has(item.soundId),
+              }"
             >
               <button
                 type="button"
@@ -1330,6 +1351,7 @@ watch(sceneId, (newId, oldId) => {
 /* ── Playback bar ── */
 
 .scene-playback-bar {
+  --pulse-color: var(--color-accent);
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -1501,6 +1523,7 @@ watch(sceneId, (newId, oldId) => {
 }
 
 .sound-card-ambience {
+  --pulse-color: var(--color-ambience);
   flex-direction: column;
   align-items: stretch;
   gap: 0.35rem;
@@ -1676,6 +1699,7 @@ watch(sceneId, (newId, oldId) => {
 }
 
 .effect-card {
+  --pulse-color: var(--color-effects);
   position: relative;
   display: flex;
   flex-direction: column;
