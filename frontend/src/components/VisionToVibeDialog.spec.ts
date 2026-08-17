@@ -128,6 +128,14 @@ describe('visionToVibeDialog', () => {
     expect(analyzeImageVibe).not.toHaveBeenCalled()
   })
 
+  it('emits close on Escape', async () => {
+    const wrapper = mountDialog()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('emits close from the close button', async () => {
     const wrapper = mountDialog()
     await wrapper.find('.btn-close').trigger('click')

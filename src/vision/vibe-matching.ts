@@ -5,6 +5,16 @@ export interface VibeMatch {
   score: number
 }
 
+export interface VibeLibrary {
+  music: SoundFile[]
+  ambience: SoundFile[]
+}
+
+export interface VibeMatches {
+  music: VibeMatch[]
+  ambience: VibeMatch[]
+}
+
 export const DEFAULT_MATCH_LIMIT = 5
 
 function normalize(tag: string): string {
@@ -31,4 +41,12 @@ export function matchVibeTags(vibeTags: string[], sounds: SoundFile[], limit = D
     .filter(match => match.score > 0)
     .sort((a, b) => b.score - a.score || b.sound.createdAt.localeCompare(a.sound.createdAt))
     .slice(0, limit)
+}
+
+/** Ranks Music and Ambience independently — a strong match in one category never crowds out the other. */
+export function matchVibeLibrary(vibeTags: string[], library: VibeLibrary, limit = DEFAULT_MATCH_LIMIT): VibeMatches {
+  return {
+    music: matchVibeTags(vibeTags, library.music, limit),
+    ambience: matchVibeTags(vibeTags, library.ambience, limit),
+  }
 }

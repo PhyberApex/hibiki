@@ -1,5 +1,5 @@
 import type { SoundFile } from '../sound/sound.types'
-import { matchVibeTags } from './vibe-matching'
+import { matchVibeLibrary, matchVibeTags } from './vibe-matching'
 
 function sound(id: string, tags: string[], createdAt = '2026-01-01T00:00:00.000Z', category: SoundFile['category'] = 'music'): SoundFile {
   return { id, name: id, filename: `${id}.mp3`, size: 1, category, createdAt, tags }
@@ -63,5 +63,22 @@ describe('matchVibeTags', () => {
   it('counts each vibe tag at most once per sound', () => {
     const sounds = [sound('multi', ['rain', 'rainy', 'raining'])]
     expect(matchVibeTags(['rain'], sounds)[0]!.score).toBe(1)
+  })
+})
+
+describe('matchVibeLibrary', () => {
+  it('scores Music and Ambience independently with their own caps', () => {
+    const music = Array.from({ length: 7 }, (_, i) => sound(`m${i}`, ['rain'], `2026-01-0${i + 1}T00:00:00.000Z`))
+    const ambience = [sound('a-hit', ['rain'], undefined, 'ambience'), sound('a-miss', ['desert'], undefined, 'ambience')]
+    const result = matchVibeLibrary(['rain'], { music, ambience })
+    expect(result.music).toHaveLength(5)
+    expect(result.music.every(m => m.sound.category === 'music')).toBe(true)
+    expect(result.ambience.map(m => m.sound.id)).toEqual(['a-hit'])
+  })
+
+  it('returns empty lists per category when nothing matches there', () => {
+    const result = matchVibeLibrary(['rain'], { music: [], ambience: [sound('a', ['rain'], undefined, 'ambience')] })
+    expect(result.music).toEqual([])
+    expect(result.ambience).toHaveLength(1)
   })
 })

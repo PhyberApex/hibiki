@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { SoundFile } from '@/api/sounds'
 import type { VibeAnalysis, VibeMatch, VibeMatches } from '@/api/vision'
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { openFileDialog } from '@/api/config'
 import { getPathForFile } from '@/api/electron'
@@ -30,13 +30,37 @@ const error = ref<string | null>(null)
 const imageName = ref<string | null>(null)
 const dragOver = ref(false)
 
-const hasTaggedMusic = computed(() => props.musicSounds.some(s => (s.tags?.length ?? 0) > 0))
-const hasTaggedAmbience = computed(() => props.ambienceSounds.some(s => (s.tags?.length ?? 0) > 0))
-
-function isInScene(category: MatchCategory, soundId: string): boolean {
-  const ids = category === 'music' ? props.musicInScene : props.ambienceInScene
-  return ids.includes(soundId)
+interface MatchColumn {
+  category: MatchCategory
+  label: string
+  matches: VibeMatch[]
+  hasTaggedSounds: boolean
+  inScene: string[]
+  noMatchHint: string
 }
+
+function hasAnyTags(sounds: SoundFile[]): boolean {
+  return sounds.some(s => (s.tags?.length ?? 0) > 0)
+}
+
+const columns = computed<MatchColumn[]>(() => [
+  {
+    category: 'music',
+    label: 'Music',
+    matches: matches.value?.music ?? [],
+    hasTaggedSounds: hasAnyTags(props.musicSounds),
+    inScene: props.musicInScene,
+    noMatchHint: 'No Music matched these tags. Try tagging more tracks with moods and settings.',
+  },
+  {
+    category: 'ambience',
+    label: 'Ambience',
+    matches: matches.value?.ambience ?? [],
+    hasTaggedSounds: hasAnyTags(props.ambienceSounds),
+    inScene: props.ambienceInScene,
+    noMatchHint: 'No Ambience matched these tags. Try tagging more loops with moods and settings.',
+  },
+])
 
 function fileNameOf(path: string): string {
   return path.split(/[\\/]/).pop() ?? path
@@ -110,6 +134,14 @@ function reset() {
 function scoreLabel(match: VibeMatch): string {
   return `${match.score} ${match.score === 1 ? 'tag' : 'tags'} in common`
 }
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape')
+    emit('close')
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
@@ -183,12 +215,18 @@ function scoreLabel(match: VibeMatch): string {
           </section>
 
           <div class="match-columns">
-            <section class="match-column match-column-music" data-testid="vibe-music-matches">
+            <section
+              v-for="column in columns"
+              :key="column.category"
+              class="match-column"
+              :class="`match-column-${column.category}`"
+              :data-testid="`vibe-${column.category}-matches`"
+            >
               <h3 class="match-title">
-                Music
+                {{ column.label }}
               </h3>
-              <ul v-if="matches.music.length" class="match-list">
-                <li v-for="match in matches.music" :key="match.sound.id" class="match-item">
+              <ul v-if="column.matches.length" class="match-list">
+                <li v-for="match in column.matches" :key="match.sound.id" class="match-item">
                   <div class="match-info">
                     <span class="match-name" :title="match.sound.name">{{ match.sound.name }}</span>
                     <span class="match-score">{{ scoreLabel(match) }}</span>
@@ -196,52 +234,21 @@ function scoreLabel(match: VibeMatch): string {
                   <button
                     type="button"
                     class="btn-add-match"
-                    :disabled="isInScene('music', match.sound.id)"
-                    @click="emit('add', 'music', match.sound)"
+                    :disabled="column.inScene.includes(match.sound.id)"
+                    @click="emit('add', column.category, match.sound)"
                   >
-                    {{ isInScene('music', match.sound.id) ? '✓ Added' : '+ Add' }}
+                    {{ column.inScene.includes(match.sound.id) ? '✓ Added' : '+ Add' }}
                   </button>
                 </li>
               </ul>
-              <p v-else-if="!hasTaggedMusic" class="match-empty" data-testid="vibe-music-empty">
-                Tag your Music sounds to enable Vision-to-Vibe matching.
+              <p v-else-if="!column.hasTaggedSounds" class="match-empty" :data-testid="`vibe-${column.category}-empty`">
+                Tag your {{ column.label }} sounds to enable Vision-to-Vibe matching.
                 <RouterLink to="/media" class="match-link">
                   Open the sound library
                 </RouterLink>
               </p>
-              <p v-else class="match-empty" data-testid="vibe-music-empty">
-                No Music matched these tags. Try tagging more tracks with moods and settings.
-              </p>
-            </section>
-
-            <section class="match-column match-column-ambience" data-testid="vibe-ambience-matches">
-              <h3 class="match-title">
-                Ambience
-              </h3>
-              <ul v-if="matches.ambience.length" class="match-list">
-                <li v-for="match in matches.ambience" :key="match.sound.id" class="match-item">
-                  <div class="match-info">
-                    <span class="match-name" :title="match.sound.name">{{ match.sound.name }}</span>
-                    <span class="match-score">{{ scoreLabel(match) }}</span>
-                  </div>
-                  <button
-                    type="button"
-                    class="btn-add-match"
-                    :disabled="isInScene('ambience', match.sound.id)"
-                    @click="emit('add', 'ambience', match.sound)"
-                  >
-                    {{ isInScene('ambience', match.sound.id) ? '✓ Added' : '+ Add' }}
-                  </button>
-                </li>
-              </ul>
-              <p v-else-if="!hasTaggedAmbience" class="match-empty" data-testid="vibe-ambience-empty">
-                Tag your Ambience sounds to enable Vision-to-Vibe matching.
-                <RouterLink to="/media" class="match-link">
-                  Open the sound library
-                </RouterLink>
-              </p>
-              <p v-else class="match-empty" data-testid="vibe-ambience-empty">
-                No Ambience matched these tags. Try tagging more loops with moods and settings.
+              <p v-else class="match-empty" :data-testid="`vibe-${column.category}-empty`">
+                {{ column.noMatchHint }}
               </p>
             </section>
           </div>

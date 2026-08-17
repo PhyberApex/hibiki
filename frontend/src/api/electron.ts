@@ -25,7 +25,6 @@ export function openExternal(url: string): void {
     window.hibiki.invoke('shell:openExternal', url)
 }
 
-/** Absolute filesystem path of a dropped/selected File, or null when the bridge can't resolve it. */
 export function getPathForFile(file: File): string | null {
   const resolved = window.hibiki?.getPathForFile?.(file)
   return typeof resolved === 'string' && resolved.length > 0 ? resolved : null
