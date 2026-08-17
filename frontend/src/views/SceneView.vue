@@ -12,7 +12,7 @@ import {
   stopAudioStream,
   stopEffectStream,
 } from '@/api/audio-stream'
-import { openFileDialog, saveFileDialog } from '@/api/config'
+import { fetchVisionConfig, openFileDialog, saveFileDialog } from '@/api/config'
 import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
 import { listAmbience, listEffects, listMusic, soundStreamUrl } from '@/api/sounds'
 import {
@@ -20,6 +20,7 @@ import {
 } from '@/audio/browser-audio-capture'
 import RegistryBrowser from '@/components/RegistryBrowser.vue'
 import ResolveSoundDialog from '@/components/ResolveSoundDialog.vue'
+import VisionToVibeDialog from '@/components/VisionToVibeDialog.vue'
 import { useFlashSet } from '@/composables/useFlashSet'
 import { usePlayerStore } from '@/stores/player'
 
@@ -41,6 +42,8 @@ const createSceneBusy = ref(false)
 const exportBusy = ref(false)
 const importBusy = ref(false)
 const showRegistryBrowser = ref(false)
+const visionAvailable = ref(false)
+const showVisionDialog = ref(false)
 const resolveTarget = ref<{ category: 'ambience' | 'music' | 'effects', item: SceneItem } | null>(null)
 const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
@@ -175,6 +178,16 @@ async function loadScene() {
   }
   catch (err) {
     loadError.value = err instanceof Error ? err.message : 'Couldn\'t load this scene. Try again.'
+  }
+}
+
+async function loadVisionAvailability() {
+  try {
+    const config = await fetchVisionConfig()
+    visionAvailable.value = config.enabled && config.apiKeyConfigured
+  }
+  catch {
+    visionAvailable.value = false
   }
 }
 
@@ -638,12 +651,14 @@ async function onRegistryInstalled(sceneId: string) {
 onMounted(() => {
   loadScenes()
   loadSounds()
+  loadVisionAvailability()
 })
 
 onActivated(() => {
   loadScenes()
   loadSounds()
   loadScene()
+  loadVisionAvailability()
 })
 
 watch(sceneId, (newId, oldId) => {
@@ -775,6 +790,17 @@ watch(sceneId, (newId, oldId) => {
             {{ scene?.name ?? 'Loading…' }}
           </h1>
           <div v-if="scene" class="detail-actions">
+            <button
+              v-if="visionAvailable"
+              type="button"
+              class="btn btn-ghost btn-vision"
+              data-testid="vision-to-vibe-open"
+              title="Drop in an image and get matching Music and Ambience from your tagged library"
+              @click="showVisionDialog = true"
+            >
+              <span class="btn-vision-icon" aria-hidden="true">✦</span>
+              Vision to Vibe
+            </button>
             <button
               type="button"
               class="btn btn-ghost"
@@ -1133,6 +1159,16 @@ watch(sceneId, (newId, oldId) => {
       v-if="showRegistryBrowser"
       @close="showRegistryBrowser = false"
       @installed="onRegistryInstalled"
+    />
+
+    <VisionToVibeDialog
+      v-if="showVisionDialog && scene"
+      :music-sounds="musicSounds"
+      :ambience-sounds="ambienceSounds"
+      :music-in-scene="scene.music.map(m => m.soundId)"
+      :ambience-in-scene="scene.ambience.map(a => a.soundId)"
+      @add="addToScene"
+      @close="showVisionDialog = false"
     />
 
     <ResolveSoundDialog
@@ -1780,6 +1816,23 @@ watch(sceneId, (newId, oldId) => {
 
 .btn-danger:hover {
   color: var(--color-error);
+}
+
+.btn-vision {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-color: var(--color-accent-muted);
+  color: var(--color-accent-hover);
+}
+
+.btn-vision:hover:not(:disabled) {
+  background: var(--color-accent-muted);
+  color: var(--color-accent-hover);
+}
+
+.btn-vision-icon {
+  font-size: 0.85em;
 }
 
 /* ── Narrow ── */

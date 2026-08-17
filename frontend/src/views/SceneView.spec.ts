@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import { fetchVisionConfig } from '@/api/config'
 import SceneView from './SceneView.vue'
 
 vi.mock('@/api/scenes', () => ({
@@ -30,8 +31,14 @@ vi.mock('@/api/audio-stream', () => ({
 }))
 
 vi.mock('@/api/config', () => ({
+  fetchVisionConfig: vi.fn().mockResolvedValue({ apiKeyConfigured: false, enabled: false }),
   openFileDialog: vi.fn().mockResolvedValue(null),
   saveFileDialog: vi.fn().mockResolvedValue(null),
+}))
+
+vi.mock('@/api/vision', () => ({
+  analyzeImageVibe: vi.fn(),
+  matchVibe: vi.fn(),
 }))
 
 vi.mock('@/audio/browser-audio-capture', () => ({
@@ -131,5 +138,46 @@ describe('sceneView pulses', () => {
     await wrapper.find('.btn-stop-scene').trigger('click')
     await flushPromises()
     expect(wrapper.find('.sound-card-ambience').classes()).not.toContain('pulse-breathe')
+  })
+})
+
+describe('sceneView — Vision to Vibe entry point', () => {
+  beforeEach(async () => {
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValue(JSON.parse(JSON.stringify(scene)))
+    vi.mocked(fetchVisionConfig).mockReset()
+  })
+
+  it('is hidden when neither key nor toggle is set', async () => {
+    vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: false, enabled: false })
+    const wrapper = await mountScene()
+    expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(false)
+  })
+
+  it('is hidden when a key is set but the toggle is off', async () => {
+    vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: true, enabled: false })
+    const wrapper = await mountScene()
+    expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(false)
+  })
+
+  it('is hidden when the toggle is on but no key is set', async () => {
+    vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: false, enabled: true })
+    const wrapper = await mountScene()
+    expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(false)
+  })
+
+  it('is shown when both key and toggle are set, and opens the dialog', async () => {
+    vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: true, enabled: true })
+    const wrapper = await mountScene()
+    const button = wrapper.find('[data-testid="vision-to-vibe-open"]')
+    expect(button.exists()).toBe(true)
+    await button.trigger('click')
+    expect(wrapper.find('[role="dialog"][aria-label="Vision to Vibe"]').exists()).toBe(true)
+  })
+
+  it('stays hidden when the vision config cannot be loaded', async () => {
+    vi.mocked(fetchVisionConfig).mockRejectedValue(new Error('offline'))
+    const wrapper = await mountScene()
+    expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(false)
   })
 })

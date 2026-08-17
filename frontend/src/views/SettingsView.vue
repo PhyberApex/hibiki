@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import type { VisionConfig } from '@/api/config'
 import { onMounted, ref } from 'vue'
 import {
   fetchDiscordConfig,
   fetchStoragePath,
+  fetchVisionConfig,
   selectStorageFolder,
   updateDiscordToken,
   updateStoragePath,
+  updateVisionApiKey,
+  updateVisionEnabled,
 } from '@/api/config'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
@@ -23,14 +27,22 @@ const storageMessage = ref<{ type: 'success' | 'error', text: string } | null>(n
 
 const accessibilityMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
+const visionConfig = ref<VisionConfig | null>(null)
+const visionKeyInput = ref('')
+const savingVisionKey = ref(false)
+const savingVisionToggle = ref(false)
+const visionMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+
 async function load() {
   try {
-    const [config, storage] = await Promise.all([
+    const [config, storage, vision] = await Promise.all([
       fetchDiscordConfig(),
       fetchStoragePath().catch(() => ({ path: null })),
+      fetchVisionConfig().catch(() => ({ apiKeyConfigured: false, enabled: false })),
     ])
     discordConfig.value = config
     storagePath.value = storage.path
+    visionConfig.value = vision
   }
   catch (e) {
     message.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t load settings. Try again.' }
@@ -130,6 +142,67 @@ function onReduceMotionChange(event: Event) {
 
 function useSystemMotion() {
   persistAccessibility(() => accessibility.setReduceMotion(null))
+}
+
+async function saveVisionKey() {
+  const apiKey = visionKeyInput.value.trim()
+  if (!apiKey) {
+    visionMessage.value = { type: 'error', text: 'Paste your Anthropic API key in the field first.' }
+    return
+  }
+  savingVisionKey.value = true
+  visionMessage.value = null
+  try {
+    visionConfig.value = await updateVisionApiKey(apiKey)
+    visionKeyInput.value = ''
+    visionMessage.value = { type: 'success', text: 'Key saved. Switch Vision to Vibe on below to start using it.' }
+  }
+  catch (e) {
+    visionMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t save the API key.' }
+  }
+  finally {
+    savingVisionKey.value = false
+  }
+}
+
+async function clearVisionKey() {
+  savingVisionKey.value = true
+  visionMessage.value = null
+  try {
+    visionConfig.value = await updateVisionApiKey('')
+    if (visionConfig.value.apiKeyConfigured) {
+      visionMessage.value = { type: 'success', text: 'Stored key removed. The key from the HIBIKI_VISION_API_KEY environment variable is still in use.' }
+      return
+    }
+    if (visionConfig.value.enabled)
+      visionConfig.value = await updateVisionEnabled(false)
+    visionMessage.value = { type: 'success', text: 'Key removed. Vision to Vibe is off.' }
+  }
+  catch (e) {
+    visionMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t remove the API key.' }
+  }
+  finally {
+    savingVisionKey.value = false
+  }
+}
+
+async function toggleVision(event: Event) {
+  const enabled = (event.target as HTMLInputElement).checked
+  savingVisionToggle.value = true
+  visionMessage.value = null
+  try {
+    visionConfig.value = await updateVisionEnabled(enabled)
+    visionMessage.value = {
+      type: 'success',
+      text: enabled ? 'Vision to Vibe is on. Look for it in the scene editor.' : 'Vision to Vibe is off.',
+    }
+  }
+  catch (e) {
+    visionMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t update Vision to Vibe.' }
+  }
+  finally {
+    savingVisionToggle.value = false
+  }
 }
 
 onMounted(load)
@@ -317,6 +390,82 @@ onMounted(load)
         {{ accessibilityMessage.text }}
       </p>
     </section>
+
+    <hr class="divider">
+
+    <section class="section">
+      <div class="section-header">
+        <h2 class="section-title">
+          Vision to Vibe
+        </h2>
+        <p v-if="visionConfig" class="section-status">
+          <span v-if="visionConfig.enabled && visionConfig.apiKeyConfigured" class="status-connected">On</span>
+          <span v-else-if="visionConfig.apiKeyConfigured" class="status-missing">Key saved, switched off</span>
+          <span v-else class="status-missing">No key yet</span>
+        </p>
+      </div>
+      <p class="section-desc">
+        Drop a battle map or mood-board image into a scene and get matching Music and Ambience suggestions from your own tagged sound library.
+        <strong class="privacy-note">Opt-in: each image you analyze is sent to Anthropic's Claude API using your key.</strong>
+        Hibiki does not keep the image after the request. Off by default.
+      </p>
+      <div class="field">
+        <label for="vision-api-key" class="field-label">Anthropic API key</label>
+        <div class="field-row">
+          <input
+            id="vision-api-key"
+            v-model="visionKeyInput"
+            type="password"
+            :placeholder="visionConfig?.apiKeyConfigured ? 'Key saved — paste a new key to replace it' : 'Paste your Anthropic API key'"
+            autocomplete="off"
+            class="input field-input"
+          >
+          <button
+            type="button"
+            class="btn btn-primary"
+            data-testid="vision-save-key"
+            :disabled="savingVisionKey || !visionKeyInput.trim()"
+            @click="saveVisionKey"
+          >
+            {{ savingVisionKey ? 'Saving…' : 'Save' }}
+          </button>
+          <button
+            v-if="visionConfig?.apiKeyConfigured"
+            type="button"
+            class="btn btn-ghost"
+            :disabled="savingVisionKey"
+            @click="clearVisionKey"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+      <div class="toggle-list vision-toggle-list">
+        <div class="toggle-row" :class="{ 'toggle-row-disabled': !visionConfig?.apiKeyConfigured }">
+          <input
+            id="vision-enabled"
+            type="checkbox"
+            class="toggle-input"
+            :checked="Boolean(visionConfig?.enabled)"
+            :disabled="!visionConfig?.apiKeyConfigured || savingVisionToggle"
+            @change="toggleVision"
+          >
+          <div class="toggle-text">
+            <label for="vision-enabled" class="toggle-title">Enable Vision to Vibe</label>
+            <span class="toggle-desc">
+              {{ visionConfig?.apiKeyConfigured ? 'Shows the Vision to Vibe button in the scene editor.' : 'Save an API key first.' }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <p
+        v-if="visionMessage"
+        class="status-message settings-message"
+        :class="[visionMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
+        {{ visionMessage.text }}
+      </p>
+    </section>
   </div>
 </template>
 
@@ -480,6 +629,27 @@ onMounted(load)
 
 .btn-motion-reset:hover {
   text-decoration: underline;
+}
+
+/* ── Vision to Vibe ── */
+
+.privacy-note {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.vision-toggle-list {
+  margin-top: 1rem;
+}
+
+.toggle-row-disabled {
+  opacity: 0.6;
+}
+
+.toggle-row-disabled .toggle-title {
+  cursor: not-allowed;
 }
 
 /* ── Buttons ── */

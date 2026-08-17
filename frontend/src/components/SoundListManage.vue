@@ -7,6 +7,7 @@ import {
   listEffects,
   listMusic,
   soundStreamUrl,
+  updateSoundTags,
   uploadSound,
   uploadSoundsBulk,
 } from '@/api/sounds'
@@ -34,6 +35,12 @@ const audioEl = ref<HTMLAudioElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const toast = ref<{ type: 'success' | 'error', text: string } | null>(null)
 let toastTimer: ReturnType<typeof setTimeout> | null = null
+const editingTagsId = ref<string | null>(null)
+const tagsDraft = ref('')
+const savingTags = ref(false)
+const tagsInputRef = ref<HTMLInputElement[]>([])
+
+const supportsTags = computed(() => props.type !== 'effects')
 
 function showToast(type: 'success' | 'error', text: string) {
   if (toastTimer)
@@ -226,6 +233,40 @@ async function confirmDelete(id: string) {
   }
 }
 
+function parseTags(raw: string): string[] {
+  return raw.split(',').map(t => t.trim()).filter(t => t.length > 0)
+}
+
+async function startEditTags(sound: SoundFile) {
+  editingTagsId.value = sound.id
+  tagsDraft.value = (sound.tags ?? []).join(', ')
+  await nextTick()
+  tagsInputRef.value[0]?.focus()
+}
+
+function cancelEditTags() {
+  editingTagsId.value = null
+  tagsDraft.value = ''
+}
+
+async function saveTags(sound: SoundFile) {
+  if (editingTagsId.value !== sound.id || savingTags.value)
+    return
+  savingTags.value = true
+  try {
+    const saved = await updateSoundTags(props.type, sound.id, parseTags(tagsDraft.value))
+    items.value = items.value.map(s => (s.id === sound.id ? { ...s, tags: saved } : s))
+    cancelEditTags()
+    emit('updated')
+  }
+  catch (err) {
+    showToast('error', err instanceof Error ? err.message : 'Couldn\'t save tags. Try again.')
+  }
+  finally {
+    savingTags.value = false
+  }
+}
+
 onMounted(() => {
   loadSounds()
 })
@@ -322,6 +363,36 @@ onActivated(() => {
         </button>
 
         <span class="sound-name" :title="sound.name">{{ sound.name }}</span>
+
+        <div v-if="supportsTags" class="sound-tags">
+          <template v-if="editingTagsId === sound.id">
+            <input
+              ref="tagsInputRef"
+              v-model="tagsDraft"
+              type="text"
+              class="input tags-input"
+              placeholder="tavern, warm, night"
+              :aria-label="`Tags for ${sound.name}`"
+              :disabled="savingTags"
+              @keydown.enter.prevent="saveTags(sound)"
+              @keydown.escape.prevent="cancelEditTags"
+              @blur="saveTags(sound)"
+            >
+          </template>
+          <template v-else>
+            <span v-for="tag in sound.tags ?? []" :key="tag" class="tag-chip">{{ tag }}</span>
+            <button
+              type="button"
+              class="btn-edit-tags"
+              :class="{ 'btn-edit-tags-empty': !(sound.tags?.length) }"
+              :title="sound.tags?.length ? 'Edit tags' : 'Add tags for Vision to Vibe matching'"
+              :aria-label="`Edit tags for ${sound.name}`"
+              @click="startEditTags(sound)"
+            >
+              {{ sound.tags?.length ? '✎' : '+ tags' }}
+            </button>
+          </template>
+        </div>
 
         <span class="sound-ext">{{ fileExt(sound.filename) }}</span>
         <span v-if="sound.size" class="sound-meta">{{ formatSize(sound.size) }}</span>
@@ -559,6 +630,64 @@ onActivated(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Sound tags ── */
+
+.sound-tags {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 45%;
+}
+
+.tag-chip {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--color-accent-muted);
+  color: var(--color-accent-hover);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 10rem;
+}
+
+.btn-edit-tags {
+  border: none;
+  background: transparent;
+  color: var(--color-text-dim);
+  font-size: 0.7rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition), color var(--transition), background var(--transition);
+}
+
+.btn-edit-tags-empty {
+  border: 1px dashed var(--color-border);
+}
+
+.sound-item:hover .btn-edit-tags,
+.sound-item:focus-within .btn-edit-tags,
+.btn-edit-tags:focus-visible {
+  opacity: 1;
+}
+
+.btn-edit-tags:hover {
+  color: var(--color-text);
+  background: var(--color-bg-elevated);
+}
+
+.tags-input {
+  width: 16rem;
+  max-width: 100%;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
 }
 
 .sound-ext {

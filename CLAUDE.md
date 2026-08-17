@@ -76,6 +76,7 @@ pnpm test:coverage:frontend               # Frontend only
 │   ├── sound/         # Sound library (list, upload, delete files)
 │   ├── scenes/        # Scene store + import/export (soundboards)
 │   ├── audio/         # Audio mixing (guild-specific managers)
+│   ├── vision/        # Vision to Vibe (Claude image analysis + Sound Tag matching)
 │   ├── config/        # Configuration (env + validation)
 │   └── persistence.ts # JSON key-value store (app-config.json)
 ├── frontend/          # Vue 3 renderer (Electron renderer process)
@@ -95,7 +96,7 @@ pnpm test:coverage:frontend               # Frontend only
 
 - **Frontend → Backend:** All communication uses Electron IPC via the `preload.js` bridge.
 - **IPC API:** Defined in `bootstrap-embedded.ts` as the `EmbeddedApi` interface.
-- **Domains:** `player`, `config`, `sounds`, `scenes` (matching the service structure).
+- **Domains:** `player`, `config`, `sounds`, `scenes`, `registry`, `vision` (matching the service structure).
 - Frontend wrappers in `frontend/src/api/` provide typed functions (e.g., `joinChannel()`, `listScenes()`).
 - Audio streaming (Browser feature) uses chunked IPC: `audio:startStream`, `audio:chunk`, `audio:stopStream`.
 
@@ -121,11 +122,12 @@ Stored in `scenes.json`. Import/export bundles scenes with their sound files as 
 ### Storage
 
 Data lives in platform user data directory (e.g., `~/Library/Application Support/hibiki` on macOS):
-- `app-config.json` — Discord token (when set in UI), bookmarks, storage path override
+- `app-config.json` — Discord token (when set in UI), bookmarks, storage path override, Vision to Vibe key + toggle
 - `scenes.json` — Scene definitions
+- `sound-tags.json` — Sound Tags keyed by `<category>/<soundId>` (see `CONTEXT.md` glossary)
 - `music/`, `effects/`, `ambience/` — Sound files (copied on upload, keyed by UUID)
 
-Override paths with env vars: `HIBIKI_STORAGE_PATH`, `HIBIKI_MUSIC_DIR`, `HIBIKI_EFFECTS_DIR`, `HIBIKI_DATA_PATH` (see `.env.example`).
+Override paths with env vars: `HIBIKI_STORAGE_PATH`, `HIBIKI_MUSIC_DIR`, `HIBIKI_EFFECTS_DIR`, `HIBIKI_DATA_PATH` (see `.env.example`). The Vision to Vibe API key can also come from `HIBIKI_VISION_API_KEY` (env wins over the stored key, like `DISCORD_TOKEN`).
 
 ## Key Development Patterns
 
@@ -153,6 +155,14 @@ The Browser tab captures audio from a `WebContentsView` (Electron-managed browse
 - **Backend:** `player.startStream(guildId, stream, metadata)` accepts a Node.js `ReadableStream`.
 - **Frontend → Main:** `audio:startStream`, chunked `audio:chunk`, `audio:stopStream`.
 - **Main process:** Creates `PassThrough` streams, writes chunks, pipes to backend.
+
+### Vision to Vibe
+
+Opt-in feature (off by default) that sends an image to Anthropic's Claude API and matches the returned Vibe Tags against the GM's own Sound Tags. See `agent-docs/adr/0001-vision-to-vibe-matching.md`.
+- Backend: `src/vision/vision.service.ts` (provider-agnostic `VisionProvider`, Claude is the only implementation) and `src/vision/vibe-matching.ts` (pure ranking, Music + Ambience only, top 5 per category).
+- Sound Tags live in `sound-tags.json` via `src/sound/sound-tags.store.ts`, merged into `SoundFile.tags` by the sound library.
+- Gating: the scene editor's "Vision to Vibe" button only renders when both the key is configured and the Settings toggle is on (`config.getVision`).
+- Never retain the analyzed image; it is read from disk, sent once, and dropped.
 
 ### Scene Playback
 

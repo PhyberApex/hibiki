@@ -25,6 +25,9 @@ export function configuration() {
     discord: {
       token: process.env.DISCORD_TOKEN ?? '',
     },
+    vision: {
+      apiKey: process.env.HIBIKI_VISION_API_KEY ?? '',
+    },
     audio: {
       storageRoot,
       musicDir,

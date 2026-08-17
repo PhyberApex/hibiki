@@ -1,18 +1,32 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  fetchVisionConfig,
+  updateVisionApiKey,
+  updateVisionEnabled,
+} from '@/api/config'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import SettingsView from './SettingsView.vue'
 
 vi.mock('@/api/config', () => ({
   fetchDiscordConfig: vi.fn().mockResolvedValue({ tokenConfigured: false }),
   fetchStoragePath: vi.fn().mockResolvedValue({ path: null }),
+  fetchVisionConfig: vi.fn().mockResolvedValue({ apiKeyConfigured: false, enabled: false }),
   selectStorageFolder: vi.fn(),
   updateDiscordToken: vi.fn().mockResolvedValue({ tokenConfigured: true }),
   updateStoragePath: vi.fn().mockResolvedValue(undefined),
   fetchAccessibilitySettings: vi.fn().mockResolvedValue({ luminancePulses: true, reduceMotion: null }),
   updateAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
+  updateVisionApiKey: vi.fn().mockResolvedValue({ apiKeyConfigured: true, enabled: false }),
+  updateVisionEnabled: vi.fn().mockResolvedValue({ apiKeyConfigured: true, enabled: true }),
 }))
+
+function mountSettings() {
+  return mount(SettingsView, {
+    global: { plugins: [createPinia()] },
+  })
+}
 
 function stubMatchMedia(matches: boolean) {
   window.matchMedia = vi.fn().mockReturnValue({
@@ -119,6 +133,48 @@ describe('settingsView', () => {
       expect(updateAccessibilitySettings).toHaveBeenLastCalledWith({ luminancePulses: true, reduceMotion: null })
       expect(store.followsSystemMotion).toBe(true)
       expect(wrapper.find<HTMLInputElement>('#reduce-motion').element.checked).toBe(true)
+    })
+  })
+
+  describe('vision to Vibe section', () => {
+    beforeEach(() => {
+      vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: false, enabled: false })
+    })
+
+    it('renders the section with a third-party disclosure', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      const headings = wrapper.findAll('h2')
+      expect(headings.some(h => h.text() === 'Vision to Vibe')).toBe(true)
+      expect(wrapper.text()).toContain('Anthropic')
+    })
+
+    it('saves the API key', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      await wrapper.find('#vision-api-key').setValue('sk-ant-123')
+      await wrapper.find('[data-testid="vision-save-key"]').trigger('click')
+      await flushPromises()
+      expect(updateVisionApiKey).toHaveBeenCalledWith('sk-ant-123')
+      expect(wrapper.text()).toContain('Key saved')
+    })
+
+    it('shows the toggle disabled until a key is configured', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      const toggle = wrapper.find<HTMLInputElement>('#vision-enabled')
+      expect(toggle.element.disabled).toBe(true)
+    })
+
+    it('toggles the feature on when a key is configured', async () => {
+      vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: true, enabled: false })
+      const wrapper = mountSettings()
+      await flushPromises()
+      const toggle = wrapper.find<HTMLInputElement>('#vision-enabled')
+      expect(toggle.element.disabled).toBe(false)
+      await toggle.setValue(true)
+      await flushPromises()
+      expect(updateVisionEnabled).toHaveBeenCalledWith(true)
     })
   })
 })

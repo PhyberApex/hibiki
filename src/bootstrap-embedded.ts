@@ -1,6 +1,8 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { AccessibilitySettings } from './config/accessibility-settings'
 import type { SoundCategory } from './sound/sound.types'
+import type { VibeMatch } from './vision/vibe-matching'
+import type { VibeAnalysis } from './vision/vision.service'
 import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { generateDependencyReport } from '@discordjs/voice'
@@ -14,6 +16,8 @@ import { importScene } from './scenes/scene-import'
 import { createSceneRegistry } from './scenes/scene-registry'
 import { createSceneStore } from './scenes/scene-store'
 import { createSoundLibrary } from './sound/sound-library'
+import { matchVibeTags } from './vision/vibe-matching'
+import { createVisionService } from './vision/vision.service'
 
 async function ensureStorageDirs(config: ReturnType<typeof getConfig>): Promise<void> {
   const dbPath = config.database.path
@@ -66,6 +70,9 @@ export interface EmbeddedApi {
     setBookmarks: (bookmarks: { name: string, url: string, favicon?: string }[]) => Promise<void>
     getAccessibility: () => Promise<AccessibilitySettings>
     setAccessibility: (settings: AccessibilitySettings) => Promise<void>
+    getVision: () => Promise<VisionConfig>
+    setVisionApiKey: (apiKey: string) => Promise<VisionConfig>
+    setVisionEnabled: (enabled: boolean) => Promise<VisionConfig>
   }
   sounds: {
     listMusic: () => ReturnType<ReturnType<typeof createSoundLibrary>['list']>
@@ -74,6 +81,7 @@ export interface EmbeddedApi {
     uploadSound: (type: SoundCategory, buffer: Buffer, originalname: string) => ReturnType<ReturnType<typeof createSoundLibrary>['save']>
     deleteSound: (type: SoundCategory, id: string) => ReturnType<ReturnType<typeof createSoundLibrary>['remove']>
     getFilePath: (type: SoundCategory, id: string) => ReturnType<ReturnType<typeof createSoundLibrary>['getFilePath']>
+    setTags: (type: SoundCategory, id: string, tags: string[]) => ReturnType<ReturnType<typeof createSoundLibrary>['setTags']>
   }
   scenes: {
     list: () => ReturnType<ReturnType<typeof createSceneStore>['list']>
@@ -87,7 +95,24 @@ export interface EmbeddedApi {
     getIndex: (forceRefresh?: boolean) => Promise<import('./scenes/scene-package.types').RegistryIndex>
     installFromRegistry: (slug: string) => Promise<import('./scenes/scene-store').Scene>
   }
+  vision: {
+    analyzeImageVibe: (imagePath: string) => Promise<VibeAnalysis>
+    matchVibe: (vibeTags: string[]) => Promise<VibeMatches>
+  }
 }
+
+export interface VisionConfig {
+  apiKeyConfigured: boolean
+  enabled: boolean
+}
+
+export interface VibeMatches {
+  music: VibeMatch[]
+  ambience: VibeMatch[]
+}
+
+const VISION_API_KEY_CONFIG_KEY = 'vision.apiKey'
+const VISION_ENABLED_CONFIG_KEY = 'vision.enabled'
 
 export interface EmbeddedApp {
   close: () => Promise<void>
@@ -106,6 +131,17 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
   const registry = createSceneRegistry(config)
   const discord = createDiscordClient(config, appConfig)
   const player = createPlayer(discord)
+
+  const getVisionApiKey = async (): Promise<string | null> => {
+    if (config.vision.apiKey)
+      return config.vision.apiKey
+    return appConfig.get(VISION_API_KEY_CONFIG_KEY)
+  }
+  const getVisionConfig = async (): Promise<VisionConfig> => {
+    const [apiKey, enabled] = await Promise.all([getVisionApiKey(), appConfig.get(VISION_ENABLED_CONFIG_KEY)])
+    return { apiKeyConfigured: Boolean(apiKey?.trim()), enabled: enabled === 'true' }
+  }
+  const vision = createVisionService({ getApiKey: getVisionApiKey })
 
   // Defer login to avoid blocking app startup
   // Discord will connect in background after main window shows
@@ -184,6 +220,15 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
       setAccessibility: async (settings) => {
         await appConfig.set('accessibility', JSON.stringify(normalizeAccessibilitySettings(settings)))
       },
+      getVision: () => getVisionConfig(),
+      setVisionApiKey: async (apiKey) => {
+        await appConfig.set(VISION_API_KEY_CONFIG_KEY, typeof apiKey === 'string' ? apiKey.trim() : '')
+        return getVisionConfig()
+      },
+      setVisionEnabled: async (enabled) => {
+        await appConfig.set(VISION_ENABLED_CONFIG_KEY, enabled ? 'true' : 'false')
+        return getVisionConfig()
+      },
     },
     sounds: {
       listMusic: () => sounds.list('music'),
@@ -199,6 +244,7 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
         await scenes.removeSoundFromAll(type, id)
       },
       getFilePath: (type, id) => sounds.getFilePath(type, id),
+      setTags: (type, id, tags) => sounds.setTags(type, id, Array.isArray(tags) ? tags : []),
     },
     scenes: {
       list: () => scenes.list(),
@@ -211,6 +257,21 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
     registry: {
       getIndex: forceRefresh => registry.fetchIndex(forceRefresh ?? false),
       installFromRegistry: slug => registry.installFromRegistry(slug),
+    },
+    vision: {
+      analyzeImageVibe: async (imagePath) => {
+        const { enabled } = await getVisionConfig()
+        if (!enabled)
+          throw new Error('Vision to Vibe is turned off. Enable it in Settings first.')
+        return vision.analyzeImageVibe(imagePath)
+      },
+      matchVibe: async (vibeTags) => {
+        const [music, ambience] = await Promise.all([sounds.list('music'), sounds.list('ambience')])
+        return {
+          music: matchVibeTags(vibeTags, music),
+          ambience: matchVibeTags(vibeTags, ambience),
+        }
+      },
     },
   }
 

@@ -9,6 +9,7 @@ vi.mock('@/api/sounds', () => ({
   uploadSound: vi.fn().mockResolvedValue({}),
   uploadSoundsBulk: vi.fn().mockResolvedValue({ success: [], failed: [] }),
   deleteSound: vi.fn().mockResolvedValue(undefined),
+  updateSoundTags: vi.fn().mockImplementation(async (_type: string, _id: string, tags: string[]) => tags),
   soundStreamUrl: (type: string, id: string) => `hibiki://sound/${type}/${id}`,
 }))
 
@@ -325,5 +326,78 @@ describe('soundListManage', () => {
 
     expect(wrapper.find('.toast-success').exists()).toBe(false)
     vi.useRealTimers()
+  })
+
+  describe('sound tags', () => {
+    it('shows existing tags as chips for music', async () => {
+      const { listMusic } = await import('@/api/sounds')
+      vi.mocked(listMusic).mockResolvedValue([
+        { id: 's1', name: 'Tavern', filename: 't.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z', tags: ['warm', 'candlelit'] },
+      ])
+      const wrapper = mount(SoundListManage, { props: { type: 'music' } })
+      await flushPromises()
+      const chips = wrapper.findAll('.tag-chip')
+      expect(chips.map(c => c.text())).toEqual(['warm', 'candlelit'])
+    })
+
+    it('does not offer tag editing for effects', async () => {
+      const { listEffects } = await import('@/api/sounds')
+      vi.mocked(listEffects).mockResolvedValue([
+        { id: 'e1', name: 'Boom', filename: 'b.wav', category: 'effects', createdAt: '2024-01-01T00:00:00Z', tags: [] },
+      ])
+      const wrapper = mount(SoundListManage, { props: { type: 'effects' } })
+      await flushPromises()
+      expect(wrapper.find('.btn-edit-tags').exists()).toBe(false)
+    })
+
+    it('edits tags inline and saves them comma-separated', async () => {
+      const { listAmbience, updateSoundTags } = await import('@/api/sounds')
+      vi.mocked(listAmbience).mockResolvedValue([
+        { id: 'a1', name: 'Rain', filename: 'r.mp3', category: 'ambience', createdAt: '2024-01-01T00:00:00Z', tags: [] },
+      ])
+      const wrapper = mount(SoundListManage, { props: { type: 'ambience' } })
+      await flushPromises()
+      await wrapper.find('.btn-edit-tags').trigger('click')
+      const input = wrapper.find('input.tags-input')
+      expect(input.exists()).toBe(true)
+      await input.setValue('stormy, wet , night')
+      await input.trigger('keydown.enter')
+      await flushPromises()
+      expect(updateSoundTags).toHaveBeenCalledWith('ambience', 'a1', ['stormy', 'wet', 'night'])
+      expect(wrapper.findAll('.tag-chip').map(c => c.text())).toEqual(['stormy', 'wet', 'night'])
+      expect(wrapper.find('input.tags-input').exists()).toBe(false)
+    })
+
+    it('escape cancels tag editing without saving', async () => {
+      const { listAmbience, updateSoundTags } = await import('@/api/sounds')
+      vi.mocked(updateSoundTags).mockClear()
+      vi.mocked(listAmbience).mockResolvedValue([
+        { id: 'a1', name: 'Rain', filename: 'r.mp3', category: 'ambience', createdAt: '2024-01-01T00:00:00Z', tags: ['old'] },
+      ])
+      const wrapper = mount(SoundListManage, { props: { type: 'ambience' } })
+      await flushPromises()
+      await wrapper.find('.btn-edit-tags').trigger('click')
+      const input = wrapper.find('input.tags-input')
+      await input.setValue('new')
+      await input.trigger('keydown.escape')
+      await flushPromises()
+      expect(updateSoundTags).not.toHaveBeenCalled()
+      expect(wrapper.findAll('.tag-chip').map(c => c.text())).toEqual(['old'])
+    })
+
+    it('shows an error toast when saving tags fails', async () => {
+      const { listMusic, updateSoundTags } = await import('@/api/sounds')
+      vi.mocked(listMusic).mockResolvedValue([
+        { id: 's1', name: 'Tavern', filename: 't.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z', tags: [] },
+      ])
+      vi.mocked(updateSoundTags).mockRejectedValueOnce(new Error('disk full'))
+      const wrapper = mount(SoundListManage, { props: { type: 'music' } })
+      await flushPromises()
+      await wrapper.find('.btn-edit-tags').trigger('click')
+      await wrapper.find('input.tags-input').setValue('x')
+      await wrapper.find('input.tags-input').trigger('keydown.enter')
+      await flushPromises()
+      expect(wrapper.find('.toast-error').text()).toContain('disk full')
+    })
   })
 })

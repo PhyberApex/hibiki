@@ -4,6 +4,7 @@ import { mkdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import fg from 'fast-glob'
 import slugify from 'slugify'
+import { createSoundTagsStore } from './sound-tags.store'
 
 function resolvePath(config: Config, category: SoundCategory, filename?: string): string {
   const base = category === 'music'
@@ -39,6 +40,8 @@ function buildId(name: string): string {
 }
 
 export function createSoundLibrary(config: Config) {
+  const tagsStore = createSoundTagsStore(config)
+
   return {
     async list(category: SoundCategory): Promise<SoundFile[]> {
       const base = resolvePath(config, category)
@@ -49,18 +52,21 @@ export function createSoundLibrary(config: Config) {
       catch {
         return []
       }
+      const tagsById = await tagsStore.getAll(category)
       const results: SoundFile[] = []
       for (const file of entries) {
         const filePath = resolvePath(config, category, file)
         try {
           const stats = await stat(filePath)
+          const id = file.replace(extname(file), '')
           results.push({
-            id: file.replace(extname(file), ''),
+            id,
             name: humanize(file),
             filename: file,
             size: stats.size,
             category,
             createdAt: stats.birthtime.toISOString(),
+            tags: tagsById.get(id) ?? [],
           })
         }
         catch {
@@ -78,7 +84,7 @@ export function createSoundLibrary(config: Config) {
     async getFile(category: SoundCategory, id: string): Promise<SoundFile & { path: string }> {
       const filename = await findFilename(config, category, id)
       const path = resolvePath(config, category, filename)
-      const stats = await stat(path)
+      const [stats, tags] = await Promise.all([stat(path), tagsStore.get(category, id)])
       return {
         id,
         name: humanize(filename),
@@ -86,6 +92,7 @@ export function createSoundLibrary(config: Config) {
         category,
         size: stats.size,
         createdAt: stats.birthtime.toISOString(),
+        tags,
         path,
       }
     },
@@ -111,6 +118,12 @@ export function createSoundLibrary(config: Config) {
       const file = await findFilename(config, category, id)
       const path = resolvePath(config, category, file)
       await unlink(path)
+      await tagsStore.remove(category, id)
+    },
+
+    async setTags(category: SoundCategory, id: string, tags: string[]): Promise<string[]> {
+      await findFilename(config, category, id)
+      return tagsStore.set(category, id, tags)
     },
 
     async save(
@@ -136,6 +149,7 @@ export function createSoundLibrary(config: Config) {
         category,
         size: stats.size,
         createdAt: stats.birthtime.toISOString(),
+        tags: [],
       }
     },
   }
