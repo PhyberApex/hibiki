@@ -14,6 +14,11 @@ export interface AccessibilitySettings {
   reduceMotion: boolean | null
 }
 
+export interface VisionConfig {
+  apiKeyConfigured: boolean
+  enabled: boolean
+}
+
 function requireElectron(): void {
   if (!useElectronApi())
     throw new Error('Hibiki runs as an Electron app. Open it via pnpm run electron.')
@@ -94,4 +99,19 @@ export function listBookmarks(): Promise<Bookmark[]> {
 export function saveBookmarks(bookmarks: Bookmark[]): Promise<void> {
   requireElectron()
   return apiCall<void>('config', 'setBookmarks', [bookmarks])
+}
+
+export function fetchVisionConfig(): Promise<VisionConfig> {
+  requireElectron()
+  return apiCall<VisionConfig>('config', 'getVision', [])
+}
+
+export function updateVisionApiKey(apiKey: string): Promise<VisionConfig> {
+  requireElectron()
+  return apiCall<VisionConfig>('config', 'setVisionApiKey', [apiKey])
+}
+
+export function updateVisionEnabled(enabled: boolean): Promise<VisionConfig> {
+  requireElectron()
+  return apiCall<VisionConfig>('config', 'setVisionEnabled', [enabled])
 }

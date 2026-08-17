@@ -5,6 +5,7 @@ declare global {
       invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
       send: (channel: string, ...args: unknown[]) => void
       on: (channel: string, callback: (...args: unknown[]) => void) => () => void
+      getPathForFile?: (file: File) => string
     }
   }
 }
@@ -22,4 +23,9 @@ export function apiCall<T>(domain: string, method: string, args: unknown[]): Pro
 export function openExternal(url: string): void {
   if (window.hibiki?.invoke)
     window.hibiki.invoke('shell:openExternal', url)
+}
+
+export function getPathForFile(file: File): string | null {
+  const resolved = window.hibiki?.getPathForFile?.(file)
+  return typeof resolved === 'string' && resolved.length > 0 ? resolved : null
 }

@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, webUtils } = require('electron')
 
 contextBridge.exposeInMainWorld('hibiki', {
   platform: process.platform,
@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('hibiki', {
     ipcRenderer.on(channel, listener)
     return () => ipcRenderer.removeListener(channel, listener)
   },
+  getPathForFile: file => webUtils.getPathForFile(file),
 })

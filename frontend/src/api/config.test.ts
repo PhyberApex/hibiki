@@ -3,6 +3,7 @@ import {
   fetchAccessibilitySettings,
   fetchDiscordConfig,
   fetchStoragePath,
+  fetchVisionConfig,
   listBookmarks,
   openFileDialog,
   saveBookmarks,
@@ -12,6 +13,8 @@ import {
   updateAccessibilitySettings,
   updateDiscordToken,
   updateStoragePath,
+  updateVisionApiKey,
+  updateVisionEnabled,
 } from './config'
 
 describe('config API', () => {
@@ -157,6 +160,37 @@ describe('config API', () => {
       domain: 'config',
       method: 'setAccessibility',
       args: [settings],
+    })
+  })
+
+  it('fetchVisionConfig uses apiCall', async () => {
+    mockInvoke.mockResolvedValue({ apiKeyConfigured: true, enabled: false })
+    const result = await fetchVisionConfig()
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'getVision',
+      args: [],
+    })
+    expect(result).toEqual({ apiKeyConfigured: true, enabled: false })
+  })
+
+  it('updateVisionApiKey uses apiCall', async () => {
+    mockInvoke.mockResolvedValue({ apiKeyConfigured: true, enabled: false })
+    await updateVisionApiKey('sk-ant-123')
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'setVisionApiKey',
+      args: ['sk-ant-123'],
+    })
+  })
+
+  it('updateVisionEnabled uses apiCall', async () => {
+    mockInvoke.mockResolvedValue({ apiKeyConfigured: true, enabled: true })
+    await updateVisionEnabled(true)
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'setVisionEnabled',
+      args: [true],
     })
   })
 

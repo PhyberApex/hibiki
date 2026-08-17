@@ -4,6 +4,7 @@ import {
   listEffects,
   listMusic,
   soundStreamUrl,
+  updateSoundTags,
   uploadSound,
   uploadSoundsBulk,
 } from './sounds'
@@ -62,6 +63,17 @@ describe('sounds API', () => {
       method: 'deleteSound',
       args: ['effects', 'id1'],
     })
+  })
+
+  it('updateSoundTags uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(['tavern', 'warm'])
+    const result = await updateSoundTags('music', 'id1', ['tavern', 'warm'])
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'sounds',
+      method: 'setTags',
+      args: ['music', 'id1', ['tavern', 'warm']],
+    })
+    expect(result).toEqual(['tavern', 'warm'])
   })
 
   it('soundStreamUrl returns hibiki URL', () => {

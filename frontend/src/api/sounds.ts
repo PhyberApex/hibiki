@@ -8,6 +8,7 @@ export interface SoundFile {
   size?: number
   path?: string
   createdAt?: string
+  tags?: string[]
 }
 
 function requireElectron(): void {
@@ -58,6 +59,11 @@ export async function uploadSoundsBulk(
 export function deleteSound(type: 'music' | 'effects' | 'ambience', id: string) {
   requireElectron()
   return apiCall<void>('sounds', 'deleteSound', [type, id])
+}
+
+export function updateSoundTags(type: 'music' | 'effects' | 'ambience', id: string, tags: string[]) {
+  requireElectron()
+  return apiCall<string[]>('sounds', 'setTags', [type, id, tags])
 }
 
 /** URL to stream a sound for playback (use in <audio src="...">) */
