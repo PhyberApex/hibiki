@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.0](https://github.com/PhyberApex/hibiki/compare/v1.2.0...v1.3.0) (2026-09-01)
+
+
+### Features
+
+* **ui:** rhythmic status pulses with accessibility toggles ([#336](https://github.com/PhyberApex/hibiki/issues/336)) ([dfea553](https://github.com/PhyberApex/hibiki/commit/dfea553a4254d2439f49cc89ca8f0f1f80b843d7))
+* **vision:** Vision to Vibe — match tagged sounds to an image's mood ([#337](https://github.com/PhyberApex/hibiki/issues/337)) ([c615614](https://github.com/PhyberApex/hibiki/commit/c615614818d65d9559f7a29b9c1742d3b9328c41))
+
+
+### Bug Fixes
+
+* **deps:** update dependency @anthropic-ai/sdk to ^0.118.0 ([#344](https://github.com/PhyberApex/hibiki/issues/344)) ([dd8cb37](https://github.com/PhyberApex/hibiki/commit/dd8cb3704c0b9b04c23ee5cb8a0e8c919eb52b0f))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.120.0 ([#345](https://github.com/PhyberApex/hibiki/issues/345)) ([9947938](https://github.com/PhyberApex/hibiki/commit/994793852968b0889fccd7cd5ac95a93dd20f9bc))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.122.0 ([#353](https://github.com/PhyberApex/hibiki/issues/353)) ([f6c36e6](https://github.com/PhyberApex/hibiki/commit/f6c36e6919f115f1dba3aca327adb4e0436d5bde))
+* **deps:** update dependency adm-zip to ^0.6.0 ([#286](https://github.com/PhyberApex/hibiki/issues/286)) ([b5f6d9e](https://github.com/PhyberApex/hibiki/commit/b5f6d9e26b4f3b798877a9cd05272b7fe7bb3bdf))
+* **deps:** update dependency pinia to v4 ([#290](https://github.com/PhyberApex/hibiki/issues/290)) ([078643c](https://github.com/PhyberApex/hibiki/commit/078643c3234e0bdfe47d628221379211b76434bd))
+* **pnpm:** fix broken CI build by moving pnpm settings to pnpm-workspace.yaml ([#310](https://github.com/PhyberApex/hibiki/issues/310)) ([647921d](https://github.com/PhyberApex/hibiki/commit/647921da227accc5df75f6550e580da41445a100))
+* **pnpm:** override @electron/node-gyp to unblock Renovate lockfile updates ([#321](https://github.com/PhyberApex/hibiki/issues/321)) ([36d28ea](https://github.com/PhyberApex/hibiki/commit/36d28ea90ceb2290b5abf69d902b03d7ba5dcc9f))
+
 ## [1.2.0](https://github.com/PhyberApex/hibiki/compare/v1.1.0...v1.2.0) (2026-03-19)
 
 
