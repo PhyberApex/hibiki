@@ -12,6 +12,7 @@ trustPolicyExclude:
   - undici-types@6.21.0
 allowBuilds:
   '@discordjs/opus': true
+  '@parcel/watcher': true
   '@snazzah/davey': true
   electron: true
   electron-winstaller: true
