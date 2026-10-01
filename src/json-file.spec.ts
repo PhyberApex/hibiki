@@ -69,6 +69,20 @@ describe('createJsonFileStore', () => {
     expect(getStorageWarnings()).toHaveLength(1)
   })
 
+  it('a repeated read of the same corrupt file does not create duplicate backups or warnings', async () => {
+    const filePath = join(tempRoot, 'scenes.json')
+    writeFileSync(filePath, '{not valid json')
+    const store = createJsonFileStore<string[]>(filePath, { defaultValue: [], isValid: isStringArray })
+
+    await store.read()
+    await store.read()
+    await store.read()
+
+    expect(getStorageWarnings()).toHaveLength(1)
+    const entries = await readdir(tempRoot)
+    expect(entries.filter(name => name.includes('.corrupt-'))).toHaveLength(1)
+  })
+
   it('saving after a corrupt read does not destroy the backup file', async () => {
     const filePath = join(tempRoot, 'scenes.json')
     writeFileSync(filePath, '{not valid json')

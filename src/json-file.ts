@@ -75,11 +75,13 @@ async function readJsonFile<T>(filePath: string, options: JsonFileOptions<T>): P
   }
   catch {
     await backupCorruptFile(filePath)
+    await writeJsonFileAtomic(filePath, options.defaultValue)
     return options.defaultValue
   }
 
   if (!options.isValid(data)) {
     await backupCorruptFile(filePath)
+    await writeJsonFileAtomic(filePath, options.defaultValue)
     return options.defaultValue
   }
 
