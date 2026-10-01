@@ -293,6 +293,23 @@ describe('sceneView — overlapping effects', () => {
       expect(firstEight[i].pause).not.toHaveBeenCalled()
   })
 
+  it('layers two different effects on the Discord-streamed path without cutting either off', async () => {
+    const { startEffectStream } = await import('@/api/audio-stream')
+    const { wrapper } = await mountSceneJoined()
+    audioInstances.length = 0
+    const triggers = wrapper.findAll('.effect-trigger')
+    await triggers[0].trigger('click')
+    await flushPromises()
+    await triggers[1].trigger('click')
+    await flushPromises()
+
+    expect(audioInstances).toHaveLength(2)
+    expect(audioInstances[0].pause).not.toHaveBeenCalled()
+    expect(audioInstances[1].pause).not.toHaveBeenCalled()
+    const streamIds = vi.mocked(startEffectStream).mock.calls.map(call => call[1])
+    expect(new Set(streamIds).size).toBe(2)
+  })
+
   it('tears down the stream, capture session and audio context when an instance ends (Discord)', async () => {
     const { stopEffectStream } = await import('@/api/audio-stream')
     const { captureFromAudioElement, releaseAudioElementContext } = await import('@/audio/browser-audio-capture')

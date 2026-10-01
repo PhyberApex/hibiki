@@ -115,6 +115,17 @@ function createEffectInstanceId(): string {
   return `effect-${effectInstanceSeq}`
 }
 
+/** Trigger setup shared by playEffect and playEffectLocal: allocate an id,
+ * evict the oldest instance if we're at the cap, create the element and
+ * register it before any playback/streaming calls begin. */
+function registerEffectInstance(remote: boolean): { id: string, el: HTMLAudioElement } {
+  const id = createEffectInstanceId()
+  enforceEffectInstanceCap()
+  const el = createAudioEl()
+  effectInstances.set(id, remote ? { el, streamId: id } : { el })
+  return { id, el }
+}
+
 function cleanupEffectInstance(id: string) {
   const instance = effectInstances.get(id)
   if (!instance)
@@ -136,6 +147,8 @@ function cleanupEffectInstance(id: string) {
 }
 
 function enforceEffectInstanceCap() {
+  // effectInstances is a Map, so key iteration order is insertion order —
+  // the first key is always the oldest surviving instance (FIFO eviction).
   while (effectInstances.size >= EFFECT_INSTANCE_CAP) {
     const oldestId = effectInstances.keys().next().value
     if (oldestId === undefined)
@@ -447,10 +460,7 @@ function stopMusicLocal() {
 
 function playEffectLocal(item: SceneItem) {
   effectFlash.trigger(item.soundId)
-  const id = createEffectInstanceId()
-  enforceEffectInstanceCap()
-  const el = createAudioEl()
-  effectInstances.set(id, { el })
+  const { id, el } = registerEffectInstance(false)
   el.onended = () => cleanupEffectInstance(id)
   el.onerror = () => cleanupEffectInstance(id)
   el.src = soundStreamUrl('effects', item.soundId)
@@ -466,11 +476,8 @@ async function playEffect(item: SceneItem) {
   if (!guildId.value || !isJoined.value)
     return
   effectFlash.trigger(item.soundId)
-  const id = createEffectInstanceId()
-  enforceEffectInstanceCap()
+  const { id, el } = registerEffectInstance(true)
   const streamId = id
-  const el = createAudioEl()
-  effectInstances.set(id, { el, streamId })
   try {
     await startEffectStream(guildId.value, streamId)
     el.src = soundStreamUrl('effects', item.soundId)
