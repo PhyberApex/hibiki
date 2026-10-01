@@ -17,6 +17,7 @@ import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene 
 import { listAmbience, listEffects, listMusic, soundStreamUrl } from '@/api/sounds'
 import {
   captureFromAudioElement,
+  releaseAudioElementContext,
 } from '@/audio/browser-audio-capture'
 import RegistryBrowser from '@/components/RegistryBrowser.vue'
 import ResolveSoundDialog from '@/components/ResolveSoundDialog.vue'
@@ -48,7 +49,6 @@ const resolveTarget = ref<{ category: 'ambience' | 'music' | 'effects', item: Sc
 const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 const musicAudioEl = createAudioEl()
-const effectAudioEl = createAudioEl()
 const ambienceAudioEls = new Map<string, HTMLAudioElement>()
 const captureSessions = new Map<string, CaptureSession>()
 const ambienceTimers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -100,6 +100,68 @@ const sceneId = computed(() => {
 })
 const guildId = computed(() => player.guildId)
 const isJoined = computed(() => player.isJoined)
+
+interface EffectInstance {
+  el: HTMLAudioElement
+  streamId?: string
+}
+
+const EFFECT_INSTANCE_CAP = 8
+let effectInstanceSeq = 0
+const effectInstances = new Map<string, EffectInstance>()
+
+function createEffectInstanceId(): string {
+  effectInstanceSeq += 1
+  return `effect-${effectInstanceSeq}`
+}
+
+/** Trigger setup shared by playEffect and playEffectLocal: allocate an id,
+ * evict the oldest instance if we're at the cap, create the element and
+ * register it before any playback/streaming calls begin. */
+function registerEffectInstance(remote: boolean): { id: string, el: HTMLAudioElement } {
+  const id = createEffectInstanceId()
+  enforceEffectInstanceCap()
+  const el = createAudioEl()
+  effectInstances.set(id, remote ? { el, streamId: id } : { el })
+  return { id, el }
+}
+
+function cleanupEffectInstance(id: string) {
+  const instance = effectInstances.get(id)
+  if (!instance)
+    return
+  effectInstances.delete(id)
+  instance.el.onended = null
+  instance.el.onerror = null
+  instance.el.pause()
+  instance.el.removeAttribute('src')
+  instance.el.load()
+  const sess = captureSessions.get(id)
+  if (sess) {
+    sess.stop()
+    captureSessions.delete(id)
+  }
+  releaseAudioElementContext(instance.el)
+  if (instance.streamId && guildId.value)
+    stopEffectStream(guildId.value, instance.streamId).catch(() => {})
+}
+
+function enforceEffectInstanceCap() {
+  // effectInstances is a Map, so key iteration order is insertion order —
+  // the first key is always the oldest surviving instance (FIFO eviction).
+  while (effectInstances.size >= EFFECT_INSTANCE_CAP) {
+    const oldestId = effectInstances.keys().next().value
+    if (oldestId === undefined)
+      break
+    cleanupEffectInstance(oldestId)
+  }
+}
+
+function stopAllEffectInstances() {
+  for (const id of [...effectInstances.keys()])
+    cleanupEffectInstance(id)
+}
+
 const hasSounds = computed(() =>
   ambienceSounds.value.length > 0 || musicSounds.value.length > 0 || effectsSounds.value.length > 0,
 )
@@ -398,20 +460,25 @@ function stopMusicLocal() {
 
 function playEffectLocal(item: SceneItem) {
   effectFlash.trigger(item.soundId)
-  const el = effectAudioEl
+  const { id, el } = registerEffectInstance(false)
+  el.onended = () => cleanupEffectInstance(id)
+  el.onerror = () => cleanupEffectInstance(id)
   el.src = soundStreamUrl('effects', item.soundId)
   el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
   el.load()
-  el.play().catch(e => console.error('[scene] playEffectLocal failed:', e))
+  el.play().catch((e) => {
+    console.error('[scene] playEffectLocal failed:', e)
+    cleanupEffectInstance(id)
+  })
 }
 
 async function playEffect(item: SceneItem) {
   if (!guildId.value || !isJoined.value)
     return
   effectFlash.trigger(item.soundId)
+  const { id, el } = registerEffectInstance(true)
+  const streamId = id
   try {
-    const el = effectAudioEl
-    const streamId = `effect-${item.soundId}`
     await startEffectStream(guildId.value, streamId)
     el.src = soundStreamUrl('effects', item.soundId)
     el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
@@ -422,15 +489,14 @@ async function playEffect(item: SceneItem) {
     })
     const onChunk = (chunk: ArrayBuffer) => sendEffectChunk(guildId.value!, chunk, streamId)
     const sess = await captureFromAudioElement(el, onChunk)
-    captureSessions.set('effect', sess)
-    el.onended = () => {
-      stopEffectStream(guildId.value!, streamId).catch(() => {})
-      captureSessions.delete('effect')
-    }
+    captureSessions.set(id, sess)
+    el.onended = () => cleanupEffectInstance(id)
+    el.onerror = () => cleanupEffectInstance(id)
     await el.play()
   }
   catch (e) {
     console.error('[scene] playEffect failed:', e)
+    cleanupEffectInstance(id)
   }
 }
 
@@ -504,6 +570,7 @@ function stopSceneLocal() {
   for (const item of scene.value?.ambience ?? [])
     stopAmbienceLocal(item.soundId)
   stopMusicLocal()
+  stopAllEffectInstances()
   scenePlayingLocal.value = false
 }
 
@@ -529,6 +596,7 @@ function stopScene() {
   for (const item of scene.value?.ambience ?? [])
     stopAmbience(item.soundId)
   stopMusic()
+  stopAllEffectInstances()
   player.scenePlaying = false
 }
 
@@ -659,6 +727,11 @@ onActivated(() => {
   loadSounds()
   loadScene()
   loadVisionAvailability()
+})
+
+watch(isJoined, (joined) => {
+  if (!joined)
+    stopAllEffectInstances()
 })
 
 watch(sceneId, (newId, oldId) => {

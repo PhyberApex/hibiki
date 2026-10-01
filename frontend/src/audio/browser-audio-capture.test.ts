@@ -152,6 +152,71 @@ describe('browser-audio-capture', () => {
     })
   })
 
+  describe('releaseAudioElementContext', () => {
+    it('is a no-op for an element that was never captured', async () => {
+      vi.resetModules()
+      const { releaseAudioElementContext } = await import('./browser-audio-capture')
+      const element = document.createElement('audio')
+      expect(() => releaseAudioElementContext(element)).not.toThrow()
+    })
+
+    it('disconnects the worklet, evicts, and closes the context for a captured element', async () => {
+      const mockWorkletNode = {
+        port: { onmessage: null as any },
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }
+      const mockSource = {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }
+      const mockDestination = {}
+      const mockCtx = {
+        sampleRate: 48000,
+        state: 'running',
+        resume: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
+        createMediaElementSource: vi.fn().mockReturnValue(mockSource),
+        createMediaStreamSource: vi.fn(),
+        audioWorklet: { addModule: vi.fn().mockResolvedValue(undefined) },
+        destination: mockDestination,
+      }
+
+      vi.stubGlobal('AudioContext', class {
+        constructor() { return mockCtx as any }
+      })
+      vi.stubGlobal('AudioWorkletNode', class {
+        constructor() { return mockWorkletNode as any }
+      })
+
+      const originalCreateObjectURL = URL.createObjectURL
+      const originalRevokeObjectURL = URL.revokeObjectURL
+      URL.createObjectURL = vi.fn().mockReturnValue('blob:test')
+      URL.revokeObjectURL = vi.fn()
+
+      vi.resetModules()
+      const { captureFromAudioElement, releaseAudioElementContext } = await import('./browser-audio-capture')
+      const element = document.createElement('audio')
+      await captureFromAudioElement(element, vi.fn())
+
+      releaseAudioElementContext(element)
+
+      expect(mockWorkletNode.port.onmessage).toBeNull()
+      expect(mockWorkletNode.disconnect).toHaveBeenCalled()
+      expect(mockSource.disconnect).toHaveBeenCalled()
+      expect(mockCtx.close).toHaveBeenCalled()
+
+      // A second release is a no-op: the context was already evicted.
+      mockCtx.close.mockClear()
+      releaseAudioElementContext(element)
+      expect(mockCtx.close).not.toHaveBeenCalled()
+
+      URL.createObjectURL = originalCreateObjectURL
+      URL.revokeObjectURL = originalRevokeObjectURL
+      vi.unstubAllGlobals()
+    })
+  })
+
   describe('captureFromMediaStream', () => {
     it('creates context with stream source and returns stop that closes context', async () => {
       const mockTrack = { stop: vi.fn() }
