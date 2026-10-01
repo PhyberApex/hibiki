@@ -94,6 +94,29 @@ export async function getMainWindow(app: ElectronApplication): Promise<Page> {
 }
 
 /**
+ * Close the Electron app, force-killing the process if a graceful close hangs.
+ *
+ * A single unresponsive app (CI resource contention, a frozen renderer) must not
+ * block teardown for the full worker timeout — that turns one flaky test into a
+ * fatal "worker teardown timeout" error that fails the whole job even when the
+ * test itself goes on to pass on retry.
+ */
+export async function closeElectronApp(app: ElectronApplication): Promise<void> {
+  const FORCE_KILL_AFTER_MS = 10_000
+  const timedOut = Symbol('timed-out')
+  const result = await Promise.race([
+    app.close().catch(() => undefined),
+    new Promise(resolve => setTimeout(resolve, FORCE_KILL_AFTER_MS, timedOut)),
+  ])
+
+  if (result === timedOut) {
+    const proc = app.process()
+    if (proc && !proc.killed)
+      proc.kill('SIGKILL')
+  }
+}
+
+/**
  * Call the Electron IPC API from a test. Must be run in page context.
  * Use page.evaluate with this stringified and passed, or use invokeApi below.
  */

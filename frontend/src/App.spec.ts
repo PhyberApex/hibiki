@@ -10,6 +10,7 @@ import MediaManagementView from './views/MediaManagementView.vue'
 vi.mock('@/api/config', () => ({
   fetchAccessibilitySettings: vi.fn().mockResolvedValue({ luminancePulses: true, reduceMotion: null }),
   updateAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
+  fetchStorageWarnings: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('@/api/player', () => ({
@@ -308,5 +309,40 @@ describe('app', () => {
     releaseJoin()
     await flushPromises()
     expect(wrapper.findAll('.channel-dot')[1]!.classes()).not.toContain('pulse-busy')
+  })
+
+  it('shows a dismissible warning banner naming the backup file when a store was corrupt', async () => {
+    const { fetchStorageWarnings } = await import('@/api/config')
+    vi.mocked(fetchStorageWarnings).mockResolvedValue([
+      { file: '/data/scenes.json', backupPath: '/data/scenes.json.corrupt-2026-10-01T00-00-00-000Z.bak' },
+    ])
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.storage-warning-banner').exists()).toBe(true)
+    expect(wrapper.find('.storage-warning-message').text()).toContain('scenes.json')
+    expect(wrapper.find('.storage-warning-message').text()).toContain('scenes.json.corrupt-2026-10-01T00-00-00-000Z.bak')
+
+    await wrapper.find('.storage-warning-dismiss').trigger('click')
+    expect(wrapper.find('.storage-warning-banner').exists()).toBe(false)
+  })
+
+  it('shows no warning banner when there are no storage warnings', async () => {
+    const { fetchStorageWarnings } = await import('@/api/config')
+    vi.mocked(fetchStorageWarnings).mockResolvedValue([])
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.storage-warning-banner').exists()).toBe(false)
   })
 })

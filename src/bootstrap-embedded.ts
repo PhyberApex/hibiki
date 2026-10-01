@@ -1,5 +1,6 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { AccessibilitySettings } from './config/accessibility-settings'
+import type { StorageWarning } from './json-file'
 import type { SoundCategory } from './sound/sound.types'
 import type { VibeMatches } from './vision/vibe-matching'
 import type { VisionSettingsState } from './vision/vision-settings'
@@ -10,6 +11,7 @@ import { generateDependencyReport } from '@discordjs/voice'
 import { getConfig } from './config'
 import { normalizeAccessibilitySettings, parseAccessibilitySettings } from './config/accessibility-settings'
 import { createDiscordClient } from './discord/discord-client'
+import { getStorageWarnings } from './json-file'
 import { createAppConfig } from './persistence'
 import { createPlayer } from './player/player'
 import { exportScene } from './scenes/scene-export'
@@ -75,6 +77,7 @@ export interface EmbeddedApi {
     getVision: () => Promise<VisionSettingsState>
     setVisionApiKey: (apiKey: string) => Promise<VisionSettingsState>
     setVisionEnabled: (enabled: boolean) => Promise<VisionSettingsState>
+    getStorageWarnings: () => Promise<StorageWarning[]>
   }
   sounds: {
     listMusic: () => ReturnType<ReturnType<typeof createSoundLibrary>['list']>
@@ -123,6 +126,17 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
 
   const visionSettings = createVisionSettings(config, appConfig)
   const vision = createVisionService({ getApiKey: visionSettings.getApiKey })
+
+  // Read scenes.json, app-config.json, and (via sounds.list, which reads the
+  // sound-tags store) sound-tags.json up front, so a corrupt file is detected
+  // and its storage warning recorded before the frontend asks for warnings on launch.
+  await Promise.all([
+    scenes.list(),
+    appConfig.get('discord.token'),
+    sounds.list('music'),
+  ]).catch((err) => {
+    console.error('[Hibiki] Storage warm-up failed:', err)
+  })
 
   // Defer login to avoid blocking app startup
   // Discord will connect in background after main window shows
@@ -204,6 +218,7 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
       getVision: () => visionSettings.get(),
       setVisionApiKey: apiKey => visionSettings.setApiKey(apiKey),
       setVisionEnabled: enabled => visionSettings.setEnabled(enabled),
+      getStorageWarnings: async () => getStorageWarnings(),
     },
     sounds: {
       listMusic: () => sounds.list('music'),
