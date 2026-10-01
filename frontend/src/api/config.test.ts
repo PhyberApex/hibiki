@@ -15,6 +15,9 @@ import {
   updateStoragePath,
   updateVisionApiKey,
   updateVisionEnabled,
+  updateVisionOpenAiBaseUrl,
+  updateVisionOpenAiModel,
+  updateVisionProvider,
 } from './config'
 
 describe('config API', () => {
@@ -163,29 +166,67 @@ describe('config API', () => {
     })
   })
 
+  const visionConfig = {
+    provider: 'claude' as const,
+    enabled: false,
+    configured: true,
+    claude: { keyConfigured: true, configured: true },
+    openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+  }
+
   it('fetchVisionConfig uses apiCall', async () => {
-    mockInvoke.mockResolvedValue({ apiKeyConfigured: true, enabled: false })
+    mockInvoke.mockResolvedValue(visionConfig)
     const result = await fetchVisionConfig()
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'config',
       method: 'getVision',
       args: [],
     })
-    expect(result).toEqual({ apiKeyConfigured: true, enabled: false })
+    expect(result).toEqual(visionConfig)
   })
 
-  it('updateVisionApiKey uses apiCall', async () => {
-    mockInvoke.mockResolvedValue({ apiKeyConfigured: true, enabled: false })
-    await updateVisionApiKey('sk-ant-123')
+  it('updateVisionProvider uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(visionConfig)
+    await updateVisionProvider('openai-compatible')
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'setVisionProvider',
+      args: ['openai-compatible'],
+    })
+  })
+
+  it('updateVisionApiKey uses apiCall with the provider and key', async () => {
+    mockInvoke.mockResolvedValue(visionConfig)
+    await updateVisionApiKey('claude', 'sk-ant-123')
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'config',
       method: 'setVisionApiKey',
-      args: ['sk-ant-123'],
+      args: ['claude', 'sk-ant-123'],
+    })
+  })
+
+  it('updateVisionOpenAiBaseUrl uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(visionConfig)
+    await updateVisionOpenAiBaseUrl('http://localhost:11434/v1')
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'setVisionOpenAiBaseUrl',
+      args: ['http://localhost:11434/v1'],
+    })
+  })
+
+  it('updateVisionOpenAiModel uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(visionConfig)
+    await updateVisionOpenAiModel('llava')
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'setVisionOpenAiModel',
+      args: ['llava'],
     })
   })
 
   it('updateVisionEnabled uses apiCall', async () => {
-    mockInvoke.mockResolvedValue({ apiKeyConfigured: true, enabled: true })
+    mockInvoke.mockResolvedValue({ ...visionConfig, enabled: true })
     await updateVisionEnabled(true)
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'config',

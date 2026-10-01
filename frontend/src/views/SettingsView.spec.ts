@@ -5,21 +5,47 @@ import {
   fetchVisionConfig,
   updateVisionApiKey,
   updateVisionEnabled,
+  updateVisionOpenAiBaseUrl,
+  updateVisionOpenAiModel,
+  updateVisionProvider,
 } from '@/api/config'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import SettingsView from './SettingsView.vue'
 
+const UNCONFIGURED_VISION = {
+  provider: 'claude' as const,
+  enabled: false,
+  configured: false,
+  claude: { keyConfigured: false, configured: false },
+  openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+}
+
+const CLAUDE_CONFIGURED_VISION = {
+  ...UNCONFIGURED_VISION,
+  configured: true,
+  claude: { keyConfigured: true, configured: true },
+}
+
 vi.mock('@/api/config', () => ({
   fetchDiscordConfig: vi.fn().mockResolvedValue({ tokenConfigured: false }),
   fetchStoragePath: vi.fn().mockResolvedValue({ path: null }),
-  fetchVisionConfig: vi.fn().mockResolvedValue({ apiKeyConfigured: false, enabled: false }),
+  fetchVisionConfig: vi.fn().mockResolvedValue({
+    provider: 'claude',
+    enabled: false,
+    configured: false,
+    claude: { keyConfigured: false, configured: false },
+    openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+  }),
   selectStorageFolder: vi.fn(),
   updateDiscordToken: vi.fn().mockResolvedValue({ tokenConfigured: true }),
   updateStoragePath: vi.fn().mockResolvedValue(undefined),
   fetchAccessibilitySettings: vi.fn().mockResolvedValue({ luminancePulses: true, reduceMotion: null }),
   updateAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
-  updateVisionApiKey: vi.fn().mockResolvedValue({ apiKeyConfigured: true, enabled: false }),
-  updateVisionEnabled: vi.fn().mockResolvedValue({ apiKeyConfigured: true, enabled: true }),
+  updateVisionProvider: vi.fn(),
+  updateVisionApiKey: vi.fn(),
+  updateVisionOpenAiBaseUrl: vi.fn(),
+  updateVisionOpenAiModel: vi.fn(),
+  updateVisionEnabled: vi.fn(),
 }))
 
 function mountSettings() {
@@ -138,10 +164,18 @@ describe('settingsView', () => {
 
   describe('vision to Vibe section', () => {
     beforeEach(() => {
-      vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: false, enabled: false })
+      vi.mocked(fetchVisionConfig).mockResolvedValue(UNCONFIGURED_VISION)
+      vi.mocked(updateVisionApiKey).mockResolvedValue(CLAUDE_CONFIGURED_VISION)
+      vi.mocked(updateVisionEnabled).mockResolvedValue({ ...CLAUDE_CONFIGURED_VISION, enabled: true })
+      vi.mocked(updateVisionProvider).mockResolvedValue({
+        ...UNCONFIGURED_VISION,
+        provider: 'openai-compatible',
+      })
+      vi.mocked(updateVisionOpenAiBaseUrl).mockResolvedValue(UNCONFIGURED_VISION)
+      vi.mocked(updateVisionOpenAiModel).mockResolvedValue(UNCONFIGURED_VISION)
     })
 
-    it('renders the section with a third-party disclosure', async () => {
+    it('renders the section with a third-party disclosure naming Claude by default', async () => {
       const wrapper = mountSettings()
       await flushPromises()
       const headings = wrapper.findAll('h2')
@@ -149,25 +183,25 @@ describe('settingsView', () => {
       expect(wrapper.text()).toContain('Anthropic')
     })
 
-    it('saves the API key', async () => {
+    it('saves the Claude API key', async () => {
       const wrapper = mountSettings()
       await flushPromises()
       await wrapper.find('#vision-api-key').setValue('sk-ant-123')
       await wrapper.find('[data-testid="vision-save-key"]').trigger('click')
       await flushPromises()
-      expect(updateVisionApiKey).toHaveBeenCalledWith('sk-ant-123')
+      expect(updateVisionApiKey).toHaveBeenCalledWith('claude', 'sk-ant-123')
       expect(wrapper.text()).toContain('Key saved')
     })
 
-    it('shows the toggle disabled until a key is configured', async () => {
+    it('shows the toggle disabled until the selected provider is configured', async () => {
       const wrapper = mountSettings()
       await flushPromises()
       const toggle = wrapper.find<HTMLInputElement>('#vision-enabled')
       expect(toggle.element.disabled).toBe(true)
     })
 
-    it('toggles the feature on when a key is configured', async () => {
-      vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: true, enabled: false })
+    it('toggles the feature on when the provider is configured', async () => {
+      vi.mocked(fetchVisionConfig).mockResolvedValue(CLAUDE_CONFIGURED_VISION)
       const wrapper = mountSettings()
       await flushPromises()
       const toggle = wrapper.find<HTMLInputElement>('#vision-enabled')
@@ -175,6 +209,61 @@ describe('settingsView', () => {
       await toggle.setValue(true)
       await flushPromises()
       expect(updateVisionEnabled).toHaveBeenCalledWith(true)
+    })
+
+    it('does not show Base URL/Model fields for Claude', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      expect(wrapper.find('#vision-base-url').exists()).toBe(false)
+      expect(wrapper.find('#vision-model').exists()).toBe(false)
+    })
+
+    it('switches to the OpenAI-compatible provider and shows its fields', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      await wrapper.find('#vision-provider').setValue('openai-compatible')
+      await flushPromises()
+      expect(updateVisionProvider).toHaveBeenCalledWith('openai-compatible')
+      expect(wrapper.find('#vision-base-url').exists()).toBe(true)
+      expect(wrapper.find('#vision-model').exists()).toBe(true)
+      expect(wrapper.text()).toContain('endpoint configured below')
+    })
+
+    it('saves a custom Base URL for the OpenAI-compatible provider', async () => {
+      vi.mocked(fetchVisionConfig).mockResolvedValue({ ...UNCONFIGURED_VISION, provider: 'openai-compatible' })
+      vi.mocked(updateVisionOpenAiBaseUrl).mockResolvedValue({
+        ...UNCONFIGURED_VISION,
+        provider: 'openai-compatible',
+        configured: true,
+        openaiCompatible: { keyConfigured: false, configured: true, baseUrl: 'http://localhost:11434/v1', model: 'gpt-6-astra' },
+      })
+      const wrapper = mountSettings()
+      await flushPromises()
+      await wrapper.find('#vision-base-url').setValue('http://localhost:11434/v1')
+      await wrapper.find('[data-testid="vision-save-base-url"]').trigger('click')
+      await flushPromises()
+      expect(updateVisionOpenAiBaseUrl).toHaveBeenCalledWith('http://localhost:11434/v1')
+      expect(wrapper.find<HTMLInputElement>('#vision-enabled').element.disabled).toBe(false)
+    })
+
+    it('resets the Model back to the default', async () => {
+      vi.mocked(fetchVisionConfig).mockResolvedValue({
+        ...UNCONFIGURED_VISION,
+        provider: 'openai-compatible',
+        openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'llava' },
+      })
+      vi.mocked(updateVisionOpenAiModel).mockResolvedValue({
+        ...UNCONFIGURED_VISION,
+        provider: 'openai-compatible',
+        openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+      })
+      const wrapper = mountSettings()
+      await flushPromises()
+      expect(wrapper.find<HTMLInputElement>('#vision-model').element.value).toBe('llava')
+      await wrapper.find('[data-testid="vision-reset-model"]').trigger('click')
+      await flushPromises()
+      expect(updateVisionOpenAiModel).toHaveBeenCalledWith('')
+      expect(wrapper.find<HTMLInputElement>('#vision-model').element.value).toBe('gpt-6-astra')
     })
   })
 })

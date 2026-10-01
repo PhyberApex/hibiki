@@ -27,13 +27,15 @@ function sound(id: string, category: 'music' | 'ambience', tags: string[] = []):
 const tavern = sound('tavern', 'music', ['warm', 'tavern'])
 const rain = sound('rain', 'ambience', ['storm', 'wet'])
 
-function mountDialog(overrides: Partial<{ musicSounds: SoundFile[], ambienceSounds: SoundFile[], musicInScene: string[], ambienceInScene: string[] }> = {}) {
+function mountDialog(overrides: Partial<{ musicSounds: SoundFile[], ambienceSounds: SoundFile[], musicInScene: string[], ambienceInScene: string[], provider: 'claude' | 'openai-compatible', endpoint: string }> = {}) {
   return mount(VisionToVibeDialog, {
     props: {
       musicSounds: [tavern],
       ambienceSounds: [rain],
       musicInScene: [],
       ambienceInScene: [],
+      provider: 'claude',
+      endpoint: 'https://api.openai.com/v1',
       ...overrides,
     },
   })
@@ -46,10 +48,16 @@ describe('visionToVibeDialog', () => {
     vi.mocked(matchVibe).mockReset()
   })
 
-  it('starts on the image picker with a third-party disclosure', () => {
+  it('starts on the image picker with a third-party disclosure naming Claude', () => {
     const wrapper = mountDialog()
     expect(wrapper.find('[data-testid="vibe-pick-image"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Anthropic')
+  })
+
+  it('names the configured endpoint when using the OpenAI-compatible provider', () => {
+    const wrapper = mountDialog({ provider: 'openai-compatible', endpoint: 'http://localhost:11434/v1' })
+    expect(wrapper.text()).toContain('http://localhost:11434/v1')
+    expect(wrapper.text()).not.toContain('Anthropic')
   })
 
   it('analyzes the chosen image and shows description, tags, and matches', async () => {

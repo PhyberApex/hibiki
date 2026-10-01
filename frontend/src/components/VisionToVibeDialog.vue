@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { VisionProviderId } from '@/api/config'
 import type { SoundFile } from '@/api/sounds'
 import type { VibeAnalysis, VibeMatch, VibeMatches } from '@/api/vision'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
@@ -14,12 +15,18 @@ const props = defineProps<{
   ambienceSounds: SoundFile[]
   musicInScene: string[]
   ambienceInScene: string[]
+  provider: VisionProviderId
+  endpoint: string
 }>()
 
 const emit = defineEmits<{
   add: [category: MatchCategory, sound: SoundFile]
   close: []
 }>()
+
+const privacyNote = computed(() => props.provider === 'openai-compatible'
+  ? `The image is sent to ${props.endpoint} for analysis and isn't kept afterwards.`
+  : 'The image is sent to Anthropic\'s Claude API for analysis and isn\'t kept afterwards.')
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp']
 
@@ -194,7 +201,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               Choose image…
             </button>
             <p class="drop-privacy">
-              The image is sent to Anthropic's Claude API for analysis and isn't kept afterwards.
+              {{ privacyNote }}
             </p>
           </template>
         </div>

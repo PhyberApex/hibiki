@@ -14,9 +14,25 @@ export interface AccessibilitySettings {
   reduceMotion: boolean | null
 }
 
+export type VisionProviderId = 'claude' | 'openai-compatible'
+
+export interface VisionProviderStatus {
+  keyConfigured: boolean
+  configured: boolean
+}
+
+export interface VisionOpenAICompatibleStatus extends VisionProviderStatus {
+  baseUrl: string
+  model: string
+}
+
 export interface VisionConfig {
-  apiKeyConfigured: boolean
+  provider: VisionProviderId
   enabled: boolean
+  /** Gate for the currently selected provider — mirrors `claude.configured` or `openaiCompatible.configured`. */
+  configured: boolean
+  claude: VisionProviderStatus
+  openaiCompatible: VisionOpenAICompatibleStatus
 }
 
 export interface StorageWarning {
@@ -111,9 +127,24 @@ export function fetchVisionConfig(): Promise<VisionConfig> {
   return apiCall<VisionConfig>('config', 'getVision', [])
 }
 
-export function updateVisionApiKey(apiKey: string): Promise<VisionConfig> {
+export function updateVisionProvider(provider: VisionProviderId): Promise<VisionConfig> {
   requireElectron()
-  return apiCall<VisionConfig>('config', 'setVisionApiKey', [apiKey])
+  return apiCall<VisionConfig>('config', 'setVisionProvider', [provider])
+}
+
+export function updateVisionApiKey(provider: VisionProviderId, apiKey: string): Promise<VisionConfig> {
+  requireElectron()
+  return apiCall<VisionConfig>('config', 'setVisionApiKey', [provider, apiKey])
+}
+
+export function updateVisionOpenAiBaseUrl(baseUrl: string): Promise<VisionConfig> {
+  requireElectron()
+  return apiCall<VisionConfig>('config', 'setVisionOpenAiBaseUrl', [baseUrl])
+}
+
+export function updateVisionOpenAiModel(model: string): Promise<VisionConfig> {
+  requireElectron()
+  return apiCall<VisionConfig>('config', 'setVisionOpenAiModel', [model])
 }
 
 export function updateVisionEnabled(enabled: boolean): Promise<VisionConfig> {

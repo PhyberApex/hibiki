@@ -127,7 +127,7 @@ Data lives in platform user data directory (e.g., `~/Library/Application Support
 - `sound-tags.json` — Sound Tags keyed by `<category>/<soundId>` (see `CONTEXT.md` glossary)
 - `music/`, `effects/`, `ambience/` — Sound files (copied on upload, keyed by UUID)
 
-Override paths with env vars: `HIBIKI_STORAGE_PATH`, `HIBIKI_MUSIC_DIR`, `HIBIKI_EFFECTS_DIR`, `HIBIKI_DATA_PATH` (see `.env.example`). The Vision to Vibe API key can also come from `HIBIKI_VISION_API_KEY` (env wins over the stored key, like `DISCORD_TOKEN`).
+Override paths with env vars: `HIBIKI_STORAGE_PATH`, `HIBIKI_MUSIC_DIR`, `HIBIKI_EFFECTS_DIR`, `HIBIKI_DATA_PATH` (see `.env.example`). The Vision to Vibe API keys can also come from env — `HIBIKI_VISION_API_KEY` for Claude, `HIBIKI_VISION_OPENAI_API_KEY` for the OpenAI-compatible provider — each env var winning over its stored counterpart, like `DISCORD_TOKEN`. There is no env var for provider selection; that lives only in `app-config.json`.
 
 ## Key Development Patterns
 
@@ -158,10 +158,12 @@ The Browser tab captures audio from a `WebContentsView` (Electron-managed browse
 
 ### Vision to Vibe
 
-Opt-in feature (off by default) that sends an image to Anthropic's Claude API and matches the returned Vibe Tags against the GM's own Sound Tags. See `agent-docs/adr/0001-vision-to-vibe-matching.md`.
-- Backend: `src/vision/vision.service.ts` (provider-agnostic `VisionProvider`, Claude is the only implementation) and `src/vision/vibe-matching.ts` (pure ranking, Music + Ambience only, top 5 per category).
+Opt-in feature (off by default) that sends an image to a Vision Provider and matches the returned Vibe Tags against the GM's own Sound Tags. See `agent-docs/adr/0001-vision-to-vibe-matching.md` and `agent-docs/adr/0002-vision-providers.md`.
+- Two Vision Providers: `claude` (default, pinned model, unchanged behavior) and `openai-compatible` (one adapter speaking the OpenAI Chat Completions format against a configurable Base URL + Model — reaches OpenAI itself, compatible gateways, or local servers like Ollama/LM Studio).
+- Backend: `src/vision/vision.service.ts` (provider-agnostic `VisionProvider`, plus `createClaudeVisionProvider` and `createOpenAICompatibleVisionProvider`) and `src/vision/vibe-matching.ts` (pure ranking, Music + Ambience only, top 5 per category).
+- `src/vision/vision-settings.ts` resolves the selected provider's full config (key, and for `openai-compatible`, Base URL/Model), each provider's key stored and retained independently in `app-config.json`.
 - Sound Tags live in `sound-tags.json` via `src/sound/sound-tags.store.ts`, merged into `SoundFile.tags` by the sound library.
-- Gating: the scene editor's "Vision to Vibe" button only renders when both the key is configured and the Settings toggle is on (`config.getVision`).
+- Gating: the scene editor's "Vision to Vibe" button only renders when the Settings toggle is on **and** the selected provider is configured (`config.getVision().configured`) — Claude needs a key; `openai-compatible` needs a key **or** a non-default Base URL (for keyless local servers). The backend re-checks this gate in `analyzeImageVibe`.
 - Never retain the analyzed image; it is read from disk, sent once, and dropped.
 
 ### Scene Playback

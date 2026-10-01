@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { VisionConfig } from '@/api/config'
-import { onMounted, ref } from 'vue'
+import type { VisionConfig, VisionProviderId } from '@/api/config'
+import { computed, onMounted, ref } from 'vue'
 import {
   fetchDiscordConfig,
   fetchStoragePath,
@@ -10,6 +10,9 @@ import {
   updateStoragePath,
   updateVisionApiKey,
   updateVisionEnabled,
+  updateVisionOpenAiBaseUrl,
+  updateVisionOpenAiModel,
+  updateVisionProvider,
 } from '@/api/config'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
@@ -27,22 +30,48 @@ const storageMessage = ref<{ type: 'success' | 'error', text: string } | null>(n
 
 const accessibilityMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
+const DEFAULT_VISION_CONFIG: VisionConfig = {
+  provider: 'claude',
+  enabled: false,
+  configured: false,
+  claude: { keyConfigured: false, configured: false },
+  openaiCompatible: { keyConfigured: false, configured: false, baseUrl: '', model: '' },
+}
+
 const visionConfig = ref<VisionConfig | null>(null)
 const visionKeyInput = ref('')
+const visionBaseUrlInput = ref('')
+const visionModelInput = ref('')
 const savingVisionKey = ref(false)
+const savingVisionProvider = ref(false)
+const savingVisionAdvanced = ref(false)
 const savingVisionToggle = ref(false)
 const visionMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+
+const isOpenAiCompatible = computed(() => visionConfig.value?.provider === 'openai-compatible')
+const providerLabel = computed(() => isOpenAiCompatible.value ? 'OpenAI-compatible' : 'Anthropic')
+const selectedProviderStatus = computed(() => {
+  if (!visionConfig.value)
+    return null
+  return isOpenAiCompatible.value ? visionConfig.value.openaiCompatible : visionConfig.value.claude
+})
+
+function syncVisionAdvancedInputs() {
+  visionBaseUrlInput.value = visionConfig.value?.openaiCompatible.baseUrl ?? ''
+  visionModelInput.value = visionConfig.value?.openaiCompatible.model ?? ''
+}
 
 async function load() {
   try {
     const [config, storage, vision] = await Promise.all([
       fetchDiscordConfig(),
       fetchStoragePath().catch(() => ({ path: null })),
-      fetchVisionConfig().catch(() => ({ apiKeyConfigured: false, enabled: false })),
+      fetchVisionConfig().catch(() => DEFAULT_VISION_CONFIG),
     ])
     discordConfig.value = config
     storagePath.value = storage.path
     visionConfig.value = vision
+    syncVisionAdvancedInputs()
   }
   catch (e) {
     message.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t load settings. Try again.' }
@@ -144,16 +173,32 @@ function useSystemMotion() {
   persistAccessibility(() => accessibility.setReduceMotion(null))
 }
 
+async function changeVisionProvider(event: Event) {
+  const provider = (event.target as HTMLSelectElement).value as VisionProviderId
+  savingVisionProvider.value = true
+  visionMessage.value = null
+  try {
+    visionConfig.value = await updateVisionProvider(provider)
+    syncVisionAdvancedInputs()
+  }
+  catch (e) {
+    visionMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t switch the Vision Provider.' }
+  }
+  finally {
+    savingVisionProvider.value = false
+  }
+}
+
 async function saveVisionKey() {
   const apiKey = visionKeyInput.value.trim()
-  if (!apiKey) {
-    visionMessage.value = { type: 'error', text: 'Paste your Anthropic API key in the field first.' }
+  if (!apiKey || !visionConfig.value) {
+    visionMessage.value = { type: 'error', text: `Paste your ${providerLabel.value} API key in the field first.` }
     return
   }
   savingVisionKey.value = true
   visionMessage.value = null
   try {
-    visionConfig.value = await updateVisionApiKey(apiKey)
+    visionConfig.value = await updateVisionApiKey(visionConfig.value.provider, apiKey)
     visionKeyInput.value = ''
     visionMessage.value = { type: 'success', text: 'Key saved. Switch Vision to Vibe on below to start using it.' }
   }
@@ -166,17 +211,22 @@ async function saveVisionKey() {
 }
 
 async function clearVisionKey() {
+  if (!visionConfig.value)
+    return
+  const provider = visionConfig.value.provider
+  const envVar = provider === 'openai-compatible' ? 'HIBIKI_VISION_OPENAI_API_KEY' : 'HIBIKI_VISION_API_KEY'
   savingVisionKey.value = true
   visionMessage.value = null
   try {
-    visionConfig.value = await updateVisionApiKey('')
-    if (visionConfig.value.apiKeyConfigured) {
-      visionMessage.value = { type: 'success', text: 'Stored key removed. The key from the HIBIKI_VISION_API_KEY environment variable is still in use.' }
+    visionConfig.value = await updateVisionApiKey(provider, '')
+    const status = provider === 'openai-compatible' ? visionConfig.value.openaiCompatible : visionConfig.value.claude
+    if (status.keyConfigured) {
+      visionMessage.value = { type: 'success', text: `Stored key removed. The key from the ${envVar} environment variable is still in use.` }
       return
     }
-    if (visionConfig.value.enabled)
+    if (!visionConfig.value.configured && visionConfig.value.enabled)
       visionConfig.value = await updateVisionEnabled(false)
-    visionMessage.value = { type: 'success', text: 'Key removed. Vision to Vibe is off.' }
+    visionMessage.value = { type: 'success', text: visionConfig.value.enabled ? 'Key removed.' : 'Key removed. Vision to Vibe is off.' }
   }
   catch (e) {
     visionMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t remove the API key.' }
@@ -185,6 +235,32 @@ async function clearVisionKey() {
     savingVisionKey.value = false
   }
 }
+
+async function saveVisionAdvancedField(
+  label: string,
+  value: string,
+  update: (value: string) => Promise<VisionConfig>,
+) {
+  savingVisionAdvanced.value = true
+  visionMessage.value = null
+  try {
+    visionConfig.value = await update(value)
+    syncVisionAdvancedInputs()
+    visionMessage.value = { type: 'success', text: value ? `${label} saved.` : `${label} reset to the default.` }
+  }
+  catch (e) {
+    const action = value ? 'save' : 'reset'
+    visionMessage.value = { type: 'error', text: e instanceof Error ? e.message : `Couldn't ${action} the ${label}.` }
+  }
+  finally {
+    savingVisionAdvanced.value = false
+  }
+}
+
+const saveVisionBaseUrl = () => saveVisionAdvancedField('Base URL', visionBaseUrlInput.value, updateVisionOpenAiBaseUrl)
+const resetVisionBaseUrl = () => saveVisionAdvancedField('Base URL', '', updateVisionOpenAiBaseUrl)
+const saveVisionModel = () => saveVisionAdvancedField('Model', visionModelInput.value, updateVisionOpenAiModel)
+const resetVisionModel = () => saveVisionAdvancedField('Model', '', updateVisionOpenAiModel)
 
 async function toggleVision(event: Event) {
   const enabled = (event.target as HTMLInputElement).checked
@@ -399,24 +475,46 @@ onMounted(load)
           Vision to Vibe
         </h2>
         <p v-if="visionConfig" class="section-status">
-          <span v-if="visionConfig.enabled && visionConfig.apiKeyConfigured" class="status-connected">On</span>
-          <span v-else-if="visionConfig.apiKeyConfigured" class="status-missing">Key saved, switched off</span>
-          <span v-else class="status-missing">No key yet</span>
+          <span v-if="visionConfig.enabled && visionConfig.configured" class="status-connected">On</span>
+          <span v-else-if="visionConfig.configured" class="status-missing">Configured, switched off</span>
+          <span v-else class="status-missing">Not configured</span>
         </p>
       </div>
       <p class="section-desc">
         Drop a battle map or mood-board image into a scene and get matching Music and Ambience suggestions from your own tagged sound library.
-        <strong class="privacy-note">Opt-in: each image you analyze is sent to Anthropic's Claude API using your key.</strong>
+        <strong class="privacy-note">
+          <template v-if="isOpenAiCompatible">Opt-in: each image you analyze is sent to the endpoint configured below.</template>
+          <template v-else>Opt-in: each image you analyze is sent to Anthropic's Claude API using your key.</template>
+        </strong>
         Hibiki does not keep the image after the request. Off by default.
       </p>
       <div class="field">
-        <label for="vision-api-key" class="field-label">Anthropic API key</label>
+        <label for="vision-provider" class="field-label">Vision Provider</label>
+        <select
+          id="vision-provider"
+          class="input field-input"
+          :value="visionConfig?.provider"
+          :disabled="savingVisionProvider"
+          @change="changeVisionProvider"
+        >
+          <option value="claude">
+            Claude (Anthropic)
+          </option>
+          <option value="openai-compatible">
+            OpenAI-compatible endpoint
+          </option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="vision-api-key" class="field-label">{{ providerLabel }} API key</label>
         <div class="field-row">
           <input
             id="vision-api-key"
             v-model="visionKeyInput"
             type="password"
-            :placeholder="visionConfig?.apiKeyConfigured ? 'Key saved — paste a new key to replace it' : 'Paste your Anthropic API key'"
+            :placeholder="selectedProviderStatus?.keyConfigured
+              ? 'Key saved — paste a new key to replace it'
+              : (isOpenAiCompatible ? 'Paste an API key (optional for keyless local servers)' : 'Paste your Anthropic API key')"
             autocomplete="off"
             class="input field-input"
           >
@@ -430,7 +528,7 @@ onMounted(load)
             {{ savingVisionKey ? 'Saving…' : 'Save' }}
           </button>
           <button
-            v-if="visionConfig?.apiKeyConfigured"
+            v-if="selectedProviderStatus?.keyConfigured"
             type="button"
             class="btn btn-ghost"
             :disabled="savingVisionKey"
@@ -440,20 +538,84 @@ onMounted(load)
           </button>
         </div>
       </div>
+      <template v-if="isOpenAiCompatible">
+        <div class="field">
+          <label for="vision-base-url" class="field-label">Base URL</label>
+          <div class="field-row">
+            <input
+              id="vision-base-url"
+              v-model="visionBaseUrlInput"
+              type="text"
+              autocomplete="off"
+              class="input field-input"
+            >
+            <button
+              type="button"
+              class="btn btn-primary"
+              data-testid="vision-save-base-url"
+              :disabled="savingVisionAdvanced"
+              @click="saveVisionBaseUrl"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              data-testid="vision-reset-base-url"
+              :disabled="savingVisionAdvanced"
+              @click="resetVisionBaseUrl"
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="vision-model" class="field-label">Model</label>
+          <div class="field-row">
+            <input
+              id="vision-model"
+              v-model="visionModelInput"
+              type="text"
+              autocomplete="off"
+              class="input field-input"
+            >
+            <button
+              type="button"
+              class="btn btn-primary"
+              data-testid="vision-save-model"
+              :disabled="savingVisionAdvanced"
+              @click="saveVisionModel"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              data-testid="vision-reset-model"
+              :disabled="savingVisionAdvanced"
+              @click="resetVisionModel"
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+      </template>
       <div class="toggle-list vision-toggle-list">
-        <div class="toggle-row" :class="{ 'toggle-row-disabled': !visionConfig?.apiKeyConfigured }">
+        <div class="toggle-row" :class="{ 'toggle-row-disabled': !visionConfig?.configured }">
           <input
             id="vision-enabled"
             type="checkbox"
             class="toggle-input"
             :checked="Boolean(visionConfig?.enabled)"
-            :disabled="!visionConfig?.apiKeyConfigured || savingVisionToggle"
+            :disabled="!visionConfig?.configured || savingVisionToggle"
             @change="toggleVision"
           >
           <div class="toggle-text">
             <label for="vision-enabled" class="toggle-title">Enable Vision to Vibe</label>
             <span class="toggle-desc">
-              {{ visionConfig?.apiKeyConfigured ? 'Shows the Vision to Vibe button in the scene editor.' : 'Save an API key first.' }}
+              {{ visionConfig?.configured
+                ? 'Shows the Vision to Vibe button in the scene editor.'
+                : (isOpenAiCompatible ? 'Add a key, or a custom Base URL for a keyless local server, first.' : 'Save an API key first.') }}
             </span>
           </div>
         </div>
