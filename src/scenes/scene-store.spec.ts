@@ -1,6 +1,8 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { clearStorageWarnings, getStorageWarnings } from '../json-file'
 import { createSceneStore } from './scene-store'
 
 describe('createSceneStore', () => {
@@ -24,6 +26,7 @@ describe('createSceneStore', () => {
   beforeEach(() => {
     config = makeConfig()
     delete process.env.HIBIKI_USER_DATA
+    clearStorageWarnings()
   })
 
   it('list returns empty array when no scenes', async () => {
@@ -93,5 +96,34 @@ describe('createSceneStore', () => {
   it('remove throws for missing id', async () => {
     const store = createSceneStore(config)
     await expect(store.remove('nonexistent')).rejects.toThrow('Scene \'nonexistent\' not found')
+  })
+
+  it('a truncated scenes.json is preserved as a backup, and saving afterwards does not destroy it', async () => {
+    const scenesPath = join(dirname(config.database.path), 'scenes.json')
+    mkdirSync(dirname(scenesPath), { recursive: true })
+    writeFileSync(scenesPath, '[{"id": "truncat')
+
+    const store = createSceneStore(config)
+    const scenesOnLoad = await store.list()
+    expect(scenesOnLoad).toEqual([])
+
+    const warnings = getStorageWarnings()
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]!.file).toBe(scenesPath)
+    expect(readFileSync(warnings[0]!.backupPath, 'utf-8')).toBe('[{"id": "truncat')
+
+    await store.save({ name: 'After Corruption' })
+    expect(readFileSync(warnings[0]!.backupPath, 'utf-8')).toBe('[{"id": "truncat')
+    const scenesAfterSave = await store.list()
+    expect(scenesAfterSave).toHaveLength(1)
+    expect(scenesAfterSave[0]!.name).toBe('After Corruption')
+  })
+
+  it('never writes directly to the live file', async () => {
+    const store = createSceneStore(config)
+    await store.save({ name: 'Atomic' })
+    const scenesPath = join(dirname(config.database.path), 'scenes.json')
+    const entries = await readdir(dirname(scenesPath))
+    expect(entries).not.toContain('scenes.json.tmp')
   })
 })

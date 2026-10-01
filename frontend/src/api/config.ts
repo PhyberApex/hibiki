@@ -19,6 +19,11 @@ export interface VisionConfig {
   enabled: boolean
 }
 
+export interface StorageWarning {
+  file: string
+  backupPath: string
+}
+
 function requireElectron(): void {
   if (!useElectronApi())
     throw new Error('Hibiki runs as an Electron app. Open it via pnpm run electron.')
@@ -114,4 +119,9 @@ export function updateVisionApiKey(apiKey: string): Promise<VisionConfig> {
 export function updateVisionEnabled(enabled: boolean): Promise<VisionConfig> {
   requireElectron()
   return apiCall<VisionConfig>('config', 'setVisionEnabled', [enabled])
+}
+
+export function fetchStorageWarnings(): Promise<StorageWarning[]> {
+  requireElectron()
+  return apiCall<StorageWarning[]>('config', 'getStorageWarnings', [])
 }

@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import type { StorageWarning } from '@/api/config'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { fetchStorageWarnings } from '@/api/config'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
 
@@ -11,6 +13,13 @@ const route = useRoute()
 const player = usePlayerStore()
 const accessibility = useAccessibilityStore()
 let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const storageWarnings = ref<StorageWarning[]>([])
+const storageWarningsDismissed = ref(false)
+
+function dismissStorageWarnings() {
+  storageWarningsDismissed.value = true
+}
 
 const tabs = [
   { path: '/media', label: 'Media' },
@@ -50,6 +59,11 @@ onMounted(() => {
     if (!player.botStatus?.ready)
       startPollingWhenDisconnected()
   })
+  fetchStorageWarnings().then((warnings) => {
+    storageWarnings.value = warnings
+  }).catch((err) => {
+    console.error('Failed to load storage warnings:', err)
+  })
 })
 
 onUnmounted(() => {
@@ -78,9 +92,29 @@ function channelDotPulse(guildId: string, channelId: string): string[] {
     return ['pulse', 'pulse-steady']
   return []
 }
+
+const showStorageWarnings = computed(() =>
+  !storageWarningsDismissed.value && storageWarnings.value.length > 0,
+)
 </script>
 
 <template>
+  <div v-if="showStorageWarnings" class="storage-warning-banner" role="alert">
+    <div class="storage-warning-messages">
+      <p v-for="warning in storageWarnings" :key="warning.file" class="storage-warning-message">
+        <strong>{{ warning.file.split('/').pop() }}</strong> was corrupted and has been reset.
+        Your previous data was saved to <code>{{ warning.backupPath.split('/').pop() }}</code>.
+      </p>
+    </div>
+    <button
+      type="button"
+      class="storage-warning-dismiss"
+      aria-label="Dismiss storage warning"
+      @click="dismissStorageWarnings"
+    >
+      ✕
+    </button>
+  </div>
   <div v-if="isWelcome" class="welcome-layout">
     <RouterView />
   </div>
@@ -206,6 +240,49 @@ function channelDotPulse(guildId: string, channelId: string): string[] {
 </template>
 
 <style scoped>
+.storage-warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: var(--color-error-muted);
+  border-bottom: 1px solid var(--color-error);
+  color: var(--color-text);
+}
+
+.storage-warning-messages {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.storage-warning-message {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.storage-warning-dismiss {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.storage-warning-dismiss:hover {
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
 .welcome-layout {
   min-height: 100vh;
 }

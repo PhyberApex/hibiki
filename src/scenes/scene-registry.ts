@@ -1,8 +1,9 @@
 import type { Config } from '../config'
 import type { RegistryEntry, RegistryIndex } from './scene-package.types'
 import type { Scene, SceneItem } from './scene-store'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { writeJsonFileAtomic } from '../json-file'
 import { createLogger } from '../logger'
 import { createSceneStore } from './scene-store'
 
@@ -35,8 +36,7 @@ async function readCache(cachePath: string): Promise<CachedIndex | null> {
 }
 
 async function writeCache(cachePath: string, data: CachedIndex): Promise<void> {
-  await mkdir(dirname(cachePath), { recursive: true })
-  await writeFile(cachePath, JSON.stringify(data, null, 2), 'utf-8')
+  await writeJsonFileAtomic(cachePath, data)
 }
 
 function registryEntryToScene(entry: RegistryEntry): Omit<Scene, 'id' | 'createdAt' | 'updatedAt'> {
