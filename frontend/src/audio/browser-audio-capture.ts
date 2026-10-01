@@ -182,6 +182,26 @@ export async function captureFromAudioElement(
 }
 
 /**
+ * Close and evict the AudioContext bound to an element, for callers that create
+ * one HTMLAudioElement per trigger and discard it afterward (never calling
+ * captureFromAudioElement on that same element again). Safe to call on an
+ * element that was never captured.
+ */
+export function releaseAudioElementContext(element: HTMLAudioElement): void {
+  const entry = elementContexts.get(element)
+  if (!entry)
+    return
+  if (entry.activeWorklet) {
+    entry.activeWorklet.port.onmessage = null
+    entry.activeWorklet.disconnect()
+  }
+  entry.source.disconnect()
+  elementContexts.delete(element)
+  if (entry.ctx.state !== 'closed')
+    entry.ctx.close().catch(() => {})
+}
+
+/**
  * Capture from a MediaStream (e.g. from getUserMedia tab capture or getDisplayMedia).
  */
 export async function captureFromMediaStream(

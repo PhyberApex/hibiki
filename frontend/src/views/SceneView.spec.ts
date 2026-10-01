@@ -1,8 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { fetchVisionConfig } from '@/api/config'
+import { usePlayerStore } from '@/stores/player'
 import SceneView from './SceneView.vue'
 
 vi.mock('@/api/scenes', () => ({
@@ -17,7 +18,10 @@ vi.mock('@/api/scenes', () => ({
 vi.mock('@/api/sounds', () => ({
   listAmbience: vi.fn().mockResolvedValue([{ id: 'amb-1', name: 'Rain', filename: 'rain.mp3' }]),
   listMusic: vi.fn().mockResolvedValue([]),
-  listEffects: vi.fn().mockResolvedValue([{ id: 'fx-1', name: 'Thunder', filename: 'thunder.mp3' }]),
+  listEffects: vi.fn().mockResolvedValue([
+    { id: 'fx-1', name: 'Thunder', filename: 'thunder.mp3' },
+    { id: 'fx-2', name: 'Door slam', filename: 'door.mp3' },
+  ]),
   soundStreamUrl: vi.fn((type: string, id: string) => `hibiki://sound/${type}/${id}`),
 }))
 
@@ -42,7 +46,8 @@ vi.mock('@/api/vision', () => ({
 }))
 
 vi.mock('@/audio/browser-audio-capture', () => ({
-  captureFromAudioElement: vi.fn().mockResolvedValue({ stop: vi.fn() }),
+  captureFromAudioElement: vi.fn().mockImplementation(() => Promise.resolve({ stop: vi.fn() })),
+  releaseAudioElementContext: vi.fn(),
 }))
 
 const scene = {
@@ -50,7 +55,10 @@ const scene = {
   name: 'Storm',
   ambience: [{ soundId: 'amb-1', soundName: 'Rain', volume: 80, enabled: true }],
   music: [],
-  effects: [{ soundId: 'fx-1', soundName: 'Thunder' }],
+  effects: [
+    { soundId: 'fx-1', soundName: 'Thunder' },
+    { soundId: 'fx-2', soundName: 'Door slam' },
+  ],
 }
 
 const router = createRouter({
@@ -91,6 +99,25 @@ async function mountScene() {
   })
   await flushPromises()
   return wrapper
+}
+
+async function mountSceneJoined() {
+  await router.push('/scenes/s1')
+  await router.isReady()
+  const pinia = createPinia()
+  const wrapper = mount(SceneView, {
+    global: {
+      plugins: [pinia, router],
+      stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+    },
+  })
+  const player = usePlayerStore(pinia)
+  player.playerState = [
+    { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+  ]
+  player.guildId = 'g1'
+  await flushPromises()
+  return { wrapper, player }
 }
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -179,5 +206,137 @@ describe('sceneView — Vision to Vibe entry point', () => {
     vi.mocked(fetchVisionConfig).mockRejectedValue(new Error('offline'))
     const wrapper = await mountScene()
     expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(false)
+  })
+})
+
+describe('sceneView — overlapping effects', () => {
+  let audioInstances: HTMLAudioElement[] = []
+
+  beforeAll(stubMediaElement)
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValue(JSON.parse(JSON.stringify(scene)))
+
+    audioInstances = []
+    const OriginalAudio = globalThis.Audio
+    vi.stubGlobal('Audio', new Proxy(OriginalAudio, {
+      construct(target, args) {
+        const instance = Reflect.construct(target, args) as HTMLAudioElement
+        // Give each element its own `pause` mock — spying on the shared
+        // prototype-level stub would dedupe to a single spy across elements.
+        Object.defineProperty(instance, 'pause', { configurable: true, value: vi.fn() })
+        audioInstances.push(instance)
+        return instance
+      },
+    }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
+
+  it('layers two different effects without cutting either off (local preview)', async () => {
+    const wrapper = await mountScene()
+    audioInstances.length = 0
+    const triggers = wrapper.findAll('.effect-trigger')
+    await triggers[0].trigger('click')
+    await triggers[1].trigger('click')
+
+    expect(audioInstances).toHaveLength(2)
+    expect(audioInstances[0].pause).not.toHaveBeenCalled()
+    expect(audioInstances[1].pause).not.toHaveBeenCalled()
+  })
+
+  it('layers two instances when the same effect is triggered twice (local preview)', async () => {
+    const wrapper = await mountScene()
+    audioInstances.length = 0
+    const trigger = wrapper.find('.effect-trigger')
+    await trigger.trigger('click')
+    await trigger.trigger('click')
+
+    expect(audioInstances).toHaveLength(2)
+    expect(audioInstances[0].pause).not.toHaveBeenCalled()
+    expect(audioInstances[1].pause).not.toHaveBeenCalled()
+  })
+
+  it('fires the flash feedback on every trigger, even when layering', async () => {
+    const wrapper = await mountScene()
+    const trigger = wrapper.find('.effect-trigger')
+    await trigger.trigger('click')
+    await trigger.trigger('click')
+
+    expect(wrapper.find('.effect-card').classes()).toContain('pulse-flash')
+  })
+
+  it('stops the oldest instance once a ninth is triggered', async () => {
+    const wrapper = await mountScene()
+    audioInstances.length = 0
+    const trigger = wrapper.find('.effect-trigger')
+    for (let i = 0; i < 8; i++)
+      await trigger.trigger('click')
+    expect(audioInstances).toHaveLength(8)
+    const firstEight = [...audioInstances]
+
+    await trigger.trigger('click')
+
+    expect(audioInstances).toHaveLength(9)
+    expect(firstEight[0].pause).toHaveBeenCalled()
+    for (let i = 1; i < 8; i++)
+      expect(firstEight[i].pause).not.toHaveBeenCalled()
+  })
+
+  it('tears down the stream, capture session and audio context when an instance ends (Discord)', async () => {
+    const { stopEffectStream } = await import('@/api/audio-stream')
+    const { captureFromAudioElement, releaseAudioElementContext } = await import('@/audio/browser-audio-capture')
+    const { wrapper } = await mountSceneJoined()
+    audioInstances.length = 0
+    const trigger = wrapper.find('.effect-trigger')
+    await trigger.trigger('click')
+    await flushPromises()
+
+    expect(audioInstances).toHaveLength(1)
+    const el = audioInstances[0]
+    const sess = await vi.mocked(captureFromAudioElement).mock.results[0].value
+
+    el.dispatchEvent(new Event('ended'))
+
+    expect(sess.stop).toHaveBeenCalled()
+    expect(releaseAudioElementContext).toHaveBeenCalledWith(el)
+    expect(stopEffectStream).toHaveBeenCalledWith('g1', 'effect-1')
+  })
+
+  it('stops all running effect instances when the scene stops', async () => {
+    const { stopEffectStream } = await import('@/api/audio-stream')
+    const { wrapper, player } = await mountSceneJoined()
+    const trigger = wrapper.find('.effect-trigger')
+    await trigger.trigger('click')
+    await flushPromises()
+
+    player.scenePlaying = true
+    await flushPromises()
+    await wrapper.find('.btn-stop-scene').trigger('click')
+
+    expect(stopEffectStream).toHaveBeenCalledWith('g1', 'effect-1')
+  })
+
+  it('stops all running effect instances when the voice channel is left', async () => {
+    const { stopEffectStream } = await import('@/api/audio-stream')
+    const { wrapper, player } = await mountSceneJoined()
+    const trigger = wrapper.find('.effect-trigger')
+    await trigger.trigger('click')
+    await flushPromises()
+
+    player.playerState = []
+    await flushPromises()
+
+    expect(stopEffectStream).toHaveBeenCalledWith('g1', 'effect-1')
   })
 })
