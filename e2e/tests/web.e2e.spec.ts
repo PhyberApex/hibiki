@@ -3,6 +3,7 @@ import type { Client } from 'discord.js'
 import { existsSync, unlinkSync } from 'node:fs'
 import { test as base, expect } from '@playwright/test'
 import {
+  closeElectronApp,
   getMainWindow,
   invokeApi,
   launchElectronApp,
@@ -28,7 +29,7 @@ const test = base.extend<ElectronTestFixtures>({
   electronApp: async ({}, use) => {
     const app = await launchElectronApp()
     await use(app)
-    await app.close()
+    await closeElectronApp(app)
   },
   page: async ({ electronApp }, use) => {
     const window = await getMainWindow(electronApp)
