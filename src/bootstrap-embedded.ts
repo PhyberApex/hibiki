@@ -128,6 +128,12 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
   const config = getConfig()
   await ensureStorageDirs(config)
   const appConfig = createAppConfig(config, codec)
+
+  async function getDiscordStatus(): Promise<{ tokenConfigured: boolean, encrypted: boolean }> {
+    const tokenConfigured = Boolean(config.discord.token) || Boolean(await appConfig.get('discord.token'))
+    return { tokenConfigured, encrypted: appConfig.secretsEncrypted }
+  }
+
   const sounds = createSoundLibrary(config)
   const scenes = createSceneStore(config)
   const registry = createSceneRegistry(config)
@@ -181,23 +187,11 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
       reconnect: () => discord.reconnect(),
     },
     config: {
-      getDiscord: async () => {
-        const fromEnv = config.discord.token
-        if (fromEnv)
-          return { tokenConfigured: true, encrypted: appConfig.secretsEncrypted }
-        const fromDb = await appConfig.get('discord.token')
-        return { tokenConfigured: Boolean(fromDb), encrypted: appConfig.secretsEncrypted }
-      },
+      getDiscord: () => getDiscordStatus(),
       setDiscordToken: async (token) => {
-        if (typeof token === 'string' && token.trim()) {
+        if (typeof token === 'string' && token.trim())
           await appConfig.set('discord.token', token.trim())
-          return { tokenConfigured: true, encrypted: appConfig.secretsEncrypted }
-        }
-        const fromEnv = config.discord.token
-        if (fromEnv)
-          return { tokenConfigured: true, encrypted: appConfig.secretsEncrypted }
-        const fromDb = await appConfig.get('discord.token')
-        return { tokenConfigured: Boolean(fromDb), encrypted: appConfig.secretsEncrypted }
+        return getDiscordStatus()
       },
       getStoragePath: async () => {
         const p = await appConfig.get('storage.path')
