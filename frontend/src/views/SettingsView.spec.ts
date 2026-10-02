@@ -2,7 +2,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  fetchSceneFadeLength,
   fetchVisionConfig,
+  updateSceneFadeLength,
   updateVisionApiKey,
   updateVisionEnabled,
   updateVisionOpenAiBaseUrl,
@@ -41,6 +43,11 @@ vi.mock('@/api/config', () => ({
   updateStoragePath: vi.fn().mockResolvedValue(undefined),
   fetchAccessibilitySettings: vi.fn().mockResolvedValue({ luminancePulses: true, reduceMotion: null }),
   updateAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
+  fetchSceneFadeLength: vi.fn().mockResolvedValue(3),
+  updateSceneFadeLength: vi.fn().mockResolvedValue(undefined),
+  SCENE_FADE_LENGTH_MIN_SECONDS: 0,
+  SCENE_FADE_LENGTH_MAX_SECONDS: 10,
+  SCENE_FADE_LENGTH_STEP_SECONDS: 0.5,
   updateVisionProvider: vi.fn(),
   updateVisionApiKey: vi.fn(),
   updateVisionOpenAiBaseUrl: vi.fn(),
@@ -159,6 +166,41 @@ describe('settingsView', () => {
       expect(updateAccessibilitySettings).toHaveBeenLastCalledWith({ luminancePulses: true, reduceMotion: null })
       expect(store.followsSystemMotion).toBe(true)
       expect(wrapper.find<HTMLInputElement>('#reduce-motion').element.checked).toBe(true)
+    })
+  })
+
+  describe('scene transitions section', () => {
+    beforeEach(() => {
+      vi.mocked(fetchSceneFadeLength).mockResolvedValue(3)
+    })
+
+    it('renders the Scene transitions section with the stored value', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      const headings = wrapper.findAll('h2')
+      expect(headings.some(h => h.text() === 'Scene transitions')).toBe(true)
+      const slider = wrapper.find<HTMLInputElement>('#scene-fade-length')
+      expect(slider.element.value).toBe('3')
+      expect(slider.element.min).toBe('0')
+      expect(slider.element.max).toBe('10')
+      expect(slider.element.step).toBe('0.5')
+      expect(wrapper.find('.fade-value').text()).toBe('3s')
+    })
+
+    it('shows "Hard cut" at 0 seconds', async () => {
+      vi.mocked(fetchSceneFadeLength).mockResolvedValue(0)
+      const wrapper = mountSettings()
+      await flushPromises()
+      expect(wrapper.find('.fade-value').text()).toBe('Hard cut')
+    })
+
+    it('saves the fade length on change', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      await wrapper.find('#scene-fade-length').setValue('4.5')
+      await flushPromises()
+      expect(updateSceneFadeLength).toHaveBeenCalledWith(4.5)
+      expect(wrapper.find('.fade-value').text()).toBe('4.5s')
     })
   })
 

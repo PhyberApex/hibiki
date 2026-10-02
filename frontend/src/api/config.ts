@@ -16,6 +16,10 @@ export interface AccessibilitySettings {
   reduceMotion: boolean | null
 }
 
+export const SCENE_FADE_LENGTH_MIN_SECONDS = 0
+export const SCENE_FADE_LENGTH_MAX_SECONDS = 10
+export const SCENE_FADE_LENGTH_STEP_SECONDS = 0.5
+
 export type VisionProviderId = 'claude' | 'openai-compatible'
 
 export interface VisionProviderStatus {
@@ -80,6 +84,16 @@ export function fetchAccessibilitySettings(): Promise<AccessibilitySettings> {
 export function updateAccessibilitySettings(settings: AccessibilitySettings): Promise<void> {
   requireElectron()
   return apiCall<void>('config', 'setAccessibility', [settings])
+}
+
+export function fetchSceneFadeLength(): Promise<number> {
+  requireElectron()
+  return apiCall<number>('config', 'getSceneFadeLength', [])
+}
+
+export function updateSceneFadeLength(seconds: number): Promise<void> {
+  requireElectron()
+  return apiCall<void>('config', 'setSceneFadeLength', [seconds])
 }
 
 export async function selectStorageFolder(): Promise<string | null> {
