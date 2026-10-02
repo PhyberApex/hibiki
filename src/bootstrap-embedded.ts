@@ -146,9 +146,12 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
   // Read scenes.json, app-config.json, and (via sounds.list, which reads the
   // sound-tags store) sound-tags.json up front, so a corrupt file is detected
   // and its storage warning recorded before the frontend asks for warnings on launch.
+  // This also migrates any legacy plaintext secret (discord.token, vision.apiKey)
+  // to encrypted storage on launch, without requiring the GM to open Settings first.
   await Promise.all([
     scenes.list(),
     appConfig.get('discord.token'),
+    visionSettings.get(),
     sounds.list('music'),
   ]).catch((err) => {
     console.error('[Hibiki] Storage warm-up failed:', err)
