@@ -182,6 +182,85 @@ describe('sceneView pulses', () => {
   })
 })
 
+describe('sceneView — compact layout now-playing summary', () => {
+  beforeAll(stubMediaElement)
+
+  beforeEach(async () => {
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValue(JSON.parse(JSON.stringify(scene)))
+  })
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
+
+  it('shows "Nothing playing" while the scene is idle', async () => {
+    const wrapper = await mountScene()
+    expect(wrapper.find('.now-playing-line').text()).toBe('Nothing playing')
+  })
+
+  it('counts playing ambience once the scene plays locally', async () => {
+    const wrapper = await mountScene()
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.now-playing-line').text()).toContain('1 ambience')
+  })
+
+  it('names the currently playing music track', async () => {
+    const { listMusic } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockResolvedValueOnce([{ id: 'm1', name: 'Tavern Theme', filename: 'tavern.mp3' }])
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValueOnce({
+      ...JSON.parse(JSON.stringify(scene)),
+      music: [{ soundId: 'm1', soundName: 'Tavern Theme', volume: 80, loop: false }],
+    })
+    const wrapper = await mountScene()
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.now-playing-line').text()).toContain('Tavern Theme')
+    expect(wrapper.find('.now-playing-line').text()).toContain('1 ambience')
+  })
+
+  it('shows "Scene playing" (never "Nothing playing") while Stop is still the active action, even after a track ends on its own', async () => {
+    const { listMusic } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockResolvedValueOnce([{ id: 'm1', name: 'Tavern Theme', filename: 'tavern.mp3' }])
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValueOnce({
+      id: 's1',
+      name: 'Storm',
+      ambience: [],
+      music: [{ soundId: 'm1', soundName: 'Tavern Theme', volume: 80, loop: false }],
+      effects: [],
+    })
+    const playSpy = vi.spyOn(mediaProto, 'play').mockImplementation(function (this: HTMLMediaElement) {
+      queueMicrotask(() => this.onended?.(new Event('ended')))
+      return Promise.resolve()
+    })
+    const wrapper = await mountScene()
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+
+    // The track already ended (onended cleared playingMusicId), but the scene
+    // is still "started" — Stop is still the right button, so the summary
+    // line must not claim nothing is playing.
+    expect(wrapper.find('.btn-stop-scene').exists()).toBe(true)
+    expect(wrapper.find('.now-playing-line').text()).toBe('Scene playing')
+
+    playSpy.mockRestore()
+  })
+
+  it('stops reporting playback once the scene is stopped', async () => {
+    const wrapper = await mountScene()
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+    await wrapper.find('.btn-stop-scene').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.now-playing-line').text()).toBe('Nothing playing')
+  })
+})
+
 describe('sceneView — Vision to Vibe entry point', () => {
   beforeEach(async () => {
     const { getScene } = await import('@/api/scenes')

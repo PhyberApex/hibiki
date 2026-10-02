@@ -84,6 +84,44 @@ const botStatusPulse = computed(() => {
   return player.botStatus?.ready ? 'pulse-steady' : 'pulse-alert'
 })
 
+// Prefer the currently selected guild (player.guildId) — that's the guild
+// Scene playback actually targets — but fall back to "any connected guild"
+// while guildId hasn't been (re-)synced yet, e.g. right after doReconnect()
+// clears it and before loadDirectory() resolves. Without the fallback this
+// would wrongly read as "not joined" during that window.
+const connectedEntry = computed(() => {
+  if (player.guildId)
+    return player.playerState.find(g => g.guildId === player.guildId && g.connectedChannelId) ?? null
+  return player.playerState.find(g => g.connectedChannelId) ?? null
+})
+
+const connectedChannelName = computed(() => {
+  if (!connectedEntry.value)
+    return null
+  const guild = player.directory.find(g => g.guildId === connectedEntry.value!.guildId)
+  return guild?.channels.find(c => c.id === connectedEntry.value!.connectedChannelId)?.name ?? null
+})
+
+const compactConnectionLabel = computed(() => {
+  if (!player.botStatus?.ready)
+    return 'Disconnected'
+  if (connectedChannelName.value)
+    return connectedChannelName.value
+  // Joined but the directory hasn't caught up with the channel name yet —
+  // say "Connected", not a false "No channel".
+  return connectedEntry.value ? 'Connected' : 'No channel'
+})
+
+const compactConnectionTitle = computed(() => {
+  if (!player.botStatus?.ready)
+    return 'Discord bot not connected'
+  if (connectedChannelName.value)
+    return `Connected to ${connectedChannelName.value} — widen the window to change channel`
+  return connectedEntry.value
+    ? 'Connected — widen the window to see the channel name'
+    : 'Discord bot connected — widen the window to join a voice channel'
+})
+
 function channelDotPulse(guildId: string, channelId: string): string[] {
   const isSelected = player.guildId === guildId && player.channelId === channelId
   if (player.channelJoinBusy && isSelected)
@@ -222,6 +260,49 @@ const showStorageWarnings = computed(() =>
     </aside>
 
     <div class="main-area">
+      <header class="compact-header">
+        <nav class="compact-tabs">
+          <RouterLink
+            v-for="tab in tabs"
+            :key="tab.path"
+            :to="tab.path"
+            class="compact-tab"
+            :class="{ 'compact-tab-active': isTabActive(tab.path) }"
+          >
+            {{ tab.label }}
+            <span
+              v-if="tab.path === '/scenes' && player.scenePlaying"
+              class="streaming-badge"
+              title="Scene is playing in voice"
+            >LIVE</span>
+            <span
+              v-if="tab.path === '/browser' && player.browserStreamingCount > 0"
+              class="streaming-badge"
+              title="Streaming audio to Discord"
+            >LIVE</span>
+          </RouterLink>
+        </nav>
+        <div class="compact-status-group">
+          <span
+            class="compact-connection bot-status pulse"
+            :class="[player.botStatus?.ready ? 'bot-status-connected' : 'bot-status-disconnected', botStatusPulse]"
+            :title="compactConnectionTitle"
+          >
+            <span class="bot-status-dot" aria-hidden="true" />
+            {{ compactConnectionLabel }}
+          </span>
+          <button
+            type="button"
+            class="btn-reconnect"
+            :disabled="player.reconnecting"
+            :title="player.reconnecting ? 'Reconnecting…' : 'Reconnect Discord bot'"
+            :aria-label="player.reconnecting ? 'Reconnecting' : 'Reconnect Discord bot'"
+            @click="player.doReconnect"
+          >
+            ↻
+          </button>
+        </div>
+      </header>
       <main class="content">
         <RouterView v-slot="{ Component }">
           <KeepAlive>
@@ -601,6 +682,61 @@ const showStorageWarnings = computed(() =>
   min-width: 0;
 }
 
+.compact-header {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.compact-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow-x: auto;
+}
+
+.compact-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition), color var(--transition);
+}
+
+.compact-tab:hover {
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+.compact-tab-active {
+  color: var(--color-accent);
+  font-weight: 600;
+  background: var(--color-accent-muted);
+}
+
+.compact-status-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.compact-connection {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .content {
   flex: 1;
   padding: 1.5rem;
@@ -676,6 +812,20 @@ const showStorageWarnings = computed(() =>
 
   .content {
     padding: 1rem;
+  }
+}
+
+/* Compact session layout: sidebar collapses into a header.
+   899.98px (not 900px) keeps "900px and above unchanged" exact — max-width is
+   inclusive, so matching exactly 900 here would also catch the 900px boundary.
+   Kept in sync with the matching breakpoint in SceneView.vue. */
+@media (max-width: 899.98px) {
+  .sidebar {
+    display: none;
+  }
+
+  .compact-header {
+    display: flex;
   }
 }
 </style>

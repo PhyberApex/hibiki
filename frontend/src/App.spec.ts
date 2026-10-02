@@ -312,6 +312,115 @@ describe('app', () => {
     expect(wrapper.findAll('.channel-dot')[1]!.classes()).not.toContain('pulse-busy')
   })
 
+  it('has a compact header with tab links to Media, Scenes, Browser, and Settings', async () => {
+    await router.push('/media')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    const tabs = wrapper.findAll('.compact-tab')
+    expect(tabs).toHaveLength(4)
+    expect(tabs[0]!.text()).toBe('Media')
+    expect(tabs[1]!.text()).toBe('Scenes')
+    expect(tabs[2]!.text()).toBe('Browser')
+    expect(tabs[3]!.text()).toBe('Settings')
+  })
+
+  it('shows Disconnected in the compact connection indicator when the bot is not ready', async () => {
+    const { fetchBotStatus } = await import('@/api/player')
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: false })
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.compact-connection').text()).toContain('Disconnected')
+  })
+
+  it('shows "No channel" in the compact connection indicator when connected but not joined', async () => {
+    const { fetchPlayerState, fetchBotStatus, fetchGuildDirectory } = await import('@/api/player')
+    vi.mocked(fetchPlayerState).mockResolvedValue([])
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
+    vi.mocked(fetchGuildDirectory).mockResolvedValue([])
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.compact-connection').text()).toContain('No channel')
+  })
+
+  it('names the connected channel in the compact connection indicator when joined', async () => {
+    const { fetchPlayerState, fetchBotStatus, fetchGuildDirectory } = await import('@/api/player')
+    vi.mocked(fetchPlayerState).mockResolvedValue([
+      { guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const },
+    ])
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
+    vi.mocked(fetchGuildDirectory).mockResolvedValue([
+      {
+        guildId: 'g1',
+        guildName: 'Test Guild',
+        iconUrl: null,
+        channels: [{ id: 'ch1', name: 'General' }],
+      },
+    ])
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.compact-connection').text()).toContain('General')
+  })
+
+  it('shows "Connected" rather than a false "No channel" when joined but the directory has not resolved the channel name yet', async () => {
+    const { fetchPlayerState, fetchBotStatus, fetchGuildDirectory } = await import('@/api/player')
+    vi.mocked(fetchPlayerState).mockResolvedValue([
+      { guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const },
+    ])
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
+    vi.mocked(fetchGuildDirectory).mockResolvedValue([])
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    const text = wrapper.find('.compact-connection').text()
+    expect(text).toContain('Connected')
+    expect(text).not.toContain('No channel')
+  })
+
+  it('has a reconnect button in the compact header that reconnects the bot', async () => {
+    const { fetchBotStatus, reconnectBot } = await import('@/api/player')
+    vi.mocked(fetchBotStatus).mockResolvedValue({ ready: false })
+    await router.push('/scenes')
+    await router.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+    await flushPromises()
+    const reconnectButtons = wrapper.findAll('.compact-status-group .btn-reconnect')
+    expect(reconnectButtons).toHaveLength(1)
+    await reconnectButtons[0]!.trigger('click')
+    expect(reconnectBot).toHaveBeenCalled()
+  })
+
   it('shows a dismissible warning banner naming the backup file when a store was corrupt', async () => {
     const { fetchStorageWarnings } = await import('@/api/config')
     vi.mocked(fetchStorageWarnings).mockResolvedValue([
