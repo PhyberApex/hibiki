@@ -179,6 +179,23 @@ const hasAnySoundMissing = computed(() => {
     ))
 })
 
+// Gated on the scene-level playing flags (not just "is a track currently
+// audible") so this never contradicts the Play/Stop button next to it — a
+// track can end naturally (onended clears playingMusicId) while the scene is
+// still "started" and Stop is still the right action.
+const nowPlayingLabel = computed(() => {
+  if (!scenePlayingLocal.value && !player.scenePlaying)
+    return 'Nothing playing'
+  const parts: string[] = []
+  if (playingMusicId.value) {
+    const musicItem = scene.value?.music.find(m => m.soundId === playingMusicId.value)
+    parts.push(musicItem?.soundName ?? resolveSoundName('music', playingMusicId.value))
+  }
+  if (playingAmbienceIds.value.size > 0)
+    parts.push(`${playingAmbienceIds.value.size} ambience`)
+  return parts.length > 0 ? parts.join(' · ') : 'Scene playing'
+})
+
 function sceneSoundCount(s: Scene): number {
   return s.ambience.length + s.music.length + s.effects.length
 }
@@ -958,6 +975,10 @@ watch(sceneId, (newId, oldId) => {
         </div>
       </div>
 
+      <p v-if="scene" class="now-playing-line">
+        {{ nowPlayingLabel }}
+      </p>
+
       <template v-if="scene">
         <section class="scene-section scene-section-ambience">
           <div class="section-header">
@@ -1578,6 +1599,13 @@ watch(sceneId, (newId, oldId) => {
   text-decoration: underline;
 }
 
+.now-playing-line {
+  display: none;
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
 /* ═══════ SCENE SECTIONS ═══════ */
 
 .scene-section {
@@ -1916,6 +1944,32 @@ watch(sceneId, (newId, oldId) => {
 
 .btn-vision-icon {
   font-size: 0.85em;
+}
+
+/* ── Compact session layout: Scene editing hidden, Effects + playback only ──
+   899.98px (not 900px) keeps "900px and above unchanged" exact — max-width is
+   inclusive, so matching exactly 900 here would also catch the 900px boundary.
+   Kept in sync with the matching breakpoint in App.vue. */
+
+@media (max-width: 899.98px) {
+  .detail-actions {
+    display: none;
+  }
+
+  .scene-section-ambience,
+  .scene-section-music {
+    display: none;
+  }
+
+  .scene-section-effects .add-select,
+  .effect-remove,
+  .effect-resolve-hint {
+    display: none;
+  }
+
+  .now-playing-line {
+    display: block;
+  }
 }
 
 /* ── Narrow ── */

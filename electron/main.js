@@ -36,7 +36,7 @@ function createWindow(loadUrl) {
   const win = new BrowserWindow({
     width: 1400,
     height: 800,
-    minWidth: 1400,
+    minWidth: 480,
     minHeight: 600,
     show: !isTestMode,
     webPreferences: {
