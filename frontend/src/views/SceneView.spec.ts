@@ -650,6 +650,37 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     expect(vi.mocked(mediaProto.play).mock.calls.length).toBe(playCallsAfterStart)
   })
 
+  it('stops a local music track via the inline per-track Stop button after re-opening the playing Scene', async () => {
+    const { listMusic } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockImplementation(async () => [{ id: 'm1', name: 'Tavern Theme', filename: 'tavern.mp3' }])
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockImplementation(async () => ({
+      id: 's1',
+      name: 'Storm',
+      ambience: [],
+      music: [{ soundId: 'm1', soundName: 'Tavern Theme', volume: 80, loop: false }],
+      effects: [],
+    }))
+
+    const { wrapper, player } = await mountSceneWithPlayer()
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+    expect(player.playingSceneMode).toBe('local')
+
+    // Re-opening the playing Scene must leave its controls working as before.
+    await router.push('/scenes')
+    await flushPromises()
+    await router.push('/scenes/s1')
+    await flushPromises()
+
+    const stopButton = wrapper.find('.btn-icon-active')
+    expect(stopButton.exists()).toBe(true)
+    await stopButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.btn-icon-active').exists()).toBe(false)
+  })
+
   it('stops the playing Scene without starting a different one when opening a different Scene', async () => {
     const { wrapper, player } = await mountSceneWithPlayer()
     await wrapper.find('.btn-play-local').trigger('click')

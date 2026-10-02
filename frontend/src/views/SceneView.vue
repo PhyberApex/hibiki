@@ -505,6 +505,17 @@ function stopMusicLocal() {
   musicSource = null
 }
 
+// The inline per-track Stop button in the Music section isn't scoped to
+// either mode (it shows for whichever track is currently loaded, Play or
+// individually triggered) — stopMusic() alone would no-op on a local track,
+// so dispatch to whichever teardown actually matches what's playing.
+function stopMusicPlayback() {
+  if (musicSource === 'local')
+    stopMusicLocal()
+  else
+    stopMusic()
+}
+
 function playEffectLocal(item: SceneItem) {
   effectFlash.trigger(item.soundId)
   const { id, el } = registerEffectInstance(false)
@@ -1224,7 +1235,7 @@ watch(sceneId, (newId, oldId) => {
                     class="btn-icon btn-icon-active"
                     title="Stop"
                     aria-label="Stop music"
-                    @click="stopMusic"
+                    @click="stopMusicPlayback"
                   >
                     ■
                   </button>
