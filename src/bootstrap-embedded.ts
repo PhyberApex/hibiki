@@ -1,6 +1,7 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { AccessibilitySettings } from './config/accessibility-settings'
 import type { StorageWarning } from './json-file'
+import type { SecretCodec } from './persistence'
 import type { SoundCategory } from './sound/sound.types'
 import type { VibeMatches } from './vision/vibe-matching'
 import type { VisionSettingsState } from './vision/vision-settings'
@@ -66,8 +67,8 @@ export interface EmbeddedApi {
     reconnect: () => Promise<void>
   }
   config: {
-    getDiscord: () => Promise<{ tokenConfigured: boolean }>
-    setDiscordToken: (token: string) => Promise<{ tokenConfigured: boolean }>
+    getDiscord: () => Promise<{ tokenConfigured: boolean, encrypted: boolean }>
+    setDiscordToken: (token: string) => Promise<{ tokenConfigured: boolean, encrypted: boolean }>
     getStoragePath: () => Promise<{ path: string | null }>
     setStoragePath: (path: string) => Promise<void>
     getBookmarks: () => Promise<{ name: string, url: string, favicon?: string }[]>
@@ -120,13 +121,19 @@ export interface EmbeddedApp {
   onPlayerStateChanged: (listener: () => void) => () => void
 }
 
-export async function getEmbeddedApp(): Promise<EmbeddedApp> {
+export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> {
   process.env.HIBIKI_EMBEDDED = '1'
   const report = generateDependencyReport()
   console.warn('[Hibiki] Voice dependency report:\n', report)
   const config = getConfig()
   await ensureStorageDirs(config)
-  const appConfig = createAppConfig(config)
+  const appConfig = createAppConfig(config, codec)
+
+  async function getDiscordStatus(): Promise<{ tokenConfigured: boolean, encrypted: boolean }> {
+    const tokenConfigured = Boolean(config.discord.token) || Boolean(await appConfig.get('discord.token'))
+    return { tokenConfigured, encrypted: appConfig.secretsEncrypted }
+  }
+
   const sounds = createSoundLibrary(config)
   const scenes = createSceneStore(config)
   const registry = createSceneRegistry(config)
@@ -139,9 +146,12 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
   // Read scenes.json, app-config.json, and (via sounds.list, which reads the
   // sound-tags store) sound-tags.json up front, so a corrupt file is detected
   // and its storage warning recorded before the frontend asks for warnings on launch.
+  // This also migrates any legacy plaintext secret (discord.token, vision.apiKey)
+  // to encrypted storage on launch, without requiring the GM to open Settings first.
   await Promise.all([
     scenes.list(),
     appConfig.get('discord.token'),
+    visionSettings.get(),
     sounds.list('music'),
   ]).catch((err) => {
     console.error('[Hibiki] Storage warm-up failed:', err)
@@ -180,23 +190,11 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
       reconnect: () => discord.reconnect(),
     },
     config: {
-      getDiscord: async () => {
-        const fromEnv = config.discord.token
-        if (fromEnv)
-          return { tokenConfigured: true }
-        const fromDb = await appConfig.get('discord.token')
-        return { tokenConfigured: Boolean(fromDb) }
-      },
+      getDiscord: () => getDiscordStatus(),
       setDiscordToken: async (token) => {
-        if (typeof token === 'string' && token.trim()) {
+        if (typeof token === 'string' && token.trim())
           await appConfig.set('discord.token', token.trim())
-          return { tokenConfigured: true }
-        }
-        const fromEnv = config.discord.token
-        if (fromEnv)
-          return { tokenConfigured: true }
-        const fromDb = await appConfig.get('discord.token')
-        return { tokenConfigured: Boolean(fromDb) }
+        return getDiscordStatus()
       },
       getStoragePath: async () => {
         const p = await appConfig.get('storage.path')

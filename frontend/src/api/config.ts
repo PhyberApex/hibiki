@@ -2,6 +2,8 @@ import { apiCall, useElectronApi } from './electron'
 
 export interface DiscordConfig {
   tokenConfigured: boolean
+  /** False when this system can't encrypt secrets at rest (e.g. Linux without a keyring) — the token is stored as plain text. */
+  encrypted: boolean
 }
 
 export interface StorageConfig {
@@ -21,6 +23,11 @@ export interface VisionProviderStatus {
   configured: boolean
 }
 
+/** The Claude key is the only Vision secret encrypted at rest. */
+export interface VisionClaudeStatus extends VisionProviderStatus {
+  encrypted: boolean
+}
+
 export interface VisionOpenAICompatibleStatus extends VisionProviderStatus {
   baseUrl: string
   model: string
@@ -31,7 +38,7 @@ export interface VisionConfig {
   enabled: boolean
   /** Gate for the currently selected provider — mirrors `claude.configured` or `openaiCompatible.configured`. */
   configured: boolean
-  claude: VisionProviderStatus
+  claude: VisionClaudeStatus
   openaiCompatible: VisionOpenAICompatibleStatus
 }
 

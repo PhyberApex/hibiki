@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { VisionConfig, VisionProviderId } from '@/api/config'
+import type { DiscordConfig, VisionConfig, VisionProviderId } from '@/api/config'
 import { computed, onMounted, ref } from 'vue'
 import {
   fetchDiscordConfig,
@@ -19,7 +19,7 @@ import { usePlayerStore } from '@/stores/player'
 
 const player = usePlayerStore()
 const accessibility = useAccessibilityStore()
-const discordConfig = ref<{ tokenConfigured: boolean } | null>(null)
+const discordConfig = ref<DiscordConfig | null>(null)
 const tokenInput = ref('')
 const saving = ref(false)
 const message = ref<{ type: 'success' | 'error', text: string } | null>(null)
@@ -34,7 +34,7 @@ const DEFAULT_VISION_CONFIG: VisionConfig = {
   provider: 'claude',
   enabled: false,
   configured: false,
-  claude: { keyConfigured: false, configured: false },
+  claude: { keyConfigured: false, configured: false, encrypted: true },
   openaiCompatible: { keyConfigured: false, configured: false, baseUrl: '', model: '' },
 }
 
@@ -87,8 +87,7 @@ async function saveToken() {
   saving.value = true
   message.value = null
   try {
-    await updateDiscordToken(token)
-    discordConfig.value = { tokenConfigured: true }
+    discordConfig.value = await updateDiscordToken(token)
     tokenInput.value = ''
     message.value = { type: 'success', text: 'Token saved. Connecting…' }
     await player.doReconnect()
@@ -349,6 +348,9 @@ onMounted(load)
             {{ saving ? 'Saving…' : 'Save' }}
           </button>
         </div>
+        <p v-if="discordConfig && !discordConfig.encrypted" class="field-hint field-hint-warning">
+          Not encrypted on this system — stored as plain text.
+        </p>
       </div>
       <p
         v-if="message"
@@ -537,6 +539,9 @@ onMounted(load)
             Remove
           </button>
         </div>
+        <p v-if="!isOpenAiCompatible && visionConfig && !visionConfig.claude.encrypted" class="field-hint field-hint-warning">
+          Not encrypted on this system — stored as plain text.
+        </p>
       </div>
       <template v-if="isOpenAiCompatible">
         <div class="field">
@@ -719,6 +724,16 @@ onMounted(load)
   display: flex;
   gap: 0.5rem;
   align-items: center;
+}
+
+.field-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-dim);
+}
+
+.field-hint-warning {
+  color: var(--color-warning);
 }
 
 .field-input {

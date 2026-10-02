@@ -29,7 +29,7 @@ describe('createVisionSettings', () => {
       provider: 'claude',
       enabled: false,
       configured: false,
-      claude: { keyConfigured: false, configured: false },
+      claude: { keyConfigured: false, configured: false, encrypted: false },
       openaiCompatible: { keyConfigured: false, configured: false, baseUrl: OPENAI_COMPATIBLE_DEFAULT_BASE_URL, model: OPENAI_COMPATIBLE_DEFAULT_MODEL },
     })
   })
@@ -38,7 +38,7 @@ describe('createVisionSettings', () => {
     const config = makeConfig()
     const settings = createVisionSettings(config, createAppConfig(config))
     const state = await settings.setApiKey('claude', '  sk-stored  ')
-    expect(state.claude).toEqual({ keyConfigured: true, configured: true })
+    expect(state.claude).toEqual({ keyConfigured: true, configured: true, encrypted: false })
     expect(state.configured).toBe(true)
     expect((await settings.getProviderConfig()).apiKey).toBe('sk-stored')
   })
@@ -55,7 +55,7 @@ describe('createVisionSettings', () => {
     const settings = createVisionSettings(config, createAppConfig(config))
     await settings.setApiKey('claude', 'sk-stored')
     const state = await settings.setApiKey('claude', '')
-    expect(state.claude).toEqual({ keyConfigured: false, configured: false })
+    expect(state.claude).toEqual({ keyConfigured: false, configured: false, encrypted: false })
   })
 
   it('removing a stored Claude key while its env key is set keeps it configured', async () => {
@@ -63,7 +63,7 @@ describe('createVisionSettings', () => {
     const settings = createVisionSettings(config, createAppConfig(config))
     await settings.setApiKey('claude', 'sk-stored')
     const state = await settings.setApiKey('claude', '')
-    expect(state.claude).toEqual({ keyConfigured: true, configured: true })
+    expect(state.claude).toEqual({ keyConfigured: true, configured: true, encrypted: false })
   })
 
   it('persists the enabled toggle and selected provider across instances', async () => {
