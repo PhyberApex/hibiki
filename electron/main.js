@@ -51,9 +51,16 @@ function createWindow(loadUrl) {
   return win
 }
 
+/** audioStreams: Map<guildId, Map<streamId|undefined, PassThrough>> - multiple music streams per guild, mixed by backend */
 const audioStreams = new Map()
 /** effectStreams: Map<guildId, Map<streamId, PassThrough>> - multiple streams per guild, mixed by backend */
 const effectStreams = new Map()
+
+function getOrCreateAudioStreams(guildId) {
+  if (!audioStreams.has(guildId))
+    audioStreams.set(guildId, new Map())
+  return audioStreams.get(guildId)
+}
 
 function getOrCreateEffectStreams(guildId) {
   if (!effectStreams.has(guildId))
@@ -69,30 +76,36 @@ function registerIpcHandlers(api) {
     return obj[method](...args)
   })
 
-  ipcMain.handle('audio:startStream', async (_, { guildId, metadata }) => {
-    if (audioStreams.has(guildId)) {
-      const existing = audioStreams.get(guildId)
-      existing.end()
-      audioStreams.delete(guildId)
+  ipcMain.handle('audio:startStream', async (_, { guildId, metadata, streamId }) => {
+    const streams = getOrCreateAudioStreams(guildId)
+    if (streams.has(streamId)) {
+      streams.get(streamId).end()
+      streams.delete(streamId)
     }
     const stream = new PassThrough()
-    audioStreams.set(guildId, stream)
-    api.player.startStream(guildId, stream, metadata)
+    streams.set(streamId, stream)
+    api.player.startStream(guildId, stream, metadata, streamId)
   })
 
-  ipcMain.on('audio:chunk', (_, { guildId, chunk }) => {
-    const stream = audioStreams.get(guildId)
+  ipcMain.on('audio:chunk', (_, { guildId, streamId, chunk }) => {
+    const streams = audioStreams.get(guildId)
+    if (!streams)
+      return
+    const stream = streams.get(streamId)
     if (stream && chunk && chunk.byteLength > 0)
       stream.push(Buffer.from(chunk))
   })
 
-  ipcMain.handle('audio:stopStream', async (_, { guildId }) => {
-    const stream = audioStreams.get(guildId)
-    if (stream) {
-      audioStreams.delete(guildId)
-      stream.end()
+  ipcMain.handle('audio:stopStream', async (_, { guildId, streamId }) => {
+    const streams = audioStreams.get(guildId)
+    if (streams) {
+      const stream = streams.get(streamId)
+      if (stream) {
+        streams.delete(streamId)
+        stream.end()
+      }
     }
-    api.player.stopStream(guildId)
+    api.player.stopStream(guildId, streamId)
   })
 
   ipcMain.handle('audio:startEffectStream', async (_, { guildId, streamId }) => {

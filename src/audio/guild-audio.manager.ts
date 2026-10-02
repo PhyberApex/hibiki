@@ -21,11 +21,18 @@ interface TrackMetadata {
 
 const RECONNECT_GRACE_PERIOD_MS = 5_000
 
+interface MusicStreamEntry {
+  metadata?: TrackMetadata
+  seq: number
+}
+
 export class GuildAudioManager extends EventEmitter {
   private connection?: VoiceConnection
   private readonly engine = new AudioEngine()
   private channelName?: string
-  private currentTrack?: TrackMetadata
+  /** Bookkeeping for current-track reporting; keyed the same way as the engine's music streams. */
+  private readonly musicStreams = new Map<string | undefined, MusicStreamEntry>()
+  private musicStreamSeq = 0
   /**
    * Set while this manager is itself tearing down a connection, so the
    * resulting Destroyed stateChange doesn't re-trigger teardown handling.
@@ -103,7 +110,7 @@ export class GuildAudioManager extends EventEmitter {
   private handleTeardown(connection: VoiceConnection) {
     if (this.connection !== connection || this.intentionalTeardown)
       return
-    this.stopMusic()
+    this.stopAllMusic()
     this.connection = undefined
     this.channelName = undefined
     this.emit('disconnected')
@@ -126,33 +133,46 @@ export class GuildAudioManager extends EventEmitter {
   }
 
   disconnect() {
-    this.stopMusic()
+    this.stopAllMusic()
     this.withIntentionalTeardown(() => getVoiceConnection(this.guildId)?.destroy())
     this.connection = undefined
     this.channelName = undefined
   }
 
   destroy() {
-    this.stopMusic()
+    this.stopAllMusic()
     this.withIntentionalTeardown(() => this.connection?.destroy())
     this.connection = undefined
     this.engine.destroy()
   }
 
-  playMusicFromStream(stream: Readable, metadata?: TrackMetadata) {
-    this.currentTrack = metadata
-    stream.once('end', () => {
-      this.currentTrack = undefined
-    })
-    stream.once('error', () => {
-      this.currentTrack = undefined
-    })
-    this.engine.playMusicFromStream(stream)
+  /**
+   * Starts a music stream under `streamId` (or the default slot when
+   * omitted). An existing stream under the same id is replaced, same as a
+   * plain restart; other ids are left playing.
+   */
+  playMusicFromStream(stream: Readable, metadata?: TrackMetadata, streamId?: string) {
+    const seq = ++this.musicStreamSeq
+    this.musicStreams.set(streamId, { metadata, seq })
+    const clearEntry = () => {
+      if (this.musicStreams.get(streamId)?.seq === seq)
+        this.musicStreams.delete(streamId)
+    }
+    stream.once('end', clearEntry)
+    stream.once('error', clearEntry)
+    this.engine.playMusicFromStream(stream, streamId)
   }
 
-  stopMusic() {
-    this.currentTrack = undefined
-    this.engine.stopMusic()
+  /** Ends the music stream for `streamId` (or the default slot when omitted). Other ids keep playing. */
+  stopMusic(streamId?: string) {
+    this.musicStreams.delete(streamId)
+    this.engine.stopMusic(streamId)
+  }
+
+  /** Ends every music stream for this guild, regardless of id. */
+  stopAllMusic() {
+    this.musicStreams.clear()
+    this.engine.stopAllMusic()
   }
 
   playEffectFromStream(stream: Readable) {
@@ -171,8 +191,14 @@ export class GuildAudioManager extends EventEmitter {
     return this.channelName
   }
 
-  get track() {
-    return this.currentTrack
+  /** The most recently started music stream that is still alive; undefined once none are left. */
+  get track(): TrackMetadata | undefined {
+    let latest: MusicStreamEntry | undefined
+    for (const entry of this.musicStreams.values()) {
+      if (!latest || entry.seq > latest.seq)
+        latest = entry
+    }
+    return latest?.metadata
   }
 
   get connected() {

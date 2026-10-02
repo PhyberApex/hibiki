@@ -2,6 +2,7 @@ import type { VoiceBasedChannel } from 'discord.js'
 import type { DiscordClient } from '../discord/discord-client'
 import { EventEmitter } from 'node:events'
 import * as voice from '@discordjs/voice'
+import { AudioEngine } from '../audio/audio-engine'
 import { createPlayer } from './player'
 
 jest.mock('@discordjs/voice', () => ({
@@ -22,11 +23,22 @@ jest.mock('../audio/audio-engine', () => ({
     playMusicFromStream: jest.fn(),
     playEffectFromStream: jest.fn(),
     stopMusic: jest.fn(),
+    stopAllMusic: jest.fn(),
     getVolumes: jest.fn().mockReturnValue({ music: 100, effects: 100 }),
     setVolumes: jest.fn(),
     destroy: jest.fn(),
   })),
 }))
+
+/** The mocked AudioEngine instance the most recently constructed manager is using. */
+function getEngineMock(): {
+  playMusicFromStream: jest.Mock
+  stopMusic: jest.Mock
+  stopAllMusic: jest.Mock
+} {
+  const results = (AudioEngine as unknown as jest.Mock).mock.results
+  return results[results.length - 1].value
+}
 
 type FakeConnection = EventEmitter & {
   joinConfig: { channelId: string }
@@ -115,6 +127,42 @@ describe('createPlayer', () => {
 
       expect(stateChanged).toHaveBeenCalledTimes(1)
       expect(await player.getState()).toEqual([])
+    })
+  })
+
+  describe('music stream ids', () => {
+    async function connectedPlayer() {
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      const player = createPlayer(createFakeDiscordClient())
+      await player.connect(fakeChannel)
+      return player
+    }
+
+    it('startStream forwards an optional streamId to the manager', async () => {
+      const player = await connectedPlayer()
+      const stream = new EventEmitter() as unknown as import('node:stream').Readable
+
+      player.startStream('guild-1', stream, undefined, 'a')
+
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, 'a')
+    })
+
+    it('stopStream forwards an optional streamId to the manager, without stopping other streams', async () => {
+      const player = await connectedPlayer()
+
+      player.stopStream('guild-1', 'a')
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith('a')
+      expect(getEngineMock().stopAllMusic).not.toHaveBeenCalled()
+    })
+
+    it('stop (the guild-level Stop action) ends every music stream, not just one id', async () => {
+      const player = await connectedPlayer()
+
+      await player.stop('guild-1')
+
+      expect(getEngineMock().stopAllMusic).toHaveBeenCalledTimes(1)
     })
   })
 })

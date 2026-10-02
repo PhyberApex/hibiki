@@ -64,20 +64,21 @@ export function createPlayer(discord: DiscordClient) {
     const manager = managers.get(guildId)
     if (!manager)
       return
-    manager.stopMusic()
+    manager.stopAllMusic()
   }
 
   function startStream(
     guildId: string,
     stream: Readable,
     metadata?: TrackMetadata,
+    streamId?: string,
   ): void {
     const manager = managers.get(guildId)
     if (!manager)
       throw new Error('Not connected to a voice channel. Join first.')
     if (!manager.connected)
       throw new Error('Not connected to a voice channel. Join first.')
-    manager.playMusicFromStream(stream, metadata)
+    manager.playMusicFromStream(stream, metadata, streamId)
   }
 
   function startEffectStream(guildId: string, stream: Readable): void {
@@ -89,10 +90,10 @@ export function createPlayer(discord: DiscordClient) {
     manager.playEffectFromStream(stream)
   }
 
-  function stopStream(guildId: string): void {
+  function stopStream(guildId: string, streamId?: string): void {
     const manager = managers.get(guildId)
     if (manager)
-      manager.stopMusic()
+      manager.stopMusic(streamId)
   }
 
   function getLiveState(): GuildPlaybackState[] {
