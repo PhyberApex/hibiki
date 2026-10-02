@@ -391,4 +391,39 @@ describe('sceneView — overlapping effects', () => {
 
     expect(stopEffectStream).toHaveBeenCalledWith('g1', 'effect-1')
   })
+
+  it('resets scene playback indicators (ambience, music, scenePlaying) when the voice channel is lost', async () => {
+    const { stopAudioStream, stopEffectStream } = await import('@/api/audio-stream')
+    const { wrapper, player } = await mountSceneJoined()
+
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+    expect(player.scenePlaying).toBe(true)
+
+    player.playerState = []
+    await flushPromises()
+
+    expect(player.scenePlaying).toBe(false)
+    expect(stopEffectStream).toHaveBeenCalledWith('g1', 'ambience-amb-1')
+    expect(stopAudioStream).toHaveBeenCalledWith('g1')
+  })
+
+  it('does not stop scene playback when the sidebar selection switches to a different, unjoined guild', async () => {
+    const { stopAudioStream, stopEffectStream } = await import('@/api/audio-stream')
+    const { wrapper, player } = await mountSceneJoined()
+
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+    expect(player.scenePlaying).toBe(true)
+    vi.mocked(stopAudioStream).mockClear()
+    vi.mocked(stopEffectStream).mockClear()
+
+    // g1 stays joined and playing; the GM just looks at a different, unjoined guild.
+    player.guildId = 'g2'
+    await flushPromises()
+
+    expect(player.scenePlaying).toBe(true)
+    expect(stopAudioStream).not.toHaveBeenCalled()
+    expect(stopEffectStream).not.toHaveBeenCalled()
+  })
 })

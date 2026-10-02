@@ -2,6 +2,7 @@ import type { DiscordGatewayAdapterCreator, VoiceConnection } from '@discordjs/v
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Readable } from 'node:stream'
 import type { SoundCategory } from '../sound/sound.types'
+import { EventEmitter } from 'node:events'
 import {
   AudioPlayerStatus,
   entersState,
@@ -18,13 +19,22 @@ interface TrackMetadata {
   category: SoundCategory
 }
 
-export class GuildAudioManager {
+const RECONNECT_GRACE_PERIOD_MS = 5_000
+
+export class GuildAudioManager extends EventEmitter {
   private connection?: VoiceConnection
   private readonly engine = new AudioEngine()
   private channelName?: string
   private currentTrack?: TrackMetadata
+  /**
+   * Set while this manager is itself tearing down a connection, so the
+   * resulting Destroyed stateChange doesn't re-trigger teardown handling.
+   */
+  private intentionalTeardown = false
 
-  constructor(private readonly guildId: string) {}
+  constructor(private readonly guildId: string) {
+    super()
+  }
 
   async connect(channel: VoiceBasedChannel) {
     if (
@@ -35,36 +45,96 @@ export class GuildAudioManager {
       return this.connection
     }
 
-    this.connection?.destroy()
-    this.connection = joinVoiceChannel({
+    this.destroyConnection()
+
+    const connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
       adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
       selfDeaf: false,
     })
+    this.connection = connection
     this.channelName = channel.name
 
-    this.connection.on('error', (error) => {
+    connection.on('error', (error) => {
       console.error(`[GuildAudioManager] VoiceConnection error (guild ${this.guildId}):`, error.message)
     })
-    this.connection.on('stateChange', (oldState, newState) => {
+    connection.on('stateChange', (oldState, newState) => {
       console.warn(`[GuildAudioManager] VoiceConnection state: ${oldState.status} -> ${newState.status} (guild ${this.guildId})`)
+      if (newState.status === VoiceConnectionStatus.Disconnected)
+        this.handleDisconnect(connection)
+      if (newState.status === VoiceConnectionStatus.Destroyed)
+        this.handleTeardown(connection)
     })
-    this.connection.subscribe(this.engine.audioPlayer)
-    await entersState(this.connection, VoiceConnectionStatus.Ready, 20_000)
-    return this.connection
+    connection.subscribe(this.engine.audioPlayer)
+    await entersState(connection, VoiceConnectionStatus.Ready, 20_000)
+    return connection
+  }
+
+  /**
+   * Standard discord.js reconnect pattern: give Discord's own reconnect a
+   * 5s grace period to re-enter Signalling or Connecting; otherwise the
+   * connection is treated as dead and torn down.
+   */
+  private async handleDisconnect(connection: VoiceConnection) {
+    try {
+      await Promise.race([
+        entersState(connection, VoiceConnectionStatus.Signalling, RECONNECT_GRACE_PERIOD_MS),
+        entersState(connection, VoiceConnectionStatus.Connecting, RECONNECT_GRACE_PERIOD_MS),
+      ])
+    }
+    catch {
+      if (this.connection !== connection)
+        return
+      try {
+        connection.destroy()
+      }
+      catch {
+        // Already destroyed by another path; nothing left to tear down.
+      }
+    }
+  }
+
+  /**
+   * Fires for any Destroyed transition that this manager didn't initiate
+   * itself (grace-period expiry, or the connection being destroyed from
+   * outside), so callers can clean up the same way either path.
+   */
+  private handleTeardown(connection: VoiceConnection) {
+    if (this.connection !== connection || this.intentionalTeardown)
+      return
+    this.stopMusic()
+    this.connection = undefined
+    this.channelName = undefined
+    this.emit('disconnected')
+  }
+
+  /**
+   * Runs `action` with `intentionalTeardown` set, so a resulting Destroyed
+   * stateChange is suppressed instead of being treated as an external kill.
+   */
+  private withIntentionalTeardown(action: () => void): void {
+    this.intentionalTeardown = true
+    action()
+    this.intentionalTeardown = false
+  }
+
+  private destroyConnection() {
+    if (!this.connection)
+      return
+    this.withIntentionalTeardown(() => this.connection!.destroy())
   }
 
   disconnect() {
     this.stopMusic()
-    getVoiceConnection(this.guildId)?.destroy()
+    this.withIntentionalTeardown(() => getVoiceConnection(this.guildId)?.destroy())
     this.connection = undefined
     this.channelName = undefined
   }
 
   destroy() {
     this.stopMusic()
-    this.connection?.destroy()
+    this.withIntentionalTeardown(() => this.connection?.destroy())
     this.connection = undefined
     this.engine.destroy()
   }

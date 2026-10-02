@@ -20,6 +20,7 @@ vi.mock('@/api/player', () => ({
   joinChannel: vi.fn().mockResolvedValue(undefined),
   leaveGuild: vi.fn().mockResolvedValue(undefined),
   reconnectBot: vi.fn().mockResolvedValue(undefined),
+  onPlayerStateChanged: vi.fn().mockReturnValue(() => {}),
 }))
 
 const router = createRouter({

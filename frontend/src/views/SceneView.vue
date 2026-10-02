@@ -734,9 +734,12 @@ onActivated(() => {
   loadVisionAvailability()
 })
 
-watch(isJoined, (joined) => {
-  if (!joined)
-    stopAllEffectInstances()
+// Only react to the selected guild's own connection dropping — not to the GM
+// switching the sidebar selection to a different, not-yet-joined guild (which
+// also flips `isJoined` false but shouldn't stop another guild's playback).
+watch([guildId, isJoined], ([newGuildId, joined], [oldGuildId, wasJoined]) => {
+  if (newGuildId === oldGuildId && wasJoined && !joined)
+    stopScene()
 })
 
 watch(sceneId, (newId, oldId) => {

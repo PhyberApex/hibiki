@@ -9,6 +9,7 @@ vi.mock('@/api/player', () => ({
   joinChannel: vi.fn().mockResolvedValue(undefined),
   leaveGuild: vi.fn().mockResolvedValue(undefined),
   reconnectBot: vi.fn().mockResolvedValue(undefined),
+  onPlayerStateChanged: vi.fn().mockReturnValue(() => {}),
 }))
 
 describe('player store', () => {
@@ -18,6 +19,7 @@ describe('player store', () => {
   let joinChannel: ReturnType<typeof vi.fn>
   let leaveGuild: ReturnType<typeof vi.fn>
   let reconnectBot: ReturnType<typeof vi.fn>
+  let onPlayerStateChanged: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     setActivePinia(createPinia())
@@ -28,7 +30,9 @@ describe('player store', () => {
     joinChannel = vi.mocked(api.joinChannel)
     leaveGuild = vi.mocked(api.leaveGuild)
     reconnectBot = vi.mocked(api.reconnectBot)
+    onPlayerStateChanged = vi.mocked(api.onPlayerStateChanged)
     vi.clearAllMocks()
+    onPlayerStateChanged.mockReturnValue(() => {})
   })
 
   afterEach(() => {
@@ -296,6 +300,24 @@ describe('player store', () => {
       expect(fetchGuildDirectory).toHaveBeenCalled()
       expect(store.reconnecting).toBe(false)
       vi.useRealTimers()
+    })
+  })
+
+  describe('onPlayerStateChanged reaction', () => {
+    it('reloads state when the backend pushes a state-changed notification', async () => {
+      fetchPlayerState.mockResolvedValue([])
+      fetchBotStatus.mockResolvedValue({ ready: true })
+
+      usePlayerStore()
+      expect(onPlayerStateChanged).toHaveBeenCalledTimes(1)
+      const pushListener = onPlayerStateChanged.mock.calls[0][0] as () => void
+
+      fetchPlayerState.mockClear()
+      const newState = [{ guildId: 'g1', isIdle: true, track: null, source: 'live' as const }]
+      fetchPlayerState.mockResolvedValue(newState)
+
+      pushListener()
+      await vi.waitFor(() => expect(fetchPlayerState).toHaveBeenCalled())
     })
   })
 

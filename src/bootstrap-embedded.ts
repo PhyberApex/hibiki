@@ -112,6 +112,12 @@ export interface EmbeddedApi {
 export interface EmbeddedApp {
   close: () => Promise<void>
   api: EmbeddedApi
+  /**
+   * Subscribes to backend-initiated player state changes (e.g. an
+   * auto-torn-down voice connection) so the main process can push them to
+   * the renderer. Returns an unsubscribe function.
+   */
+  onPlayerStateChanged: (listener: () => void) => () => void
 }
 
 export async function getEmbeddedApp(): Promise<EmbeddedApp> {
@@ -273,5 +279,6 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
   return {
     close: () => discord.destroy(),
     api,
+    onPlayerStateChanged: player.onStateChanged,
   }
 }

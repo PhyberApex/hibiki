@@ -333,6 +333,10 @@ app.whenReady().then(async () => {
     return
   }
   appHandle = handle
+  handle.onPlayerStateChanged(() => {
+    if (mainWindow)
+      mainWindow.webContents.send('player:stateChanged')
+  })
 
   const webDistDir = path.join(botRoot, 'web-dist')
   if (!fs.existsSync(path.join(webDistDir, 'index.html'))) {

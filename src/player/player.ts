@@ -3,6 +3,7 @@ import type { Readable } from 'node:stream'
 import type { DiscordClient } from '../discord/discord-client'
 import type { SoundCategory } from '../sound/sound.types'
 import type { GuildPlaybackState } from './player.types'
+import { EventEmitter } from 'node:events'
 import { getVoiceConnection } from '@discordjs/voice'
 import { GuildAudioManager } from '../audio/guild-audio.manager'
 import { createLogger } from '../logger'
@@ -18,10 +19,17 @@ export interface TrackMetadata {
 
 export function createPlayer(discord: DiscordClient) {
   const managers = new Map<string, GuildAudioManager>()
+  const stateEvents = new EventEmitter()
 
   function getOrCreateManager(guildId: string): GuildAudioManager {
-    if (!managers.has(guildId))
-      managers.set(guildId, new GuildAudioManager(guildId))
+    if (!managers.has(guildId)) {
+      const manager = new GuildAudioManager(guildId)
+      manager.on('disconnected', () => {
+        managers.delete(guildId)
+        stateEvents.emit('stateChanged')
+      })
+      managers.set(guildId, manager)
+    }
     return managers.get(guildId)!
   }
 
@@ -35,18 +43,21 @@ export function createPlayer(discord: DiscordClient) {
     if (!guildId)
       return
     log.info(`Disconnecting from guild ${guildId}`)
-    const connection = getVoiceConnection(guildId)
-    if (connection) {
-      connection.destroy()
-    }
-    else {
-      await discord.leaveVoiceChannel(guildId)
-    }
     const manager = managers.get(guildId)
     if (manager) {
+      // manager.disconnect() destroys the connection itself, under its own
+      // intentional-teardown guard — destroying it here first would fire the
+      // Destroyed stateChange before the guard is up, deleting the manager
+      // out from under this function and emitting a spurious 'disconnected'.
       manager.disconnect()
       managers.delete(guildId)
+      return
     }
+    const connection = getVoiceConnection(guildId)
+    if (connection)
+      connection.destroy()
+    else
+      await discord.leaveVoiceChannel(guildId)
   }
 
   async function stop(guildId: string): Promise<void> {
@@ -134,6 +145,11 @@ export function createPlayer(discord: DiscordClient) {
     return manager.getVolumes()
   }
 
+  function onStateChanged(listener: () => void): () => void {
+    stateEvents.on('stateChanged', listener)
+    return () => stateEvents.off('stateChanged', listener)
+  }
+
   return {
     connect,
     disconnect,
@@ -144,5 +160,6 @@ export function createPlayer(discord: DiscordClient) {
     getState,
     getVolume,
     setVolume,
+    onStateChanged,
   }
 }
