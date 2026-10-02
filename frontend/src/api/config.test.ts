@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchAccessibilitySettings,
   fetchDiscordConfig,
+  fetchSceneFadeLength,
   fetchStoragePath,
   fetchVisionConfig,
   listBookmarks,
@@ -12,6 +13,7 @@ import {
   selectStorageFolder,
   updateAccessibilitySettings,
   updateDiscordToken,
+  updateSceneFadeLength,
   updateStoragePath,
   updateVisionApiKey,
   updateVisionEnabled,
@@ -163,6 +165,27 @@ describe('config API', () => {
       domain: 'config',
       method: 'setAccessibility',
       args: [settings],
+    })
+  })
+
+  it('fetchSceneFadeLength uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(3)
+    const result = await fetchSceneFadeLength()
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'getSceneFadeLength',
+      args: [],
+    })
+    expect(result).toBe(3)
+  })
+
+  it('updateSceneFadeLength uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await updateSceneFadeLength(4.5)
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'setSceneFadeLength',
+      args: [4.5],
     })
   })
 

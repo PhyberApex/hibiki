@@ -11,6 +11,7 @@ import { dirname } from 'node:path'
 import { generateDependencyReport } from '@discordjs/voice'
 import { getConfig } from './config'
 import { normalizeAccessibilitySettings, parseAccessibilitySettings } from './config/accessibility-settings'
+import { normalizeSceneFadeLength, parseSceneFadeLength } from './config/scene-fade-settings'
 import { createDiscordClient } from './discord/discord-client'
 import { getStorageWarnings } from './json-file'
 import { createAppConfig } from './persistence'
@@ -75,6 +76,8 @@ export interface EmbeddedApi {
     setBookmarks: (bookmarks: { name: string, url: string, favicon?: string }[]) => Promise<void>
     getAccessibility: () => Promise<AccessibilitySettings>
     setAccessibility: (settings: AccessibilitySettings) => Promise<void>
+    getSceneFadeLength: () => Promise<number>
+    setSceneFadeLength: (seconds: number) => Promise<void>
     getVision: () => Promise<VisionSettingsState>
     setVisionProvider: (provider: VisionProviderId) => Promise<VisionSettingsState>
     setVisionApiKey: (provider: VisionProviderId, apiKey: string) => Promise<VisionSettingsState>
@@ -221,6 +224,10 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
       getAccessibility: async () => parseAccessibilitySettings(await appConfig.get('accessibility')),
       setAccessibility: async (settings) => {
         await appConfig.set('accessibility', JSON.stringify(normalizeAccessibilitySettings(settings)))
+      },
+      getSceneFadeLength: async () => parseSceneFadeLength(await appConfig.get('scene.fadeLength')),
+      setSceneFadeLength: async (seconds) => {
+        await appConfig.set('scene.fadeLength', JSON.stringify(normalizeSceneFadeLength(seconds)))
       },
       getVision: () => visionSettings.get(),
       setVisionProvider: provider => visionSettings.setProvider(provider),

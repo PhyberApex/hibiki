@@ -3,10 +3,15 @@ import type { DiscordConfig, VisionConfig, VisionProviderId } from '@/api/config
 import { computed, onMounted, ref } from 'vue'
 import {
   fetchDiscordConfig,
+  fetchSceneFadeLength,
   fetchStoragePath,
   fetchVisionConfig,
+  SCENE_FADE_LENGTH_MAX_SECONDS,
+  SCENE_FADE_LENGTH_MIN_SECONDS,
+  SCENE_FADE_LENGTH_STEP_SECONDS,
   selectStorageFolder,
   updateDiscordToken,
+  updateSceneFadeLength,
   updateStoragePath,
   updateVisionApiKey,
   updateVisionEnabled,
@@ -29,6 +34,10 @@ const savingStorage = ref(false)
 const storageMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
 const accessibilityMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+
+const sceneFadeLength = ref(3)
+const savingFadeLength = ref(false)
+const fadeLengthMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
 const DEFAULT_VISION_CONFIG: VisionConfig = {
   provider: 'claude',
@@ -63,14 +72,16 @@ function syncVisionAdvancedInputs() {
 
 async function load() {
   try {
-    const [config, storage, vision] = await Promise.all([
+    const [config, storage, vision, fadeLength] = await Promise.all([
       fetchDiscordConfig(),
       fetchStoragePath().catch(() => ({ path: null })),
       fetchVisionConfig().catch(() => DEFAULT_VISION_CONFIG),
+      fetchSceneFadeLength().catch(() => 3),
     ])
     discordConfig.value = config
     storagePath.value = storage.path
     visionConfig.value = vision
+    sceneFadeLength.value = fadeLength
     syncVisionAdvancedInputs()
   }
   catch (e) {
@@ -170,6 +181,22 @@ function onReduceMotionChange(event: Event) {
 
 function useSystemMotion() {
   persistAccessibility(() => accessibility.setReduceMotion(null))
+}
+
+async function onSceneFadeLengthChange(event: Event) {
+  const seconds = Number((event.target as HTMLInputElement).value)
+  sceneFadeLength.value = seconds
+  savingFadeLength.value = true
+  fadeLengthMessage.value = null
+  try {
+    await updateSceneFadeLength(seconds)
+  }
+  catch (e) {
+    fadeLengthMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t save fade length.' }
+  }
+  finally {
+    savingFadeLength.value = false
+  }
 }
 
 async function changeVisionProvider(event: Event) {
@@ -466,6 +493,46 @@ onMounted(load)
         :class="[accessibilityMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
       >
         {{ accessibilityMessage.text }}
+      </p>
+    </section>
+
+    <hr class="divider">
+
+    <section class="section">
+      <div class="section-header">
+        <h2 class="section-title">
+          Scene transitions
+        </h2>
+      </div>
+      <p class="section-desc">
+        How long Scenes take to crossfade when you switch between them.
+      </p>
+      <div class="field">
+        <label for="scene-fade-length" class="field-label">Fade length</label>
+        <div class="field-row">
+          <input
+            id="scene-fade-length"
+            type="range"
+            :min="SCENE_FADE_LENGTH_MIN_SECONDS"
+            :max="SCENE_FADE_LENGTH_MAX_SECONDS"
+            :step="SCENE_FADE_LENGTH_STEP_SECONDS"
+            class="fade-slider"
+            :value="sceneFadeLength"
+            :disabled="savingFadeLength"
+            @change="onSceneFadeLengthChange"
+          >
+          <span class="fade-value">{{ sceneFadeLength === 0 ? 'Hard cut' : `${sceneFadeLength}s` }}</span>
+        </div>
+        <p class="field-hint">
+          0 seconds switches Scenes with a hard cut instead of a fade.
+        </p>
+      </div>
+      <p
+        v-if="fadeLengthMessage"
+        class="status-message settings-message"
+        :class="[fadeLengthMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
+        {{ fadeLengthMessage.text }}
       </p>
     </section>
 
@@ -806,6 +873,21 @@ onMounted(load)
 
 .btn-motion-reset:hover {
   text-decoration: underline;
+}
+
+/* ── Scene transitions ── */
+
+.fade-slider {
+  flex: 1;
+  accent-color: var(--color-accent);
+}
+
+.fade-value {
+  min-width: 4.5rem;
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
 }
 
 /* ── Vision to Vibe ── */
