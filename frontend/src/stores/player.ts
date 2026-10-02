@@ -7,6 +7,7 @@ import {
   fetchPlayerState,
   joinChannel,
   leaveGuild,
+  onPlayerStateChanged,
   reconnectBot,
 } from '@/api/player'
 
@@ -46,6 +47,10 @@ export const usePlayerStore = defineStore('player', () => {
       // Expected when running outside Electron (e.g. tests or Vite dev)
     }
   }
+
+  onPlayerStateChanged(() => {
+    loadState()
+  })
 
   function syncSelectionFromConnectedState() {
     const connected = playerState.value.find(g => g.connectedChannelId)

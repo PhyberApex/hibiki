@@ -31,6 +31,7 @@ vi.mock('@/api/player', () => ({
   joinChannel: vi.fn(),
   leaveGuild: vi.fn(),
   reconnectBot: vi.fn(),
+  onPlayerStateChanged: vi.fn().mockReturnValue(() => {}),
 }))
 
 describe('mediaManagementView', () => {

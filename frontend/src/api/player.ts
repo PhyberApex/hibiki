@@ -81,3 +81,9 @@ export function reconnectBot(): Promise<void> {
   requireElectron()
   return apiCall<void>('player', 'reconnect', [])
 }
+
+export function onPlayerStateChanged(callback: () => void): () => void {
+  if (!window.hibiki?.on)
+    return () => {}
+  return window.hibiki.on('player:stateChanged', callback)
+}
