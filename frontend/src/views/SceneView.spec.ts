@@ -714,4 +714,57 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
 
     expect(player.playingSceneId).toBeNull()
   })
+
+  it('stops a Discord item toggled individually on voice loss without disturbing a concurrent local Playing Scene', async () => {
+    // mockImplementation (not mockResolvedValueOnce) because a prior test's
+    // wrapper is never unmounted and stays subscribed to the shared router —
+    // pushing a new route here can trigger its watcher too, consuming a
+    // once-queued mock value meant for this test's own mount.
+    const { listAmbience } = await import('@/api/sounds')
+    vi.mocked(listAmbience).mockImplementation(async () => [
+      { id: 'amb-1', name: 'Rain', filename: 'rain.mp3' },
+      { id: 'amb-2', name: 'Wind', filename: 'wind.mp3' },
+    ])
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockImplementation(async () => ({
+      id: 's1',
+      name: 'Storm',
+      ambience: [
+        { soundId: 'amb-1', soundName: 'Rain', volume: 80, enabled: true },
+        { soundId: 'amb-2', soundName: 'Wind', volume: 80, enabled: false },
+      ],
+      music: [],
+      effects: [],
+    }))
+
+    const { stopEffectStream } = await import('@/api/audio-stream')
+    const { wrapper, player } = await mountSceneWithPlayer()
+    player.playerState = [
+      { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+    ]
+    player.guildId = 'g1'
+    await flushPromises()
+
+    // Local preview plays amb-1 (enabled by default).
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+    expect(player.playingSceneId).toBe('s1')
+    expect(player.playingSceneMode).toBe('local')
+
+    // The GM also joins voice and toggles amb-2 on individually — always the
+    // Discord path, independent of the local Playing Scene.
+    const checkboxes = wrapper.findAll('input[type="checkbox"]')
+    await checkboxes[1].setValue(true)
+    await flushPromises()
+
+    vi.mocked(stopEffectStream).mockClear()
+    player.playerState = []
+    await flushPromises()
+
+    // The individually-toggled Discord item stops (as today)...
+    expect(stopEffectStream).toHaveBeenCalledWith('g1', 'ambience-amb-2')
+    // ...but the local Playing Scene survives losing voice.
+    expect(player.playingSceneId).toBe('s1')
+    expect(player.playingSceneMode).toBe('local')
+  })
 })

@@ -55,6 +55,12 @@ const ambienceAudioEls = new Map<string, HTMLAudioElement>()
 const captureSessions = new Map<string, CaptureSession>()
 const ambienceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const playingAmbienceIds = ref(new Set<string>())
+// Which path (Discord stream vs local-only) started each currently-audible
+// ambience id / the music slot — lets stopScene()/stopSceneLocal() tear down
+// only what they're actually responsible for, even when a local preview and
+// an individually-toggled Discord item are both audible at once.
+const ambienceSource = new Map<string, 'discord' | 'local'>()
+let musicSource: 'discord' | 'local' | null = null
 const effectFlash = useFlashSet()
 const sceneTransitionFlash = useFlashSet()
 const SCENE_START_FLASH = 'start'
@@ -304,6 +310,7 @@ function toggleAmbience(item: SceneItem) {
 
 function stopAmbience(soundId: string) {
   playingAmbienceIds.value.delete(soundId)
+  ambienceSource.delete(soundId)
   const timer = ambienceTimers.get(soundId)
   if (timer != null) {
     clearTimeout(timer)
@@ -326,6 +333,7 @@ function stopAmbience(soundId: string) {
 
 function stopAmbienceLocal(soundId: string) {
   playingAmbienceIds.value.delete(soundId)
+  ambienceSource.delete(soundId)
   const timer = ambienceTimers.get(soundId)
   if (timer != null) {
     clearTimeout(timer)
@@ -380,6 +388,7 @@ async function playAmbience(item: SceneItem) {
 
     await el.play()
     playingAmbienceIds.value.add(item.soundId)
+    ambienceSource.set(item.soundId, 'discord')
   }
   catch (e) {
     console.error('[scene] playAmbience failed:', e)
@@ -414,6 +423,7 @@ async function playAmbienceLocal(item: SceneItem) {
     }
     await el.play()
     playingAmbienceIds.value.add(item.soundId)
+    ambienceSource.set(item.soundId, 'local')
   }
   catch (e) {
     console.error('[scene] playAmbienceLocal failed:', e)
@@ -431,6 +441,7 @@ async function playMusic(item: SceneItem) {
       return
     const el = musicAudioEl
     playingMusicId.value = item.soundId
+    musicSource = 'discord'
     await startAudioStream(guildId.value, {
       id: track.id,
       name: track.name,
@@ -450,23 +461,33 @@ async function playMusic(item: SceneItem) {
     captureSessions.set('music', sess)
     el.onended = () => {
       playingMusicId.value = null
+      musicSource = null
     }
     el.onerror = () => {
       playingMusicId.value = null
+      musicSource = null
     }
     await el.play()
   }
   catch (e) {
     console.error('[scene] playMusic failed:', e)
     playingMusicId.value = null
+    musicSource = null
   }
 }
 
+// The IPC/session cleanup below always runs defensively, even if nothing was
+// actually streaming — but the shared audio element is only touched when a
+// local track isn't what's currently loaded into it, so a defensive call
+// here (e.g. from the voice-lost watcher) never interrupts a local preview.
 function stopMusic() {
-  musicAudioEl.pause()
-  musicAudioEl.removeAttribute('src')
-  musicAudioEl.load()
-  playingMusicId.value = null
+  if (musicSource !== 'local') {
+    musicAudioEl.pause()
+    musicAudioEl.removeAttribute('src')
+    musicAudioEl.load()
+    playingMusicId.value = null
+    musicSource = null
+  }
   const sess = captureSessions.get('music')
   if (sess) {
     sess.stop()
@@ -481,6 +502,7 @@ function stopMusicLocal() {
   musicAudioEl.removeAttribute('src')
   musicAudioEl.load()
   playingMusicId.value = null
+  musicSource = null
 }
 
 function playEffectLocal(item: SceneItem) {
@@ -568,6 +590,7 @@ async function playSceneLocal() {
       stopMusicLocal()
       const el = musicAudioEl
       playingMusicId.value = firstMusic.soundId
+      musicSource = 'local'
       el.src = soundStreamUrl('music', firstMusic.soundId)
       el.loop = firstMusic.loop ?? false
       el.volume = (firstMusic.volume ?? 80) / 100 * (globalVolume.value / 100)
@@ -578,9 +601,11 @@ async function playSceneLocal() {
       })
       el.onended = () => {
         playingMusicId.value = null
+        musicSource = null
       }
       el.onerror = () => {
         playingMusicId.value = null
+        musicSource = null
       }
       await el.play()
     }
@@ -591,17 +616,20 @@ async function playSceneLocal() {
   }
 }
 
-// Tears down whatever ambience/music is actually audible right now
-// (`playingAmbienceIds`/`playingMusicId` are ground truth, regardless of
-// whether it got there via Play or an individual toggle) using the local
-// teardown path, plus the always-shared effect instances. Only clears the
-// shared playing-scene identity when local preview is what it tracked, so a
-// defensive call here (e.g. at the top of playScene) never cuts off a
-// Discord stream that happens to share the same ambience ids.
+// Tears down whatever is actually audible via the local-only path right now
+// (`ambienceSource`/`musicSource` are ground truth, regardless of whether it
+// got there via Play or an individual toggle — though in practice only Play
+// starts local playback, individual triggers are always Discord), plus the
+// always-shared effect instances. Scoped to local-sourced ids specifically
+// so a defensive call here (e.g. at the top of playScene) never touches a
+// Discord stream that happens to be audible at the same time.
 function stopSceneLocal() {
-  for (const soundId of [...playingAmbienceIds.value])
-    stopAmbienceLocal(soundId)
-  stopMusicLocal()
+  for (const soundId of [...playingAmbienceIds.value]) {
+    if (ambienceSource.get(soundId) === 'local')
+      stopAmbienceLocal(soundId)
+  }
+  if (musicSource === 'local')
+    stopMusicLocal()
   stopAllEffectInstances()
   player.clearPlayingScene('local')
 }
@@ -624,15 +652,20 @@ async function playScene() {
   }
 }
 
-// Same shape as stopSceneLocal, via the Discord teardown path. Used
-// unconditionally wherever Discord playback must stop regardless of how it
-// started — the Stop button/row, deleting the playing Scene, losing voice,
-// and ambience/music that was toggled individually (never via Play) when the
-// GM leaves the open Scene — so those keep stopping "as today" even though
-// they never set a playing-scene identity to gate on.
+// Same shape as stopSceneLocal, scoped to Discord-sourced ids via the Discord
+// teardown path. Safe to call unconditionally wherever Discord playback must
+// stop regardless of how it started — the Stop button/row, deleting the
+// playing Scene, losing voice, and ambience/music that was toggled
+// individually (never via Play) when the GM leaves the open Scene — so those
+// keep stopping "as today" even though they never set a playing-scene
+// identity to gate on, and without disturbing a concurrent local preview.
 function stopScene() {
-  for (const soundId of [...playingAmbienceIds.value])
-    stopAmbience(soundId)
+  for (const soundId of [...playingAmbienceIds.value]) {
+    if (ambienceSource.get(soundId) === 'discord')
+      stopAmbience(soundId)
+  }
+  // Always run — stopMusic() itself only touches the shared element when a
+  // local track isn't loaded, so this is safe even if nothing was streaming.
   stopMusic()
   stopAllEffectInstances()
   player.clearPlayingScene('discord')
@@ -783,14 +816,11 @@ onActivated(() => {
 // Only react to the selected guild's own connection dropping — not to the GM
 // switching the sidebar selection to a different, not-yet-joined guild (which
 // also flips `isJoined` false but shouldn't stop another guild's playback).
-// Only react to the selected guild's own connection dropping — not to the GM
-// switching the sidebar selection to a different, not-yet-joined guild (which
-// also flips `isJoined` false but shouldn't stop another guild's playback).
-// Skipped when local preview is what's tracked as playing, so losing voice
-// never cuts off a local preview; stopScene() still tears down ambience/music
-// started individually (no Playing Scene tracked at all), matching "as today".
+// stopScene() is scoped to Discord-sourced ambience/music (see its comment),
+// so calling it unconditionally here never touches a concurrent local
+// preview, while still tearing down ambience/music toggled individually.
 watch([guildId, isJoined], ([newGuildId, joined], [oldGuildId, wasJoined]) => {
-  if (newGuildId === oldGuildId && wasJoined && !joined && player.playingSceneMode !== 'local')
+  if (newGuildId === oldGuildId && wasJoined && !joined)
     stopScene()
 })
 
