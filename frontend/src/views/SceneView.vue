@@ -842,11 +842,14 @@ watch([guildId, isJoined], ([newGuildId, joined], [oldGuildId, wasJoined]) => {
 // Scene, exactly as before — hence the ground-truth teardown in stopScene()/
 // stopSceneLocal() runs whenever nothing survives the navigation. Effect
 // instances always stop on any Scene change (out of scope to change that).
-watch(sceneId, (newId, oldId) => {
-  // Skip on the initial mount (oldId undefined) — there's nothing to leave
-  // yet, so no stop logic applies, only the load.
-  const hadScene = oldId !== undefined && oldId !== ''
-  if (hadScene) {
+let sceneWatcherRanOnce = false
+watch(sceneId, (newId) => {
+  // Skip only on the true initial mount — there's nothing to leave yet, so
+  // no stop logic applies, only the load. `sceneId` is also `undefined`
+  // while on the Scene list (no `:id` route param), so this can't key off
+  // "oldId is undefined": that's also true for every list → Scene
+  // navigation, which must still run the stop logic below.
+  if (sceneWatcherRanOnce) {
     const survivesNavigation = player.playingSceneId !== null && (!newId || player.playingSceneId === newId)
     if (!survivesNavigation) {
       stopScene()
@@ -854,6 +857,7 @@ watch(sceneId, (newId, oldId) => {
     }
     stopAllEffectInstances()
   }
+  sceneWatcherRanOnce = true
   loadScene()
 }, { immediate: true })
 </script>

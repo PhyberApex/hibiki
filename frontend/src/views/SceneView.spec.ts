@@ -697,6 +697,22 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     expect(wrapper.find('.btn-play-local').exists()).toBe(true)
   })
 
+  it('stops the playing Scene when opening a different Scene from the Scene list', async () => {
+    const { wrapper, player } = await mountSceneWithPlayer()
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+    expect(player.playingSceneId).toBe('s1')
+
+    await router.push('/scenes')
+    await flushPromises()
+    expect(player.playingSceneId).toBe('s1')
+
+    await router.push('/scenes/s2')
+    await flushPromises()
+
+    expect(player.playingSceneId).toBeNull()
+  })
+
   it('stops the playing Scene when it is deleted', async () => {
     vi.stubGlobal('confirm', () => true)
     const { deleteScene } = await import('@/api/scenes')
