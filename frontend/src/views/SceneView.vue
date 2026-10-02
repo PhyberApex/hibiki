@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { VisionProviderId } from '@/api/config'
 import type { Scene, SceneItem } from '@/api/scenes'
 import type { SoundFile } from '@/api/sounds'
 import type { CaptureSession } from '@/audio/browser-audio-capture'
@@ -44,6 +45,8 @@ const exportBusy = ref(false)
 const importBusy = ref(false)
 const showRegistryBrowser = ref(false)
 const visionAvailable = ref(false)
+const visionProvider = ref<VisionProviderId>('claude')
+const visionEndpoint = ref('')
 const showVisionDialog = ref(false)
 const resolveTarget = ref<{ category: 'ambience' | 'music' | 'effects', item: SceneItem } | null>(null)
 const loadError = ref<string | null>(null)
@@ -246,7 +249,9 @@ async function loadScene() {
 async function loadVisionAvailability() {
   try {
     const config = await fetchVisionConfig()
-    visionAvailable.value = config.enabled && config.apiKeyConfigured
+    visionAvailable.value = config.enabled && config.configured
+    visionProvider.value = config.provider
+    visionEndpoint.value = config.openaiCompatible.baseUrl
   }
   catch {
     visionAvailable.value = false
@@ -1240,6 +1245,8 @@ watch(sceneId, (newId, oldId) => {
       :ambience-sounds="ambienceSounds"
       :music-in-scene="scene.music.map(m => m.soundId)"
       :ambience-in-scene="scene.ambience.map(a => a.soundId)"
+      :provider="visionProvider"
+      :endpoint="visionEndpoint"
       @add="addToScene"
       @close="showVisionDialog = false"
     />

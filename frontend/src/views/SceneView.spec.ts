@@ -34,8 +34,22 @@ vi.mock('@/api/audio-stream', () => ({
   stopEffectStream: vi.fn().mockResolvedValue(undefined),
 }))
 
+const UNCONFIGURED_VISION = {
+  provider: 'claude' as const,
+  enabled: false,
+  configured: false,
+  claude: { keyConfigured: false, configured: false },
+  openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+}
+
 vi.mock('@/api/config', () => ({
-  fetchVisionConfig: vi.fn().mockResolvedValue({ apiKeyConfigured: false, enabled: false }),
+  fetchVisionConfig: vi.fn().mockResolvedValue({
+    provider: 'claude',
+    enabled: false,
+    configured: false,
+    claude: { keyConfigured: false, configured: false },
+    openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+  }),
   openFileDialog: vi.fn().mockResolvedValue(null),
   saveFileDialog: vi.fn().mockResolvedValue(null),
 }))
@@ -175,31 +189,52 @@ describe('sceneView — Vision to Vibe entry point', () => {
     vi.mocked(fetchVisionConfig).mockReset()
   })
 
-  it('is hidden when neither key nor toggle is set', async () => {
-    vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: false, enabled: false })
+  it('is hidden when neither the provider is configured nor the toggle is set', async () => {
+    vi.mocked(fetchVisionConfig).mockResolvedValue(UNCONFIGURED_VISION)
     const wrapper = await mountScene()
     expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(false)
   })
 
-  it('is hidden when a key is set but the toggle is off', async () => {
-    vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: true, enabled: false })
+  it('is hidden when the provider is configured but the toggle is off', async () => {
+    vi.mocked(fetchVisionConfig).mockResolvedValue({
+      ...UNCONFIGURED_VISION,
+      configured: true,
+      claude: { keyConfigured: true, configured: true },
+    })
     const wrapper = await mountScene()
     expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(false)
   })
 
-  it('is hidden when the toggle is on but no key is set', async () => {
-    vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: false, enabled: true })
+  it('is hidden when the toggle is on but the provider is not configured', async () => {
+    vi.mocked(fetchVisionConfig).mockResolvedValue({ ...UNCONFIGURED_VISION, enabled: true })
     const wrapper = await mountScene()
     expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(false)
   })
 
-  it('is shown when both key and toggle are set, and opens the dialog', async () => {
-    vi.mocked(fetchVisionConfig).mockResolvedValue({ apiKeyConfigured: true, enabled: true })
+  it('is shown when the provider is configured and the toggle is set, and opens the dialog', async () => {
+    vi.mocked(fetchVisionConfig).mockResolvedValue({
+      ...UNCONFIGURED_VISION,
+      enabled: true,
+      configured: true,
+      claude: { keyConfigured: true, configured: true },
+    })
     const wrapper = await mountScene()
     const button = wrapper.find('[data-testid="vision-to-vibe-open"]')
     expect(button.exists()).toBe(true)
     await button.trigger('click')
     expect(wrapper.find('[role="dialog"][aria-label="Vision to Vibe"]').exists()).toBe(true)
+  })
+
+  it('is shown when the OpenAI-compatible provider is configured via a custom Base URL, with no key', async () => {
+    vi.mocked(fetchVisionConfig).mockResolvedValue({
+      provider: 'openai-compatible',
+      enabled: true,
+      configured: true,
+      claude: { keyConfigured: false, configured: false },
+      openaiCompatible: { keyConfigured: false, configured: true, baseUrl: 'http://localhost:11434/v1', model: 'local-vision' },
+    })
+    const wrapper = await mountScene()
+    expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(true)
   })
 
   it('stays hidden when the vision config cannot be loaded', async () => {

@@ -4,7 +4,7 @@ import type { StorageWarning } from './json-file'
 import type { SoundCategory } from './sound/sound.types'
 import type { VibeMatches } from './vision/vibe-matching'
 import type { VisionSettingsState } from './vision/vision-settings'
-import type { VibeAnalysis } from './vision/vision.service'
+import type { VibeAnalysis, VisionProviderId } from './vision/vision.service'
 import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { generateDependencyReport } from '@discordjs/voice'
@@ -75,7 +75,10 @@ export interface EmbeddedApi {
     getAccessibility: () => Promise<AccessibilitySettings>
     setAccessibility: (settings: AccessibilitySettings) => Promise<void>
     getVision: () => Promise<VisionSettingsState>
-    setVisionApiKey: (apiKey: string) => Promise<VisionSettingsState>
+    setVisionProvider: (provider: VisionProviderId) => Promise<VisionSettingsState>
+    setVisionApiKey: (provider: VisionProviderId, apiKey: string) => Promise<VisionSettingsState>
+    setVisionOpenAiBaseUrl: (baseUrl: string) => Promise<VisionSettingsState>
+    setVisionOpenAiModel: (model: string) => Promise<VisionSettingsState>
     setVisionEnabled: (enabled: boolean) => Promise<VisionSettingsState>
     getStorageWarnings: () => Promise<StorageWarning[]>
   }
@@ -125,7 +128,7 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
   const player = createPlayer(discord)
 
   const visionSettings = createVisionSettings(config, appConfig)
-  const vision = createVisionService({ getApiKey: visionSettings.getApiKey })
+  const vision = createVisionService({ getProviderConfig: visionSettings.getProviderConfig })
 
   // Read scenes.json, app-config.json, and (via sounds.list, which reads the
   // sound-tags store) sound-tags.json up front, so a corrupt file is detected
@@ -216,7 +219,10 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
         await appConfig.set('accessibility', JSON.stringify(normalizeAccessibilitySettings(settings)))
       },
       getVision: () => visionSettings.get(),
-      setVisionApiKey: apiKey => visionSettings.setApiKey(apiKey),
+      setVisionProvider: provider => visionSettings.setProvider(provider),
+      setVisionApiKey: (provider, apiKey) => visionSettings.setApiKey(provider, apiKey),
+      setVisionOpenAiBaseUrl: baseUrl => visionSettings.setOpenAiBaseUrl(baseUrl),
+      setVisionOpenAiModel: model => visionSettings.setOpenAiModel(model),
       setVisionEnabled: enabled => visionSettings.setEnabled(enabled),
       getStorageWarnings: async () => getStorageWarnings(),
     },
@@ -250,9 +256,11 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
     },
     vision: {
       analyzeImageVibe: async (imagePath) => {
-        const { enabled } = await visionSettings.get()
+        const { enabled, configured } = await visionSettings.get()
         if (!enabled)
           throw new Error('Vision to Vibe is turned off. Enable it in Settings first.')
+        if (!configured)
+          throw new Error('The selected Vision Provider is not configured. Add it in Settings first.')
         return vision.analyzeImageVibe(imagePath)
       },
       matchVibe: async (vibeTags) => {

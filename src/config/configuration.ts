@@ -27,6 +27,7 @@ export function configuration() {
     },
     vision: {
       apiKey: process.env.HIBIKI_VISION_API_KEY ?? '',
+      openaiApiKey: process.env.HIBIKI_VISION_OPENAI_API_KEY ?? '',
     },
     audio: {
       storageRoot,
