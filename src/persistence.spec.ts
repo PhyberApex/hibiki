@@ -1,3 +1,4 @@
+import type { SecretCodec } from './persistence'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -105,5 +106,104 @@ describe('createAppConfig with a corrupt store', () => {
     const val = await appConfig.get('anything')
     expect(val).toBeNull()
     expect(getStorageWarnings()).toHaveLength(1)
+  })
+})
+
+describe('createAppConfig with a secret codec', () => {
+  let secretConfig: ReturnType<typeof makeSecretConfig>
+
+  function makeSecretConfig() {
+    const root = mkdtempSync(join(tmpdir(), 'hibiki-config-secrets-'))
+    return {
+      discord: { token: '' },
+      audio: {
+        storageRoot: root,
+        musicDir: join(root, 'music'),
+        effectsDir: join(root, 'effects'),
+        webDistDir: 'web-dist',
+      },
+      database: { path: join(root, 'data', 'hibiki.json') },
+    }
+  }
+
+  function fakeCodec(available = true): SecretCodec {
+    return {
+      available,
+      encrypt: value => `enc(${value})`,
+      decrypt: (value) => {
+        const match = /^enc\((.*)\)$/.exec(value)
+        if (!match)
+          throw new Error('cannot decrypt')
+        return match[1]
+      },
+    }
+  }
+
+  function readStoredConfig(): Record<string, string> {
+    const configPath = join(secretConfig.audio.storageRoot, 'data', 'app-config.json')
+    return JSON.parse(readFileSync(configPath, 'utf-8'))
+  }
+
+  beforeEach(() => {
+    secretConfig = makeSecretConfig()
+    clearStorageWarnings()
+  })
+
+  it('encrypts a secret key on write, and decrypts it back on read', async () => {
+    const appConfig = createAppConfig(secretConfig, fakeCodec())
+    await appConfig.set('discord.token', 'abc123')
+
+    expect(readStoredConfig()['discord.token']).toBe('enc:v1:enc(abc123)')
+    expect(await appConfig.get('discord.token')).toBe('abc123')
+  })
+
+  it('never encrypts a non-secret key', async () => {
+    const appConfig = createAppConfig(secretConfig, fakeCodec())
+    await appConfig.set('storage.path', '/tmp/music')
+
+    expect(readStoredConfig()['storage.path']).toBe('/tmp/music')
+  })
+
+  it('migrates a legacy plaintext secret to encrypted storage on read', async () => {
+    const configPath = join(secretConfig.audio.storageRoot, 'data', 'app-config.json')
+    mkdirSync(dirname(configPath), { recursive: true })
+    writeFileSync(configPath, JSON.stringify({ 'discord.token': 'legacy-plain' }))
+
+    const appConfig = createAppConfig(secretConfig, fakeCodec())
+    expect(await appConfig.get('discord.token')).toBe('legacy-plain')
+    expect(readStoredConfig()['discord.token']).toBe('enc:v1:enc(legacy-plain)')
+  })
+
+  it('treats an undecryptable value as not configured, not a crash', async () => {
+    const configPath = join(secretConfig.audio.storageRoot, 'data', 'app-config.json')
+    mkdirSync(dirname(configPath), { recursive: true })
+    writeFileSync(configPath, JSON.stringify({ 'discord.token': 'enc:v1:garbage' }))
+
+    const appConfig = createAppConfig(secretConfig, fakeCodec())
+    await expect(appConfig.get('discord.token')).resolves.toBeNull()
+  })
+
+  it('falls back to plaintext storage when the codec is unavailable', async () => {
+    const appConfig = createAppConfig(secretConfig, fakeCodec(false))
+    await appConfig.set('discord.token', 'plain-token')
+
+    expect(readStoredConfig()['discord.token']).toBe('plain-token')
+    expect(await appConfig.get('discord.token')).toBe('plain-token')
+    expect(appConfig.secretsEncrypted).toBe(false)
+  })
+
+  it('does not migrate a legacy plaintext secret when the codec is unavailable', async () => {
+    const configPath = join(secretConfig.audio.storageRoot, 'data', 'app-config.json')
+    mkdirSync(dirname(configPath), { recursive: true })
+    writeFileSync(configPath, JSON.stringify({ 'discord.token': 'legacy-plain' }))
+
+    const appConfig = createAppConfig(secretConfig, fakeCodec(false))
+    expect(await appConfig.get('discord.token')).toBe('legacy-plain')
+    expect(readStoredConfig()['discord.token']).toBe('legacy-plain')
+  })
+
+  it('reports secretsEncrypted based on codec availability', () => {
+    expect(createAppConfig(secretConfig, fakeCodec(true)).secretsEncrypted).toBe(true)
+    expect(createAppConfig(secretConfig, fakeCodec(false)).secretsEncrypted).toBe(false)
   })
 })

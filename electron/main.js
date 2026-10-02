@@ -1,7 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { PassThrough } = require('node:stream')
-const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, protocol, session, shell, WebContentsView } = require('electron')
+const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'hibiki', privileges: { standard: true, secure: true, supportFetchAPI: true } },
@@ -9,6 +9,27 @@ protocol.registerSchemesAsPrivileged([
 
 let appHandle = null
 let mainWindow = null
+
+/**
+ * On Linux without a keyring, `safeStorage` reports encryption as available
+ * but silently falls back to a `basic_text` backend that doesn't actually
+ * encrypt — so that backend is treated as unavailable too (see issue #412).
+ */
+function isSecretEncryptionAvailable() {
+  if (!safeStorage.isEncryptionAvailable())
+    return false
+  if (process.platform === 'linux' && typeof safeStorage.getSelectedStorageBackend === 'function')
+    return safeStorage.getSelectedStorageBackend() !== 'basic_text'
+  return true
+}
+
+function createSecretCodec() {
+  return {
+    available: isSecretEncryptionAvailable(),
+    encrypt: plaintext => safeStorage.encryptString(plaintext).toString('base64'),
+    decrypt: ciphertext => safeStorage.decryptString(Buffer.from(ciphertext, 'base64')),
+  }
+}
 
 function createWindow(loadUrl) {
   const isTestMode = process.env.ELECTRON_TEST_MODE === '1'
@@ -323,7 +344,7 @@ app.whenReady().then(async () => {
   let handle
   let api
   try {
-    const embedded = await getEmbeddedApp()
+    const embedded = await getEmbeddedApp(createSecretCodec())
     handle = embedded
     api = embedded.api
   }

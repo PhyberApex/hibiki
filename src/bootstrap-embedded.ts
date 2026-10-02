@@ -1,6 +1,7 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { AccessibilitySettings } from './config/accessibility-settings'
 import type { StorageWarning } from './json-file'
+import type { SecretCodec } from './persistence'
 import type { SoundCategory } from './sound/sound.types'
 import type { VibeMatches } from './vision/vibe-matching'
 import type { VisionSettingsState } from './vision/vision-settings'
@@ -66,8 +67,8 @@ export interface EmbeddedApi {
     reconnect: () => Promise<void>
   }
   config: {
-    getDiscord: () => Promise<{ tokenConfigured: boolean }>
-    setDiscordToken: (token: string) => Promise<{ tokenConfigured: boolean }>
+    getDiscord: () => Promise<{ tokenConfigured: boolean, encrypted: boolean }>
+    setDiscordToken: (token: string) => Promise<{ tokenConfigured: boolean, encrypted: boolean }>
     getStoragePath: () => Promise<{ path: string | null }>
     setStoragePath: (path: string) => Promise<void>
     getBookmarks: () => Promise<{ name: string, url: string, favicon?: string }[]>
@@ -120,13 +121,13 @@ export interface EmbeddedApp {
   onPlayerStateChanged: (listener: () => void) => () => void
 }
 
-export async function getEmbeddedApp(): Promise<EmbeddedApp> {
+export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> {
   process.env.HIBIKI_EMBEDDED = '1'
   const report = generateDependencyReport()
   console.warn('[Hibiki] Voice dependency report:\n', report)
   const config = getConfig()
   await ensureStorageDirs(config)
-  const appConfig = createAppConfig(config)
+  const appConfig = createAppConfig(config, codec)
   const sounds = createSoundLibrary(config)
   const scenes = createSceneStore(config)
   const registry = createSceneRegistry(config)
@@ -183,20 +184,20 @@ export async function getEmbeddedApp(): Promise<EmbeddedApp> {
       getDiscord: async () => {
         const fromEnv = config.discord.token
         if (fromEnv)
-          return { tokenConfigured: true }
+          return { tokenConfigured: true, encrypted: appConfig.secretsEncrypted }
         const fromDb = await appConfig.get('discord.token')
-        return { tokenConfigured: Boolean(fromDb) }
+        return { tokenConfigured: Boolean(fromDb), encrypted: appConfig.secretsEncrypted }
       },
       setDiscordToken: async (token) => {
         if (typeof token === 'string' && token.trim()) {
           await appConfig.set('discord.token', token.trim())
-          return { tokenConfigured: true }
+          return { tokenConfigured: true, encrypted: appConfig.secretsEncrypted }
         }
         const fromEnv = config.discord.token
         if (fromEnv)
-          return { tokenConfigured: true }
+          return { tokenConfigured: true, encrypted: appConfig.secretsEncrypted }
         const fromDb = await appConfig.get('discord.token')
-        return { tokenConfigured: Boolean(fromDb) }
+        return { tokenConfigured: Boolean(fromDb), encrypted: appConfig.secretsEncrypted }
       },
       getStoragePath: async () => {
         const p = await appConfig.get('storage.path')
