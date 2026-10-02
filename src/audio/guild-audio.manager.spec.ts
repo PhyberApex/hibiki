@@ -1,6 +1,7 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import { EventEmitter } from 'node:events'
 import * as voice from '@discordjs/voice'
+import { AudioEngine } from './audio-engine'
 import { GuildAudioManager } from './guild-audio.manager'
 
 jest.mock('@discordjs/voice', () => ({
@@ -23,11 +24,27 @@ jest.mock('./audio-engine', () => ({
     playMusicFromStream: jest.fn(),
     playEffectFromStream: jest.fn(),
     stopMusic: jest.fn(),
+    stopAllMusic: jest.fn(),
     getVolumes: jest.fn().mockReturnValue({ music: 100, effects: 100 }),
     setVolumes: jest.fn(),
     destroy: jest.fn(),
   })),
 }))
+
+/** The mocked AudioEngine instance the manager under test constructed. */
+function getEngineMock(): {
+  playMusicFromStream: jest.Mock
+  stopMusic: jest.Mock
+  stopAllMusic: jest.Mock
+  destroy: jest.Mock
+} {
+  const results = (AudioEngine as unknown as jest.Mock).mock.results
+  return results[results.length - 1].value
+}
+
+function createFakeStream(): EventEmitter {
+  return new EventEmitter()
+}
 
 type FakeConnection = EventEmitter & {
   joinConfig: { channelId: string }
@@ -182,6 +199,93 @@ describe('guildAudioManager', () => {
       expect(listener).not.toHaveBeenCalled()
       expect(manager.connected).toBe(true)
       expect(manager.channelId).toBe('channel-2')
+    })
+  })
+
+  describe('music stream ids', () => {
+    const metaA = { id: 'a', name: 'Track A', filename: 'a.mp3', category: 'music' as const }
+    const metaB = { id: 'b', name: 'Track B', filename: 'b.mp3', category: 'music' as const }
+
+    it('forwards the stream id to the engine on start and stop', () => {
+      const stream = createFakeStream()
+      manager.playMusicFromStream(stream as any, metaA, 'a')
+      manager.stopMusic('a')
+
+      const engine = getEngineMock()
+      expect(engine.playMusicFromStream).toHaveBeenCalledWith(stream, 'a')
+      expect(engine.stopMusic).toHaveBeenCalledWith('a')
+      expect(engine.stopAllMusic).not.toHaveBeenCalled()
+    })
+
+    it('reports the most recently started still-alive stream as the current track', () => {
+      manager.playMusicFromStream(createFakeStream() as any, metaA, 'a')
+      manager.playMusicFromStream(createFakeStream() as any, metaB, 'b')
+
+      expect(manager.track).toEqual(metaB)
+    })
+
+    it('falls back to the next-most-recent stream when the latest one ends', () => {
+      manager.playMusicFromStream(createFakeStream() as any, metaA, 'a')
+      const streamB = createFakeStream()
+      manager.playMusicFromStream(streamB as any, metaB, 'b')
+
+      streamB.emit('end')
+
+      expect(manager.track).toEqual(metaA)
+    })
+
+    it('treats a restarted id as newly started for current-track purposes', () => {
+      manager.playMusicFromStream(createFakeStream() as any, metaA, 'a')
+      manager.playMusicFromStream(createFakeStream() as any, metaB, 'b')
+      const metaA2 = { ...metaA, name: 'Track A (again)' }
+      manager.playMusicFromStream(createFakeStream() as any, metaA2, 'a')
+
+      expect(manager.track).toEqual(metaA2)
+    })
+
+    it('clears the current track once every stream has ended', () => {
+      const stream = createFakeStream()
+      manager.playMusicFromStream(stream as any, metaA, 'a')
+
+      stream.emit('end')
+
+      expect(manager.track).toBeUndefined()
+    })
+
+    it('destroy() ends every music stream via stopAllMusic', () => {
+      manager.playMusicFromStream(createFakeStream() as any, metaA, 'a')
+      manager.playMusicFromStream(createFakeStream() as any, metaB, 'b')
+
+      manager.destroy()
+
+      expect(getEngineMock().stopAllMusic).toHaveBeenCalledTimes(1)
+      expect(manager.track).toBeUndefined()
+    })
+
+    it('disconnect() ends every music stream via stopAllMusic', () => {
+      ;(voice.getVoiceConnection as jest.Mock).mockReturnValue(undefined)
+      manager.playMusicFromStream(createFakeStream() as any, metaA, 'a')
+      manager.playMusicFromStream(createFakeStream() as any, metaB, 'b')
+
+      manager.disconnect()
+
+      expect(getEngineMock().stopAllMusic).toHaveBeenCalledTimes(1)
+      expect(manager.track).toBeUndefined()
+    })
+
+    it('a lost connection teardown ends every music stream via stopAllMusic', async () => {
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+
+      await manager.connect(fakeChannel)
+      manager.playMusicFromStream(createFakeStream() as any, metaA, 'a')
+      manager.playMusicFromStream(createFakeStream() as any, metaB, 'b')
+
+      connection.emit('stateChange', { status: voice.VoiceConnectionStatus.Ready }, { status: voice.VoiceConnectionStatus.Destroyed })
+      await flushAsync()
+
+      expect(getEngineMock().stopAllMusic).toHaveBeenCalledTimes(1)
+      expect(manager.track).toBeUndefined()
     })
   })
 })

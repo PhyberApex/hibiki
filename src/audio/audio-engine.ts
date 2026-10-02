@@ -21,7 +21,6 @@ interface MixerInputLike {
 interface ActiveStream {
   source: Readable
   input: MixerInputLike
-  loop?: boolean
   volume: number
 }
 
@@ -33,7 +32,8 @@ export class AudioEngine {
   private readonly mixerOutput = new PassThrough()
   private readonly player: AudioPlayer
   private readonly resource: AudioResource<null>
-  private background?: ActiveStream
+  /** Music streams by id; a start without an id keys to the `undefined` slot. */
+  private readonly musicStreams = new Map<string | undefined, ActiveStream>()
   private readonly effectStreams = new Set<ActiveStream>()
   private volumes = { ...DEFAULT_VOLUMES }
 
@@ -81,13 +81,23 @@ export class AudioEngine {
       this.volumes.effects = CLAMP(updates.effects)
   }
 
-  playMusicFromStream(stream: Readable) {
-    this.stopBackground()
-    this.background = this.spawnInputFromStream(stream, this.volumes.music, false)
+  playMusicFromStream(stream: Readable, streamId?: string) {
+    this.stopMusicStream(streamId)
+    const active = this.spawnInputFromStream(stream, this.volumes.music)
+    this.musicStreams.set(streamId, active)
+
+    const onEnded = () => {
+      if (this.musicStreams.get(streamId) === active) {
+        active.input.destroy()
+        this.musicStreams.delete(streamId)
+      }
+    }
+    stream.once('end', onEnded)
+    stream.once('error', onEnded)
   }
 
   playEffectFromStream(stream: Readable) {
-    const effectStream = this.spawnInputFromStream(stream, this.volumes.effects, false)
+    const effectStream = this.spawnInputFromStream(stream, this.volumes.effects)
     this.effectStreams.add(effectStream)
 
     // Auto-cleanup when stream ends
@@ -99,12 +109,19 @@ export class AudioEngine {
     })
   }
 
-  stopMusic() {
-    this.stopBackground()
+  /** Ends the music stream for `streamId` (or the default stream when omitted). Other ids are untouched. */
+  stopMusic(streamId?: string) {
+    this.stopMusicStream(streamId)
+  }
+
+  /** Ends every music stream for this guild, regardless of id. */
+  stopAllMusic() {
+    for (const id of [...this.musicStreams.keys()])
+      this.stopMusicStream(id)
   }
 
   destroy() {
-    this.stopBackground()
+    this.stopAllMusic()
     // Clean up all effect streams
     for (const effect of this.effectStreams) {
       effect.source.removeAllListeners?.()
@@ -117,11 +134,7 @@ export class AudioEngine {
     this.mixerOutput.destroy()
   }
 
-  private spawnInputFromStream(
-    stream: Readable,
-    volume: number,
-    _loop: boolean,
-  ): ActiveStream {
+  private spawnInputFromStream(stream: Readable, volume: number): ActiveStream {
     const input = this.mixer.createAudioInput({
       sampleRate: 48000,
       channels: 2,
@@ -131,25 +144,16 @@ export class AudioEngine {
 
     stream.pipe(input)
 
-    stream.once('error', () => {
-      input.destroy()
-      if (this.background?.source === stream)
-        this.background = undefined
-    })
-    stream.once('end', () => {
-      input.destroy()
-      if (this.background?.source === stream)
-        this.background = undefined
-    })
     return { source: stream, input, volume }
   }
 
-  private stopBackground() {
-    if (!this.background)
+  private stopMusicStream(streamId?: string) {
+    const active = this.musicStreams.get(streamId)
+    if (!active)
       return
-    this.background.source.removeAllListeners?.()
-    this.background.source.destroy?.()
-    this.background.input.destroy()
-    this.background = undefined
+    active.source.removeAllListeners?.()
+    active.source.destroy?.()
+    active.input.destroy()
+    this.musicStreams.delete(streamId)
   }
 }

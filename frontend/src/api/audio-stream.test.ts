@@ -40,6 +40,28 @@ describe('audio-stream API', () => {
     expect(mockSend).toHaveBeenCalledWith('audio:chunk', { guildId: 'g1', chunk })
   })
 
+  it('startAudioStream passes an optional streamId', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await startAudioStream('g1', undefined, 'crossfade-1')
+    expect(mockInvoke).toHaveBeenCalledWith('audio:startStream', {
+      guildId: 'g1',
+      metadata: undefined,
+      streamId: 'crossfade-1',
+    })
+  })
+
+  it('stopAudioStream passes an optional streamId', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await stopAudioStream('g1', 'crossfade-1')
+    expect(mockInvoke).toHaveBeenCalledWith('audio:stopStream', { guildId: 'g1', streamId: 'crossfade-1' })
+  })
+
+  it('sendAudioChunk passes an optional streamId', () => {
+    const chunk = new ArrayBuffer(8)
+    sendAudioChunk('g1', chunk, 'crossfade-1')
+    expect(mockSend).toHaveBeenCalledWith('audio:chunk', { guildId: 'g1', chunk, streamId: 'crossfade-1' })
+  })
+
   it('startEffectStream uses invoke and returns streamId', async () => {
     mockInvoke.mockResolvedValue('stream-123')
     const id = await startEffectStream('g1')

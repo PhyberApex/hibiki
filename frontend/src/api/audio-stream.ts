@@ -15,25 +15,26 @@ export interface StreamMetadata {
 export function startAudioStream(
   guildId: string,
   metadata?: StreamMetadata,
+  streamId?: string,
 ): Promise<void> {
   requireElectron()
   if (!window.hibiki?.invoke)
     throw new Error('Electron API not available')
-  return window.hibiki.invoke('audio:startStream', { guildId, metadata }) as Promise<void>
+  return window.hibiki.invoke('audio:startStream', { guildId, metadata, streamId }) as Promise<void>
 }
 
-export function stopAudioStream(guildId: string): Promise<void> {
+export function stopAudioStream(guildId: string, streamId?: string): Promise<void> {
   requireElectron()
   if (!window.hibiki?.invoke)
     throw new Error('Electron API not available')
-  return window.hibiki.invoke('audio:stopStream', { guildId }) as Promise<void>
+  return window.hibiki.invoke('audio:stopStream', { guildId, streamId }) as Promise<void>
 }
 
-export function sendAudioChunk(guildId: string, chunk: ArrayBuffer): void {
+export function sendAudioChunk(guildId: string, chunk: ArrayBuffer, streamId?: string): void {
   requireElectron()
   if (typeof window.hibiki?.send !== 'function')
     throw new Error('Electron send not available')
-  window.hibiki.send('audio:chunk', { guildId, chunk })
+  window.hibiki.send('audio:chunk', { guildId, chunk, streamId })
 }
 
 export function sendEffectChunk(guildId: string, chunk: ArrayBuffer, streamId?: string): void {

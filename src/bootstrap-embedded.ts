@@ -62,9 +62,9 @@ export interface EmbeddedApi {
     join: (body: { guildId: string, channelId: string }) => Promise<void>
     leave: (body: { guildId: string }) => Promise<void>
     stop: (guildId: string) => Promise<void>
-    startStream: (guildId: string, stream: NodeJS.ReadableStream, metadata?: { id: string, name: string, filename: string, category: string }) => void
+    startStream: (guildId: string, stream: NodeJS.ReadableStream, metadata?: { id: string, name: string, filename: string, category: string }, streamId?: string) => void
     startEffectStream: (guildId: string, stream: NodeJS.ReadableStream) => void
-    stopStream: (guildId: string) => void
+    stopStream: (guildId: string, streamId?: string) => void
     reconnect: () => Promise<void>
   }
   config: {
@@ -185,11 +185,11 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
         await player.disconnect(body.guildId)
       },
       stop: guildId => player.stop(guildId),
-      startStream: (guildId, stream, metadata) =>
-        player.startStream(guildId, stream as import('node:stream').Readable, metadata as import('./player/player').TrackMetadata | undefined),
+      startStream: (guildId, stream, metadata, streamId) =>
+        player.startStream(guildId, stream as import('node:stream').Readable, metadata as import('./player/player').TrackMetadata | undefined, streamId),
       startEffectStream: (guildId, stream) =>
         player.startEffectStream(guildId, stream as import('node:stream').Readable),
-      stopStream: guildId => player.stopStream(guildId),
+      stopStream: (guildId, streamId) => player.stopStream(guildId, streamId),
       reconnect: () => discord.reconnect(),
     },
     config: {
