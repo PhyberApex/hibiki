@@ -451,7 +451,7 @@ describe('sceneView — overlapping effects', () => {
     await trigger.trigger('click')
     await flushPromises()
 
-    player.scenePlaying = true
+    player.setPlayingScene('s1', 'discord')
     await flushPromises()
     await wrapper.find('.btn-stop-scene').trigger('click')
 
@@ -504,5 +504,214 @@ describe('sceneView — overlapping effects', () => {
     expect(player.scenePlaying).toBe(true)
     expect(stopAudioStream).not.toHaveBeenCalled()
     expect(stopEffectStream).not.toHaveBeenCalled()
+  })
+
+  it('stops ambience toggled individually (no Play pressed) when the voice channel is left', async () => {
+    const { stopEffectStream } = await import('@/api/audio-stream')
+    const { wrapper, player } = await mountSceneJoined()
+
+    // The fixture starts this ambience item already enabled, so flip it off
+    // then back on to actually fire the toggle handler (and thus playAmbience).
+    const checkbox = wrapper.find('input[type="checkbox"]')
+    await checkbox.setValue(false)
+    await checkbox.setValue(true)
+    await flushPromises()
+    expect(player.playingSceneId).toBeNull()
+
+    player.playerState = []
+    await flushPromises()
+
+    expect(stopEffectStream).toHaveBeenCalledWith('g1', 'ambience-amb-1')
+  })
+})
+
+describe('sceneView — Playing Scene outlives the open Scene', () => {
+  beforeAll(stubMediaElement)
+
+  const sceneB = {
+    id: 's2',
+    name: 'Tavern',
+    ambience: [],
+    music: [],
+    effects: [],
+  }
+
+  beforeEach(async () => {
+    const { getScene, listScenes } = await import('@/api/scenes')
+    vi.mocked(getScene).mockImplementation(async (id: string) => {
+      if (id === 's1')
+        return JSON.parse(JSON.stringify(scene))
+      if (id === 's2')
+        return JSON.parse(JSON.stringify(sceneB))
+      return null
+    })
+    vi.mocked(listScenes).mockResolvedValue([
+      JSON.parse(JSON.stringify(scene)),
+      JSON.parse(JSON.stringify(sceneB)),
+    ])
+  })
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
+
+  async function mountSceneWithPlayer() {
+    await router.push('/scenes/s1')
+    await router.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(SceneView, {
+      global: {
+        plugins: [pinia, router],
+        stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+      },
+    })
+    await flushPromises()
+    return { wrapper, player: usePlayerStore(pinia) }
+  }
+
+  it('does not start playback just from opening a Scene', async () => {
+    const { wrapper, player } = await mountSceneWithPlayer()
+    expect(player.playingSceneId).toBeNull()
+    expect(wrapper.find('.sound-card-ambience').classes()).not.toContain('pulse-breathe')
+  })
+
+  it('stops ambience toggled individually (no Play pressed) when navigating back to the Scene list', async () => {
+    const { stopEffectStream } = await import('@/api/audio-stream')
+    const { wrapper, player } = await mountSceneWithPlayer()
+    player.playerState = [
+      { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+    ]
+    player.guildId = 'g1'
+    await flushPromises()
+
+    // The fixture starts this ambience item already enabled, so flip it off
+    // then back on to actually fire the toggle handler (and thus playAmbience).
+    const checkbox = wrapper.find('input[type="checkbox"]')
+    await checkbox.setValue(false)
+    await checkbox.setValue(true)
+    await flushPromises()
+    expect(player.playingSceneId).toBeNull()
+
+    vi.mocked(stopEffectStream).mockClear()
+    await router.push('/scenes')
+    await flushPromises()
+
+    expect(stopEffectStream).toHaveBeenCalledWith('g1', 'ambience-amb-1')
+  })
+
+  it('keeps Music and Ambience playing when navigating back to the Scene list (local preview)', async () => {
+    const { wrapper, player } = await mountSceneWithPlayer()
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+    expect(player.playingSceneId).toBe('s1')
+    expect(player.playingSceneMode).toBe('local')
+
+    await router.push('/scenes')
+    await flushPromises()
+
+    expect(player.playingSceneId).toBe('s1')
+    expect(player.playingSceneMode).toBe('local')
+  })
+
+  it('marks the playing Scene in the list and stops it from there', async () => {
+    const { wrapper, player } = await mountSceneWithPlayer()
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+
+    await router.push('/scenes')
+    await flushPromises()
+
+    const row = wrapper.findAll('.scene-list-row').find(r => r.text().includes('Storm'))
+    expect(row).toBeTruthy()
+    expect(row!.find('.playing-badge').exists()).toBe(true)
+
+    await row!.find('.btn-stop-list').trigger('click')
+    await flushPromises()
+
+    expect(player.playingSceneId).toBeNull()
+    expect(player.playingSceneMode).toBeNull()
+  })
+
+  it('shows the playing state and does not restart when re-opening the playing Scene', async () => {
+    const { wrapper, player } = await mountSceneWithPlayer()
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+    const playCallsAfterStart = vi.mocked(mediaProto.play).mock.calls.length
+
+    await router.push('/scenes')
+    await flushPromises()
+    await router.push('/scenes/s1')
+    await flushPromises()
+
+    expect(player.playingSceneId).toBe('s1')
+    expect(wrapper.find('.btn-stop-scene').exists()).toBe(true)
+    expect(vi.mocked(mediaProto.play).mock.calls.length).toBe(playCallsAfterStart)
+  })
+
+  it('stops the playing Scene without starting a different one when opening a different Scene', async () => {
+    const { wrapper, player } = await mountSceneWithPlayer()
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+    expect(player.playingSceneId).toBe('s1')
+
+    await router.push('/scenes/s2')
+    await flushPromises()
+
+    expect(wrapper.find('.detail-title').text()).toBe('Tavern')
+    expect(player.playingSceneId).toBeNull()
+    expect(player.playingSceneMode).toBeNull()
+    expect(wrapper.find('.btn-stop-scene').exists()).toBe(false)
+    expect(wrapper.find('.btn-play-local').exists()).toBe(true)
+  })
+
+  it('stops the playing Scene when it is deleted', async () => {
+    vi.stubGlobal('confirm', () => true)
+    const { deleteScene } = await import('@/api/scenes')
+    const { wrapper, player } = await mountSceneWithPlayer()
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+    expect(player.playingSceneId).toBe('s1')
+
+    await wrapper.find('.btn-danger').trigger('click')
+    await flushPromises()
+
+    expect(deleteScene).toHaveBeenCalledWith('s1')
+    expect(player.playingSceneId).toBeNull()
+    vi.unstubAllGlobals()
+  })
+
+  it('works the same for Discord streaming: survives the list, marks the row, stops from there', async () => {
+    await router.push('/scenes/s1')
+    await router.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(SceneView, {
+      global: {
+        plugins: [pinia, router],
+        stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+      },
+    })
+    const player = usePlayerStore(pinia)
+    player.playerState = [
+      { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+    ]
+    player.guildId = 'g1'
+    await flushPromises()
+
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+    expect(player.playingSceneId).toBe('s1')
+    expect(player.playingSceneMode).toBe('discord')
+
+    await router.push('/scenes')
+    await flushPromises()
+    expect(player.playingSceneId).toBe('s1')
+
+    const row = wrapper.findAll('.scene-list-row').find(r => r.text().includes('Storm'))
+    await row!.find('.btn-stop-list').trigger('click')
+    await flushPromises()
+
+    expect(player.playingSceneId).toBeNull()
   })
 })
