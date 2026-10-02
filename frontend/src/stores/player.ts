@@ -20,7 +20,26 @@ export const usePlayerStore = defineStore('player', () => {
   const channelId = ref('')
   const channelJoinBusy = ref(false)
   const browserStreamingCount = ref(0)
-  const scenePlaying = ref(false)
+  // The Scene started with Play/Stream, distinct from the open Scene — see
+  // "Playing Scene" in CONTEXT.md. `scenePlaying` is kept as a computed for
+  // existing readers (sidebar indicator, now-playing line). Mutate both
+  // fields together via setPlayingScene/clearPlayingScene, never directly,
+  // so "id set, mode null" can't happen.
+  const playingSceneId = ref<string | null>(null)
+  const playingSceneMode = ref<'discord' | 'local' | null>(null)
+  const scenePlaying = computed(() => playingSceneId.value !== null)
+
+  function setPlayingScene(id: string, mode: 'discord' | 'local') {
+    playingSceneId.value = id
+    playingSceneMode.value = mode
+  }
+
+  function clearPlayingScene(mode: 'discord' | 'local') {
+    if (playingSceneMode.value === mode) {
+      playingSceneId.value = null
+      playingSceneMode.value = null
+    }
+  }
 
   const channels = computed(() => {
     const guild = directory.value.find(entry => entry.guildId === guildId.value)
@@ -193,6 +212,10 @@ export const usePlayerStore = defineStore('player', () => {
     reconnecting,
     connectedGuildId,
     browserStreamingCount,
+    playingSceneId,
+    playingSceneMode,
     scenePlaying,
+    setPlayingScene,
+    clearPlayingScene,
   }
 })

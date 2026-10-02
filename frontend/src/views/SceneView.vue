@@ -37,7 +37,6 @@ const musicSounds = ref<SoundFile[]>([])
 const effectsSounds = ref<SoundFile[]>([])
 const globalVolume = ref(80)
 const playingMusicId = ref<string | null>(null)
-const scenePlayingLocal = ref(false)
 const showCreateInput = ref(false)
 const newSceneName = ref('')
 const createSceneBusy = ref(false)
@@ -56,6 +55,12 @@ const ambienceAudioEls = new Map<string, HTMLAudioElement>()
 const captureSessions = new Map<string, CaptureSession>()
 const ambienceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const playingAmbienceIds = ref(new Set<string>())
+// Which path (Discord stream vs local-only) started each currently-audible
+// ambience id / the music slot — lets stopScene()/stopSceneLocal() tear down
+// only what they're actually responsible for, even when a local preview and
+// an individually-toggled Discord item are both audible at once.
+const ambienceSource = new Map<string, 'discord' | 'local'>()
+let musicSource: 'discord' | 'local' | null = null
 const effectFlash = useFlashSet()
 const sceneTransitionFlash = useFlashSet()
 const SCENE_START_FLASH = 'start'
@@ -179,12 +184,16 @@ const hasAnySoundMissing = computed(() => {
     ))
 })
 
-// Gated on the scene-level playing flags (not just "is a track currently
+const isScenePlayingHere = computed(() =>
+  scene.value != null && player.playingSceneId === scene.value.id,
+)
+
+// Gated on the scene-level playing flag (not just "is a track currently
 // audible") so this never contradicts the Play/Stop button next to it — a
 // track can end naturally (onended clears playingMusicId) while the scene is
 // still "started" and Stop is still the right action.
 const nowPlayingLabel = computed(() => {
-  if (!scenePlayingLocal.value && !player.scenePlaying)
+  if (!isScenePlayingHere.value)
     return 'Nothing playing'
   const parts: string[] = []
   if (playingMusicId.value) {
@@ -301,6 +310,7 @@ function toggleAmbience(item: SceneItem) {
 
 function stopAmbience(soundId: string) {
   playingAmbienceIds.value.delete(soundId)
+  ambienceSource.delete(soundId)
   const timer = ambienceTimers.get(soundId)
   if (timer != null) {
     clearTimeout(timer)
@@ -323,6 +333,7 @@ function stopAmbience(soundId: string) {
 
 function stopAmbienceLocal(soundId: string) {
   playingAmbienceIds.value.delete(soundId)
+  ambienceSource.delete(soundId)
   const timer = ambienceTimers.get(soundId)
   if (timer != null) {
     clearTimeout(timer)
@@ -377,6 +388,7 @@ async function playAmbience(item: SceneItem) {
 
     await el.play()
     playingAmbienceIds.value.add(item.soundId)
+    ambienceSource.set(item.soundId, 'discord')
   }
   catch (e) {
     console.error('[scene] playAmbience failed:', e)
@@ -411,6 +423,7 @@ async function playAmbienceLocal(item: SceneItem) {
     }
     await el.play()
     playingAmbienceIds.value.add(item.soundId)
+    ambienceSource.set(item.soundId, 'local')
   }
   catch (e) {
     console.error('[scene] playAmbienceLocal failed:', e)
@@ -428,6 +441,7 @@ async function playMusic(item: SceneItem) {
       return
     const el = musicAudioEl
     playingMusicId.value = item.soundId
+    musicSource = 'discord'
     await startAudioStream(guildId.value, {
       id: track.id,
       name: track.name,
@@ -447,23 +461,33 @@ async function playMusic(item: SceneItem) {
     captureSessions.set('music', sess)
     el.onended = () => {
       playingMusicId.value = null
+      musicSource = null
     }
     el.onerror = () => {
       playingMusicId.value = null
+      musicSource = null
     }
     await el.play()
   }
   catch (e) {
     console.error('[scene] playMusic failed:', e)
     playingMusicId.value = null
+    musicSource = null
   }
 }
 
+// The IPC/session cleanup below always runs defensively, even if nothing was
+// actually streaming — but the shared audio element is only touched when a
+// local track isn't what's currently loaded into it, so a defensive call
+// here (e.g. from the voice-lost watcher) never interrupts a local preview.
 function stopMusic() {
-  musicAudioEl.pause()
-  musicAudioEl.removeAttribute('src')
-  musicAudioEl.load()
-  playingMusicId.value = null
+  if (musicSource !== 'local') {
+    musicAudioEl.pause()
+    musicAudioEl.removeAttribute('src')
+    musicAudioEl.load()
+    playingMusicId.value = null
+    musicSource = null
+  }
   const sess = captureSessions.get('music')
   if (sess) {
     sess.stop()
@@ -478,6 +502,18 @@ function stopMusicLocal() {
   musicAudioEl.removeAttribute('src')
   musicAudioEl.load()
   playingMusicId.value = null
+  musicSource = null
+}
+
+// The inline per-track Stop button in the Music section isn't scoped to
+// either mode (it shows for whichever track is currently loaded, Play or
+// individually triggered) — stopMusic() alone would no-op on a local track,
+// so dispatch to whichever teardown actually matches what's playing.
+function stopMusicPlayback() {
+  if (musicSource === 'local')
+    stopMusicLocal()
+  else
+    stopMusic()
 }
 
 function playEffectLocal(item: SceneItem) {
@@ -555,7 +591,7 @@ async function playSceneLocal() {
   if (!scene.value)
     return
   stopScene()
-  scenePlayingLocal.value = true
+  player.setPlayingScene(scene.value.id, 'local')
   sceneTransitionFlash.trigger(SCENE_START_FLASH)
   try {
     for (const item of scene.value.ambience.filter(a => a.enabled))
@@ -565,6 +601,7 @@ async function playSceneLocal() {
       stopMusicLocal()
       const el = musicAudioEl
       playingMusicId.value = firstMusic.soundId
+      musicSource = 'local'
       el.src = soundStreamUrl('music', firstMusic.soundId)
       el.loop = firstMusic.loop ?? false
       el.volume = (firstMusic.volume ?? 80) / 100 * (globalVolume.value / 100)
@@ -575,9 +612,11 @@ async function playSceneLocal() {
       })
       el.onended = () => {
         playingMusicId.value = null
+        musicSource = null
       }
       el.onerror = () => {
         playingMusicId.value = null
+        musicSource = null
       }
       await el.play()
     }
@@ -588,19 +627,29 @@ async function playSceneLocal() {
   }
 }
 
+// Tears down whatever is actually audible via the local-only path right now
+// (`ambienceSource`/`musicSource` are ground truth, regardless of whether it
+// got there via Play or an individual toggle — though in practice only Play
+// starts local playback, individual triggers are always Discord), plus the
+// always-shared effect instances. Scoped to local-sourced ids specifically
+// so a defensive call here (e.g. at the top of playScene) never touches a
+// Discord stream that happens to be audible at the same time.
 function stopSceneLocal() {
-  for (const item of scene.value?.ambience ?? [])
-    stopAmbienceLocal(item.soundId)
-  stopMusicLocal()
+  for (const soundId of [...playingAmbienceIds.value]) {
+    if (ambienceSource.get(soundId) === 'local')
+      stopAmbienceLocal(soundId)
+  }
+  if (musicSource === 'local')
+    stopMusicLocal()
   stopAllEffectInstances()
-  scenePlayingLocal.value = false
+  player.clearPlayingScene('local')
 }
 
 async function playScene() {
   if (!scene.value || !isJoined.value || !guildId.value)
     return
   stopSceneLocal()
-  player.scenePlaying = true
+  player.setPlayingScene(scene.value.id, 'discord')
   sceneTransitionFlash.trigger(SCENE_START_FLASH)
   try {
     for (const item of scene.value.ambience.filter(a => a.enabled))
@@ -614,12 +663,33 @@ async function playScene() {
   }
 }
 
+// Same shape as stopSceneLocal, scoped to Discord-sourced ids via the Discord
+// teardown path. Safe to call unconditionally wherever Discord playback must
+// stop regardless of how it started — the Stop button/row, deleting the
+// playing Scene, losing voice, and ambience/music that was toggled
+// individually (never via Play) when the GM leaves the open Scene — so those
+// keep stopping "as today" even though they never set a playing-scene
+// identity to gate on, and without disturbing a concurrent local preview.
 function stopScene() {
-  for (const item of scene.value?.ambience ?? [])
-    stopAmbience(item.soundId)
+  for (const soundId of [...playingAmbienceIds.value]) {
+    if (ambienceSource.get(soundId) === 'discord')
+      stopAmbience(soundId)
+  }
+  // Always run — stopMusic() itself only touches the shared element when a
+  // local track isn't loaded, so this is safe even if nothing was streaming.
   stopMusic()
   stopAllEffectInstances()
-  player.scenePlaying = false
+  player.clearPlayingScene('discord')
+}
+
+// Single entry point for Stop wherever it's triggered (the open Scene's
+// playback bar, or a row in the Scene list) — dispatches to whichever mode
+// is actually playing.
+function stopPlayingScene() {
+  if (player.playingSceneMode === 'discord')
+    stopScene()
+  else if (player.playingSceneMode === 'local')
+    stopSceneLocal()
 }
 
 function openCreateScene() {
@@ -657,6 +727,9 @@ async function deleteCurrentScene() {
   // eslint-disable-next-line no-alert -- simple confirm for destructive action
   if (!scene.value || !confirm(`Delete "${scene.value.name}"? This can't be undone.`))
     return
+  // Stops the Playing Scene if this is it, and any ambience/music started
+  // individually on this open Scene either way — both calls are no-ops for
+  // whichever mode isn't actually active.
   stopScene()
   stopSceneLocal()
   await deleteScene(scene.value.id)
@@ -754,18 +827,37 @@ onActivated(() => {
 // Only react to the selected guild's own connection dropping — not to the GM
 // switching the sidebar selection to a different, not-yet-joined guild (which
 // also flips `isJoined` false but shouldn't stop another guild's playback).
+// stopScene() is scoped to Discord-sourced ambience/music (see its comment),
+// so calling it unconditionally here never touches a concurrent local
+// preview, while still tearing down ambience/music toggled individually.
 watch([guildId, isJoined], ([newGuildId, joined], [oldGuildId, wasJoined]) => {
   if (newGuildId === oldGuildId && wasJoined && !joined)
     stopScene()
 })
 
-watch(sceneId, (newId, oldId) => {
-  const hadScene = oldId !== undefined && oldId !== ''
-  const hasNoScene = newId === undefined || newId === ''
-  if (hadScene && (hasNoScene || newId !== oldId)) {
-    stopScene()
-    stopSceneLocal()
+// Going to the Scene list, or re-opening the Scene that's already playing,
+// must not stop it — only opening a *different* Scene stops the Playing
+// Scene. But ambience/music started individually (no Play pressed, so no
+// Playing Scene is tracked) must still stop whenever the GM leaves the open
+// Scene, exactly as before — hence the ground-truth teardown in stopScene()/
+// stopSceneLocal() runs whenever nothing survives the navigation. Effect
+// instances always stop on any Scene change (out of scope to change that).
+let sceneWatcherRanOnce = false
+watch(sceneId, (newId) => {
+  // Skip only on the true initial mount — there's nothing to leave yet, so
+  // no stop logic applies, only the load. `sceneId` is also `undefined`
+  // while on the Scene list (no `:id` route param), so this can't key off
+  // "oldId is undefined": that's also true for every list → Scene
+  // navigation, which must still run the stop logic below.
+  if (sceneWatcherRanOnce) {
+    const survivesNavigation = player.playingSceneId !== null && (!newId || player.playingSceneId === newId)
+    if (!survivesNavigation) {
+      stopScene()
+      stopSceneLocal()
+    }
+    stopAllEffectInstances()
   }
+  sceneWatcherRanOnce = true
   loadScene()
 }, { immediate: true })
 </script>
@@ -835,8 +927,14 @@ watch(sceneId, (newId, oldId) => {
 
       <!-- Scene list -->
       <ul v-if="scenes.length > 0" class="scene-list">
-        <li v-for="s in scenes" :key="s.id">
+        <li v-for="s in scenes" :key="s.id" class="scene-list-row">
           <RouterLink :to="`/scenes/${s.id}`" class="scene-list-item">
+            <span
+              v-if="player.playingSceneId === s.id"
+              class="playing-badge"
+              title="Playing"
+              aria-label="Playing"
+            >●</span>
             <span class="scene-list-name">{{ s.name }}</span>
             <span class="scene-list-counts">
               <span v-if="s.music.length" class="count-badge count-badge-music">{{ s.music.length }} music</span>
@@ -847,6 +945,15 @@ watch(sceneId, (newId, oldId) => {
             <span v-if="s.updatedAt" class="scene-list-date">{{ formatDate(s.updatedAt) }}</span>
             <span class="scene-list-arrow" aria-hidden="true">›</span>
           </RouterLink>
+          <button
+            v-if="player.playingSceneId === s.id"
+            type="button"
+            class="btn-stop-list"
+            :aria-label="`Stop ${s.name}`"
+            @click="stopPlayingScene"
+          >
+            Stop
+          </button>
         </li>
       </ul>
 
@@ -943,11 +1050,11 @@ watch(sceneId, (newId, oldId) => {
           >
         </label>
         <div class="playback-actions">
-          <template v-if="scenePlayingLocal || player.scenePlaying">
+          <template v-if="isScenePlayingHere">
             <button
               type="button"
               class="btn btn-stop-scene"
-              @click="scenePlayingLocal ? stopSceneLocal() : stopScene()"
+              @click="stopPlayingScene"
             >
               Stop
             </button>
@@ -1132,7 +1239,7 @@ watch(sceneId, (newId, oldId) => {
                     class="btn-icon btn-icon-active"
                     title="Stop"
                     aria-label="Stop music"
-                    @click="stopMusic"
+                    @click="stopMusicPlayback"
                   >
                     ■
                   </button>
@@ -1337,7 +1444,14 @@ watch(sceneId, (newId, oldId) => {
   gap: 0.125rem;
 }
 
+.scene-list-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .scene-list-item {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -1346,10 +1460,35 @@ watch(sceneId, (newId, oldId) => {
   text-decoration: none;
   color: var(--color-text);
   transition: background var(--transition);
+  min-width: 0;
 }
 
 .scene-list-item:hover {
   background: var(--color-bg-card);
+}
+
+.playing-badge {
+  color: var(--color-accent);
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.btn-stop-list {
+  flex-shrink: 0;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--color-error-muted);
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.btn-stop-list:hover {
+  background: var(--color-error);
+  color: var(--color-on-accent-bg);
 }
 
 .scene-list-name {

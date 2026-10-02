@@ -166,6 +166,36 @@ describe('player store', () => {
 
       expect(store.connectedGuildId).toBe('g2')
     })
+
+    it('scenePlaying is false when no Scene is playing', () => {
+      const store = usePlayerStore()
+      expect(store.playingSceneId).toBeNull()
+      expect(store.playingSceneMode).toBeNull()
+      expect(store.scenePlaying).toBe(false)
+    })
+
+    it('setPlayingScene sets both fields and scenePlaying becomes true', () => {
+      const store = usePlayerStore()
+
+      store.setPlayingScene('s1', 'discord')
+      expect(store.playingSceneId).toBe('s1')
+      expect(store.playingSceneMode).toBe('discord')
+      expect(store.scenePlaying).toBe(true)
+    })
+
+    it('clearPlayingScene only clears when the mode matches', () => {
+      const store = usePlayerStore()
+      store.setPlayingScene('s1', 'local')
+
+      store.clearPlayingScene('discord')
+      expect(store.playingSceneId).toBe('s1')
+      expect(store.playingSceneMode).toBe('local')
+
+      store.clearPlayingScene('local')
+      expect(store.playingSceneId).toBeNull()
+      expect(store.playingSceneMode).toBeNull()
+      expect(store.scenePlaying).toBe(false)
+    })
   })
 
   describe('selectChannel', () => {
