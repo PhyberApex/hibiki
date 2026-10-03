@@ -1,4 +1,6 @@
 import type { Readable } from 'node:stream'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { canDecode, createPcmStream, MIXER_CHANNELS, MIXER_SAMPLE_RATE } from './index'
 
@@ -54,5 +56,13 @@ describe('backend sound decoders', () => {
 
   it('createPcmStream throws for a format with no backend decoder', async () => {
     await expect(createPcmStream(fixture('fixture.m4a'))).rejects.toThrow()
+  })
+
+  it('reports a .mp3-named file with no MPEG magic bytes as not decodable', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hibiki-decoders-'))
+    const fakePath = join(dir, 'not-really.mp3')
+    writeFileSync(fakePath, 'this is not an mp3 file')
+
+    await expect(canDecode(fakePath)).resolves.toBe(false)
   })
 })

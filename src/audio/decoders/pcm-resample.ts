@@ -54,11 +54,6 @@ export class PcmResampler {
     return this.toStereoInt16(output, channels.length)
   }
 
-  /** No buffered partial output remains between calls; provided for symmetry/clarity at stream end. */
-  flush(): Buffer {
-    return Buffer.alloc(0)
-  }
-
   private toStereoInt16(samples: number[], channels: number): Buffer {
     const frames = samples.length / channels
     const buffer = Buffer.alloc(frames * MIXER_CHANNELS * 2)

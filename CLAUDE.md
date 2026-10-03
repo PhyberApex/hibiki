@@ -46,7 +46,7 @@ pnpm package            # Create unpacked app only (for testing)
 # Backend tests (Jest)
 pnpm test:backend                         # All backend tests
 pnpm test:watch                           # Watch mode
-npx jest --config jest.config.js <file>   # Single test file
+node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js <file>   # Single test file
 
 # Frontend tests (Vitest)
 pnpm test:frontend                        # All frontend tests

@@ -10,11 +10,11 @@ Issue #414 moves Sound Library playback for Discord into the Electron main proce
 
 The work is split into sub-issues, chained with blocked-by, so each lands as one focused agent run:
 
-1. #415 (this ADR) — ADR and the decoder module, no GM-visible behaviour change.
-2. #416 — Music
-3. #417 — Ambience
-4. #418 — Effects
-5. #419 — Master volume, cleanup and docs
+1. Issue #415 (this ADR) — ADR and the decoder module, no GM-visible behaviour change.
+2. Issue #416 — Music
+3. Issue #417 — Ambience
+4. Issue #418 — Effects
+5. Issue #419 — Master volume, cleanup and docs
 
 This ADR, numbered 0003 because ADR-0002 (Vision Providers) already exists, records the decisions from #414's triage that apply to the decoder foundation, ahead of #416–#419 wiring it into actual playback.
 
