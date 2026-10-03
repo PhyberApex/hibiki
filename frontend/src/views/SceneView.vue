@@ -13,13 +13,14 @@ import {
   stopAudioStream,
   stopEffectStream,
 } from '@/api/audio-stream'
-import { fetchVisionConfig, openFileDialog, saveFileDialog } from '@/api/config'
+import { fetchSceneFadeLength, fetchVisionConfig, openFileDialog, saveFileDialog } from '@/api/config'
 import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
 import { listAmbience, listEffects, listMusic, soundStreamUrl } from '@/api/sounds'
 import {
   captureFromAudioElement,
   releaseAudioElementContext,
 } from '@/audio/browser-audio-capture'
+import { CrossfadeRamp } from '@/audio/crossfade-ramp'
 import RegistryBrowser from '@/components/RegistryBrowser.vue'
 import ResolveSoundDialog from '@/components/ResolveSoundDialog.vue'
 import VisionToVibeDialog from '@/components/VisionToVibeDialog.vue'
@@ -50,17 +51,41 @@ const showVisionDialog = ref(false)
 const resolveTarget = ref<{ category: 'ambience' | 'music' | 'effects', item: SceneItem } | null>(null)
 const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
-const musicAudioEl = createAudioEl()
 const ambienceAudioEls = new Map<string, HTMLAudioElement>()
 const captureSessions = new Map<string, CaptureSession>()
 const ambienceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const playingAmbienceIds = ref(new Set<string>())
 // Which path (Discord stream vs local-only) started each currently-audible
-// ambience id / the music slot — lets stopScene()/stopSceneLocal() tear down
+// ambience id / music channel — lets stopScene()/stopSceneLocal() tear down
 // only what they're actually responsible for, even when a local preview and
 // an individually-toggled Discord item are both audible at once.
 const ambienceSource = new Map<string, 'discord' | 'local'>()
-let musicSource: 'discord' | 'local' | null = null
+
+// Scene Crossfade (see CONTEXT.md): music needs two long-lived elements used
+// alternately, because capturing an element for Discord permanently binds it
+// to a MediaElementAudioSourceNode — the outgoing track must stay audible
+// (and streamable) while the incoming track starts on the other channel.
+// `primaryMusicChannel` is whichever channel holds the latest requested
+// track; it never points at a channel that's mid fade-out.
+interface MusicChannel {
+  el: HTMLAudioElement
+  streamId: string
+  soundId: string | null
+  source: 'discord' | 'local' | null
+}
+const musicChannels: MusicChannel[] = [
+  { el: createAudioEl(), streamId: 'music-a', soundId: null, source: null },
+  { el: createAudioEl(), streamId: 'music-b', soundId: null, source: null },
+]
+let primaryMusicChannel = musicChannels[0]
+const crossfadeRamp = new CrossfadeRamp()
+function musicFadeKey(channel: MusicChannel): string {
+  return `music:${channel.streamId}`
+}
+function ambienceFadeKey(soundId: string): string {
+  return `ambience:${soundId}`
+}
+
 const effectFlash = useFlashSet()
 const sceneTransitionFlash = useFlashSet()
 const SCENE_START_FLASH = 'start'
@@ -113,6 +138,10 @@ interface EffectInstance {
   el: HTMLAudioElement
   streamId?: string
 }
+
+// Matches DEFAULT_SCENE_FADE_LENGTH_SECONDS (src/config/scene-fade-settings.ts)
+// — used only if fetching the configured fade length fails outright.
+const DEFAULT_CROSSFADE_FALLBACK_SECONDS = 3
 
 const EFFECT_INSTANCE_CAP = 8
 let effectInstanceSeq = 0
@@ -234,8 +263,8 @@ function updateAmbienceVolume(item: SceneItem) {
 }
 
 function updateMusicVolume(item: SceneItem) {
-  if (playingMusicId.value === item.soundId)
-    musicAudioEl.volume = computeVolume(item.volume ?? 80)
+  if (primaryMusicChannel.soundId === item.soundId)
+    primaryMusicChannel.el.volume = computeVolume(item.volume ?? 80)
 }
 
 function updateAllVolumes() {
@@ -309,6 +338,7 @@ function toggleAmbience(item: SceneItem) {
 }
 
 function stopAmbience(soundId: string) {
+  crossfadeRamp.cancel(ambienceFadeKey(soundId))
   playingAmbienceIds.value.delete(soundId)
   ambienceSource.delete(soundId)
   const timer = ambienceTimers.get(soundId)
@@ -332,6 +362,7 @@ function stopAmbience(soundId: string) {
 }
 
 function stopAmbienceLocal(soundId: string) {
+  crossfadeRamp.cancel(ambienceFadeKey(soundId))
   playingAmbienceIds.value.delete(soundId)
   ambienceSource.delete(soundId)
   const timer = ambienceTimers.get(soundId)
@@ -352,7 +383,7 @@ function isLooping(item: SceneItem): boolean {
   return (item.repeatMin ?? 0) === 0 && (item.repeatMax ?? 0) === 0
 }
 
-async function playAmbience(item: SceneItem) {
+async function playAmbience(item: SceneItem, initialVolume?: number) {
   if (!guildId.value || !isJoined.value)
     return
   try {
@@ -362,7 +393,7 @@ async function playAmbience(item: SceneItem) {
     await startEffectStream(guildId.value, streamId)
     el.src = soundStreamUrl('ambience', item.soundId)
     el.loop = isLooping(item)
-    el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
+    el.volume = initialVolume ?? computeVolume(item.volume ?? 80)
     el.load()
     await new Promise<void>((resolve, reject) => {
       el.addEventListener('canplaythrough', () => resolve(), { once: true })
@@ -396,13 +427,13 @@ async function playAmbience(item: SceneItem) {
   }
 }
 
-async function playAmbienceLocal(item: SceneItem) {
+async function playAmbienceLocal(item: SceneItem, initialVolume?: number) {
   try {
     stopAmbienceLocal(item.soundId)
     const el = getAmbienceAudio(item.soundId)
     el.src = soundStreamUrl('ambience', item.soundId)
     el.loop = isLooping(item)
-    el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
+    el.volume = initialVolume ?? computeVolume(item.volume ?? 80)
     el.load()
     await new Promise<void>((resolve, reject) => {
       el.addEventListener('canplaythrough', () => resolve(), { once: true })
@@ -431,89 +462,123 @@ async function playAmbienceLocal(item: SceneItem) {
   }
 }
 
-async function playMusic(item: SceneItem) {
+function clearMusicChannel(channel: MusicChannel) {
+  channel.soundId = null
+  channel.source = null
+  if (primaryMusicChannel === channel)
+    playingMusicId.value = null
+}
+
+// Fully tears down one music channel: cancels any crossfade ramp targeting
+// it, stops the element, and (for Discord) the capture session and stream.
+// Safe to call on an idle channel — used both for ordinary Stop and to free
+// up a channel a crossfade needs to reuse, even mid fade.
+function stopMusicChannel(channel: MusicChannel, mode: 'discord' | 'local') {
+  crossfadeRamp.cancel(musicFadeKey(channel))
+  channel.el.onended = null
+  channel.el.onerror = null
+  channel.el.pause()
+  channel.el.removeAttribute('src')
+  channel.el.load()
+  const sess = captureSessions.get(channel.streamId)
+  if (sess) {
+    sess.stop()
+    captureSessions.delete(channel.streamId)
+  }
+  if (mode === 'discord' && guildId.value)
+    stopAudioStream(guildId.value, channel.streamId).catch(() => {})
+  clearMusicChannel(channel)
+}
+
+async function playMusic(item: SceneItem, channel: MusicChannel = primaryMusicChannel, initialVolume?: number) {
   if (!guildId.value || !isJoined.value)
     return
   try {
-    stopMusic()
+    if (channel.source)
+      stopMusicChannel(channel, channel.source)
     const track = musicSounds.value.find(s => s.id === item.soundId)
     if (!track)
       return
-    const el = musicAudioEl
-    playingMusicId.value = item.soundId
-    musicSource = 'discord'
+    channel.soundId = item.soundId
+    channel.source = 'discord'
+    if (channel === primaryMusicChannel)
+      playingMusicId.value = item.soundId
     await startAudioStream(guildId.value, {
       id: track.id,
       name: track.name,
       filename: track.filename,
       category: 'music',
-    })
+    }, channel.streamId)
+    const el = channel.el
     el.src = soundStreamUrl('music', item.soundId)
     el.loop = item.loop ?? false
-    el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
+    el.volume = initialVolume ?? computeVolume(item.volume ?? 80)
     el.load()
     await new Promise<void>((resolve, reject) => {
       el.addEventListener('canplaythrough', () => resolve(), { once: true })
       el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
     })
-    const onChunk = (chunk: ArrayBuffer) => sendAudioChunk(guildId.value!, chunk)
+    const onChunk = (chunk: ArrayBuffer) => sendAudioChunk(guildId.value!, chunk, channel.streamId)
     const sess = await captureFromAudioElement(el, onChunk)
-    captureSessions.set('music', sess)
-    el.onended = () => {
-      playingMusicId.value = null
-      musicSource = null
-    }
-    el.onerror = () => {
-      playingMusicId.value = null
-      musicSource = null
-    }
+    captureSessions.set(channel.streamId, sess)
+    el.onended = () => clearMusicChannel(channel)
+    el.onerror = () => clearMusicChannel(channel)
     await el.play()
   }
   catch (e) {
     console.error('[scene] playMusic failed:', e)
-    playingMusicId.value = null
-    musicSource = null
+    clearMusicChannel(channel)
   }
 }
 
-// The IPC/session cleanup below always runs defensively, even if nothing was
-// actually streaming — but the shared audio element is only touched when a
-// local track isn't what's currently loaded into it, so a defensive call
-// here (e.g. from the voice-lost watcher) never interrupts a local preview.
+async function playMusicLocal(item: SceneItem, channel: MusicChannel = primaryMusicChannel, initialVolume?: number) {
+  try {
+    if (channel.source)
+      stopMusicChannel(channel, channel.source)
+    channel.soundId = item.soundId
+    channel.source = 'local'
+    if (channel === primaryMusicChannel)
+      playingMusicId.value = item.soundId
+    const el = channel.el
+    el.src = soundStreamUrl('music', item.soundId)
+    el.loop = item.loop ?? false
+    el.volume = initialVolume ?? computeVolume(item.volume ?? 80)
+    el.load()
+    await new Promise<void>((resolve, reject) => {
+      el.addEventListener('canplaythrough', () => resolve(), { once: true })
+      el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
+    })
+    el.onended = () => clearMusicChannel(channel)
+    el.onerror = () => clearMusicChannel(channel)
+    await el.play()
+  }
+  catch (e) {
+    console.error('[scene] playMusicLocal failed:', e)
+    clearMusicChannel(channel)
+  }
+}
+
 function stopMusic() {
-  if (musicSource !== 'local') {
-    musicAudioEl.pause()
-    musicAudioEl.removeAttribute('src')
-    musicAudioEl.load()
-    playingMusicId.value = null
-    musicSource = null
+  for (const channel of musicChannels) {
+    if (channel.source === 'discord')
+      stopMusicChannel(channel, 'discord')
   }
-  const sess = captureSessions.get('music')
-  if (sess) {
-    sess.stop()
-    captureSessions.delete('music')
-  }
-  if (guildId.value)
-    stopAudioStream(guildId.value).catch(() => {})
 }
 
 function stopMusicLocal() {
-  musicAudioEl.pause()
-  musicAudioEl.removeAttribute('src')
-  musicAudioEl.load()
-  playingMusicId.value = null
-  musicSource = null
+  for (const channel of musicChannels) {
+    if (channel.source === 'local')
+      stopMusicChannel(channel, 'local')
+  }
 }
 
 // The inline per-track Stop button in the Music section isn't scoped to
 // either mode (it shows for whichever track is currently loaded, Play or
-// individually triggered) — stopMusic() alone would no-op on a local track,
-// so dispatch to whichever teardown actually matches what's playing.
+// individually triggered) — dispatch using whichever mode the primary
+// channel is actually in.
 function stopMusicPlayback() {
-  if (musicSource === 'local')
-    stopMusicLocal()
-  else
-    stopMusic()
+  if (primaryMusicChannel.source)
+    stopMusicChannel(primaryMusicChannel, primaryMusicChannel.source)
 }
 
 function playEffectLocal(item: SceneItem) {
@@ -597,29 +662,8 @@ async function playSceneLocal() {
     for (const item of scene.value.ambience.filter(a => a.enabled))
       await playAmbienceLocal(item)
     const firstMusic = scene.value.music[0]
-    if (firstMusic) {
-      stopMusicLocal()
-      const el = musicAudioEl
-      playingMusicId.value = firstMusic.soundId
-      musicSource = 'local'
-      el.src = soundStreamUrl('music', firstMusic.soundId)
-      el.loop = firstMusic.loop ?? false
-      el.volume = (firstMusic.volume ?? 80) / 100 * (globalVolume.value / 100)
-      el.load()
-      await new Promise<void>((resolve, reject) => {
-        el.addEventListener('canplaythrough', () => resolve(), { once: true })
-        el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
-      })
-      el.onended = () => {
-        playingMusicId.value = null
-        musicSource = null
-      }
-      el.onerror = () => {
-        playingMusicId.value = null
-        musicSource = null
-      }
-      await el.play()
-    }
+    if (firstMusic)
+      await playMusicLocal(firstMusic)
   }
   catch (e) {
     console.error('[scene] playSceneLocal failed:', e)
@@ -628,19 +672,21 @@ async function playSceneLocal() {
 }
 
 // Tears down whatever is actually audible via the local-only path right now
-// (`ambienceSource`/`musicSource` are ground truth, regardless of whether it
-// got there via Play or an individual toggle — though in practice only Play
-// starts local playback, individual triggers are always Discord), plus the
-// always-shared effect instances. Scoped to local-sourced ids specifically
-// so a defensive call here (e.g. at the top of playScene) never touches a
-// Discord stream that happens to be audible at the same time.
+// (`ambienceSource`/each music channel's `.source` are ground truth,
+// regardless of whether it got there via Play or an individual toggle —
+// though in practice only Play starts local playback, individual triggers
+// are always Discord), plus the always-shared effect instances. Scoped to
+// local-sourced ids specifically so a defensive call here (e.g. at the top
+// of playScene) never touches a Discord stream that happens to be audible
+// at the same time.
 function stopSceneLocal() {
   for (const soundId of [...playingAmbienceIds.value]) {
     if (ambienceSource.get(soundId) === 'local')
       stopAmbienceLocal(soundId)
   }
-  if (musicSource === 'local')
-    stopMusicLocal()
+  // Always run — stopMusicLocal() itself only touches channels that are
+  // actually local-sourced, so this is safe even if nothing was playing.
+  stopMusicLocal()
   stopAllEffectInstances()
   player.clearPlayingScene('local')
 }
@@ -690,6 +736,134 @@ function stopPlayingScene() {
     stopScene()
   else if (player.playingSceneMode === 'local')
     stopSceneLocal()
+}
+
+// Scene Crossfade (see CONTEXT.md): ambience is already keyed per soundId
+// (one persistent element/stream regardless of which Scene asked for it), so
+// a sound present in both the outgoing and incoming Scene is simply never
+// stopped — only its volume ramp is retargeted. Anything no longer wanted
+// fades out and, once silent, is torn down exactly like a normal Stop.
+function crossfadeAmbience(target: Scene, mode: 'discord' | 'local', durationMs: number) {
+  const targetItems = new Map(target.ambience.filter(a => a.enabled).map(a => [a.soundId, a] as const))
+
+  for (const soundId of [...playingAmbienceIds.value]) {
+    if (ambienceSource.get(soundId) !== mode || targetItems.has(soundId))
+      continue
+    // Already on its way out from an earlier switch — let it finish; a
+    // second Scene switch never resurrects or restarts an outgoing fade.
+    if (crossfadeRamp.directionOf(ambienceFadeKey(soundId)) === 'out')
+      continue
+    const el = ambienceAudioEls.get(soundId)
+    if (!el)
+      continue
+    crossfadeRamp.fade(ambienceFadeKey(soundId), {
+      direction: 'out',
+      from: el.volume,
+      to: 0,
+      durationMs,
+      onVolume: (v) => { el.volume = v },
+      onDone: () => (mode === 'discord' ? stopAmbience(soundId) : stopAmbienceLocal(soundId)),
+    })
+  }
+
+  for (const item of targetItems.values()) {
+    const to = computeVolume(item.volume ?? 80)
+    const alreadyPlaying = playingAmbienceIds.value.has(item.soundId) && ambienceSource.get(item.soundId) === mode
+    if (alreadyPlaying) {
+      const el = ambienceAudioEls.get(item.soundId)
+      if (!el)
+        continue
+      crossfadeRamp.fade(ambienceFadeKey(item.soundId), {
+        direction: 'in',
+        from: el.volume,
+        to,
+        durationMs,
+        onVolume: (v) => { el.volume = v },
+      })
+    }
+    else {
+      const startFn = mode === 'discord' ? playAmbience : playAmbienceLocal
+      startFn(item, 0).then(() => {
+        crossfadeRamp.fade(ambienceFadeKey(item.soundId), {
+          direction: 'in',
+          from: 0,
+          to,
+          durationMs,
+          onVolume: (v) => {
+            const el = ambienceAudioEls.get(item.soundId)
+            if (el)
+              el.volume = v
+          },
+        })
+      })
+    }
+  }
+}
+
+// Music has no "present in both Scenes" case to preserve — only ever one
+// outgoing and one incoming track — so the two long-lived channels simply
+// swap roles: the channel holding the outgoing track fades out and stops on
+// its own schedule, while the other channel (reused immediately, even if it
+// was still finishing an earlier fade-out) starts the incoming track at
+// volume 0 and ramps up. `primaryMusicChannel` flips to the incoming channel
+// right away, so it never points at a channel that's mid fade-out.
+function crossfadeMusic(target: Scene, mode: 'discord' | 'local', durationMs: number) {
+  const outgoingChannel = primaryMusicChannel
+  const outgoingHadTrack = outgoingChannel.soundId != null
+  const targetTrack = target.music[0]
+  const incomingChannel = targetTrack ? (musicChannels.find(c => c !== outgoingChannel) ?? musicChannels[1]) : null
+
+  if (incomingChannel) {
+    primaryMusicChannel = incomingChannel
+    const startFn = mode === 'discord' ? playMusic : playMusicLocal
+    startFn(targetTrack!, incomingChannel, 0).then(() => {
+      crossfadeRamp.fade(musicFadeKey(incomingChannel), {
+        direction: 'in',
+        from: 0,
+        to: computeVolume(targetTrack!.volume ?? 80),
+        durationMs,
+        onVolume: (v) => { incomingChannel.el.volume = v },
+      })
+    })
+  }
+  else {
+    playingMusicId.value = null
+  }
+
+  if (outgoingHadTrack) {
+    crossfadeRamp.fade(musicFadeKey(outgoingChannel), {
+      direction: 'out',
+      from: outgoingChannel.el.volume,
+      to: 0,
+      durationMs,
+      onVolume: (v) => { outgoingChannel.el.volume = v },
+      onDone: () => stopMusicChannel(outgoingChannel, mode),
+    })
+  }
+}
+
+// Entry point for Scene Crossfade (see CONTEXT.md): called instead of a hard
+// stop when the GM opens a different Scene while one is already playing. The
+// new Scene becomes the Playing Scene immediately; the configured fade
+// length then drives both channels' ramps (0 is a hard cut, handled by
+// CrossfadeRamp itself).
+async function crossfadeToScene(targetId: string, mode: 'discord' | 'local') {
+  let target: Scene | null
+  try {
+    target = await getScene(targetId)
+  }
+  catch (e) {
+    console.error('[scene] crossfadeToScene: failed to load target scene', e)
+    return
+  }
+  if (!target)
+    return
+  const fadeSeconds = await fetchSceneFadeLength().catch(() => DEFAULT_CROSSFADE_FALLBACK_SECONDS)
+  const durationMs = fadeSeconds * 1000
+  player.setPlayingScene(target.id, mode)
+  sceneTransitionFlash.trigger(SCENE_START_FLASH)
+  crossfadeAmbience(target, mode, durationMs)
+  crossfadeMusic(target, mode, durationMs)
 }
 
 function openCreateScene() {
@@ -848,12 +1022,23 @@ watch(sceneId, (newId) => {
   // no stop logic applies, only the load. `sceneId` is also `undefined`
   // while on the Scene list (no `:id` route param), so this can't key off
   // "oldId is undefined": that's also true for every list → Scene
-  // navigation, which must still run the stop logic below.
+  // navigation, which must still run the stop/crossfade logic below.
   if (sceneWatcherRanOnce) {
-    const survivesNavigation = player.playingSceneId !== null && (!newId || player.playingSceneId === newId)
-    if (!survivesNavigation) {
-      stopScene()
-      stopSceneLocal()
+    const playingId = player.playingSceneId
+    // Opening a different Scene than the one currently playing is the only
+    // case Scene Crossfade (see CONTEXT.md) applies to — reopening the
+    // playing Scene, or navigating while nothing plays, changes nothing.
+    const opensADifferentPlayingScene = playingId !== null && !!newId && newId !== playingId
+    if (opensADifferentPlayingScene) {
+      crossfadeToScene(newId, player.playingSceneMode!)
+        .catch(e => console.error('[scene] crossfadeToScene failed:', e))
+    }
+    else {
+      const survivesNavigation = playingId !== null && (!newId || playingId === newId)
+      if (!survivesNavigation) {
+        stopScene()
+        stopSceneLocal()
+      }
     }
     stopAllEffectInstances()
   }
