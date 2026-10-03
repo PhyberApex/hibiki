@@ -393,7 +393,7 @@ async function playAmbience(item: SceneItem, initialVolume?: number) {
     await startEffectStream(guildId.value, streamId)
     el.src = soundStreamUrl('ambience', item.soundId)
     el.loop = isLooping(item)
-    el.volume = initialVolume ?? (item.volume ?? 80) / 100 * (globalVolume.value / 100)
+    el.volume = initialVolume ?? computeVolume(item.volume ?? 80)
     el.load()
     await new Promise<void>((resolve, reject) => {
       el.addEventListener('canplaythrough', () => resolve(), { once: true })
@@ -433,7 +433,7 @@ async function playAmbienceLocal(item: SceneItem, initialVolume?: number) {
     const el = getAmbienceAudio(item.soundId)
     el.src = soundStreamUrl('ambience', item.soundId)
     el.loop = isLooping(item)
-    el.volume = initialVolume ?? (item.volume ?? 80) / 100 * (globalVolume.value / 100)
+    el.volume = initialVolume ?? computeVolume(item.volume ?? 80)
     el.load()
     await new Promise<void>((resolve, reject) => {
       el.addEventListener('canplaythrough', () => resolve(), { once: true })
