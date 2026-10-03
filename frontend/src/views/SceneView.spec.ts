@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { fetchVisionConfig } from '@/api/config'
+import { fetchSceneFadeLength, fetchVisionConfig } from '@/api/config'
 import { usePlayerStore } from '@/stores/player'
 import SceneView from './SceneView.vue'
 
@@ -52,6 +52,9 @@ vi.mock('@/api/config', () => ({
   }),
   openFileDialog: vi.fn().mockResolvedValue(null),
   saveFileDialog: vi.fn().mockResolvedValue(null),
+  // 0.1s rather than the real 3s default, so crossfade tests can wait for a
+  // fade to actually complete with a short, real setTimeout-based `wait()`.
+  fetchSceneFadeLength: vi.fn().mockResolvedValue(0.1),
 }))
 
 vi.mock('@/api/vision', () => ({
@@ -484,7 +487,9 @@ describe('sceneView — overlapping effects', () => {
 
     expect(player.scenePlaying).toBe(false)
     expect(stopEffectStream).toHaveBeenCalledWith('g1', 'ambience-amb-1')
-    expect(stopAudioStream).toHaveBeenCalledWith('g1')
+    // This scene has no Music, so no music channel was ever Discord-sourced
+    // — stopMusic() has nothing to tear down and makes no IPC call for it.
+    expect(stopAudioStream).not.toHaveBeenCalled()
   })
 
   it('does not stop scene playback when the sidebar selection switches to a different, unjoined guild', async () => {
@@ -681,7 +686,7 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     expect(wrapper.find('.btn-icon-active').exists()).toBe(false)
   })
 
-  it('stops the playing Scene without starting a different one when opening a different Scene', async () => {
+  it('crossfades to a different Scene instead of cutting to silence when opening it', async () => {
     const { wrapper, player } = await mountSceneWithPlayer()
     await wrapper.find('.btn-play-local').trigger('click')
     await flushPromises()
@@ -690,14 +695,22 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     await router.push('/scenes/s2')
     await flushPromises()
 
+    // The new Scene becomes the Playing Scene immediately, in the same
+    // mode — this is a crossfade, not a stop-then-silence.
     expect(wrapper.find('.detail-title').text()).toBe('Tavern')
-    expect(player.playingSceneId).toBeNull()
-    expect(player.playingSceneMode).toBeNull()
-    expect(wrapper.find('.btn-stop-scene').exists()).toBe(false)
-    expect(wrapper.find('.btn-play-local').exists()).toBe(true)
+    expect(player.playingSceneId).toBe('s2')
+    expect(player.playingSceneMode).toBe('local')
+    expect(wrapper.find('.btn-stop-scene').exists()).toBe(true)
+
+    await wait(300)
+    await flushPromises()
+
+    // Once the fade completes, nothing from the old Scene is left running —
+    // Tavern (s2) itself has no sounds, so the summary just says so.
+    expect(wrapper.find('.now-playing-line').text()).toBe('Scene playing')
   })
 
-  it('stops the playing Scene when opening a different Scene from the Scene list', async () => {
+  it('crossfades to a different Scene when opening it from the Scene list', async () => {
     const { wrapper, player } = await mountSceneWithPlayer()
     await wrapper.find('.btn-play-local').trigger('click')
     await flushPromises()
@@ -710,7 +723,8 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     await router.push('/scenes/s2')
     await flushPromises()
 
-    expect(player.playingSceneId).toBeNull()
+    expect(player.playingSceneId).toBe('s2')
+    expect(player.playingSceneMode).toBe('local')
   })
 
   it('stops the playing Scene when it is deleted', async () => {
@@ -813,5 +827,205 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     // ...but the local Playing Scene survives losing voice.
     expect(player.playingSceneId).toBe('s1')
     expect(player.playingSceneMode).toBe('local')
+  })
+})
+
+describe('sceneView — Scene Crossfade', () => {
+  beforeAll(stubMediaElement)
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
+
+  // A fresh router per test, rather than the module-level `router` shared by
+  // every other describe block in this file — those earlier tests often
+  // leave their own wrapper mounted (never unmounted) with a non-null
+  // `playingSceneId`, still subscribed to the shared route. Since opening a
+  // different Scene while one plays now has real side effects (crossfading,
+  // not just an idempotent stop), those zombie wrappers would otherwise
+  // react to this describe's route pushes too and pollute its assertions.
+  function createTestRouter() {
+    return createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/scenes', name: 'scenes', component: SceneView },
+        { path: '/scenes/:id', name: 'scene', component: SceneView },
+      ],
+    })
+  }
+
+  async function mountAt(path: string) {
+    const testRouter = createTestRouter()
+    await testRouter.push(path)
+    await testRouter.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(SceneView, {
+      global: {
+        plugins: [pinia, testRouter],
+        stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+      },
+    })
+    await flushPromises()
+    return { wrapper, player: usePlayerStore(pinia), router: testRouter }
+  }
+
+  const sceneX = {
+    id: 'x1',
+    name: 'Camp',
+    ambience: [{ soundId: 'amb-1', soundName: 'Rain', volume: 80, enabled: true }],
+    music: [{ soundId: 'm1', soundName: 'Track One', volume: 80, loop: false }],
+    effects: [],
+  }
+  // amb-1 is shared with sceneX (at a different volume, to prove the glide),
+  // amb-2 is new to this Scene, and the Music track differs entirely.
+  const sceneY = {
+    id: 'y1',
+    name: 'Tavern',
+    ambience: [
+      { soundId: 'amb-1', soundName: 'Rain', volume: 40, enabled: true },
+      { soundId: 'amb-2', soundName: 'Wind', volume: 60, enabled: true },
+    ],
+    music: [{ soundId: 'm2', soundName: 'Track Two', volume: 80, loop: false }],
+    effects: [],
+  }
+  const sceneZ = { id: 'z1', name: 'Silence', ambience: [], music: [], effects: [] }
+
+  beforeEach(async () => {
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockImplementation(async (id: string) => {
+      if (id === 'x1')
+        return JSON.parse(JSON.stringify(sceneX))
+      if (id === 'y1')
+        return JSON.parse(JSON.stringify(sceneY))
+      if (id === 'z1')
+        return JSON.parse(JSON.stringify(sceneZ))
+      return null
+    })
+    const { listAmbience, listMusic } = await import('@/api/sounds')
+    vi.mocked(listAmbience).mockResolvedValue([
+      { id: 'amb-1', name: 'Rain', filename: 'rain.mp3' },
+      { id: 'amb-2', name: 'Wind', filename: 'wind.mp3' },
+    ])
+    vi.mocked(listMusic).mockResolvedValue([
+      { id: 'm1', name: 'Track One', filename: 'one.mp3' },
+      { id: 'm2', name: 'Track Two', filename: 'two.mp3' },
+    ])
+  })
+
+  it('glides a shared Ambience sound to its new volume without restarting it', async () => {
+    const audioInstances: HTMLAudioElement[] = []
+    const OriginalAudio = globalThis.Audio
+    vi.stubGlobal('Audio', new Proxy(OriginalAudio, {
+      construct(target, args) {
+        const instance = Reflect.construct(target, args) as HTMLAudioElement
+        Object.defineProperty(instance, 'pause', { configurable: true, value: vi.fn() })
+        audioInstances.push(instance)
+        return instance
+      },
+    }))
+
+    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+    expect(player.playingSceneId).toBe('x1')
+    const instancesAfterX = audioInstances.length
+
+    await testRouter.push('/scenes/y1')
+    await flushPromises()
+
+    // amb-1 is shared — it reuses its existing element (no restart). Only
+    // amb-2, new to this Scene, needs a fresh one; the incoming Music track
+    // reuses the second long-lived music channel created at mount.
+    expect(audioInstances.length).toBe(instancesAfterX + 1)
+
+    await wait(300)
+    await flushPromises()
+
+    expect(wrapper.find('.now-playing-line').text()).toContain('2 ambience')
+  })
+
+  it('performs an immediate cut with no lingering old-Scene sounds when the fade length is 0', async () => {
+    vi.mocked(fetchSceneFadeLength).mockResolvedValueOnce(0)
+    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+
+    await testRouter.push('/scenes/z1')
+    await flushPromises()
+
+    expect(player.playingSceneId).toBe('z1')
+    // z1 has no sounds of its own, and the cut was immediate — nothing from
+    // x1 should still be reported as playing.
+    expect(wrapper.find('.now-playing-line').text()).toBe('Scene playing')
+  })
+
+  it('ends with only the newest Scene playing after switching twice during a fade', async () => {
+    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+
+    await testRouter.push('/scenes/y1')
+    await flushPromises()
+    // Before y1's fade finishes, switch again.
+    await testRouter.push('/scenes/z1')
+    await flushPromises()
+
+    expect(player.playingSceneId).toBe('z1')
+
+    await wait(400)
+    await flushPromises()
+
+    expect(wrapper.find('.now-playing-line').text()).toBe('Scene playing')
+  })
+
+  it('silences everything immediately when Stop is pressed during a fade', async () => {
+    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+    await wrapper.find('.btn-play-local').trigger('click')
+    await flushPromises()
+
+    await testRouter.push('/scenes/y1')
+    await flushPromises()
+    expect(player.playingSceneId).toBe('y1')
+
+    await wrapper.find('.btn-stop-scene').trigger('click')
+    await flushPromises()
+
+    expect(player.playingSceneId).toBeNull()
+    expect(wrapper.find('.now-playing-line').text()).toBe('Nothing playing')
+  })
+
+  it('streams both the outgoing and incoming Music tracks to Discord at once during the fade', async () => {
+    const { startAudioStream, stopAudioStream } = await import('@/api/audio-stream')
+    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+    player.playerState = [
+      { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+    ]
+    player.guildId = 'g1'
+    await flushPromises()
+
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+    expect(player.playingSceneId).toBe('x1')
+
+    await testRouter.push('/scenes/y1')
+    await flushPromises()
+
+    const streamIds = vi.mocked(startAudioStream).mock.calls.map(call => call[2])
+    expect(streamIds).toEqual(expect.arrayContaining(['music-a', 'music-b']))
+    // Both channels are still streaming at this point — the outgoing one
+    // (music-a) hasn't been torn down yet, mid-fade.
+    expect(stopAudioStream).not.toHaveBeenCalledWith('g1', 'music-a')
+
+    await wait(300)
+    await flushPromises()
+
+    // Once the fade completes, the outgoing stream is closed.
+    expect(stopAudioStream).toHaveBeenCalledWith('g1', 'music-a')
   })
 })
