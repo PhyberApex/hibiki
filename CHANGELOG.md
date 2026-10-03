@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.3.0](https://github.com/PhyberApex/hibiki/compare/v1.2.0...v1.3.0) (2026-10-03)
+
+
+### Features
+
+* **audio:** add JS/WASM backend decoder module and ADR-0003 ([#440](https://github.com/PhyberApex/hibiki/issues/440)) ([89f33e2](https://github.com/PhyberApex/hibiki/commit/89f33e286896d11c7beb859bd096518a0cc06da6))
+* **audio:** auto-recover or tear down voice connections on Discord disconnect ([#427](https://github.com/PhyberApex/hibiki/issues/427)) ([c9f2e11](https://github.com/PhyberApex/hibiki/commit/c9f2e11d7d12ed5908e099d863e95fb6ba4c8d77)), closes [#411](https://github.com/PhyberApex/hibiki/issues/411)
+* **audio:** support overlapping music streams per guild ([#436](https://github.com/PhyberApex/hibiki/issues/436)) ([97aa9e4](https://github.com/PhyberApex/hibiki/commit/97aa9e425d547f4425c6145d23d47f5a80d78b6e)), closes [#432](https://github.com/PhyberApex/hibiki/issues/432)
+* **config:** add persisted Scene fade length setting ([#435](https://github.com/PhyberApex/hibiki/issues/435)) ([7134433](https://github.com/PhyberApex/hibiki/commit/7134433b38abe4c62fb106892aea97ab794a2136))
+* **config:** encrypt Discord token and Claude Vision key at rest ([#428](https://github.com/PhyberApex/hibiki/issues/428)) ([11cfbe6](https://github.com/PhyberApex/hibiki/commit/11cfbe628cc06d55f496f858aa8295b760aac2a1))
+* **scenes:** allow overlapping Effect playback ([#424](https://github.com/PhyberApex/hibiki/issues/424)) ([b4cb656](https://github.com/PhyberApex/hibiki/commit/b4cb656900c3d3c94762f764e64077173db4efae))
+* **scenes:** crossfade on Scene switch instead of cutting to silence ([#439](https://github.com/PhyberApex/hibiki/issues/439)) ([8416bb2](https://github.com/PhyberApex/hibiki/commit/8416bb2c5b53c7a4c102ece692bc8d9f1b5032ef))
+* **scenes:** track the playing Scene separately from the open Scene ([#434](https://github.com/PhyberApex/hibiki/issues/434)) ([700e4b5](https://github.com/PhyberApex/hibiki/commit/700e4b529956d70b5699556c00d12cea59062697))
+* **storage:** make JSON stores crash-safe with atomic writes and backups ([#421](https://github.com/PhyberApex/hibiki/issues/421)) ([902ee22](https://github.com/PhyberApex/hibiki/commit/902ee22c67d33a9b057bf58921902b71d825d53b))
+* **ui:** collapse main window to a compact session layout below 900px ([#429](https://github.com/PhyberApex/hibiki/issues/429)) ([48aad58](https://github.com/PhyberApex/hibiki/commit/48aad583a11a6dfcb5924e53da543cafaf5bfc32)), closes [#413](https://github.com/PhyberApex/hibiki/issues/413)
+* **ui:** rhythmic status pulses with accessibility toggles ([#336](https://github.com/PhyberApex/hibiki/issues/336)) ([dfea553](https://github.com/PhyberApex/hibiki/commit/dfea553a4254d2439f49cc89ca8f0f1f80b843d7))
+* **vision:** add OpenAI-compatible Vision Provider alongside Claude ([#426](https://github.com/PhyberApex/hibiki/issues/426)) ([e441944](https://github.com/PhyberApex/hibiki/commit/e441944b125b9f0411719e7d5c3f216a322b565a)), closes [#335](https://github.com/PhyberApex/hibiki/issues/335)
+* **vision:** Vision to Vibe — match tagged sounds to an image's mood ([#337](https://github.com/PhyberApex/hibiki/issues/337)) ([c615614](https://github.com/PhyberApex/hibiki/commit/c615614818d65d9559f7a29b9c1742d3b9328c41))
+
+
+### Bug Fixes
+
+* **build:** unbreak packaging on Electron 44 ([#403](https://github.com/PhyberApex/hibiki/issues/403)) ([c3b1b92](https://github.com/PhyberApex/hibiki/commit/c3b1b92dff5b94ad035ea6fe0e0257e7a06891f0))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.118.0 ([#344](https://github.com/PhyberApex/hibiki/issues/344)) ([dd8cb37](https://github.com/PhyberApex/hibiki/commit/dd8cb3704c0b9b04c23ee5cb8a0e8c919eb52b0f))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.120.0 ([#345](https://github.com/PhyberApex/hibiki/issues/345)) ([9947938](https://github.com/PhyberApex/hibiki/commit/994793852968b0889fccd7cd5ac95a93dd20f9bc))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.122.0 ([#353](https://github.com/PhyberApex/hibiki/issues/353)) ([f6c36e6](https://github.com/PhyberApex/hibiki/commit/f6c36e6919f115f1dba3aca327adb4e0436d5bde))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.123.0 ([#362](https://github.com/PhyberApex/hibiki/issues/362)) ([eb9b0da](https://github.com/PhyberApex/hibiki/commit/eb9b0da1383109cef64841cfcad7b653c7a2f42b))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.124.0 ([#373](https://github.com/PhyberApex/hibiki/issues/373)) ([b9733e3](https://github.com/PhyberApex/hibiki/commit/b9733e36c75a336cc188d4168df0ae9031cf0851))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.125.0 ([#380](https://github.com/PhyberApex/hibiki/issues/380)) ([2f723d1](https://github.com/PhyberApex/hibiki/commit/2f723d1290fa4d16e5448db901a31b48a9b3bf18))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.126.0 ([#388](https://github.com/PhyberApex/hibiki/issues/388)) ([b2a3bed](https://github.com/PhyberApex/hibiki/commit/b2a3bed7da21ca91b370781fb75d65cd7f52c3a6))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.128.0 ([#395](https://github.com/PhyberApex/hibiki/issues/395)) ([aa83382](https://github.com/PhyberApex/hibiki/commit/aa833820000cc53c545b42607bffbe38d7130667))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.129.0 ([#423](https://github.com/PhyberApex/hibiki/issues/423)) ([2fd9b98](https://github.com/PhyberApex/hibiki/commit/2fd9b98d79f33085b51fac42ea6146af383152b9))
+* **deps:** update dependency adm-zip to ^0.6.0 ([#286](https://github.com/PhyberApex/hibiki/issues/286)) ([b5f6d9e](https://github.com/PhyberApex/hibiki/commit/b5f6d9e26b4f3b798877a9cd05272b7fe7bb3bdf))
+* **deps:** update dependency dotenv to v18 ([#397](https://github.com/PhyberApex/hibiki/issues/397)) ([6e60e46](https://github.com/PhyberApex/hibiki/commit/6e60e46e7347243ff049020a52d8abb8ef861bc8))
+* **deps:** update dependency pinia to v4 ([#290](https://github.com/PhyberApex/hibiki/issues/290)) ([078643c](https://github.com/PhyberApex/hibiki/commit/078643c3234e0bdfe47d628221379211b76434bd))
+* **pnpm:** fix broken CI build by moving pnpm settings to pnpm-workspace.yaml ([#310](https://github.com/PhyberApex/hibiki/issues/310)) ([647921d](https://github.com/PhyberApex/hibiki/commit/647921da227accc5df75f6550e580da41445a100))
+* **pnpm:** override @electron/node-gyp to unblock Renovate lockfile updates ([#321](https://github.com/PhyberApex/hibiki/issues/321)) ([36d28ea](https://github.com/PhyberApex/hibiki/commit/36d28ea90ceb2290b5abf69d902b03d7ba5dcc9f))
+
 ## [1.2.0](https://github.com/PhyberApex/hibiki/compare/v1.1.0...v1.2.0) (2026-03-19)
 
 
