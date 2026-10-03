@@ -1,7 +1,9 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSoundLibrary } from './sound-library'
+
+const FIXTURES_DIR = join(__dirname, '..', 'audio', 'decoders', 'fixtures')
 
 describe('createSoundLibrary', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-sound-'))
@@ -148,5 +150,42 @@ describe('sound tags', () => {
     writeFileSync(join(ambienceDir, 'wind.mp3'), 'data')
     const file = await lib.getFile('ambience', 'wind')
     expect(file.tags).toEqual([])
+  })
+})
+
+describe('canDecode', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-sound-decode-'))
+  const musicDir = join(tempRoot, 'music')
+  const config = {
+    discord: { token: '' },
+    audio: {
+      storageRoot: tempRoot,
+      musicDir,
+      effectsDir: join(tempRoot, 'effects'),
+      webDistDir: 'web-dist',
+    },
+    database: { path: join(tempRoot, 'data', 'hibiki.json') },
+  }
+
+  beforeAll(async () => {
+    const { mkdir } = await import('node:fs/promises')
+    await mkdir(musicDir, { recursive: true })
+    copyFileSync(join(FIXTURES_DIR, 'fixture-stereo-44100.mp3'), join(musicDir, 'decodable-song.mp3'))
+    copyFileSync(join(FIXTURES_DIR, 'fixture.m4a'), join(musicDir, 'undecodable-song.m4a'))
+  })
+
+  it('reports true for a format with a backend decoder', async () => {
+    const lib = createSoundLibrary(config)
+    await expect(lib.canDecode('music', 'decodable-song')).resolves.toBe(true)
+  })
+
+  it('reports false for a format with no backend decoder (renderer fallback)', async () => {
+    const lib = createSoundLibrary(config)
+    await expect(lib.canDecode('music', 'undecodable-song')).resolves.toBe(false)
+  })
+
+  it('rejects for an unknown sound id', async () => {
+    const lib = createSoundLibrary(config)
+    await expect(lib.canDecode('music', 'does-not-exist')).rejects.toThrow(/not found/)
   })
 })
