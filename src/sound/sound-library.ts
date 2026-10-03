@@ -4,6 +4,7 @@ import { mkdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import fg from 'fast-glob'
 import slugify from 'slugify'
+import { canDecode as canDecodeFile } from '../audio/decoders'
 import { createSoundTagsStore } from './sound-tags.store'
 
 function resolvePath(config: Config, category: SoundCategory, filename?: string): string {
@@ -79,6 +80,12 @@ export function createSoundLibrary(config: Config) {
     async getFilePath(category: SoundCategory, id: string): Promise<string> {
       const filename = await findFilename(config, category, id)
       return resolvePath(config, category, filename)
+    },
+
+    /** Whether backend (Discord) playback can decode this file directly, vs. the renderer fallback. See ADR-0003. */
+    async canDecode(category: SoundCategory, id: string): Promise<boolean> {
+      const filename = await findFilename(config, category, id)
+      return canDecodeFile(resolvePath(config, category, filename))
     },
 
     async getFile(category: SoundCategory, id: string): Promise<SoundFile & { path: string }> {

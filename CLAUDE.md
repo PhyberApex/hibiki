@@ -46,7 +46,7 @@ pnpm package            # Create unpacked app only (for testing)
 # Backend tests (Jest)
 pnpm test:backend                         # All backend tests
 pnpm test:watch                           # Watch mode
-npx jest --config jest.config.js <file>   # Single test file
+node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js <file>   # Single test file
 
 # Frontend tests (Vitest)
 pnpm test:frontend                        # All frontend tests
@@ -165,6 +165,14 @@ Opt-in feature (off by default) that sends an image to a Vision Provider and mat
 - Sound Tags live in `sound-tags.json` via `src/sound/sound-tags.store.ts`, merged into `SoundFile.tags` by the sound library.
 - Gating: the scene editor's "Vision to Vibe" button only renders when the Settings toggle is on **and** the selected provider is configured (`config.getVision().configured`) — Claude needs a key; `openai-compatible` needs a key **or** a non-default Base URL (for keyless local servers). The backend re-checks this gate in `analyzeImageVibe`.
 - Never retain the analyzed image; it is read from disk, sent once, and dropped.
+
+### Backend Sound Library Playback
+
+Sound Library playback for Discord decodes and mixes in the main process, feeding `AudioEngine`'s mixer directly; playback state stays per guild in `GuildAudioManager`. See `agent-docs/adr/0003-backend-sound-library-playback.md`.
+- Decoders: `src/audio/decoders/` — JS/WASM only, no bundled ffmpeg binary. `canDecode(filePath)` and `createPcmStream(filePath)` cover mp3, wav, ogg (vorbis and opus), and flac, producing 48 kHz stereo signed 16-bit LE PCM via the stateful `PcmResampler`.
+- A file whose format has no backend decoder (m4a/AAC, most likely) falls back to the renderer path (audio element → chunked IPC), which also remains for the Browser tab; local preview always stays in the renderer.
+- `sounds.canDecode(type, id)` is exposed over IPC (`src/bootstrap-embedded.ts`, wrapped in `frontend/src/api/sounds.ts#canDecode`) so playback code can pick the right path per sound.
+- These decoder packages are ESM-only; the backend's CommonJS output `require()`s them using Node 24's native `require(esm)` support. Jest needs the `--experimental-vm-modules` flag for its own equivalent support, which is why `test:backend`/`test:watch`/`test:coverage:backend` invoke `node --experimental-vm-modules node_modules/.bin/jest` instead of the `jest` bin directly.
 
 ### Scene Playback
 

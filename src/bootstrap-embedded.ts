@@ -94,6 +94,7 @@ export interface EmbeddedApi {
     deleteSound: (type: SoundCategory, id: string) => ReturnType<ReturnType<typeof createSoundLibrary>['remove']>
     getFilePath: (type: SoundCategory, id: string) => ReturnType<ReturnType<typeof createSoundLibrary>['getFilePath']>
     setTags: (type: SoundCategory, id: string, tags: string[]) => ReturnType<ReturnType<typeof createSoundLibrary>['setTags']>
+    canDecode: (type: SoundCategory, id: string) => ReturnType<ReturnType<typeof createSoundLibrary>['canDecode']>
   }
   scenes: {
     list: () => ReturnType<ReturnType<typeof createSceneStore>['list']>
@@ -252,6 +253,7 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
       },
       getFilePath: (type, id) => sounds.getFilePath(type, id),
       setTags: (type, id, tags) => sounds.setTags(type, id, Array.isArray(tags) ? tags : []),
+      canDecode: (type, id) => sounds.canDecode(type, id),
     },
     scenes: {
       list: () => scenes.list(),

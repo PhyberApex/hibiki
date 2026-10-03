@@ -66,6 +66,12 @@ export function updateSoundTags(type: 'music' | 'effects' | 'ambience', id: stri
   return apiCall<string[]>('sounds', 'setTags', [type, id, tags])
 }
 
+/** Whether backend (Discord) playback can decode this file directly, vs. the renderer fallback. See ADR-0003. */
+export function canDecode(type: 'music' | 'effects' | 'ambience', id: string) {
+  requireElectron()
+  return apiCall<boolean>('sounds', 'canDecode', [type, id])
+}
+
 /** URL to stream a sound for playback (use in <audio src="...">) */
 export function soundStreamUrl(type: 'music' | 'effects' | 'ambience', id: string): string {
   requireElectron()
