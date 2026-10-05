@@ -77,6 +77,30 @@ export function setVolume(payload: {
   return apiCall<{ music: number, effects: number }>('player', 'setVolume', [payload.guildId, { music: payload.music, effects: payload.effects }])
 }
 
+export interface PlayMusicOptions {
+  volume: number
+  loop?: boolean
+  fadeInMs?: number
+}
+
+/** Plays a Sound Library Music track decoded straight into the mixer (see ADR-0003). */
+export function playMusic(guildId: string, soundId: string, options: PlayMusicOptions): Promise<void> {
+  requireElectron()
+  return apiCall<void>('player', 'playMusic', [guildId, soundId, options])
+}
+
+/** Stops the currently playing backend-decoded Music track, if any (distinct from the chunked-IPC `audio-stream` API's `stopAudioStream`). */
+export function stopMusic(guildId: string, options: { fadeOutMs?: number } = {}): Promise<void> {
+  requireElectron()
+  return apiCall<void>('player', 'stopMusic', [guildId, options])
+}
+
+/** Changes the currently playing backend-decoded Music track's volume, if any. */
+export function setMusicVolume(guildId: string, volume: number, options: { rampMs?: number } = {}): Promise<void> {
+  requireElectron()
+  return apiCall<void>('player', 'setMusicVolume', [guildId, volume, options])
+}
+
 export function reconnectBot(): Promise<void> {
   requireElectron()
   return apiCall<void>('player', 'reconnect', [])

@@ -14,13 +14,19 @@ import {
   stopEffectStream,
 } from '@/api/audio-stream'
 import { fetchSceneFadeLength, fetchVisionConfig, openFileDialog, saveFileDialog } from '@/api/config'
+import {
+  playMusic as playBackendMusic,
+  setMusicVolume as setBackendMusicVolume,
+  stopMusic as stopBackendMusic,
+} from '@/api/player'
 import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
-import { listAmbience, listEffects, listMusic, soundStreamUrl } from '@/api/sounds'
+import { canDecode, listAmbience, listEffects, listMusic, soundStreamUrl } from '@/api/sounds'
 import {
   captureFromAudioElement,
   releaseAudioElementContext,
 } from '@/audio/browser-audio-capture'
 import { CrossfadeRamp } from '@/audio/crossfade-ramp'
+import { selectMusicPlaybackPath } from '@/audio/music-playback-path'
 import RegistryBrowser from '@/components/RegistryBrowser.vue'
 import ResolveSoundDialog from '@/components/ResolveSoundDialog.vue'
 import VisionToVibeDialog from '@/components/VisionToVibeDialog.vue'
@@ -53,6 +59,19 @@ const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 const ambienceAudioEls = new Map<string, HTMLAudioElement>()
 const captureSessions = new Map<string, CaptureSession>()
+// A sound's backend-decodability depends only on its (immutable) file
+// format, never on when/how it's played, so this is safe to cache for the
+// id's whole lifetime — avoids an IPC round-trip on every single Play click
+// and every per-track Scene Crossfade switch.
+const musicCanDecodeCache = new Map<string, Promise<boolean>>()
+function canDecodeMusicCached(soundId: string): Promise<boolean> {
+  let cached = musicCanDecodeCache.get(soundId)
+  if (!cached) {
+    cached = canDecode('music', soundId).catch(() => false)
+    musicCanDecodeCache.set(soundId, cached)
+  }
+  return cached
+}
 const ambienceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const playingAmbienceIds = ref(new Set<string>())
 // Which path (Discord stream vs local-only) started each currently-audible
@@ -67,11 +86,15 @@ const ambienceSource = new Map<string, 'discord' | 'local'>()
 // (and streamable) while the incoming track starts on the other channel.
 // `primaryMusicChannel` is whichever channel holds the latest requested
 // track; it never points at a channel that's mid fade-out.
+// A 'backend' channel doesn't use `el`/`streamId` at all (see ADR-0003): the
+// backend decodes the file straight into the mixer and owns its own
+// crossfade, so this channel slot exists only to track which soundId/mode is
+// "primary" for Stop/volume-slider bookkeeping.
 interface MusicChannel {
   el: HTMLAudioElement
   streamId: string
   soundId: string | null
-  source: 'discord' | 'local' | null
+  source: 'discord' | 'local' | 'backend' | null
 }
 const musicChannels: MusicChannel[] = [
   { el: createAudioEl(), streamId: 'music-a', soundId: null, source: null },
@@ -225,7 +248,14 @@ const nowPlayingLabel = computed(() => {
   if (!isScenePlayingHere.value)
     return 'Nothing playing'
   const parts: string[] = []
-  if (playingMusicId.value) {
+  // Backend-decoded Music (ADR-0003) is reported by GuildAudioManager and
+  // survives a renderer reload, so it's preferred over the local ref here —
+  // see CONTEXT.md on "now playing" sourcing.
+  const backendTrack = player.selectedGuildState?.track
+  if (backendTrack && backendTrack.category === 'music') {
+    parts.push(backendTrack.name)
+  }
+  else if (playingMusicId.value) {
     const musicItem = scene.value?.music.find(m => m.soundId === playingMusicId.value)
     parts.push(musicItem?.soundName ?? resolveSoundName('music', playingMusicId.value))
   }
@@ -263,8 +293,15 @@ function updateAmbienceVolume(item: SceneItem) {
 }
 
 function updateMusicVolume(item: SceneItem) {
-  if (primaryMusicChannel.soundId === item.soundId)
+  if (primaryMusicChannel.soundId !== item.soundId)
+    return
+  if (primaryMusicChannel.source === 'backend') {
+    if (guildId.value)
+      setBackendMusicVolume(guildId.value, computeVolume(item.volume ?? 80) * 100).catch(() => {})
+  }
+  else {
     primaryMusicChannel.el.volume = computeVolume(item.volume ?? 80)
+  }
 }
 
 function updateAllVolumes() {
@@ -470,11 +507,20 @@ function clearMusicChannel(channel: MusicChannel) {
 }
 
 // Fully tears down one music channel: cancels any crossfade ramp targeting
-// it, stops the element, and (for Discord) the capture session and stream.
-// Safe to call on an idle channel — used both for ordinary Stop and to free
-// up a channel a crossfade needs to reuse, even mid fade.
-function stopMusicChannel(channel: MusicChannel, mode: 'discord' | 'local') {
+// it, then either stops the backend-decoded track or the element/capture
+// session/stream for the renderer paths. Safe to call on an idle channel —
+// used both for ordinary Stop and to free up a channel a crossfade needs to
+// reuse, even mid fade. `fadeOutMs` only applies to the backend path (the
+// renderer paths are cut immediately here; their own fades, if any, are
+// driven externally via `crossfadeRamp` before this runs).
+function stopMusicChannel(channel: MusicChannel, mode: 'discord' | 'local' | 'backend', fadeOutMs = 0) {
   crossfadeRamp.cancel(musicFadeKey(channel))
+  if (mode === 'backend') {
+    if (guildId.value)
+      stopBackendMusic(guildId.value, fadeOutMs > 0 ? { fadeOutMs } : {}).catch(() => {})
+    clearMusicChannel(channel)
+    return
+  }
   channel.el.onended = null
   channel.el.onerror = null
   channel.el.pause()
@@ -490,15 +536,52 @@ function stopMusicChannel(channel: MusicChannel, mode: 'discord' | 'local') {
   clearMusicChannel(channel)
 }
 
-async function playMusic(item: SceneItem, channel: MusicChannel = primaryMusicChannel, initialVolume?: number) {
+// Backend-decoded path (see ADR-0003): the file is decoded straight into the
+// mixer in the main process, so there's no audio element/chunked IPC here —
+// the backend owns its own crossfade (fading the previous track out while
+// this one fades in), driven by `fadeInMs`.
+async function playMusicBackend(item: SceneItem, channel: MusicChannel, fadeInMs: number) {
+  if (!guildId.value)
+    return
+  if (channel.source && channel.source !== 'backend')
+    stopMusicChannel(channel, channel.source)
+  channel.soundId = item.soundId
+  channel.source = 'backend'
+  if (channel === primaryMusicChannel)
+    playingMusicId.value = item.soundId
+  await playBackendMusic(guildId.value, item.soundId, {
+    volume: computeVolume(item.volume ?? 80) * 100,
+    loop: item.loop ?? false,
+    fadeInMs,
+  })
+}
+
+async function playMusic(item: SceneItem, channel: MusicChannel = primaryMusicChannel, initialVolume?: number, fadeInMs?: number) {
   if (!guildId.value || !isJoined.value)
     return
   try {
+    const track = musicSounds.value.find(s => s.id === item.soundId)
+    if (!track) {
+      // Matches today's behaviour for a Scene Music item whose sound was
+      // deleted from the library: silence whatever this channel was
+      // playing rather than leaving it running underneath a Play action
+      // that's about to no-op.
+      if (channel.source)
+        stopMusicChannel(channel, channel.source)
+      return
+    }
+
+    const path = selectMusicPlaybackPath({
+      joined: true,
+      canDecodeBackend: await canDecodeMusicCached(item.soundId),
+    })
+    if (path === 'backend') {
+      await playMusicBackend(item, channel, fadeInMs ?? 0)
+      return
+    }
+
     if (channel.source)
       stopMusicChannel(channel, channel.source)
-    const track = musicSounds.value.find(s => s.id === item.soundId)
-    if (!track)
-      return
     channel.soundId = item.soundId
     channel.source = 'discord'
     if (channel === primaryMusicChannel)
@@ -560,8 +643,8 @@ async function playMusicLocal(item: SceneItem, channel: MusicChannel = primaryMu
 
 function stopMusic() {
   for (const channel of musicChannels) {
-    if (channel.source === 'discord')
-      stopMusicChannel(channel, 'discord')
+    if (channel.source === 'discord' || channel.source === 'backend')
+      stopMusicChannel(channel, channel.source)
   }
 }
 
@@ -810,36 +893,95 @@ function crossfadeAmbience(target: Scene, mode: 'discord' | 'local', durationMs:
 function crossfadeMusic(target: Scene, mode: 'discord' | 'local', durationMs: number) {
   const outgoingChannel = primaryMusicChannel
   const outgoingHadTrack = outgoingChannel.soundId != null
+  const outgoingWasBackend = outgoingChannel.source === 'backend'
   const targetTrack = target.music[0]
   const incomingChannel = targetTrack ? (musicChannels.find(c => c !== outgoingChannel) ?? musicChannels[1]) : null
 
   if (incomingChannel) {
     primaryMusicChannel = incomingChannel
-    const startFn = mode === 'discord' ? playMusic : playMusicLocal
+    // The backend path (ADR-0003) drives its own fade-in via fadeInMs, so
+    // only the 'discord' branch threads durationMs through; playMusicLocal
+    // never uses the backend path and keeps its existing 3-arg signature.
+    const startFn = mode === 'discord'
+      ? (item: SceneItem, channel: MusicChannel, initialVolume: number) => playMusic(item, channel, initialVolume, durationMs)
+      : playMusicLocal
     startFn(targetTrack!, incomingChannel, 0).then(() => {
-      crossfadeRamp.fade(musicFadeKey(incomingChannel), {
-        direction: 'in',
-        from: 0,
-        to: computeVolume(targetTrack!.volume ?? 80),
-        durationMs,
-        onVolume: (v) => { incomingChannel.el.volume = v },
-      })
+      // playMusic/playMusicLocal both swallow their own failures internally
+      // (console.error + clearMusicChannel) rather than rejecting, so this
+      // always runs — a failed start shows up as `incomingChannel` having
+      // been cleared back to empty.
+      if (incomingChannel.soundId !== targetTrack!.soundId) {
+        // If the outgoing track is still alive on the backend (preserved on
+        // purpose below), restore it as primary so Stop/volume controls can
+        // reach it again instead of leaving it reachable only on the
+        // backend with no surviving UI handle.
+        if (outgoingHadTrack && outgoingWasBackend) {
+          primaryMusicChannel = outgoingChannel
+          playingMusicId.value = outgoingChannel.soundId
+        }
+        return
+      }
+      if (incomingChannel.source === 'backend') {
+        // The backend already faded the previous backend track out (and
+        // stopped it) as a side effect of this call succeeding, but only
+        // when the OUTGOING track was also backend-sourced — see
+        // GuildAudioManager.playMusic, which only knows about its own prior
+        // backend track. Only drop the renderer's own bookkeeping for it
+        // once we know that actually happened.
+        if (outgoingHadTrack && outgoingWasBackend)
+          clearMusicChannel(outgoingChannel)
+      }
+      else {
+        crossfadeRamp.fade(musicFadeKey(incomingChannel), {
+          direction: 'in',
+          from: 0,
+          to: computeVolume(targetTrack!.volume ?? 80),
+          durationMs,
+          onVolume: (v) => { incomingChannel.el.volume = v },
+        })
+        // A mixed-path switch (outgoing was backend-decoded, incoming falls
+        // back to the renderer, e.g. a backend-decodable track followed by
+        // an m4a one): the backend was never told about this crossfade at
+        // all, so nothing else will stop the previous backend track —
+        // fade/stop it directly here instead of leaving it orphaned.
+        if (outgoingHadTrack && outgoingWasBackend)
+          stopMusicChannel(outgoingChannel, 'backend', durationMs)
+      }
     })
   }
   else {
     playingMusicId.value = null
   }
 
-  if (outgoingHadTrack) {
+  // Renderer/local element outgoing fade: unconditional on the incoming
+  // track's success, exactly as before 'backend' existed — this is what
+  // guarantees the old track always stops, never orphaned, regardless of
+  // whether the new one took over.
+  if (outgoingHadTrack && !outgoingWasBackend) {
     crossfadeRamp.fade(musicFadeKey(outgoingChannel), {
       direction: 'out',
       from: outgoingChannel.el.volume,
       to: 0,
       durationMs,
       onVolume: (v) => { outgoingChannel.el.volume = v },
-      onDone: () => stopMusicChannel(outgoingChannel, mode),
+      onDone: () => {
+        // Re-check rather than trust the closed-over `mode`/`outgoingWasBackend`:
+        // by the time this fade completes, nothing should have changed the
+        // channel's source out from under it, but a plain narrowing check is
+        // cheap insurance against an unchecked cast silently papering over
+        // whatever did.
+        if (outgoingChannel.source && outgoingChannel.source !== 'backend')
+          stopMusicChannel(outgoingChannel, outgoingChannel.source)
+      },
     })
   }
+
+  // Backend outgoing with no incoming track at all (switching to a
+  // music-less Scene): nothing above will trigger its fade-out, so do it
+  // directly. When there IS an incoming channel, the `.then()` above handles
+  // it once the new track is confirmed to have started.
+  if (outgoingHadTrack && outgoingWasBackend && !incomingChannel)
+    stopMusicChannel(outgoingChannel, 'backend', durationMs)
 }
 
 // Entry point for Scene Crossfade (see CONTEXT.md): called instead of a hard

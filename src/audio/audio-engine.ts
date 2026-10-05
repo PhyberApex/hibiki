@@ -2,6 +2,7 @@ import type {
   AudioPlayer,
   AudioResource,
 } from '@discordjs/voice'
+import type { AudioInput } from 'node-audio-mixer'
 import type { Readable } from 'node:stream'
 import { PassThrough } from 'node:stream'
 import {
@@ -11,17 +12,15 @@ import {
   StreamType,
 } from '@discordjs/voice'
 import { AudioMixer } from 'node-audio-mixer'
-
-/** Mixer input: Writable stream with destroy() */
-interface MixerInputLike {
-  destroy: () => void
-}
+import { rampVolume } from './volume-ramp'
 
 /** One active stream (music or effect) feeding into the mixer */
 interface ActiveStream {
   source: Readable
-  input: MixerInputLike
+  input: AudioInput
   volume: number
+  /** Cancels an in-progress volume ramp started by `rampStreamVolume`, if any. */
+  cancelRamp?: () => void
 }
 
 const DEFAULT_VOLUMES = { music: 85, effects: 90 }
@@ -81,9 +80,9 @@ export class AudioEngine {
       this.volumes.effects = CLAMP(updates.effects)
   }
 
-  playMusicFromStream(stream: Readable, streamId?: string) {
+  playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = this.volumes.music) {
     this.stopMusicStream(streamId)
-    const active = this.spawnInputFromStream(stream, this.volumes.music)
+    const active = this.spawnInputFromStream(stream, CLAMP(initialVolume))
     this.musicStreams.set(streamId, active)
 
     const onEnded = () => {
@@ -112,6 +111,53 @@ export class AudioEngine {
   /** Ends the music stream for `streamId` (or the default stream when omitted). Other ids are untouched. */
   stopMusic(streamId?: string) {
     this.stopMusicStream(streamId)
+  }
+
+  /**
+   * Sets a music stream's volume immediately, cancelling any in-progress
+   * ramp on it. `node-audio-mixer` inputs apply `params.volume` live (see
+   * ADR-0003), so this needs no gain `Transform`. No-op if the stream has
+   * already ended.
+   */
+  setStreamVolume(streamId: string | undefined, volume: number): void {
+    const active = this.musicStreams.get(streamId)
+    if (!active)
+      return
+    active.cancelRamp?.()
+    active.cancelRamp = undefined
+    active.volume = CLAMP(volume)
+    active.input.params = { volume: active.volume }
+  }
+
+  /**
+   * Ramps a music stream's volume from its current value to `to` over
+   * `durationMs`, replacing any ramp already in progress on it. No-op if the
+   * stream has already ended.
+   */
+  rampStreamVolume(streamId: string | undefined, to: number, durationMs: number, onDone?: () => void): void {
+    const active = this.musicStreams.get(streamId)
+    if (!active)
+      return
+    active.cancelRamp?.()
+    if (durationMs <= 0) {
+      this.setStreamVolume(streamId, to)
+      onDone?.()
+      return
+    }
+    const handle = rampVolume({
+      from: active.volume,
+      to,
+      durationMs,
+      onVolume: (v) => {
+        active.volume = CLAMP(v)
+        active.input.params = { volume: active.volume }
+      },
+      onDone: () => {
+        active.cancelRamp = undefined
+        onDone?.()
+      },
+    })
+    active.cancelRamp = handle.cancel
   }
 
   /** Ends every music stream for this guild, regardless of id. */
@@ -151,6 +197,7 @@ export class AudioEngine {
     const active = this.musicStreams.get(streamId)
     if (!active)
       return
+    active.cancelRamp?.()
     active.source.removeAllListeners?.()
     active.source.destroy?.()
     active.input.destroy()

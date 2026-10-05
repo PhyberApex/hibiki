@@ -2,7 +2,7 @@ import type { Readable } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { AudioEngine } from './audio-engine'
 
-const createdInputs: { destroy: jest.Mock }[] = []
+const createdInputs: { destroy: jest.Mock, params?: { volume?: number } }[] = []
 
 jest.mock('@discordjs/voice', () => ({
   createAudioPlayer: jest.fn().mockReturnValue({ play: jest.fn(), on: jest.fn(), stop: jest.fn() }),
@@ -15,8 +15,8 @@ jest.mock('node-audio-mixer', () => ({
   AudioMixer: jest.fn().mockImplementation(() => ({
     pipe: jest.fn(),
     destroy: jest.fn(),
-    createAudioInput: jest.fn().mockImplementation(() => {
-      const input = { destroy: jest.fn() }
+    createAudioInput: jest.fn().mockImplementation((params: { volume?: number }) => {
+      const input = { destroy: jest.fn(), params: { volume: params.volume } }
       createdInputs.push(input)
       return input
     }),
@@ -37,6 +37,102 @@ describe('audioEngine', () => {
     jest.clearAllMocks()
     createdInputs.length = 0
     engine = new AudioEngine()
+  })
+
+  describe('initial volume and live volume control', () => {
+    it('spawns the input at the given initial volume instead of the master music volume', () => {
+      const stream = createFakeStream()
+
+      engine.playMusicFromStream(stream, 'a', 0)
+
+      expect(createdInputs[0].params?.volume).toBe(0)
+    })
+
+    it('setStreamVolume updates the input live via params', () => {
+      const stream = createFakeStream()
+      engine.playMusicFromStream(stream, 'a', 50)
+
+      engine.setStreamVolume('a', 80)
+
+      expect(createdInputs[0].params?.volume).toBe(80)
+    })
+
+    it('setStreamVolume is a no-op for an id with no active stream', () => {
+      expect(() => engine.setStreamVolume('missing', 50)).not.toThrow()
+    })
+
+    it('rampStreamVolume ramps the input volume over time and calls onDone', () => {
+      jest.useFakeTimers()
+      try {
+        const stream = createFakeStream()
+        engine.playMusicFromStream(stream, 'a', 0)
+        const onDone = jest.fn()
+
+        engine.rampStreamVolume('a', 100, 1000, onDone)
+
+        jest.advanceTimersByTime(500)
+        expect(createdInputs[0].params?.volume).toBe(50)
+        expect(onDone).not.toHaveBeenCalled()
+
+        jest.advanceTimersByTime(500)
+        expect(createdInputs[0].params?.volume).toBe(100)
+        expect(onDone).toHaveBeenCalledTimes(1)
+      }
+      finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('rampStreamVolume with a duration of 0 sets the volume immediately and calls onDone synchronously', () => {
+      const stream = createFakeStream()
+      engine.playMusicFromStream(stream, 'a', 50)
+      const onDone = jest.fn()
+
+      engine.rampStreamVolume('a', 0, 0, onDone)
+
+      expect(createdInputs[0].params?.volume).toBe(0)
+      expect(onDone).toHaveBeenCalledTimes(1)
+    })
+
+    it('a later ramp cancels an in-progress one on the same stream', () => {
+      jest.useFakeTimers()
+      try {
+        const stream = createFakeStream()
+        engine.playMusicFromStream(stream, 'a', 0)
+        const firstDone = jest.fn()
+        const secondDone = jest.fn()
+
+        engine.rampStreamVolume('a', 100, 1000, firstDone)
+        jest.advanceTimersByTime(200)
+        engine.rampStreamVolume('a', 0, 200, secondDone)
+        jest.advanceTimersByTime(200)
+
+        expect(createdInputs[0].params?.volume).toBe(0)
+        expect(firstDone).not.toHaveBeenCalled()
+        expect(secondDone).toHaveBeenCalledTimes(1)
+      }
+      finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('stopping a stream cancels its in-progress ramp', () => {
+      jest.useFakeTimers()
+      try {
+        const stream = createFakeStream()
+        engine.playMusicFromStream(stream, 'a', 0)
+        const onDone = jest.fn()
+
+        engine.rampStreamVolume('a', 100, 1000, onDone)
+        engine.stopMusic('a')
+        jest.advanceTimersByTime(1000)
+
+        expect(onDone).not.toHaveBeenCalled()
+      }
+      finally {
+        jest.useRealTimers()
+      }
+    })
   })
 
   describe('playMusicFromStream with stream ids', () => {
