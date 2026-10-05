@@ -44,6 +44,9 @@ vi.mock('@/api/player', async (importOriginal) => {
     playMusic: vi.fn().mockResolvedValue(undefined),
     stopMusic: vi.fn().mockResolvedValue(undefined),
     setMusicVolume: vi.fn().mockResolvedValue(undefined),
+    playAmbience: vi.fn().mockResolvedValue(undefined),
+    stopAmbience: vi.fn().mockResolvedValue(undefined),
+    setAmbienceVolume: vi.fn().mockResolvedValue(undefined),
   }
 })
 
@@ -1164,6 +1167,226 @@ describe('sceneView — Scene Crossfade', () => {
       // ...and the previous backend track must still be explicitly stopped,
       // not silently left running with no reachable UI handle.
       expect(stopMusic).toHaveBeenCalledWith('g1', { fadeOutMs: 100 })
+    })
+  })
+
+  describe('backend-decoded Ambience (ADR-0003)', () => {
+    beforeEach(async () => {
+      const { canDecode } = await import('@/api/sounds')
+      vi.mocked(canDecode).mockResolvedValue(true)
+    })
+
+    it('plays via the backend and sends no audio:effectChunk IPC when the sound can decode', async () => {
+      const { startEffectStream, sendEffectChunk } = await import('@/api/audio-stream')
+      const { playAmbience } = await import('@/api/player')
+      const { wrapper, player } = await mountAt('/scenes/x1')
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+
+      await wrapper.find('.btn-play-scene').trigger('click')
+      await flushPromises()
+
+      expect(playAmbience).toHaveBeenCalledWith('g1', 'amb-1', { volume: expect.closeTo(64), repeatMin: 0, repeatMax: 0, fadeInMs: 0 })
+      expect(startEffectStream).not.toHaveBeenCalled()
+      expect(sendEffectChunk).not.toHaveBeenCalled()
+    })
+
+    it('glides a shared Ambience sound to its new volume via the backend without restarting it, and fades in a sound new to the target Scene', async () => {
+      const { playAmbience, setAmbienceVolume } = await import('@/api/player')
+      const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+
+      await wrapper.find('.btn-play-scene').trigger('click')
+      await flushPromises()
+      vi.mocked(playAmbience).mockClear()
+
+      await testRouter.push('/scenes/y1')
+      await flushPromises()
+
+      // amb-1 is shared (present in both x1 and y1, at a different volume in
+      // each) — glided to y1's volume via the backend, never restarted.
+      expect(setAmbienceVolume).toHaveBeenCalledWith('g1', 'amb-1', expect.closeTo(32), { rampMs: 100 })
+      expect(playAmbience).not.toHaveBeenCalledWith('g1', 'amb-1', expect.anything())
+      // amb-2 is new to the target Scene — starts fresh via the backend with a fade-in.
+      expect(playAmbience).toHaveBeenCalledWith('g1', 'amb-2', { volume: expect.closeTo(48), repeatMin: 0, repeatMax: 0, fadeInMs: 100 })
+    })
+
+    it('stops an outgoing-only Ambience sound via the backend when the target Scene drops it', async () => {
+      const { stopAmbience } = await import('@/api/player')
+      const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+
+      await wrapper.find('.btn-play-scene').trigger('click')
+      await flushPromises()
+
+      await testRouter.push('/scenes/z1')
+      await flushPromises()
+
+      expect(stopAmbience).toHaveBeenCalledWith('g1', 'amb-1', { fadeOutMs: 100 })
+    })
+
+    it('stops a backend-sourced instance of the same Ambience sound before starting it locally during a Scene Crossfade', async () => {
+      const { getScene } = await import('@/api/scenes')
+      const sceneV = {
+        id: 'v1',
+        name: 'Village',
+        ambience: [{ soundId: 'amb-1', soundName: 'Rain', volume: 50, enabled: true }],
+        music: [],
+        effects: [],
+      }
+      vi.mocked(getScene).mockImplementation(async (id: string) => {
+        if (id === 'x1')
+          return JSON.parse(JSON.stringify(sceneX))
+        if (id === 'v1')
+          return JSON.parse(JSON.stringify(sceneV))
+        return null
+      })
+
+      const { stopAmbience } = await import('@/api/player')
+      const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+
+      // Join voice and flip amb-1's checkbox off then on — individually
+      // toggling while joined always routes through the backend,
+      // regardless of what's currently the (locally) Playing Scene.
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+      await wrapper.find('input[type="checkbox"]').setValue(false)
+      await wrapper.find('input[type="checkbox"]').setValue(true)
+      await flushPromises()
+
+      // Mark x1 as the (locally) Playing Scene directly — isolates the
+      // crossfade this test cares about from a real Play Local click's own
+      // side effects (which aren't relevant here).
+      player.setPlayingScene('x1', 'local')
+      vi.mocked(stopAmbience).mockClear()
+
+      // Opening a different Scene that also wants amb-1 while a local
+      // Scene is playing triggers a local-mode Scene Crossfade.
+      await testRouter.push('/scenes/v1')
+      await flushPromises()
+
+      // The backend-sourced amb-1 must be stopped via the real IPC call
+      // before being started locally — not left orphaned, playing
+      // underneath the new local instance with no reachable UI handle.
+      expect(stopAmbience).toHaveBeenCalledWith('g1', 'amb-1', {})
+    })
+
+    it('toggling an Ambience sound off stops it via the backend, not the chunked-IPC effect stream', async () => {
+      const { stopEffectStream } = await import('@/api/audio-stream')
+      const { stopAmbience } = await import('@/api/player')
+      const { wrapper, player } = await mountAt('/scenes/x1')
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+
+      await wrapper.find('.btn-play-scene').trigger('click')
+      await flushPromises()
+
+      await wrapper.find('input[type="checkbox"]').setValue(false)
+      await flushPromises()
+
+      expect(stopAmbience).toHaveBeenCalledWith('g1', 'amb-1', {})
+      expect(stopEffectStream).not.toHaveBeenCalledWith('g1', 'ambience-amb-1')
+    })
+
+    it('does not orphan an outgoing backend Ambience sound when crossfading to a Scene whose shared sound falls back to the renderer', async () => {
+      const { canDecode } = await import('@/api/sounds')
+      // amb-1 (outgoing, shared) is backend-decodable; amb-2 (new to the
+      // target) is not (e.g. m4a) — a mixed-decodability crossfade.
+      vi.mocked(canDecode).mockImplementation(async (_type, id) => id === 'amb-1')
+      const { startEffectStream } = await import('@/api/audio-stream')
+      const { playAmbience, setAmbienceVolume } = await import('@/api/player')
+      const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+
+      await wrapper.find('.btn-play-scene').trigger('click')
+      await flushPromises()
+      expect(playAmbience).toHaveBeenCalledWith('g1', 'amb-1', expect.anything())
+
+      await testRouter.push('/scenes/y1')
+      await flushPromises()
+
+      // amb-1 stays backend-sourced and is simply glided to y1's volume...
+      expect(setAmbienceVolume).toHaveBeenCalledWith('g1', 'amb-1', expect.closeTo(32), { rampMs: 100 })
+      // ...while amb-2 (new, not backend-decodable) falls back to the
+      // renderer path instead of being orphaned or silently dropped.
+      expect(startEffectStream).toHaveBeenCalledWith('g1', 'ambience-amb-2')
+    })
+
+    it('stops a local preview of the same Ambience sound when a different Scene turns it on individually while joined', async () => {
+      const { getScene } = await import('@/api/scenes')
+      const sceneW = {
+        id: 'w1',
+        name: 'Other',
+        ambience: [{ soundId: 'amb-1', soundName: 'Rain', volume: 50, enabled: false }],
+        music: [],
+        effects: [],
+      }
+      vi.mocked(getScene).mockImplementation(async (id: string) => {
+        if (id === 'x1')
+          return JSON.parse(JSON.stringify(sceneX))
+        if (id === 'w1')
+          return JSON.parse(JSON.stringify(sceneW))
+        return null
+      })
+
+      const created: { el: HTMLAudioElement, pause: ReturnType<typeof vi.fn> }[] = []
+      const OriginalAudio = globalThis.Audio
+      vi.stubGlobal('Audio', new Proxy(OriginalAudio, {
+        construct(target, args) {
+          const instance = Reflect.construct(target, args) as HTMLAudioElement
+          const pauseSpy = vi.fn()
+          Object.defineProperty(instance, 'pause', { configurable: true, value: pauseSpy })
+          created.push({ el: instance, pause: pauseSpy })
+          return instance
+        },
+      }))
+
+      const { playAmbience } = await import('@/api/player')
+      const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+
+      // x1's amb-1 starts playing locally (not joined, no Discord involved).
+      await wrapper.find('.btn-play-local').trigger('click')
+      await flushPromises()
+      const ambienceEntry = created.find(c => c.el.src.includes('ambience/amb-1'))
+      expect(ambienceEntry).toBeTruthy()
+
+      // Now join voice and open a different Scene that also has amb-1, but
+      // disabled — individually enabling it there must not leave the local
+      // preview's element orphaned, playing underneath the backend stream.
+      await testRouter.push('/scenes/w1')
+      await flushPromises()
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+
+      await wrapper.find('input[type="checkbox"]').setValue(true)
+      await flushPromises()
+
+      expect(playAmbience).toHaveBeenCalledWith('g1', 'amb-1', expect.anything())
+      expect(ambienceEntry!.pause).toHaveBeenCalled()
     })
   })
 })

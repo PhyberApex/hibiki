@@ -17,6 +17,8 @@ export interface PlayerStateItem {
   lastUpdated?: string
   /** Music and effects volume 0–100; only present when live. */
   volume?: { music: number, effects: number }
+  /** soundIds of backend-decoded Ambience sounds currently active; only present when live. */
+  ambience?: string[]
 }
 
 export interface GuildDirectoryEntry {
@@ -99,6 +101,31 @@ export function stopMusic(guildId: string, options: { fadeOutMs?: number } = {})
 export function setMusicVolume(guildId: string, volume: number, options: { rampMs?: number } = {}): Promise<void> {
   requireElectron()
   return apiCall<void>('player', 'setMusicVolume', [guildId, volume, options])
+}
+
+export interface PlayAmbienceOptions {
+  volume: number
+  repeatMin: number
+  repeatMax: number
+  fadeInMs?: number
+}
+
+/** Plays a Sound Library Ambience sound decoded straight into the mixer (see ADR-0003). Several can be active at once per guild, keyed by soundId. */
+export function playAmbience(guildId: string, soundId: string, options: PlayAmbienceOptions): Promise<void> {
+  requireElectron()
+  return apiCall<void>('player', 'playAmbience', [guildId, soundId, options])
+}
+
+/** Stops a backend-decoded Ambience sound, if playing (distinct from the chunked-IPC `audio-stream` API's `stopEffectStream`). */
+export function stopAmbience(guildId: string, soundId: string, options: { fadeOutMs?: number } = {}): Promise<void> {
+  requireElectron()
+  return apiCall<void>('player', 'stopAmbience', [guildId, soundId, options])
+}
+
+/** Changes a backend-decoded Ambience sound's volume, if playing. */
+export function setAmbienceVolume(guildId: string, soundId: string, volume: number, options: { rampMs?: number } = {}): Promise<void> {
+  requireElectron()
+  return apiCall<void>('player', 'setAmbienceVolume', [guildId, soundId, volume, options])
 }
 
 export function reconnectBot(): Promise<void> {

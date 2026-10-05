@@ -5,10 +5,13 @@ import {
   fetchPlayerState,
   joinChannel,
   leaveGuild,
+  playAmbience,
   playMusic,
   reconnectBot,
+  setAmbienceVolume,
   setMusicVolume,
   setVolume,
+  stopAmbience,
   stopMusic,
   stopPlayback,
 } from './player'
@@ -113,6 +116,36 @@ describe('player API', () => {
       domain: 'player',
       method: 'setMusicVolume',
       args: ['g1', 40, { rampMs: 500 }],
+    })
+  })
+
+  it('playAmbience uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await playAmbience('g1', 'rain', { volume: 70, repeatMin: 5, repeatMax: 15, fadeInMs: 3000 })
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'player',
+      method: 'playAmbience',
+      args: ['g1', 'rain', { volume: 70, repeatMin: 5, repeatMax: 15, fadeInMs: 3000 }],
+    })
+  })
+
+  it('stopAmbience uses apiCall, defaulting options to {}', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await stopAmbience('g1', 'rain')
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'player',
+      method: 'stopAmbience',
+      args: ['g1', 'rain', {}],
+    })
+  })
+
+  it('setAmbienceVolume uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await setAmbienceVolume('g1', 'rain', 40, { rampMs: 500 })
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'player',
+      method: 'setAmbienceVolume',
+      args: ['g1', 'rain', 40, { rampMs: 500 }],
     })
   })
 
