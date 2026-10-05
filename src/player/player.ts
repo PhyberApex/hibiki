@@ -1,6 +1,6 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Readable } from 'node:stream'
-import type { PlayAmbienceOptions, PlayMusicOptions } from '../audio/guild-audio.manager'
+import type { PlayAmbienceOptions, PlayEffectOptions, PlayMusicOptions } from '../audio/guild-audio.manager'
 import type { DiscordClient } from '../discord/discord-client'
 import type { SoundLibrary } from '../sound/sound-library'
 import type { SoundCategory } from '../sound/sound.types'
@@ -8,6 +8,7 @@ import type { GuildPlaybackState } from './player.types'
 import { EventEmitter } from 'node:events'
 import { getVoiceConnection } from '@discordjs/voice'
 import { createPcmStream } from '../audio/decoders'
+import { createEffectPcmCache } from '../audio/decoders/effect-pcm-cache'
 import { GuildAudioManager } from '../audio/guild-audio.manager'
 import { createLogger } from '../logger'
 
@@ -23,6 +24,8 @@ export interface TrackMetadata {
 export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
   const managers = new Map<string, GuildAudioManager>()
   const stateEvents = new EventEmitter()
+  /** Shared across every guild — the same Sound Library Effect file decodes identically regardless of which guild triggers it (see ADR-0003). */
+  const effectPcmCache = createEffectPcmCache()
 
   function getOrCreateManager(guildId: string): GuildAudioManager {
     if (!managers.has(guildId)) {
@@ -71,6 +74,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
       return
     manager.stopAllMusic()
     manager.stopAllAmbience()
+    manager.stopAllEffects()
   }
 
   function startStream(
@@ -151,6 +155,30 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     manager.setAmbienceVolume(soundId, volume, options)
   }
 
+  /**
+   * Plays a Sound Library Effect decoded straight into the mixer (see
+   * ADR-0003); every trigger is its own instance, and the same Effect can
+   * layer. Recently used Effects are served from an in-memory PCM cache
+   * (`effectPcmCache`) to keep trigger latency low despite a fresh decoder
+   * instance otherwise being spun up on every single trigger — `getFilePath`
+   * (just a glob + path join) rather than `getFile` (which also stats the
+   * file and reads the tags store) for the same reason: every trigger would
+   * otherwise pay that I/O even on a PCM cache hit, undercutting the cache's
+   * whole point, and nothing but the path is needed here.
+   */
+  async function playEffect(guildId: string, soundId: string, options: PlayEffectOptions): Promise<void> {
+    const manager = managers.get(guildId)
+    if (!manager || !manager.connected)
+      throw new Error('Not connected to a voice channel. Join first.')
+    const path = await sounds.getFilePath('effects', soundId)
+    await manager.playEffect(() => effectPcmCache.get(path, () => createPcmStream(path)), options)
+  }
+
+  /** Ends every backend-decoded Effect instance for this guild (distinct from the chunked-IPC `audio:stopEffectStream` path). */
+  function stopEffects(guildId: string): void {
+    managers.get(guildId)?.stopAllEffects()
+  }
+
   function getLiveState(): GuildPlaybackState[] {
     const timestamp = new Date().toISOString()
     return Array.from(managers.entries()).map(([guildId, manager]) => ({
@@ -220,6 +248,8 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     playAmbience,
     stopAmbience,
     setAmbienceVolume,
+    playEffect,
+    stopEffects,
     getState,
     getVolume,
     setVolume,

@@ -128,6 +128,22 @@ export function setAmbienceVolume(guildId: string, soundId: string, volume: numb
   return apiCall<void>('player', 'setAmbienceVolume', [guildId, soundId, volume, options])
 }
 
+export interface PlayEffectOptions {
+  volume: number
+}
+
+/** Plays a Sound Library Effect decoded straight into the mixer (see ADR-0003). Every trigger is its own instance; the same Effect can layer. */
+export function playEffect(guildId: string, soundId: string, options: PlayEffectOptions): Promise<void> {
+  requireElectron()
+  return apiCall<void>('player', 'playEffect', [guildId, soundId, options])
+}
+
+/** Ends every backend-decoded Effect instance for this guild (distinct from the chunked-IPC `audio-stream` API's `stopEffectStream`). */
+export function stopEffects(guildId: string): Promise<void> {
+  requireElectron()
+  return apiCall<void>('player', 'stopEffects', [guildId])
+}
+
 export function reconnectBot(): Promise<void> {
   requireElectron()
   return apiCall<void>('player', 'reconnect', [])

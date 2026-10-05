@@ -16,10 +16,12 @@ import {
 import { fetchSceneFadeLength, fetchVisionConfig, openFileDialog, saveFileDialog } from '@/api/config'
 import {
   playAmbience as playBackendAmbience,
+  playEffect as playBackendEffect,
   playMusic as playBackendMusic,
   setAmbienceVolume as setBackendAmbienceVolume,
   setMusicVolume as setBackendMusicVolume,
   stopAmbience as stopBackendAmbience,
+  stopEffects as stopBackendEffects,
   stopMusic as stopBackendMusic,
 } from '@/api/player'
 import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
@@ -66,7 +68,7 @@ const captureSessions = new Map<string, CaptureSession>()
 // format, never on when/how it's played, so this is safe to cache for the
 // id's whole lifetime — avoids an IPC round-trip on every single Play click
 // and every per-track Scene Crossfade switch.
-function createDecodeCache(category: 'music' | 'ambience'): (soundId: string) => Promise<boolean> {
+function createDecodeCache(category: 'music' | 'ambience' | 'effects'): (soundId: string) => Promise<boolean> {
   const cache = new Map<string, Promise<boolean>>()
   return (soundId: string) => {
     let cached = cache.get(soundId)
@@ -79,6 +81,7 @@ function createDecodeCache(category: 'music' | 'ambience'): (soundId: string) =>
 }
 const canDecodeMusicCached = createDecodeCache('music')
 const canDecodeAmbienceCached = createDecodeCache('ambience')
+const canDecodeEffectsCached = createDecodeCache('effects')
 const ambienceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const playingAmbienceIds = ref(new Set<string>())
 // Which path started each currently-audible ambience id / music channel —
@@ -236,9 +239,12 @@ function enforceEffectInstanceCap() {
   }
 }
 
+/** Stops every Effect instance for the current guild, regardless of path: renderer-tracked (local preview + chunked-IPC fallback) instances here, and any backend-decoded ones (ADR-0003, which keeps its own cap independently of `EFFECT_INSTANCE_CAP` above) via the backend. */
 function stopAllEffectInstances() {
   for (const id of [...effectInstances.keys()])
     cleanupEffectInstance(id)
+  if (guildId.value)
+    stopBackendEffects(guildId.value).catch(() => {})
 }
 
 const hasSounds = computed(() =>
@@ -809,10 +815,38 @@ function playEffectLocal(item: SceneItem) {
   })
 }
 
+// Backend-decoded path (see ADR-0003): the file is decoded straight into
+// the mixer in the main process, so there's no audio element/chunked IPC
+// here. Every trigger is its own instance (never replacing another), with
+// its own cap of 8 kept independently by the backend — overlap parity with
+// the renderer's own Effect cap (#408), just enforced on the other side.
+async function playEffectBackend(item: SceneItem): Promise<void> {
+  if (!guildId.value)
+    return
+  await playBackendEffect(guildId.value, item.soundId, {
+    volume: computeVolume(item.volume ?? 80) * 100,
+  })
+}
+
 async function playEffect(item: SceneItem) {
   if (!guildId.value || !isJoined.value)
     return
   effectFlash.trigger(item.soundId)
+
+  const path = selectBackendPlaybackPath({
+    joined: true,
+    canDecodeBackend: await canDecodeEffectsCached(item.soundId),
+  })
+  if (path === 'backend') {
+    try {
+      await playEffectBackend(item)
+    }
+    catch (e) {
+      console.error('[scene] playEffectBackend failed:', e)
+    }
+    return
+  }
+
   const { id, el } = registerEffectInstance(true)
   const streamId = id
   try {

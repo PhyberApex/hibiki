@@ -915,4 +915,201 @@ describe('guildAudioManager', () => {
       })
     })
   })
+
+  describe('playEffect (backend-decoded instance)', () => {
+    it('decodes via the factory and plays it through the engine at the given volume', async () => {
+      const stream = createFakeStream()
+      const factory = jest.fn().mockReturnValue(stream)
+
+      await manager.playEffect(factory, { volume: 90 })
+
+      expect(factory).toHaveBeenCalledTimes(1)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 90)
+    })
+
+    it('layers two different instances without stopping either', async () => {
+      await manager.playEffect(jest.fn().mockReturnValue(createFakeStream()), { volume: 90 })
+      await manager.playEffect(jest.fn().mockReturnValue(createFakeStream()), { volume: 90 })
+
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(2)
+      const [idA, idB] = getEngineMock().playMusicFromStream.mock.calls.map(call => call[1])
+      expect(idA).not.toBe(idB)
+      expect(getEngineMock().stopMusic).not.toHaveBeenCalled()
+    })
+
+    it('layers two instances of the same Effect, each its own mixer input', async () => {
+      const streamA = createFakeStream()
+      const streamB = createFakeStream()
+      const factory = jest.fn().mockReturnValueOnce(streamA).mockReturnValueOnce(streamB)
+
+      await manager.playEffect(factory, { volume: 90 })
+      await manager.playEffect(factory, { volume: 90 })
+
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(1, streamA, expect.any(String), 90)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, streamB, expect.any(String), 90)
+      expect(getEngineMock().stopMusic).not.toHaveBeenCalled()
+    })
+
+    it('stops the oldest instance once a ninth is triggered', async () => {
+      const ids: string[] = []
+      for (let i = 0; i < 8; i++) {
+        await manager.playEffect(jest.fn().mockReturnValue(createFakeStream()), { volume: 90 })
+        ids.push(getEngineMock().playMusicFromStream.mock.calls[i][1])
+      }
+      expect(getEngineMock().stopMusic).not.toHaveBeenCalled()
+
+      await manager.playEffect(jest.fn().mockReturnValue(createFakeStream()), { volume: 90 })
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledTimes(1)
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(ids[0])
+    })
+
+    it('evicts in trigger order even when a later trigger\'s decode resolves first', async () => {
+      // Fill the cap with 7, leaving room for exactly one more live slot.
+      const ids: string[] = []
+      for (let i = 0; i < 7; i++) {
+        await manager.playEffect(jest.fn().mockReturnValue(createFakeStream()), { volume: 90 })
+        ids.push(getEngineMock().playMusicFromStream.mock.calls[i][1])
+      }
+
+      // Trigger #8 (slow decode) and #9 (fast decode) close together — #9's
+      // decode resolves first, but #8 was triggered first and must still be
+      // the one evicted when #9's slot-reservation runs, not whichever
+      // happened to finish decoding first.
+      const slow = createDeferredFactory()
+      const eighth = manager.playEffect(slow.factory, { volume: 90 })
+      const ninthStream = createFakeStream()
+      await manager.playEffect(jest.fn().mockReturnValue(ninthStream), { volume: 90 })
+
+      // The 9th trigger's reservation evicted the 1st (oldest by trigger
+      // order), not the still-decoding 8th.
+      expect(getEngineMock().stopMusic).toHaveBeenCalledTimes(1)
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(ids[0])
+
+      slow.resolve(createFakeStream())
+      await eighth
+
+      // The 8th's decode resolving afterward must not trigger a second,
+      // redundant eviction — it already reserved its slot up front.
+      expect(getEngineMock().stopMusic).toHaveBeenCalledTimes(1)
+    })
+
+    it('an instance evicted by the cap while still decoding never reaches the engine once its decode resolves', async () => {
+      // Trigger #1 (slow decode) is still mid-decode while #2-#8 (fast)
+      // fill the remaining cap slots, so it's still the oldest entry when
+      // #9 arrives and evicts it.
+      const oldest = createDeferredFactory()
+      const firstTrigger = manager.playEffect(oldest.factory, { volume: 90 })
+      for (let i = 0; i < 7; i++)
+        await manager.playEffect(jest.fn().mockReturnValue(createFakeStream()), { volume: 90 })
+
+      // The 9th trigger's cap enforcement evicts #1, which is still mid-decode.
+      await manager.playEffect(jest.fn().mockReturnValue(createFakeStream()), { volume: 90 })
+      const playCallsBeforeResolve = getEngineMock().playMusicFromStream.mock.calls.length
+
+      oldest.resolve(createFakeStream())
+      await firstTrigger
+
+      // The decode resolving after eviction must not register a mixer
+      // input for it — it was already stopped before it ever started.
+      expect(getEngineMock().playMusicFromStream.mock.calls.length).toBe(playCallsBeforeResolve)
+    })
+
+    it('an instance stopped in bulk (stopAllEffects) while still decoding never reaches the engine once its decode resolves', async () => {
+      const deferred = createDeferredFactory()
+      const playPromise = manager.playEffect(deferred.factory, { volume: 90 })
+
+      manager.stopAllEffects()
+
+      deferred.resolve(createFakeStream())
+      await playPromise
+
+      expect(getEngineMock().playMusicFromStream).not.toHaveBeenCalled()
+    })
+
+    it('an instance that already ended naturally does not count toward the cap', async () => {
+      const endedStream = createFakeStream()
+      await manager.playEffect(jest.fn().mockReturnValue(endedStream), { volume: 90 })
+      endedStream.emit('end')
+
+      for (let i = 0; i < 7; i++)
+        await manager.playEffect(jest.fn().mockReturnValue(createFakeStream()), { volume: 90 })
+
+      // That's 8 *live* instances (the first already ended) — still under
+      // the cap, so nothing should have been evicted.
+      expect(getEngineMock().stopMusic).not.toHaveBeenCalled()
+    })
+
+    it('rejects, leaving every other instance untouched, if the factory fails', async () => {
+      const stream = createFakeStream()
+      await manager.playEffect(jest.fn().mockReturnValue(stream), { volume: 90 })
+
+      await expect(
+        manager.playEffect(jest.fn().mockRejectedValue(new Error('decode failed')), { volume: 90 }),
+      ).rejects.toThrow('decode failed')
+
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+      expect(getEngineMock().stopMusic).not.toHaveBeenCalled()
+    })
+
+    it('stopAllEffects ends every active instance, without touching Music or Ambience', async () => {
+      const streamA = createFakeStream()
+      const streamB = createFakeStream()
+      await manager.playEffect(jest.fn().mockReturnValue(streamA), { volume: 90 })
+      await manager.playEffect(jest.fn().mockReturnValue(streamB), { volume: 90 })
+      const [idA, idB] = getEngineMock().playMusicFromStream.mock.calls.map(call => call[1])
+
+      manager.stopAllEffects()
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(idA)
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(idB)
+      expect(getEngineMock().stopAllMusic).not.toHaveBeenCalled()
+    })
+
+    it('a stopped instance is dropped from bookkeeping, so a later stopAllEffects does not touch it again', async () => {
+      const stream = createFakeStream()
+      await manager.playEffect(jest.fn().mockReturnValue(stream), { volume: 90 })
+      const id = getEngineMock().playMusicFromStream.mock.calls[0][1]
+      stream.emit('end')
+
+      manager.stopAllEffects()
+
+      expect(getEngineMock().stopMusic).not.toHaveBeenCalledWith(id)
+    })
+
+    it('destroy() ends every Effect instance via the engine', async () => {
+      const stream = createFakeStream()
+      await manager.playEffect(jest.fn().mockReturnValue(stream), { volume: 90 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      manager.destroy()
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
+    })
+
+    it('disconnect() ends every Effect instance via the engine', async () => {
+      ;(voice.getVoiceConnection as jest.Mock).mockReturnValue(undefined)
+      const stream = createFakeStream()
+      await manager.playEffect(jest.fn().mockReturnValue(stream), { volume: 90 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      manager.disconnect()
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
+    })
+
+    it('a lost connection teardown ends every Effect instance', async () => {
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      await manager.connect(fakeChannel)
+      const stream = createFakeStream()
+      await manager.playEffect(jest.fn().mockReturnValue(stream), { volume: 90 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      connection.emit('stateChange', { status: voice.VoiceConnectionStatus.Ready }, { status: voice.VoiceConnectionStatus.Destroyed })
+      await flushAsync()
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
+    })
+  })
 })
