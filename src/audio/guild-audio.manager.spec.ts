@@ -994,6 +994,39 @@ describe('guildAudioManager', () => {
       expect(getEngineMock().stopMusic).toHaveBeenCalledTimes(1)
     })
 
+    it('an instance evicted by the cap while still decoding never reaches the engine once its decode resolves', async () => {
+      // Trigger #1 (slow decode) is still mid-decode while #2-#8 (fast)
+      // fill the remaining cap slots, so it's still the oldest entry when
+      // #9 arrives and evicts it.
+      const oldest = createDeferredFactory()
+      const firstTrigger = manager.playEffect(oldest.factory, { volume: 90 })
+      for (let i = 0; i < 7; i++)
+        await manager.playEffect(jest.fn().mockReturnValue(createFakeStream()), { volume: 90 })
+
+      // The 9th trigger's cap enforcement evicts #1, which is still mid-decode.
+      await manager.playEffect(jest.fn().mockReturnValue(createFakeStream()), { volume: 90 })
+      const playCallsBeforeResolve = getEngineMock().playMusicFromStream.mock.calls.length
+
+      oldest.resolve(createFakeStream())
+      await firstTrigger
+
+      // The decode resolving after eviction must not register a mixer
+      // input for it — it was already stopped before it ever started.
+      expect(getEngineMock().playMusicFromStream.mock.calls.length).toBe(playCallsBeforeResolve)
+    })
+
+    it('an instance stopped in bulk (stopAllEffects) while still decoding never reaches the engine once its decode resolves', async () => {
+      const deferred = createDeferredFactory()
+      const playPromise = manager.playEffect(deferred.factory, { volume: 90 })
+
+      manager.stopAllEffects()
+
+      deferred.resolve(createFakeStream())
+      await playPromise
+
+      expect(getEngineMock().playMusicFromStream).not.toHaveBeenCalled()
+    })
+
     it('an instance that already ended naturally does not count toward the cap', async () => {
       const endedStream = createFakeStream()
       await manager.playEffect(jest.fn().mockReturnValue(endedStream), { volume: 90 })

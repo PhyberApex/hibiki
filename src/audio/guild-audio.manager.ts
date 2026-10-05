@@ -597,6 +597,18 @@ export class GuildAudioManager extends EventEmitter {
       throw err
     }
 
+    if (!this.effectStreamIds.has(streamId)) {
+      // This slot was evicted by a later trigger's cap enforcement, or
+      // cleared in bulk by stopAllEffects (Scene stop / leave / disconnect),
+      // while this decode was still in flight — never register with the
+      // engine. Without this check, a slow decode would still start
+      // playing after having already been "stopped", since nothing else
+      // here ever touches the engine for a slot that was reserved but
+      // never decoded.
+      stream.destroy?.()
+      return
+    }
+
     this.engine.playMusicFromStream(stream, streamId, options.volume)
     const onEnded = () => this.effectStreamIds.delete(streamId)
     stream.once('end', onEnded)
