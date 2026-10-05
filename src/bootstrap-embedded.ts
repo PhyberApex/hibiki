@@ -68,6 +68,9 @@ export interface EmbeddedApi {
     playMusic: (guildId: string, soundId: string, options: { volume: number, loop?: boolean, fadeInMs?: number }) => Promise<void>
     stopMusic: (guildId: string, options?: { fadeOutMs?: number }) => void
     setMusicVolume: (guildId: string, volume: number, options?: { rampMs?: number }) => void
+    playAmbience: (guildId: string, soundId: string, options: { volume: number, repeatMin: number, repeatMax: number, fadeInMs?: number }) => Promise<void>
+    stopAmbience: (guildId: string, soundId: string, options?: { fadeOutMs?: number }) => void
+    setAmbienceVolume: (guildId: string, soundId: string, volume: number, options?: { rampMs?: number }) => void
     reconnect: () => Promise<void>
   }
   config: {
@@ -197,6 +200,9 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
       playMusic: (guildId, soundId, options) => player.playMusic(guildId, soundId, options),
       stopMusic: (guildId, options) => player.stopMusic(guildId, options),
       setMusicVolume: (guildId, volume, options) => player.setMusicVolume(guildId, volume, options),
+      playAmbience: (guildId, soundId, options) => player.playAmbience(guildId, soundId, options),
+      stopAmbience: (guildId, soundId, options) => player.stopAmbience(guildId, soundId, options),
+      setAmbienceVolume: (guildId, soundId, volume, options) => player.setAmbienceVolume(guildId, soundId, volume, options),
       reconnect: () => discord.reconnect(),
     },
     config: {

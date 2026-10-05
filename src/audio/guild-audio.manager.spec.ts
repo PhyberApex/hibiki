@@ -569,4 +569,350 @@ describe('guildAudioManager', () => {
       })
     })
   })
+
+  describe('playAmbience (backend-decoded sound)', () => {
+    afterEach(() => {
+      jest.useRealTimers()
+    })
+
+    it('decodes via the factory and reports the soundId through activeAmbience', async () => {
+      const stream = createFakeStream()
+      const factory = jest.fn().mockReturnValue(stream)
+
+      await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+
+      expect(factory).toHaveBeenCalledTimes(1)
+      const engine = getEngineMock()
+      expect(engine.playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 70)
+      expect(manager.activeAmbience).toEqual(['rain'])
+    })
+
+    it('several Ambience sounds can be active at once, independently', async () => {
+      await manager.playAmbience(jest.fn().mockReturnValue(createFakeStream()), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      await manager.playAmbience(jest.fn().mockReturnValue(createFakeStream()), 'wind', { volume: 50, repeatMin: 0, repeatMax: 0 })
+
+      expect(manager.activeAmbience.sort()).toEqual(['rain', 'wind'])
+
+      manager.stopAmbience('rain')
+
+      expect(manager.activeAmbience).toEqual(['wind'])
+    })
+
+    it('both repeat bounds 0 loops seamlessly, restarting the decoder stream at end of file under the same stream id', async () => {
+      const firstStream = createFakeStream()
+      const secondStream = createFakeStream()
+      const factory = jest.fn().mockReturnValueOnce(firstStream).mockReturnValueOnce(secondStream)
+
+      await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      firstStream.emit('end')
+      await flushAsync()
+
+      expect(factory).toHaveBeenCalledTimes(2)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, streamId, 70)
+      expect(manager.activeAmbience).toEqual(['rain'])
+    })
+
+    it('non-zero repeat bounds wait a random delay in range before restarting, using fake timers', async () => {
+      jest.useFakeTimers()
+      const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.5)
+      const firstStream = createFakeStream()
+      const secondStream = createFakeStream()
+      const factory = jest.fn().mockReturnValueOnce(firstStream).mockReturnValueOnce(secondStream)
+
+      await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 10, repeatMax: 20 })
+
+      firstStream.emit('end')
+      // Not restarted immediately — it's waiting out the repeat gap.
+      expect(factory).toHaveBeenCalledTimes(1)
+
+      // Midpoint of [10s, 20s] with Math.random() stubbed to 0.5 is 15s.
+      // advanceTimersByTimeAsync (not the sync variant + a manual flush)
+      // because setImmediate is itself faked under modern fake timers, so a
+      // flushAsync() built on it would never settle.
+      await jest.advanceTimersByTimeAsync(14_999)
+      expect(factory).toHaveBeenCalledTimes(1)
+      await jest.advanceTimersByTimeAsync(1)
+
+      expect(factory).toHaveBeenCalledTimes(2)
+      expect(manager.activeAmbience).toEqual(['rain'])
+      randomSpy.mockRestore()
+    })
+
+    it('stop clears a pending interval-repeat restart so it never fires', async () => {
+      jest.useFakeTimers()
+      const firstStream = createFakeStream()
+      const factory = jest.fn().mockReturnValueOnce(firstStream).mockReturnValueOnce(createFakeStream())
+
+      await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 5, repeatMax: 5 })
+      firstStream.emit('end')
+
+      manager.stopAmbience('rain')
+      await jest.advanceTimersByTimeAsync(60_000)
+
+      expect(factory).toHaveBeenCalledTimes(1)
+      expect(manager.activeAmbience).toEqual([])
+    })
+
+    it('stop ends the sound immediately by default', async () => {
+      const stream = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(stream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      manager.stopAmbience('rain')
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
+      expect(getEngineMock().rampStreamVolume).not.toHaveBeenCalled()
+      expect(manager.activeAmbience).toEqual([])
+    })
+
+    it('stop with fadeOutMs ramps to 0 before stopping', async () => {
+      const stream = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(stream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      manager.stopAmbience('rain', { fadeOutMs: 500 })
+
+      expect(manager.activeAmbience).toEqual([])
+      expect(getEngineMock().rampStreamVolume).toHaveBeenCalledWith(streamId, 0, 500, expect.any(Function))
+      expect(getEngineMock().stopMusic).not.toHaveBeenCalled()
+
+      getEngineMock().rampStreamVolume.mock.calls[0][3]()
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
+    })
+
+    it('stopAmbience is a no-op for a soundId that is not playing', () => {
+      expect(() => manager.stopAmbience('rain')).not.toThrow()
+      expect(getEngineMock().stopMusic).not.toHaveBeenCalled()
+    })
+
+    it('fadeInMs starts the sound silent and ramps up to its target volume', async () => {
+      const stream = createFakeStream()
+
+      await manager.playAmbience(jest.fn().mockReturnValue(stream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0, fadeInMs: 400 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, streamId, 0)
+      expect(getEngineMock().rampStreamVolume).toHaveBeenCalledWith(streamId, 70, 400)
+    })
+
+    it('replacing an already-playing sound with fadeInMs keeps the old one audible and fading out, instead of cutting it', async () => {
+      const streamA = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(streamA), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      const idA = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      const streamB = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(streamB), 'rain', { volume: 40, repeatMin: 0, repeatMax: 0, fadeInMs: 300 })
+      const idB = getEngineMock().playMusicFromStream.mock.calls[1][1]
+
+      // Incoming sound starts silent and ramps up to its target volume.
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, streamB, idB, 0)
+      expect(getEngineMock().rampStreamVolume).toHaveBeenCalledWith(idB, 40, 300)
+      // Outgoing sound ramps to silence over the same duration, then stops.
+      expect(getEngineMock().rampStreamVolume).toHaveBeenCalledWith(idA, 0, 300, expect.any(Function))
+      expect(getEngineMock().stopMusic).not.toHaveBeenCalled()
+
+      getEngineMock().rampStreamVolume.mock.calls.find(call => call[0] === idA)![3]()
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(idA)
+      expect(manager.activeAmbience).toEqual(['rain'])
+    })
+
+    it('replacing an already-playing sound without fadeInMs stops the old one immediately', async () => {
+      const streamA = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(streamA), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      const idA = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      const streamB = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(streamB), 'rain', { volume: 40, repeatMin: 0, repeatMax: 0 })
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(idA)
+      expect(getEngineMock().rampStreamVolume).not.toHaveBeenCalled()
+    })
+
+    it('setAmbienceVolume sets immediately without a rampMs', async () => {
+      const stream = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(stream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      manager.setAmbienceVolume('rain', 40)
+
+      expect(getEngineMock().setStreamVolume).toHaveBeenCalledWith(streamId, 40)
+      expect(getEngineMock().rampStreamVolume).not.toHaveBeenCalled()
+    })
+
+    it('setAmbienceVolume ramps when given a rampMs (the Scene Crossfade shared-sound rule)', async () => {
+      const stream = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(stream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      manager.setAmbienceVolume('rain', 40, { rampMs: 300 })
+
+      expect(getEngineMock().rampStreamVolume).toHaveBeenCalledWith(streamId, 40, 300)
+    })
+
+    it('setAmbienceVolume updates the stored target even mid-repeat-gap, so the next restart uses it', async () => {
+      jest.useFakeTimers()
+      const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0)
+      const firstStream = createFakeStream()
+      const secondStream = createFakeStream()
+      const factory = jest.fn().mockReturnValueOnce(firstStream).mockReturnValueOnce(secondStream)
+
+      await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 5, repeatMax: 5 })
+      firstStream.emit('end')
+
+      // No stream is registered with the engine during the gap, so this is a
+      // bookkeeping-only update — nothing to ramp yet.
+      manager.setAmbienceVolume('rain', 20)
+      getEngineMock().setStreamVolume.mockClear()
+
+      await jest.advanceTimersByTimeAsync(5_000)
+
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, expect.any(String), 20)
+      randomSpy.mockRestore()
+    })
+
+    it('setAmbienceVolume is a no-op for a soundId that is not playing', () => {
+      expect(() => manager.setAmbienceVolume('rain', 40)).not.toThrow()
+      expect(getEngineMock().setStreamVolume).not.toHaveBeenCalled()
+    })
+
+    it('leaves the current sound untouched if a replacement playAmbience call fails to start', async () => {
+      const streamA = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(streamA), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      const idA = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      await expect(
+        manager.playAmbience(jest.fn().mockRejectedValue(new Error('decode failed')), 'rain', { volume: 40, repeatMin: 0, repeatMax: 0 }),
+      ).rejects.toThrow('decode failed')
+
+      // Still reported as active, and the original engine stream was never
+      // touched by the failed replacement — only a confirmed new start may
+      // stop the outgoing one.
+      expect(manager.activeAmbience).toEqual(['rain'])
+      expect(getEngineMock().stopMusic).not.toHaveBeenCalledWith(idA)
+    })
+
+    it('stopAllAmbience ends every Ambience sound and clears pending repeat timers, without touching Music', async () => {
+      jest.useFakeTimers()
+      const rainStream = createFakeStream()
+      const windStream = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(rainStream), 'rain', { volume: 70, repeatMin: 5, repeatMax: 5 })
+      await manager.playAmbience(jest.fn().mockReturnValue(windStream), 'wind', { volume: 50, repeatMin: 0, repeatMax: 0 })
+      rainStream.emit('end') // now waiting out a pending repeat timer
+
+      manager.stopAllAmbience()
+      await jest.advanceTimersByTimeAsync(60_000)
+
+      expect(manager.activeAmbience).toEqual([])
+      // Only the two ambience streams were stopped — stopAllMusic (the
+      // separate Music teardown) was never invoked.
+      expect(getEngineMock().stopAllMusic).not.toHaveBeenCalled()
+    })
+
+    it('destroy() ends every Ambience sound via the engine', async () => {
+      const stream = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(stream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      manager.destroy()
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
+      expect(manager.activeAmbience).toEqual([])
+    })
+
+    it('a lost connection teardown ends every Ambience sound', async () => {
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      await manager.connect(fakeChannel)
+      const stream = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(stream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      connection.emit('stateChange', { status: voice.VoiceConnectionStatus.Ready }, { status: voice.VoiceConnectionStatus.Destroyed })
+      await flushAsync()
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
+      expect(manager.activeAmbience).toEqual([])
+    })
+
+    describe('races between concurrent calls', () => {
+      it('a playAmbience call superseded by a second one for the same soundId before its decode resolves never commits', async () => {
+        const first = createDeferredFactory()
+        const firstCall = manager.playAmbience(first.factory, 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+
+        const streamB = createFakeStream()
+        await manager.playAmbience(jest.fn().mockReturnValue(streamB), 'rain', { volume: 40, repeatMin: 0, repeatMax: 0 })
+        const idB = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+        const staleStream = createFakeStream()
+        first.resolve(staleStream)
+        await firstCall
+        await flushAsync()
+
+        expect(manager.activeAmbience).toEqual(['rain'])
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(streamB, idB, 40)
+      })
+
+      it('stopAmbience called while a playAmbience is mid-decode prevents that sound from resurrecting playback', async () => {
+        const deferred = createDeferredFactory()
+        const playCall = manager.playAmbience(deferred.factory, 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+
+        manager.stopAmbience('rain')
+
+        const stream = createFakeStream()
+        deferred.resolve(stream)
+        await playCall
+
+        expect(manager.activeAmbience).toEqual([])
+        expect(getEngineMock().playMusicFromStream).not.toHaveBeenCalled()
+      })
+
+      it('stopAmbience called while a loop restart is mid-decode prevents that restart from resurrecting playback', async () => {
+        const firstStream = createFakeStream()
+        const restart = createDeferredFactory()
+        const factory = jest.fn()
+          .mockReturnValueOnce(firstStream)
+          .mockImplementationOnce(() => restart.factory())
+
+        await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+        expect(manager.activeAmbience).toEqual(['rain'])
+
+        firstStream.emit('end')
+
+        manager.stopAmbience('rain')
+        expect(manager.activeAmbience).toEqual([])
+
+        restart.resolve()
+        await flushAsync()
+
+        expect(manager.activeAmbience).toEqual([])
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+      })
+
+      it('stopAmbience called while an interval-repeat restart is mid-decode prevents that restart from resurrecting playback', async () => {
+        jest.useFakeTimers()
+        const firstStream = createFakeStream()
+        const restart = createDeferredFactory()
+        const factory = jest.fn()
+          .mockReturnValueOnce(firstStream)
+          .mockImplementationOnce(() => restart.factory())
+
+        await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 1, repeatMax: 1 })
+        firstStream.emit('end')
+        await jest.advanceTimersByTimeAsync(1_000)
+        expect(factory).toHaveBeenCalledTimes(2)
+
+        manager.stopAmbience('rain')
+        expect(manager.activeAmbience).toEqual([])
+
+        restart.resolve()
+        await jest.advanceTimersByTimeAsync(0)
+
+        expect(manager.activeAmbience).toEqual([])
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+      })
+    })
+  })
 })

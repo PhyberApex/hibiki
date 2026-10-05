@@ -1,6 +1,6 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Readable } from 'node:stream'
-import type { PlayMusicOptions } from '../audio/guild-audio.manager'
+import type { PlayAmbienceOptions, PlayMusicOptions } from '../audio/guild-audio.manager'
 import type { DiscordClient } from '../discord/discord-client'
 import type { SoundLibrary } from '../sound/sound-library'
 import type { SoundCategory } from '../sound/sound.types'
@@ -32,6 +32,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
         stateEvents.emit('stateChanged')
       })
       manager.on('trackChanged', () => stateEvents.emit('stateChanged'))
+      manager.on('ambienceChanged', () => stateEvents.emit('stateChanged'))
       managers.set(guildId, manager)
     }
     return managers.get(guildId)!
@@ -69,6 +70,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     if (!manager)
       return
     manager.stopAllMusic()
+    manager.stopAllAmbience()
   }
 
   function startStream(
@@ -127,6 +129,28 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     manager.setMusicVolume(volume, options)
   }
 
+  /** Plays a Sound Library Ambience sound decoded straight into the mixer (see ADR-0003). Several can be active at once per guild, keyed by soundId. */
+  async function playAmbience(guildId: string, soundId: string, options: PlayAmbienceOptions): Promise<void> {
+    const manager = managers.get(guildId)
+    if (!manager || !manager.connected)
+      throw new Error('Not connected to a voice channel. Join first.')
+    const file = await sounds.getFile('ambience', soundId)
+    await manager.playAmbience(() => createPcmStream(file.path), soundId, options)
+  }
+
+  /** Stops a backend-decoded Ambience sound (started via `playAmbience` above), if playing. */
+  function stopAmbience(guildId: string, soundId: string, options: { fadeOutMs?: number } = {}): void {
+    managers.get(guildId)?.stopAmbience(soundId, options)
+  }
+
+  /** Changes a backend-decoded Ambience sound's volume, if playing. */
+  function setAmbienceVolume(guildId: string, soundId: string, volume: number, options: { rampMs?: number } = {}): void {
+    const manager = managers.get(guildId)
+    if (!manager)
+      throw new Error('No player for this guild. Join a voice channel first.')
+    manager.setAmbienceVolume(soundId, volume, options)
+  }
+
   function getLiveState(): GuildPlaybackState[] {
     const timestamp = new Date().toISOString()
     return Array.from(managers.entries()).map(([guildId, manager]) => ({
@@ -138,6 +162,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
       source: 'live' as const,
       lastUpdated: timestamp,
       volume: manager.getVolumes(),
+      ambience: manager.activeAmbience,
     }))
   }
 
@@ -192,6 +217,9 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     playMusic,
     stopMusic,
     setMusicVolume,
+    playAmbience,
+    stopAmbience,
+    setAmbienceVolume,
     getState,
     getVolume,
     setVolume,
