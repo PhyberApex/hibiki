@@ -148,13 +148,13 @@ When adding a new backend feature:
 3. Register the IPC handler in `electron/main.js` (or use the generic `api` handler).
 4. Add a typed wrapper in the frontend (e.g., `frontend/src/api/player.ts`).
 
-### Audio Streaming (Browser Feature)
+### Audio Streaming (Chunked IPC)
 
-The Browser tab captures audio from a `WebContentsView` (Electron-managed browser) using Web Audio API + AudioWorklet. Audio chunks are sent via IPC to the backend, which streams them to Discord voice.
+Audio chunks are captured in the renderer via Web Audio API + AudioWorklet (`frontend/src/audio/browser-audio-capture.ts`) and sent over IPC to the backend, which streams them to Discord voice — used by the Browser tab (always; a `WebContentsView` has no backend decoder) and by the renderer fallback for a Sound Library file with no backend decoder (m4a/AAC, see "Backend Sound Library Playback" below).
 
-- **Backend:** `player.startStream(guildId, stream, metadata)` accepts a Node.js `ReadableStream`.
-- **Frontend → Main:** `audio:startStream`, chunked `audio:chunk`, `audio:stopStream`.
-- **Main process:** Creates `PassThrough` streams, writes chunks, pipes to backend.
+- **Backend:** `player.startStream(guildId, stream, metadata?, streamId?)` feeds a long-lived Music slot in `AudioEngine` (the Scene Music fallback); `player.startEffectStream(guildId, stream)` spawns a new layered mixer input per call (the Browser tab, and the Scene Ambience/Effects fallback — an Ambience fallback stream is keyed `ambience-<soundId>`). Both accept a Node.js `Readable`.
+- **Frontend → Main** (`frontend/src/api/audio-stream.ts`): `audio:startStream`/chunked `audio:chunk`/`audio:stopStream` for the Music lane; `audio:startEffectStream`/chunked `audio:effectChunk`/`audio:stopEffectStream` for the effect lane.
+- **Main process** (`electron/main.js`): Creates `PassThrough` streams per `streamId`, writes chunks, pipes to the backend.
 
 ### Vision to Vibe
 
