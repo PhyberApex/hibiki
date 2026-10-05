@@ -578,12 +578,26 @@ export class GuildAudioManager extends EventEmitter {
     streamFactory: () => Readable | Promise<Readable>,
     options: PlayEffectOptions,
   ): Promise<void> {
-    const stream = await streamFactory()
+    // Reserve the slot (and evict the oldest, if at cap) before decoding —
+    // not after — so eviction order matches trigger order rather than
+    // decode-completion order. Otherwise a slow cache-miss decode started
+    // just before a fast cache-hit one could let the *newer* trigger
+    // register first and evict the true oldest instance twice over, while
+    // the chronologically later trigger survives.
     const streamId = `backend-effect:${++this.effectStreamSeq}`
     this.enforceEffectInstanceCap()
     this.effectStreamIds.add(streamId)
-    this.engine.playMusicFromStream(stream, streamId, options.volume)
 
+    let stream: Readable
+    try {
+      stream = await streamFactory()
+    }
+    catch (err) {
+      this.effectStreamIds.delete(streamId)
+      throw err
+    }
+
+    this.engine.playMusicFromStream(stream, streamId, options.volume)
     const onEnded = () => this.effectStreamIds.delete(streamId)
     stream.once('end', onEnded)
     stream.once('error', onEnded)

@@ -964,6 +964,36 @@ describe('guildAudioManager', () => {
       expect(getEngineMock().stopMusic).toHaveBeenCalledWith(ids[0])
     })
 
+    it('evicts in trigger order even when a later trigger\'s decode resolves first', async () => {
+      // Fill the cap with 7, leaving room for exactly one more live slot.
+      const ids: string[] = []
+      for (let i = 0; i < 7; i++) {
+        await manager.playEffect(jest.fn().mockReturnValue(createFakeStream()), { volume: 90 })
+        ids.push(getEngineMock().playMusicFromStream.mock.calls[i][1])
+      }
+
+      // Trigger #8 (slow decode) and #9 (fast decode) close together — #9's
+      // decode resolves first, but #8 was triggered first and must still be
+      // the one evicted when #9's slot-reservation runs, not whichever
+      // happened to finish decoding first.
+      const slow = createDeferredFactory()
+      const eighth = manager.playEffect(slow.factory, { volume: 90 })
+      const ninthStream = createFakeStream()
+      await manager.playEffect(jest.fn().mockReturnValue(ninthStream), { volume: 90 })
+
+      // The 9th trigger's reservation evicted the 1st (oldest by trigger
+      // order), not the still-decoding 8th.
+      expect(getEngineMock().stopMusic).toHaveBeenCalledTimes(1)
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(ids[0])
+
+      slow.resolve(createFakeStream())
+      await eighth
+
+      // The 8th's decode resolving afterward must not trigger a second,
+      // redundant eviction — it already reserved its slot up front.
+      expect(getEngineMock().stopMusic).toHaveBeenCalledTimes(1)
+    })
+
     it('an instance that already ended naturally does not count toward the cap', async () => {
       const endedStream = createFakeStream()
       await manager.playEffect(jest.fn().mockReturnValue(endedStream), { volume: 90 })
