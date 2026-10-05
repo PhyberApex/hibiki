@@ -96,10 +96,6 @@ export function updateSceneFadeLength(seconds: number): Promise<void> {
   return apiCall<void>('config', 'setSceneFadeLength', [seconds])
 }
 
-export const MASTER_VOLUME_MIN = 0
-export const MASTER_VOLUME_MAX = 100
-export const MASTER_VOLUME_DEFAULT = 80
-
 export function fetchMasterVolume(): Promise<number> {
   requireElectron()
   return apiCall<number>('config', 'getMasterVolume', [])
