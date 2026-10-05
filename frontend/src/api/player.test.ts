@@ -5,8 +5,11 @@ import {
   fetchPlayerState,
   joinChannel,
   leaveGuild,
+  playMusic,
   reconnectBot,
+  setMusicVolume,
   setVolume,
+  stopMusic,
   stopPlayback,
 } from './player'
 
@@ -80,6 +83,36 @@ describe('player API', () => {
       domain: 'player',
       method: 'setVolume',
       args: ['g1', { music: 80, effects: 90 }],
+    })
+  })
+
+  it('playMusic uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await playMusic('g1', 'song-1', { volume: 80, loop: true, fadeInMs: 3000 })
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'player',
+      method: 'playMusic',
+      args: ['g1', 'song-1', { volume: 80, loop: true, fadeInMs: 3000 }],
+    })
+  })
+
+  it('stopMusic uses apiCall, defaulting options to {}', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await stopMusic('g1')
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'player',
+      method: 'stopMusic',
+      args: ['g1', {}],
+    })
+  })
+
+  it('setMusicVolume uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await setMusicVolume('g1', 40, { rampMs: 500 })
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'player',
+      method: 'setMusicVolume',
+      args: ['g1', 40, { rampMs: 500 }],
     })
   })
 

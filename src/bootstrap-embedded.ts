@@ -65,6 +65,9 @@ export interface EmbeddedApi {
     startStream: (guildId: string, stream: NodeJS.ReadableStream, metadata?: { id: string, name: string, filename: string, category: string }, streamId?: string) => void
     startEffectStream: (guildId: string, stream: NodeJS.ReadableStream) => void
     stopStream: (guildId: string, streamId?: string) => void
+    playMusic: (guildId: string, soundId: string, options: { volume: number, loop?: boolean, fadeInMs?: number }) => Promise<void>
+    stopMusic: (guildId: string, options?: { fadeOutMs?: number }) => void
+    setMusicVolume: (guildId: string, volume: number, options?: { rampMs?: number }) => void
     reconnect: () => Promise<void>
   }
   config: {
@@ -142,7 +145,7 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
   const scenes = createSceneStore(config)
   const registry = createSceneRegistry(config)
   const discord = createDiscordClient(config, appConfig)
-  const player = createPlayer(discord)
+  const player = createPlayer(discord, sounds)
 
   const visionSettings = createVisionSettings(config, appConfig)
   const vision = createVisionService({ getProviderConfig: visionSettings.getProviderConfig })
@@ -191,6 +194,9 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
       startEffectStream: (guildId, stream) =>
         player.startEffectStream(guildId, stream as import('node:stream').Readable),
       stopStream: (guildId, streamId) => player.stopStream(guildId, streamId),
+      playMusic: (guildId, soundId, options) => player.playMusic(guildId, soundId, options),
+      stopMusic: (guildId, options) => player.stopMusic(guildId, options),
+      setMusicVolume: (guildId, volume, options) => player.setMusicVolume(guildId, volume, options),
       reconnect: () => discord.reconnect(),
     },
     config: {

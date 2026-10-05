@@ -1,5 +1,6 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { DiscordClient } from '../discord/discord-client'
+import type { SoundLibrary } from '../sound/sound-library'
 import { EventEmitter } from 'node:events'
 import * as voice from '@discordjs/voice'
 import { AudioEngine } from '../audio/audio-engine'
@@ -24,10 +25,15 @@ jest.mock('../audio/audio-engine', () => ({
     playEffectFromStream: jest.fn(),
     stopMusic: jest.fn(),
     stopAllMusic: jest.fn(),
+    setStreamVolume: jest.fn(),
+    rampStreamVolume: jest.fn(),
     getVolumes: jest.fn().mockReturnValue({ music: 100, effects: 100 }),
     setVolumes: jest.fn(),
     destroy: jest.fn(),
   })),
+}))
+jest.mock('../audio/decoders', () => ({
+  createPcmStream: jest.fn(),
 }))
 
 /** The mocked AudioEngine instance the most recently constructed manager is using. */
@@ -35,9 +41,18 @@ function getEngineMock(): {
   playMusicFromStream: jest.Mock
   stopMusic: jest.Mock
   stopAllMusic: jest.Mock
+  setStreamVolume: jest.Mock
+  rampStreamVolume: jest.Mock
 } {
   const results = (AudioEngine as unknown as jest.Mock).mock.results
   return results[results.length - 1].value
+}
+
+function createFakeSoundLibrary(overrides: Partial<SoundLibrary> = {}): SoundLibrary {
+  return {
+    getFile: jest.fn(),
+    ...overrides,
+  } as unknown as SoundLibrary
 }
 
 type FakeConnection = EventEmitter & {
@@ -84,7 +99,7 @@ describe('createPlayer', () => {
       // via getVoiceConnection(guildId), which manager.disconnect() uses.
       ;(voice.getVoiceConnection as jest.Mock).mockReturnValue(connection)
 
-      const player = createPlayer(createFakeDiscordClient())
+      const player = createPlayer(createFakeDiscordClient(), createFakeSoundLibrary())
       await player.connect(fakeChannel)
 
       const stateChanged = jest.fn()
@@ -103,7 +118,7 @@ describe('createPlayer', () => {
       const connection = createFakeConnection()
       ;(voice.getVoiceConnection as jest.Mock).mockReturnValue(connection)
 
-      const player = createPlayer(createFakeDiscordClient())
+      const player = createPlayer(createFakeDiscordClient(), createFakeSoundLibrary())
       await player.disconnect('guild-1')
 
       expect(voice.getVoiceConnection).toHaveBeenCalledWith('guild-1')
@@ -116,7 +131,7 @@ describe('createPlayer', () => {
       const connection = createFakeConnection()
       ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
 
-      const player = createPlayer(createFakeDiscordClient())
+      const player = createPlayer(createFakeDiscordClient(), createFakeSoundLibrary())
       await player.connect(fakeChannel)
 
       const stateChanged = jest.fn()
@@ -134,7 +149,7 @@ describe('createPlayer', () => {
     async function connectedPlayer() {
       const connection = createFakeConnection()
       ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
-      const player = createPlayer(createFakeDiscordClient())
+      const player = createPlayer(createFakeDiscordClient(), createFakeSoundLibrary())
       await player.connect(fakeChannel)
       return player
     }
@@ -163,6 +178,80 @@ describe('createPlayer', () => {
       await player.stop('guild-1')
 
       expect(getEngineMock().stopAllMusic).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('playMusic / stopMusic / setMusicVolume', () => {
+    async function connectedPlayer(sounds: SoundLibrary) {
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      const player = createPlayer(createFakeDiscordClient(), sounds)
+      await player.connect(fakeChannel)
+      return player
+    }
+
+    it('resolves the sound, decodes it, and starts it on the manager', async () => {
+      const file = { id: 's1', name: 'Song', filename: 's1.mp3', category: 'music' as const, path: '/music/s1.mp3' }
+      const sounds = createFakeSoundLibrary({ getFile: jest.fn().mockResolvedValue(file) })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      const stream = new EventEmitter()
+      createPcmStream.mockResolvedValue(stream)
+
+      await player.playMusic('guild-1', 's1', { volume: 80, loop: true })
+
+      expect(sounds.getFile).toHaveBeenCalledWith('music', 's1')
+      expect(createPcmStream).toHaveBeenCalledWith('/music/s1.mp3')
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 80)
+    })
+
+    it('throws when the guild is not connected', async () => {
+      const sounds = createFakeSoundLibrary()
+      const player = createPlayer(createFakeDiscordClient(), sounds)
+
+      await expect(player.playMusic('guild-1', 's1', { volume: 80 })).rejects.toThrow('Not connected')
+    })
+
+    it('stopMusic forwards fadeOutMs to the manager and is a no-op without a manager', async () => {
+      const file = { id: 's1', name: 'Song', filename: 's1.mp3', category: 'music' as const, path: '/music/s1.mp3' }
+      const sounds = createFakeSoundLibrary({ getFile: jest.fn().mockResolvedValue(file) })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockResolvedValue(new EventEmitter())
+      await player.playMusic('guild-1', 's1', { volume: 80 })
+
+      player.stopMusic('guild-1', { fadeOutMs: 500 })
+
+      expect(getEngineMock().rampStreamVolume).toHaveBeenCalledWith(expect.any(String), 0, 500, expect.any(Function))
+      expect(() => player.stopMusic('guild-nope')).not.toThrow()
+    })
+
+    it('setMusicVolume forwards to the manager and throws without a manager', async () => {
+      const file = { id: 's1', name: 'Song', filename: 's1.mp3', category: 'music' as const, path: '/music/s1.mp3' }
+      const sounds = createFakeSoundLibrary({ getFile: jest.fn().mockResolvedValue(file) })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockResolvedValue(new EventEmitter())
+      await player.playMusic('guild-1', 's1', { volume: 80 })
+
+      player.setMusicVolume('guild-1', 40)
+
+      expect(getEngineMock().setStreamVolume).toHaveBeenCalledWith(expect.any(String), 40)
+      expect(() => player.setMusicVolume('guild-nope', 40)).toThrow('No player for this guild')
+    })
+
+    it('notifies onStateChanged when the track changes (e.g. starts or ends)', async () => {
+      const file = { id: 's1', name: 'Song', filename: 's1.mp3', category: 'music' as const, path: '/music/s1.mp3' }
+      const sounds = createFakeSoundLibrary({ getFile: jest.fn().mockResolvedValue(file) })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockResolvedValue(new EventEmitter())
+      const stateChanged = jest.fn()
+      player.onStateChanged(stateChanged)
+
+      await player.playMusic('guild-1', 's1', { volume: 80 })
+
+      expect(stateChanged).toHaveBeenCalledTimes(1)
     })
   })
 })

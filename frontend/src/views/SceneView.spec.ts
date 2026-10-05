@@ -23,6 +23,9 @@ vi.mock('@/api/sounds', () => ({
     { id: 'fx-2', name: 'Door slam', filename: 'door.mp3' },
   ]),
   soundStreamUrl: vi.fn((type: string, id: string) => `hibiki://sound/${type}/${id}`),
+  // Defaults every track to the renderer fallback (ADR-0003); backend-path
+  // tests override this per-call to exercise `playMusic`/`stopMusic`.
+  canDecode: vi.fn().mockResolvedValue(false),
 }))
 
 vi.mock('@/api/audio-stream', () => ({
@@ -33,6 +36,16 @@ vi.mock('@/api/audio-stream', () => ({
   stopAudioStream: vi.fn().mockResolvedValue(undefined),
   stopEffectStream: vi.fn().mockResolvedValue(undefined),
 }))
+
+vi.mock('@/api/player', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/player')>()
+  return {
+    ...actual,
+    playMusic: vi.fn().mockResolvedValue(undefined),
+    stopMusic: vi.fn().mockResolvedValue(undefined),
+    setMusicVolume: vi.fn().mockResolvedValue(undefined),
+  }
+})
 
 const UNCONFIGURED_VISION = {
   provider: 'claude' as const,
@@ -1027,5 +1040,130 @@ describe('sceneView — Scene Crossfade', () => {
 
     // Once the fade completes, the outgoing stream is closed.
     expect(stopAudioStream).toHaveBeenCalledWith('g1', 'music-a')
+  })
+
+  describe('backend-decoded Music (ADR-0003)', () => {
+    beforeEach(async () => {
+      const { canDecode } = await import('@/api/sounds')
+      vi.mocked(canDecode).mockResolvedValue(true)
+    })
+
+    it('plays via the backend and sends no audio:chunk IPC when the track can decode', async () => {
+      const { startAudioStream } = await import('@/api/audio-stream')
+      const { playMusic } = await import('@/api/player')
+      const { wrapper, player } = await mountAt('/scenes/x1')
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+
+      await wrapper.find('.btn-play-scene').trigger('click')
+      await flushPromises()
+
+      expect(playMusic).toHaveBeenCalledWith('g1', 'm1', { volume: expect.closeTo(64), loop: false, fadeInMs: 0 })
+      expect(startAudioStream).not.toHaveBeenCalled()
+    })
+
+    it('crossfades via the backend (fadeInMs on the new track) without the renderer separately stopping the old one', async () => {
+      const { playMusic, stopMusic } = await import('@/api/player')
+      const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+
+      await wrapper.find('.btn-play-scene').trigger('click')
+      await flushPromises()
+      vi.mocked(playMusic).mockClear()
+
+      await testRouter.push('/scenes/y1')
+      await flushPromises()
+
+      expect(playMusic).toHaveBeenCalledWith('g1', 'm2', { volume: expect.closeTo(64), loop: false, fadeInMs: 100 })
+      // The backend fades and stops the previous track itself (see
+      // GuildAudioManager.playMusic) — the renderer must not also call
+      // stopMusic for it.
+      expect(stopMusic).not.toHaveBeenCalled()
+    })
+
+    it('does not orphan the outgoing backend track if the incoming one fails to start', async () => {
+      const { playMusic, stopMusic } = await import('@/api/player')
+      const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+
+      await wrapper.find('.btn-play-scene').trigger('click')
+      await flushPromises()
+      vi.mocked(playMusic).mockClear()
+      vi.mocked(playMusic).mockRejectedValueOnce(new Error('decode failed'))
+
+      await testRouter.push('/scenes/y1')
+      await flushPromises()
+
+      // The incoming call was attempted and failed; the backend was never
+      // told to stop the still-playing outgoing track (m1).
+      expect(playMusic).toHaveBeenCalledWith('g1', 'm2', expect.anything())
+      expect(stopMusic).not.toHaveBeenCalled()
+
+      // It must still be reachable via Stop — not silently orphaned. Scene Y
+      // is now the Playing Scene (set eagerly before the switch attempted),
+      // so its own playback bar's Stop button is what's visible; clicking it
+      // must still reach and silence the still-playing backend track.
+      await wrapper.find('.btn-stop-scene').trigger('click')
+      await flushPromises()
+
+      expect(stopMusic).toHaveBeenCalledWith('g1', {})
+    })
+
+    it('stops the backend track immediately via the inline Stop button', async () => {
+      const { stopMusic } = await import('@/api/player')
+      const { wrapper, player } = await mountAt('/scenes/x1')
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+
+      await wrapper.find('.btn-play-scene').trigger('click')
+      await flushPromises()
+
+      await wrapper.find('[aria-label="Stop music"]').trigger('click')
+      await flushPromises()
+
+      expect(stopMusic).toHaveBeenCalledWith('g1', {})
+    })
+
+    it('does not orphan the outgoing backend track when crossfading to a track that falls back to the renderer', async () => {
+      const { canDecode } = await import('@/api/sounds')
+      // m1 (outgoing) is backend-decodable; m2 (incoming) is not (e.g. m4a) —
+      // a mixed-path crossfade the backend is never told about.
+      vi.mocked(canDecode).mockImplementation(async (_type, id) => id === 'm1')
+      const { startAudioStream } = await import('@/api/audio-stream')
+      const { playMusic, stopMusic } = await import('@/api/player')
+      const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+      player.playerState = [
+        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      ]
+      player.guildId = 'g1'
+      await flushPromises()
+
+      await wrapper.find('.btn-play-scene').trigger('click')
+      await flushPromises()
+      expect(playMusic).toHaveBeenCalledWith('g1', 'm1', expect.anything())
+
+      await testRouter.push('/scenes/y1')
+      await flushPromises()
+
+      // The incoming track falls back to the renderer path (chunked IPC)...
+      expect(startAudioStream).toHaveBeenCalled()
+      // ...and the previous backend track must still be explicitly stopped,
+      // not silently left running with no reachable UI handle.
+      expect(stopMusic).toHaveBeenCalledWith('g1', { fadeOutMs: 100 })
+    })
   })
 })
