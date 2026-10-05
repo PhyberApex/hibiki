@@ -34,11 +34,8 @@ export class AudioEngine {
   /** Music streams by id; a start without an id keys to the `undefined` slot. */
   private readonly musicStreams = new Map<string | undefined, ActiveStream>()
   private readonly effectStreams = new Set<ActiveStream>()
-  private volumes = { ...DEFAULT_VOLUMES }
 
-  constructor(initialVolumes = DEFAULT_VOLUMES) {
-    this.volumes = { music: CLAMP(initialVolumes.music), effects: CLAMP(initialVolumes.effects) }
-
+  constructor() {
     // Create mixer for combining audio streams
     this.mixer = new AudioMixer({
       sampleRate: 48000,
@@ -69,18 +66,7 @@ export class AudioEngine {
     return this.player
   }
 
-  getVolumes(): { music: number, effects: number } {
-    return { ...this.volumes }
-  }
-
-  setVolumes(updates: { music?: number, effects?: number }): void {
-    if (typeof updates.music === 'number')
-      this.volumes.music = CLAMP(updates.music)
-    if (typeof updates.effects === 'number')
-      this.volumes.effects = CLAMP(updates.effects)
-  }
-
-  playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = this.volumes.music) {
+  playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.music) {
     this.stopMusicStream(streamId)
     const active = this.spawnInputFromStream(stream, CLAMP(initialVolume))
     this.musicStreams.set(streamId, active)
@@ -96,7 +82,7 @@ export class AudioEngine {
   }
 
   playEffectFromStream(stream: Readable) {
-    const effectStream = this.spawnInputFromStream(stream, this.volumes.effects)
+    const effectStream = this.spawnInputFromStream(stream, DEFAULT_VOLUMES.effects)
     this.effectStreams.add(effectStream)
 
     // Auto-cleanup when stream ends

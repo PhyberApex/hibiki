@@ -13,7 +13,7 @@ import {
   stopAudioStream,
   stopEffectStream,
 } from '@/api/audio-stream'
-import { fetchSceneFadeLength, fetchVisionConfig, openFileDialog, saveFileDialog } from '@/api/config'
+import { fetchMasterVolume, fetchSceneFadeLength, fetchVisionConfig, openFileDialog, saveFileDialog, updateMasterVolume } from '@/api/config'
 import {
   playAmbience as playBackendAmbience,
   playEffect as playBackendEffect,
@@ -345,6 +345,16 @@ function updateAllVolumes() {
 }
 
 watch(globalVolume, () => updateAllVolumes())
+
+/** Loads the persisted master volume (`src/config/master-volume-settings.ts`) once at mount, instead of always starting back at the ref's default. */
+async function loadGlobalVolume() {
+  globalVolume.value = await fetchMasterVolume().catch(() => globalVolume.value)
+}
+
+/** Persists the master volume slider's current position; fired on `change` (drag release), not on every `input` tick. */
+function saveGlobalVolume() {
+  updateMasterVolume(globalVolume.value).catch(() => {})
+}
 
 // getState() reports active backend-decoded Ambience sounds per guild (see
 // ADR-0003), so the pulse/toggle state here stays correct even when it
@@ -1321,6 +1331,7 @@ onMounted(() => {
   loadScenes()
   loadSounds()
   loadVisionAvailability()
+  loadGlobalVolume()
 })
 
 onActivated(() => {
@@ -1564,6 +1575,7 @@ watch(sceneId, (newId) => {
             max="100"
             class="volume-slider"
             aria-label="Global volume"
+            @change="saveGlobalVolume"
           >
         </label>
         <div class="playback-actions">

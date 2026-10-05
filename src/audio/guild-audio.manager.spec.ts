@@ -27,8 +27,6 @@ jest.mock('./audio-engine', () => ({
     stopAllMusic: jest.fn(),
     setStreamVolume: jest.fn(),
     rampStreamVolume: jest.fn(),
-    getVolumes: jest.fn().mockReturnValue({ music: 100, effects: 100 }),
-    setVolumes: jest.fn(),
     destroy: jest.fn(),
   })),
 }))

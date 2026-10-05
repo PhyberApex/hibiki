@@ -15,8 +15,6 @@ export interface PlayerStateItem {
   track: PlayerTrackInfo | null
   source: 'live' | 'discord'
   lastUpdated?: string
-  /** Music and effects volume 0–100; only present when live. */
-  volume?: { music: number, effects: number }
   /** soundIds of backend-decoded Ambience sounds currently active; only present when live. */
   ambience?: string[]
 }
@@ -68,15 +66,6 @@ export function stopPlayback(guildId: string) {
 export function fetchGuildDirectory(): Promise<GuildDirectoryEntry[]> {
   requireElectron()
   return apiCall('player', 'getGuildDirectory', [])
-}
-
-export function setVolume(payload: {
-  guildId: string
-  music?: number
-  effects?: number
-}) {
-  requireElectron()
-  return apiCall<{ music: number, effects: number }>('player', 'setVolume', [payload.guildId, { music: payload.music, effects: payload.effects }])
 }
 
 export interface PlayMusicOptions {

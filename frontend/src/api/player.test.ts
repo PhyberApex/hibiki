@@ -11,7 +11,6 @@ import {
   reconnectBot,
   setAmbienceVolume,
   setMusicVolume,
-  setVolume,
   stopAmbience,
   stopEffects,
   stopMusic,
@@ -78,17 +77,6 @@ describe('player API', () => {
     mockInvoke.mockResolvedValue(dir)
     const result = await fetchGuildDirectory()
     expect(result).toEqual(dir)
-  })
-
-  it('setVolume uses apiCall', async () => {
-    mockInvoke.mockResolvedValue({ music: 80, effects: 90 })
-    const result = await setVolume({ guildId: 'g1', music: 80, effects: 90 })
-    expect(result).toEqual({ music: 80, effects: 90 })
-    expect(mockInvoke).toHaveBeenCalledWith('api', {
-      domain: 'player',
-      method: 'setVolume',
-      args: ['g1', { music: 80, effects: 90 }],
-    })
   })
 
   it('playMusic uses apiCall', async () => {

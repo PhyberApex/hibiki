@@ -96,6 +96,20 @@ export function updateSceneFadeLength(seconds: number): Promise<void> {
   return apiCall<void>('config', 'setSceneFadeLength', [seconds])
 }
 
+export const MASTER_VOLUME_MIN = 0
+export const MASTER_VOLUME_MAX = 100
+export const MASTER_VOLUME_DEFAULT = 80
+
+export function fetchMasterVolume(): Promise<number> {
+  requireElectron()
+  return apiCall<number>('config', 'getMasterVolume', [])
+}
+
+export function updateMasterVolume(volume: number): Promise<void> {
+  requireElectron()
+  return apiCall<void>('config', 'setMasterVolume', [volume])
+}
+
 export async function selectStorageFolder(): Promise<string | null> {
   if (!useElectronApi())
     throw new Error('Hibiki runs as an Electron app.')
