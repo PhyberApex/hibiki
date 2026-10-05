@@ -2,6 +2,7 @@ import type { VoiceBasedChannel } from 'discord.js'
 import type { DiscordClient } from '../discord/discord-client'
 import type { SoundLibrary } from '../sound/sound-library'
 import { EventEmitter } from 'node:events'
+import { Readable } from 'node:stream'
 import * as voice from '@discordjs/voice'
 import { AudioEngine } from '../audio/audio-engine'
 import { createPlayer } from './player'
@@ -54,6 +55,11 @@ function createFakeSoundLibrary(overrides: Partial<SoundLibrary> = {}): SoundLib
     getFile: jest.fn(),
     ...overrides,
   } as unknown as SoundLibrary
+}
+
+/** A real, fully consumable Readable — unlike Music/Ambience's bare EventEmitter fakes, `playEffect` actually reads this to completion via the PCM cache. */
+function fakePcmStream(data = 'pcm'): Readable {
+  return Readable.from([Buffer.from(data)])
 }
 
 type FakeConnection = EventEmitter & {
@@ -360,6 +366,90 @@ describe('createPlayer', () => {
 
       player.stopAmbience('guild-1', 'rain')
       expect(stateChanged).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('playEffect / stopEffects', () => {
+    async function connectedPlayer(sounds: SoundLibrary) {
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      const player = createPlayer(createFakeDiscordClient(), sounds)
+      await player.connect(fakeChannel)
+      return player
+    }
+
+    it('resolves the sound\'s path (not the fuller getFile(), which would also stat and read tags for no reason here), decodes it, and plays it through the manager at the given volume', async () => {
+      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn().mockResolvedValue('/effects/fx1.mp3') })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockResolvedValue(fakePcmStream())
+
+      await player.playEffect('guild-1', 'fx1', { volume: 90 })
+
+      expect(sounds.getFilePath).toHaveBeenCalledWith('effects', 'fx1')
+      expect(createPcmStream).toHaveBeenCalledWith('/effects/fx1.mp3')
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(expect.anything(), expect.any(String), 90)
+    })
+
+    it('throws when the guild is not connected', async () => {
+      const sounds = createFakeSoundLibrary()
+      const player = createPlayer(createFakeDiscordClient(), sounds)
+
+      await expect(player.playEffect('guild-1', 'fx1', { volume: 90 })).rejects.toThrow('Not connected')
+    })
+
+    it('triggering the same Effect twice layers two instances, each its own mixer input', async () => {
+      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn().mockResolvedValue('/effects/fx1.mp3') })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockImplementation(() => Promise.resolve(fakePcmStream()))
+
+      await player.playEffect('guild-1', 'fx1', { volume: 90 })
+      await player.playEffect('guild-1', 'fx1', { volume: 90 })
+
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(2)
+      const [idA, idB] = getEngineMock().playMusicFromStream.mock.calls.map(call => call[1])
+      expect(idA).not.toBe(idB)
+    })
+
+    it('serves a second trigger of the same Effect from the PCM cache, without decoding again', async () => {
+      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn().mockResolvedValue('/effects/fx1.mp3') })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockImplementation(() => Promise.resolve(fakePcmStream()))
+
+      await player.playEffect('guild-1', 'fx1', { volume: 90 })
+      await player.playEffect('guild-1', 'fx1', { volume: 90 })
+
+      expect(createPcmStream).toHaveBeenCalledTimes(1)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(2)
+    })
+
+    it('stopEffects forwards to the manager and is a no-op without a manager', async () => {
+      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn().mockResolvedValue('/effects/fx1.mp3') })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockResolvedValue(fakePcmStream())
+      await player.playEffect('guild-1', 'fx1', { volume: 90 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      player.stopEffects('guild-1')
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
+      expect(() => player.stopEffects('guild-nope')).not.toThrow()
+    })
+
+    it('the guild-level Stop action ends active Effects too, not just Music and Ambience', async () => {
+      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn().mockResolvedValue('/effects/fx1.mp3') })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockResolvedValue(fakePcmStream())
+      await player.playEffect('guild-1', 'fx1', { volume: 90 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+
+      await player.stop('guild-1')
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
     })
   })
 })

@@ -46,6 +46,11 @@ export interface PlayAmbienceOptions {
   fadeInMs?: number
 }
 
+export interface PlayEffectOptions {
+  /** 0-100, the absolute volume to play this instance at (see ADR-0003 — no master bus layered on top yet). */
+  volume: number
+}
+
 /**
  * One Ambience sound's bookkeeping, keyed by soundId in `ambienceEntries` —
  * several can be active at once per guild. Only ever holds a sound that has
@@ -102,6 +107,20 @@ export class GuildAudioManager extends EventEmitter {
    */
   private readonly ambienceGenerations = new Map<string, number>()
   private ambienceStreamSeq = 0
+  /**
+   * streamIds of backend-decoded Effect instances currently playing, in the
+   * order they started — a `Set` preserves insertion order, so the first
+   * entry is always the oldest, which `enforceEffectInstanceCap` needs for
+   * FIFO eviction. Unlike `musicStreams`/`ambienceEntries`, Effects never
+   * replace each other (every trigger is its own instance, layered freely —
+   * overlap parity with the renderer's own Effect cap, #408), so this only
+   * ever grows (on trigger) or shrinks (on end/cap eviction/bulk stop),
+   * never replaces an entry in place.
+   */
+  private readonly effectStreamIds = new Set<string>()
+  private effectStreamSeq = 0
+  /** Matches the renderer's own Effect cap (`EFFECT_INSTANCE_CAP` in SceneView.vue, #408). */
+  private static readonly EFFECT_INSTANCE_CAP = 8
   /**
    * Set while this manager is itself tearing down a connection, so the
    * resulting Destroyed stateChange doesn't re-trigger teardown handling.
@@ -181,6 +200,7 @@ export class GuildAudioManager extends EventEmitter {
       return
     this.stopAllMusic()
     this.stopAllAmbience()
+    this.stopAllEffects()
     this.connection = undefined
     this.channelName = undefined
     this.emit('disconnected')
@@ -205,6 +225,7 @@ export class GuildAudioManager extends EventEmitter {
   disconnect() {
     this.stopAllMusic()
     this.stopAllAmbience()
+    this.stopAllEffects()
     this.withIntentionalTeardown(() => getVoiceConnection(this.guildId)?.destroy())
     this.connection = undefined
     this.channelName = undefined
@@ -213,6 +234,7 @@ export class GuildAudioManager extends EventEmitter {
   destroy() {
     this.stopAllMusic()
     this.stopAllAmbience()
+    this.stopAllEffects()
     this.withIntentionalTeardown(() => this.connection?.destroy())
     this.connection = undefined
     this.engine.destroy()
@@ -536,6 +558,53 @@ export class GuildAudioManager extends EventEmitter {
 
   playEffectFromStream(stream: Readable) {
     this.engine.playEffectFromStream(stream)
+  }
+
+  /**
+   * Plays a Sound Library Effect decoded straight into the mixer (see
+   * ADR-0003) as a brand new instance, reusing the engine's generic named-
+   * stream mixing (the same primitive `playMusic`/`playAmbience` use, under
+   * their own id namespaces) rather than `playEffectFromStream`'s anonymous
+   * `Set` — a unique id per trigger is what lets a ninth trigger stop just
+   * the oldest instance instead of all of them. Unlike `playMusic`/
+   * `playAmbience`, a new call never replaces an existing one: every
+   * trigger is independent and layers freely, up to `EFFECT_INSTANCE_CAP`
+   * simultaneous instances per guild, at which point starting one more
+   * stops the oldest (overlap parity with the renderer's own Effect cap,
+   * #408). Rejects, leaving every other instance untouched, if
+   * `streamFactory` fails.
+   */
+  async playEffect(
+    streamFactory: () => Readable | Promise<Readable>,
+    options: PlayEffectOptions,
+  ): Promise<void> {
+    const stream = await streamFactory()
+    const streamId = `backend-effect:${++this.effectStreamSeq}`
+    this.enforceEffectInstanceCap()
+    this.effectStreamIds.add(streamId)
+    this.engine.playMusicFromStream(stream, streamId, options.volume)
+
+    const onEnded = () => this.effectStreamIds.delete(streamId)
+    stream.once('end', onEnded)
+    stream.once('error', onEnded)
+  }
+
+  /** Ends every backend-decoded Effect instance for this guild (Scene stop, leave, disconnect). */
+  stopAllEffects(): void {
+    for (const streamId of this.effectStreamIds)
+      this.engine.stopMusic(streamId)
+    this.effectStreamIds.clear()
+  }
+
+  /** FIFO-evicts the oldest backend-decoded Effect instance(s) until there's room for one more, under `EFFECT_INSTANCE_CAP`. */
+  private enforceEffectInstanceCap(): void {
+    while (this.effectStreamIds.size >= GuildAudioManager.EFFECT_INSTANCE_CAP) {
+      const oldestStreamId: string | undefined = this.effectStreamIds.values().next().value
+      if (oldestStreamId === undefined)
+        break
+      this.effectStreamIds.delete(oldestStreamId)
+      this.engine.stopMusic(oldestStreamId)
+    }
   }
 
   get isIdle() {

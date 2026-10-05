@@ -47,6 +47,8 @@ vi.mock('@/api/player', async (importOriginal) => {
     playAmbience: vi.fn().mockResolvedValue(undefined),
     stopAmbience: vi.fn().mockResolvedValue(undefined),
     setAmbienceVolume: vi.fn().mockResolvedValue(undefined),
+    playEffect: vi.fn().mockResolvedValue(undefined),
+    stopEffects: vi.fn().mockResolvedValue(undefined),
   }
 })
 
@@ -543,6 +545,99 @@ describe('sceneView — overlapping effects', () => {
     await flushPromises()
 
     expect(stopEffectStream).toHaveBeenCalledWith('g1', 'ambience-amb-1')
+  })
+})
+
+describe('sceneView — backend-decoded Effects (ADR-0003)', () => {
+  beforeAll(stubMediaElement)
+
+  beforeEach(async () => {
+    const { canDecode } = await import('@/api/sounds')
+    vi.mocked(canDecode).mockImplementation(async (_type: string, _id: string) => _type === 'effects')
+  })
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
+
+  it('plays via the backend and sends no audio:effectChunk IPC when the sound can decode', async () => {
+    const { startEffectStream, sendEffectChunk } = await import('@/api/audio-stream')
+    const { playEffect: playBackendEffect } = await import('@/api/player')
+    const { wrapper } = await mountSceneJoined()
+
+    await wrapper.find('.effect-trigger').trigger('click')
+    await flushPromises()
+
+    expect(playBackendEffect).toHaveBeenCalledWith('g1', 'fx-1', { volume: expect.closeTo(64) })
+    expect(startEffectStream).not.toHaveBeenCalled()
+    expect(sendEffectChunk).not.toHaveBeenCalled()
+  })
+
+  it('fires the flash feedback on a backend-decoded trigger', async () => {
+    const { wrapper } = await mountSceneJoined()
+
+    await wrapper.find('.effect-trigger').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.effect-card').classes()).toContain('pulse-flash')
+  })
+
+  it('layers multiple backend-decoded instances of the same Effect, one call per trigger', async () => {
+    const { playEffect: playBackendEffect } = await import('@/api/player')
+    const { wrapper } = await mountSceneJoined()
+    const trigger = wrapper.find('.effect-trigger')
+
+    await trigger.trigger('click')
+    await flushPromises()
+    await trigger.trigger('click')
+    await flushPromises()
+
+    expect(playBackendEffect).toHaveBeenCalledTimes(2)
+  })
+
+  it('falls back to the renderer path for a non-decodable (e.g. m4a) Effect', async () => {
+    const { canDecode } = await import('@/api/sounds')
+    vi.mocked(canDecode).mockResolvedValue(false)
+    const { startEffectStream } = await import('@/api/audio-stream')
+    const { playEffect: playBackendEffect } = await import('@/api/player')
+    const { wrapper } = await mountSceneJoined()
+
+    await wrapper.find('.effect-trigger').trigger('click')
+    await flushPromises()
+
+    expect(playBackendEffect).not.toHaveBeenCalled()
+    expect(startEffectStream).toHaveBeenCalled()
+  })
+
+  it('stops backend-decoded Effect instances via the backend when the scene stops', async () => {
+    const { stopEffects: stopBackendEffects } = await import('@/api/player')
+    const { wrapper, player } = await mountSceneJoined()
+
+    await wrapper.find('.effect-trigger').trigger('click')
+    await flushPromises()
+    vi.mocked(stopBackendEffects).mockClear()
+
+    player.setPlayingScene('s1', 'discord')
+    await flushPromises()
+    await wrapper.find('.btn-stop-scene').trigger('click')
+
+    expect(stopBackendEffects).toHaveBeenCalledWith('g1')
+  })
+
+  it('stops backend-decoded Effect instances via the backend when the voice channel is left', async () => {
+    const { stopEffects: stopBackendEffects } = await import('@/api/player')
+    const { wrapper, player } = await mountSceneJoined()
+
+    await wrapper.find('.effect-trigger').trigger('click')
+    await flushPromises()
+    vi.mocked(stopBackendEffects).mockClear()
+
+    player.playerState = []
+    await flushPromises()
+
+    expect(stopBackendEffects).toHaveBeenCalledWith('g1')
   })
 })
 

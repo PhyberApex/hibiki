@@ -6,12 +6,14 @@ import {
   joinChannel,
   leaveGuild,
   playAmbience,
+  playEffect,
   playMusic,
   reconnectBot,
   setAmbienceVolume,
   setMusicVolume,
   setVolume,
   stopAmbience,
+  stopEffects,
   stopMusic,
   stopPlayback,
 } from './player'
@@ -146,6 +148,26 @@ describe('player API', () => {
       domain: 'player',
       method: 'setAmbienceVolume',
       args: ['g1', 'rain', 40, { rampMs: 500 }],
+    })
+  })
+
+  it('playEffect uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await playEffect('g1', 'fx-1', { volume: 90 })
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'player',
+      method: 'playEffect',
+      args: ['g1', 'fx-1', { volume: 90 }],
+    })
+  })
+
+  it('stopEffects uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await stopEffects('g1')
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'player',
+      method: 'stopEffects',
+      args: ['g1'],
     })
   })
 
