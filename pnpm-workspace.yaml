@@ -25,7 +25,7 @@ overrides:
   '@electron/node-gyp': npm:@electron/node-gyp@10.2.0-electron.2
 
 allowBuilds:
-  '@discordjs/opus': true
+  '@discordjs/opus': false
   '@parcel/watcher': true
   '@snazzah/davey': true
   electron: true

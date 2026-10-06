@@ -222,6 +222,27 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     return () => stateEvents.off('stateChanged', listener)
   }
 
+  /**
+   * Tears down every connected guild's voice state (used on app shutdown —
+   * see `bootstrap-embedded.ts`'s `close()`). Each manager's own `destroy()`
+   * already guards against emitting a spurious `disconnected` event for
+   * intentional teardown, so clearing the map directly here (rather than
+   * going through the `disconnected` listener) is just bookkeeping, not a
+   * race. One manager throwing during teardown must not stop the rest.
+   */
+  async function destroyAll(): Promise<void> {
+    const toDestroy = [...managers.values()]
+    managers.clear()
+    await Promise.all(toDestroy.map(async (manager) => {
+      try {
+        manager.destroy()
+      }
+      catch (err) {
+        log.error('Failed to destroy guild audio manager during shutdown:', err)
+      }
+    }))
+  }
+
   return {
     connect,
     disconnect,
@@ -239,5 +260,6 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     stopEffects,
     getState,
     onStateChanged,
+    destroyAll,
   }
 }

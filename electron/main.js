@@ -447,15 +447,36 @@ app.whenReady().then(async () => {
   app.quit(1)
 })
 
-app.on('window-all-closed', () => {
-  if (appHandle?.close)
-    appHandle.close().catch(() => {})
+const SHUTDOWN_TEARDOWN_TIMEOUT_MS = 5_000
+
+/**
+ * Tears down voice connections/audio engines before the process exits — see
+ * issue #456. Nulls `appHandle` synchronously (before its first await) so
+ * the `before-quit` listener below can tell, on its re-triggered second
+ * pass, that teardown already started and let quit proceed instead of
+ * preventing default again. Time-bounded so a hung teardown can't block
+ * quitting forever.
+ */
+async function teardownBeforeQuit() {
+  const handle = appHandle
   appHandle = null
+  if (!handle?.close)
+    return
+  let timeout
+  await Promise.race([
+    handle.close().catch(err => console.error('Error during shutdown teardown:', err)),
+    new Promise((resolve) => { timeout = setTimeout(resolve, SHUTDOWN_TEARDOWN_TIMEOUT_MS) }),
+  ])
+  clearTimeout(timeout)
+}
+
+app.on('window-all-closed', () => {
   app.quit()
 })
 
-app.on('before-quit', () => {
-  if (appHandle?.close)
-    appHandle.close().catch(() => {})
-  appHandle = null
+app.on('before-quit', (event) => {
+  if (appHandle === null)
+    return
+  event.preventDefault()
+  teardownBeforeQuit().then(() => app.quit())
 })

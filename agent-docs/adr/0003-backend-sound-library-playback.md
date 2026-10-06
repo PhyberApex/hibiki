@@ -21,7 +21,7 @@ This ADR, numbered 0003 because ADR-0002 (Vision Providers) already exists, reco
 ## Decision
 
 - **Where decoding happens**: in the Electron main process. A Sound Library file is read from disk and decoded straight into PCM that feeds `AudioEngine`'s `node-audio-mixer` inputs (48 kHz, stereo, signed 16-bit little-endian). Playback state stays per guild in `GuildAudioManager`.
-- **Decoders: JS/WASM only, no bundled ffmpeg binary.** Four small packages from the `wasm-audio-decoders` family cover the required formats, each shipping its WASM binary base64-embedded in its JS bundle (no separate `.wasm` file I/O, so no asar-unpacking is needed for them — see `forge.config.js`'s `asar.unpack`, which only covers native `.node` modules like `@discordjs/opus`):
+- **Decoders: JS/WASM only, no bundled ffmpeg binary.** Four small packages from the `wasm-audio-decoders` family cover the required formats, each shipping its WASM binary base64-embedded in its JS bundle (no separate `.wasm` file I/O, so no asar-unpacking is needed for them — see `forge.config.js`'s `asar.unpack`, which only covers native `.node` modules like `@snazzah/davey`, Discord's DAVE E2EE voice encryption):
   - `mpg123-decoder` — MP3
   - `@wasm-audio-decoders/ogg-vorbis` — Ogg Vorbis
   - `ogg-opus-decoder` — Ogg Opus (used with `forceStereo: true`; libopus always decodes at 48 kHz, so this path needs no sample-rate conversion, only channel up-mixing)
@@ -37,7 +37,7 @@ This ADR, numbered 0003 because ADR-0002 (Vision Providers) already exists, reco
 
 ## Consequences
 
-- Four new runtime dependencies (plus their shared `@wasm-audio-decoders/common` and the unused `opus-ml` chunk), all WASM-in-JS with no native/.node binaries — no new asar-unpacking rules needed, unlike `@discordjs/opus`.
+- Four new runtime dependencies (plus their shared `@wasm-audio-decoders/common` and the unused `opus-ml` chunk), all WASM-in-JS with no native/.node binaries — no new asar-unpacking rules needed, unlike `@snazzah/davey`.
 - The ESM/CommonJS interop relies on Node 24's `require(esm)` support, which is already a hard requirement for this project (Electron 41+ needs Node 24+) — no new minimum-version constraint, but it is now also load-bearing for decoding, not just for running tooling.
 - `pnpm test`/`pnpm test:watch`/`pnpm test:coverage` now launch Jest via `node --experimental-vm-modules node_modules/.bin/jest` instead of the `jest` bin directly; this is Jest's documented, non-breaking way to support `require(esm)`, and produces identical results for every existing spec.
 - Mono sources are up-mixed to stereo (duplicated to both channels) and anything beyond two channels is read as its first two; Hibiki's own uploads are expected to be mono or stereo, so this is not expected to matter in practice.

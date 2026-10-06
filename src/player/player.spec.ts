@@ -82,6 +82,14 @@ const fakeChannel = {
   guild: { id: 'guild-1', name: 'Guild', voiceAdapterCreator: jest.fn() },
 } as unknown as VoiceBasedChannel
 
+function fakeChannelFor(guildId: string): VoiceBasedChannel {
+  return {
+    id: `${guildId}-channel`,
+    name: 'General',
+    guild: { id: guildId, name: guildId, voiceAdapterCreator: jest.fn() },
+  } as unknown as VoiceBasedChannel
+}
+
 function createFakeDiscordClient(): DiscordClient {
   return {
     listGuildDirectory: jest.fn().mockReturnValue([]),
@@ -448,6 +456,59 @@ describe('createPlayer', () => {
       await player.stop('guild-1')
 
       expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
+    })
+  })
+
+  describe('destroyAll', () => {
+    it('destroys every connected guild\'s manager and clears live state', async () => {
+      const connectionA = createFakeConnection('channel-a')
+      const connectionB = createFakeConnection('channel-b')
+      ;(voice.joinVoiceChannel as jest.Mock)
+        .mockReturnValueOnce(connectionA)
+        .mockReturnValueOnce(connectionB)
+
+      const player = createPlayer(createFakeDiscordClient(), createFakeSoundLibrary())
+      await player.connect(fakeChannelFor('guild-1'))
+      await player.connect(fakeChannelFor('guild-2'))
+
+      await player.destroyAll()
+
+      expect(connectionA.destroy).toHaveBeenCalledTimes(1)
+      expect(connectionB.destroy).toHaveBeenCalledTimes(1)
+      expect(await player.getState()).toEqual([])
+    })
+
+    it('does not emit a spurious disconnected notification for intentional teardown', async () => {
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+
+      const player = createPlayer(createFakeDiscordClient(), createFakeSoundLibrary())
+      await player.connect(fakeChannel)
+      const stateChanged = jest.fn()
+      player.onStateChanged(stateChanged)
+
+      await player.destroyAll()
+
+      expect(stateChanged).not.toHaveBeenCalled()
+    })
+
+    it('tears down every other guild even when one manager throws during its own teardown', async () => {
+      const connectionA = createFakeConnection('channel-a')
+      connectionA.destroy = jest.fn(() => {
+        throw new Error('boom')
+      })
+      const connectionB = createFakeConnection('channel-b')
+      ;(voice.joinVoiceChannel as jest.Mock)
+        .mockReturnValueOnce(connectionA)
+        .mockReturnValueOnce(connectionB)
+
+      const player = createPlayer(createFakeDiscordClient(), createFakeSoundLibrary())
+      await player.connect(fakeChannelFor('guild-1'))
+      await player.connect(fakeChannelFor('guild-2'))
+
+      await expect(player.destroyAll()).resolves.toBeUndefined()
+
+      expect(connectionB.destroy).toHaveBeenCalledTimes(1)
     })
   })
 })

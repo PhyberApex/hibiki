@@ -200,7 +200,7 @@ The scene is a **template**, not a runtime object. Playback state lives in `Guil
 ### Node Version
 
 **Node.js 24 required** (see `.nvmrc`). **MUST run `nvm use` before any pnpm commands** to activate the correct version.
-- `@discordjs/opus` uses N-API prebuilds (ABI-stable across Node versions).
+- The voice stack encodes Opus via `opusscript` (WASM) — no native module, so dev and packaged builds use the same path.
 - Electron 41+ requires Node 24+.
 - Always use `source ~/.nvm/nvm.sh && nvm use && <command>` when running commands in new shells.
 
