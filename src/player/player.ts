@@ -189,7 +189,6 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
       track: manager.track ?? null,
       source: 'live' as const,
       lastUpdated: timestamp,
-      volume: manager.getVolumes(),
       ambience: manager.activeAmbience,
     }))
   }
@@ -218,18 +217,6 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     return [...live, ...discordFallbacks]
   }
 
-  function getVolume(guildId: string): { music: number, effects: number } | null {
-    return managers.get(guildId)?.getVolumes() ?? null
-  }
-
-  function setVolume(guildId: string, updates: { music?: number, effects?: number }): { music: number, effects: number } {
-    const manager = managers.get(guildId)
-    if (!manager)
-      throw new Error('No player for this guild. Join a voice channel first.')
-    manager.setVolumes(updates)
-    return manager.getVolumes()
-  }
-
   function onStateChanged(listener: () => void): () => void {
     stateEvents.on('stateChanged', listener)
     return () => stateEvents.off('stateChanged', listener)
@@ -251,8 +238,6 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     playEffect,
     stopEffects,
     getState,
-    getVolume,
-    setVolume,
     onStateChanged,
   }
 }

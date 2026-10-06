@@ -15,8 +15,6 @@ export interface GuildPlaybackState {
   track?: TrackSummary | null
   source: 'live' | 'discord'
   lastUpdated?: string
-  /** Present when live; music and effects volume 0–100. */
-  volume?: { music: number, effects: number }
   /** soundIds of backend-decoded Ambience sounds currently active; present when live. */
   ambience?: string[]
 }

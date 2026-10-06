@@ -11,6 +11,7 @@ import { dirname } from 'node:path'
 import { generateDependencyReport } from '@discordjs/voice'
 import { getConfig } from './config'
 import { normalizeAccessibilitySettings, parseAccessibilitySettings } from './config/accessibility-settings'
+import { normalizeMasterVolume, parseMasterVolume } from './config/master-volume-settings'
 import { normalizeSceneFadeLength, parseSceneFadeLength } from './config/scene-fade-settings'
 import { createDiscordClient } from './discord/discord-client'
 import { getStorageWarnings } from './json-file'
@@ -57,8 +58,6 @@ export interface EmbeddedApi {
     getState: () => ReturnType<ReturnType<typeof createPlayer>['getState']>
     getBotStatus: () => ReturnType<ReturnType<typeof createDiscordClient>['getBotStatus']>
     getGuildDirectory: () => ReturnType<ReturnType<typeof createDiscordClient>['listGuildDirectory']>
-    getVolume: (guildId: string) => ReturnType<ReturnType<typeof createPlayer>['getVolume']>
-    setVolume: (guildId: string, updates: { music?: number, effects?: number }) => ReturnType<ReturnType<typeof createPlayer>['setVolume']>
     join: (body: { guildId: string, channelId: string }) => Promise<void>
     leave: (body: { guildId: string }) => Promise<void>
     stop: (guildId: string) => Promise<void>
@@ -86,6 +85,8 @@ export interface EmbeddedApi {
     setAccessibility: (settings: AccessibilitySettings) => Promise<void>
     getSceneFadeLength: () => Promise<number>
     setSceneFadeLength: (seconds: number) => Promise<void>
+    getMasterVolume: () => Promise<number>
+    setMasterVolume: (volume: number) => Promise<void>
     getVision: () => Promise<VisionSettingsState>
     setVisionProvider: (provider: VisionProviderId) => Promise<VisionSettingsState>
     setVisionApiKey: (provider: VisionProviderId, apiKey: string) => Promise<VisionSettingsState>
@@ -182,8 +183,6 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
       getState: () => player.getState(),
       getBotStatus: () => discord.getBotStatus(),
       getGuildDirectory: () => discord.listGuildDirectory(),
-      getVolume: guildId => player.getVolume(guildId),
-      setVolume: (guildId, updates) => player.setVolume(guildId, updates),
       join: async (body) => {
         const channel = resolveChannel(discord, body.guildId, body.channelId)
         await player.connect(channel)
@@ -245,6 +244,10 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
       getSceneFadeLength: async () => parseSceneFadeLength(await appConfig.get('scene.fadeLength')),
       setSceneFadeLength: async (seconds) => {
         await appConfig.set('scene.fadeLength', JSON.stringify(normalizeSceneFadeLength(seconds)))
+      },
+      getMasterVolume: async () => parseMasterVolume(await appConfig.get('player.masterVolume')),
+      setMasterVolume: async (volume) => {
+        await appConfig.set('player.masterVolume', JSON.stringify(normalizeMasterVolume(volume)))
       },
       getVision: () => visionSettings.get(),
       setVisionProvider: provider => visionSettings.setProvider(provider),

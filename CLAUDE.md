@@ -122,7 +122,7 @@ Stored in `scenes.json`. Import/export bundles scenes with their sound files as 
 ### Storage
 
 Data lives in platform user data directory (e.g., `~/Library/Application Support/hibiki` on macOS):
-- `app-config.json` — Discord token (when set in UI), bookmarks, storage path override, Vision to Vibe key + toggle
+- `app-config.json` — Discord token (when set in UI), bookmarks, storage path override, master volume, Vision to Vibe key + toggle
 - `scenes.json` — Scene definitions
 - `sound-tags.json` — Sound Tags keyed by `<category>/<soundId>` (see `CONTEXT.md` glossary)
 - `music/`, `effects/`, `ambience/` — Sound files (copied on upload, keyed by UUID)
@@ -148,13 +148,13 @@ When adding a new backend feature:
 3. Register the IPC handler in `electron/main.js` (or use the generic `api` handler).
 4. Add a typed wrapper in the frontend (e.g., `frontend/src/api/player.ts`).
 
-### Audio Streaming (Browser Feature)
+### Audio Streaming (Chunked IPC)
 
-The Browser tab captures audio from a `WebContentsView` (Electron-managed browser) using Web Audio API + AudioWorklet. Audio chunks are sent via IPC to the backend, which streams them to Discord voice.
+Audio chunks are captured in the renderer via Web Audio API + AudioWorklet (`frontend/src/audio/browser-audio-capture.ts`) and sent over IPC to the backend, which streams them to Discord voice — used by the Browser tab (always; a `WebContentsView` has no backend decoder) and by the renderer fallback for a Sound Library file with no backend decoder (m4a/AAC, see "Backend Sound Library Playback" below).
 
-- **Backend:** `player.startStream(guildId, stream, metadata)` accepts a Node.js `ReadableStream`.
-- **Frontend → Main:** `audio:startStream`, chunked `audio:chunk`, `audio:stopStream`.
-- **Main process:** Creates `PassThrough` streams, writes chunks, pipes to backend.
+- **Backend:** `player.startStream(guildId, stream, metadata?, streamId?)` feeds a long-lived Music slot in `AudioEngine` (the Scene Music fallback); `player.startEffectStream(guildId, stream)` spawns a new layered mixer input per call (the Browser tab, and the Scene Ambience/Effects fallback — an Ambience fallback stream is keyed `ambience-<soundId>`). Both accept a Node.js `Readable`.
+- **Frontend → Main** (`frontend/src/api/audio-stream.ts`): `audio:startStream`/chunked `audio:chunk`/`audio:stopStream` for the Music lane; `audio:startEffectStream`/chunked `audio:effectChunk`/`audio:stopEffectStream` for the effect lane.
+- **Main process** (`electron/main.js`): Creates `PassThrough` streams per `streamId`, writes chunks, pipes to the backend.
 
 ### Vision to Vibe
 
@@ -179,7 +179,9 @@ Sound Library playback for Discord decodes and mixes in the main process, feedin
 Scenes are **not** played directly in a single action. The frontend (SceneView) iterates over scene items and calls the player API individually:
 - Music: `playMusic(guildId, soundId, options)`
 - Ambience: `playAmbience(guildId, soundId, options)`
-- Effects: `playEffect(guildId, soundId)`
+- Effects: `playEffect(guildId, soundId, options)`
+
+Each call's `options.volume` is the per-item volume already multiplied by the master volume slider (`computeVolume()` in `SceneView.vue`) — `player`/`AudioEngine` have no master-volume concept of their own, they only ever receive a final absolute 0–100 value. The master volume itself is persisted in `app-config.json` via the `config` IPC domain (`getMasterVolume`/`setMasterVolume`, `src/config/master-volume-settings.ts`) instead of resetting to a hardcoded default on every launch.
 
 The scene is a **template**, not a runtime object. Playback state lives in `GuildAudioManager`.
 
@@ -264,6 +266,7 @@ The project is transitioning from a Docker-based monorepo to an Electron app. Se
 - **Scene is not a runtime object** — Scenes are templates; playback state is in `GuildAudioManager`.
 - **Build before E2E** — E2E tests launch the built app, not dev mode.
 - **Audio streaming is chunked IPC** — High-volume data; use the existing `audio:chunk` pattern, not single IPC calls.
+- **There is no per-guild music/effects volume API** — `player.getVolume`/`setVolume` were removed as dead code (#419); every `playMusic`/`playAmbience`/`playEffect` call takes its own absolute `options.volume` already scaled by the master volume (see Scene Playback above). `AudioEngine`'s `DEFAULT_VOLUMES` is just the fallback for the chunked-IPC paths (Browser tab, m4a fallback) when no explicit volume is given — it isn't live-adjustable.
 
 ## Agent skills
 

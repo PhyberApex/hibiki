@@ -73,6 +73,8 @@ vi.mock('@/api/config', () => ({
   // 0.1s rather than the real 3s default, so crossfade tests can wait for a
   // fade to actually complete with a short, real setTimeout-based `wait()`.
   fetchSceneFadeLength: vi.fn().mockResolvedValue(0.1),
+  fetchMasterVolume: vi.fn().mockResolvedValue(80),
+  updateMasterVolume: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/api/vision', () => ({
@@ -200,6 +202,47 @@ describe('sceneView pulses', () => {
     await wrapper.find('.btn-stop-scene').trigger('click')
     await flushPromises()
     expect(wrapper.find('.sound-card-ambience').classes()).not.toContain('pulse-breathe')
+  })
+})
+
+describe('sceneView — master volume persistence', () => {
+  beforeAll(stubMediaElement)
+
+  beforeEach(async () => {
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValue(JSON.parse(JSON.stringify(scene)))
+    const { fetchMasterVolume, updateMasterVolume } = await import('@/api/config')
+    vi.mocked(fetchMasterVolume).mockReset().mockResolvedValue(80)
+    vi.mocked(updateMasterVolume).mockReset().mockResolvedValue(undefined)
+  })
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
+
+  it('loads the persisted master volume on mount instead of always starting at the default', async () => {
+    const { fetchMasterVolume } = await import('@/api/config')
+    vi.mocked(fetchMasterVolume).mockResolvedValue(42)
+
+    const wrapper = await mountScene()
+
+    const slider = wrapper.find<HTMLInputElement>('[aria-label="Global volume"]')
+    expect(slider.element.value).toBe('42')
+  })
+
+  it('persists the master volume once the slider change settles, not on every drag tick', async () => {
+    const { updateMasterVolume } = await import('@/api/config')
+    const wrapper = await mountScene()
+
+    const slider = wrapper.find<HTMLInputElement>('[aria-label="Global volume"]')
+    slider.element.value = '55'
+    await slider.trigger('input')
+    expect(updateMasterVolume).not.toHaveBeenCalled()
+
+    await slider.trigger('change')
+    expect(updateMasterVolume).toHaveBeenCalledWith(55)
   })
 })
 
