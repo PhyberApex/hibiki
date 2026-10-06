@@ -134,6 +134,31 @@ export interface EmbeddedApp {
   onPlayerStateChanged: (listener: () => void) => () => void
 }
 
+/**
+ * Builds the backend's `close()` entry point — guild audio teardown before
+ * the Discord client is destroyed (see issue #456). Shared across repeated/
+ * concurrent calls (both Electron quit handlers can fire `close()`) so
+ * teardown runs exactly once and every caller awaits the same settle,
+ * rather than racing two independent teardowns. A throwing `destroyAll()`
+ * would already be isolated per-guild internally; this only needs to chain
+ * it ahead of destroying the Discord client.
+ */
+export function createShutdownHandler(
+  player: Pick<ReturnType<typeof createPlayer>, 'destroyAll'>,
+  discord: Pick<ReturnType<typeof createDiscordClient>, 'destroy'>,
+): () => Promise<void> {
+  let closePromise: Promise<void> | undefined
+  return function close(): Promise<void> {
+    if (!closePromise) {
+      closePromise = (async () => {
+        await player.destroyAll()
+        await discord.destroy()
+      })()
+    }
+    return closePromise
+  }
+}
+
 export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> {
   process.env.HIBIKI_EMBEDDED = '1'
   const report = generateDependencyReport()
@@ -303,7 +328,7 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
   }
 
   return {
-    close: () => discord.destroy(),
+    close: createShutdownHandler(player, discord),
     api,
     onPlayerStateChanged: player.onStateChanged,
   }
