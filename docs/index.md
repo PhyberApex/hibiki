@@ -40,9 +40,9 @@ Pre-built binaries for macOS, Windows, and Linux are available on the GitHub Rel
 
 You need a Discord application and bot token before running Hibiki. Follow these steps once.
 
-1. **Create an application and bot** — Go to [Discord Developer Portal](https://discord.com/developers/applications) → **New Application**. Name it (e.g. Hibiki) and create. In the sidebar, open **Bot** → **Add Bot**. Under **Token**, click **Reset Token** (or View Token), then copy it. Keep it secret; set it in the app **Settings** or as `DISCORD_TOKEN` in `.env`.
-2. **Invite the bot to your server** — Open **OAuth2** → **URL Generator**. Under **Scopes** choose **bot**. Under **Bot Permissions** select: **View Channels**, **Connect**, **Speak**, **Move Members**. Copy the generated URL, open it in a browser, pick your server, and authorize. The bot will show up in your server (offline until Hibiki is running).
-3. **(Optional) Environment variables** — For development, copy the sample env and set the token:
+1. **Create an application and bot** Go to [Discord Developer Portal](https://discord.com/developers/applications) → **New Application**. Name it (e.g. Hibiki) and create. In the sidebar, open **Bot** → **Add Bot**. Under **Token**, click **Reset Token** (or View Token), then copy it. Keep it secret; set it in the app **Settings** or as `DISCORD_TOKEN` in `.env`.
+2. **Invite the bot to your server** Open **OAuth2** → **URL Generator**. Under **Scopes** choose **bot**. Under **Bot Permissions** select: **View Channels**, **Connect**, **Speak**, **Move Members**. Copy the generated URL, open it in a browser, pick your server, and authorize. The bot will show up in your server (offline until Hibiki is running).
+3. **(Optional) Environment variables** For development, copy the sample env and set the token:
 {: .steps}
 
 ```bash
