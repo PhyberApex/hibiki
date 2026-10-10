@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/PhyberApex/hibiki/compare/v1.3.0...v1.3.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **docs:** keep bold words inline in setup steps ([#459](https://github.com/PhyberApex/hibiki/issues/459)) ([aa15f4d](https://github.com/PhyberApex/hibiki/commit/aa15f4d8a5604ea0b16035570a61b70d864039a1))
+
 ## [1.3.0](https://github.com/PhyberApex/hibiki/compare/v1.2.0...v1.3.0) (2026-10-07)
 
 
