@@ -205,6 +205,92 @@ describe('sceneView pulses', () => {
   })
 })
 
+describe('sceneView — Scene import', () => {
+  beforeAll(stubMediaElement)
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
+
+  it('reloads the sound library after importing a bundled Scene so its sounds are not flagged missing', async () => {
+    const { importScene, getScene, listScenes } = await import('@/api/scenes')
+    const { listMusic, listAmbience, listEffects } = await import('@/api/sounds')
+    const { openFileDialog } = await import('@/api/config')
+    const imported = {
+      id: 's2',
+      name: 'Imported',
+      music: [{ soundId: 'bundled-track', soundName: 'Bundled Track', volume: 60, loop: true }],
+      ambience: [],
+      effects: [],
+    }
+    vi.mocked(openFileDialog).mockResolvedValueOnce('/tmp/imported.hibiki.zip')
+    vi.mocked(importScene).mockResolvedValueOnce(imported as never)
+    vi.mocked(listScenes).mockResolvedValueOnce([imported as never])
+    vi.mocked(getScene).mockResolvedValueOnce(JSON.parse(JSON.stringify(imported)))
+    vi.mocked(listMusic).mockResolvedValueOnce([{ id: 'bundled-track', name: 'Bundled Track', filename: 'bundled-track.mp3' } as never])
+
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(SceneView, {
+      global: {
+        plugins: [createPinia(), router],
+        stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+      },
+    })
+    await flushPromises()
+    const callsBefore = { music: vi.mocked(listMusic).mock.calls.length, ambience: vi.mocked(listAmbience).mock.calls.length, effects: vi.mocked(listEffects).mock.calls.length }
+
+    const importButton = wrapper.findAll('button').find(b => b.text() === 'Import')
+    await importButton!.trigger('click')
+    await flushPromises()
+
+    expect(vi.mocked(listMusic).mock.calls.length).toBe(callsBefore.music + 1)
+    expect(vi.mocked(listAmbience).mock.calls.length).toBe(callsBefore.ambience + 1)
+    expect(vi.mocked(listEffects).mock.calls.length).toBe(callsBefore.effects + 1)
+    expect(wrapper.find('.sound-missing-badge').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('sceneView — Scene list refresh', () => {
+  beforeAll(stubMediaElement)
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
+
+  it('reloads the Scene list when navigating back from an edited Scene so its counts are not stale', async () => {
+    const { getScene, listScenes } = await import('@/api/scenes')
+    const empty = { id: 's3', name: 'Fresh', ambience: [], music: [], effects: [] }
+    const withTrack = { ...empty, music: [{ soundId: 'amb-1', soundName: 'Rain', volume: 80, loop: true }] }
+    vi.mocked(listScenes).mockResolvedValue([empty as never])
+    vi.mocked(getScene).mockResolvedValue(JSON.parse(JSON.stringify(withTrack)))
+
+    await router.push('/scenes/s3')
+    await router.isReady()
+    const wrapper = mount(SceneView, {
+      global: {
+        plugins: [createPinia(), router],
+        stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+      },
+    })
+    await flushPromises()
+
+    vi.mocked(listScenes).mockResolvedValue([withTrack as never])
+    await router.push('/scenes')
+    await flushPromises()
+
+    expect(wrapper.find('.count-badge-empty').exists()).toBe(false)
+    expect(wrapper.find('.count-badge-music').text()).toBe('1 music')
+    wrapper.unmount()
+    vi.mocked(listScenes).mockResolvedValue([])
+  })
+})
+
 describe('sceneView — master volume persistence', () => {
   beforeAll(stubMediaElement)
 

@@ -1293,7 +1293,8 @@ async function doImportScene() {
   importBusy.value = true
   try {
     const imported = await importScene(sourcePath)
-    scenes.value = await listScenes()
+    const [sceneList] = await Promise.all([listScenes(), loadSounds()])
+    scenes.value = sceneList
     await router.push(`/scenes/${imported.id}`)
     exportImportMessage.value = { type: 'success', text: `Imported "${imported.name}"` }
   }
@@ -1386,6 +1387,10 @@ watch(sceneId, (newId) => {
     stopAllEffectInstances()
   }
   sceneWatcherRanOnce = true
+  // Returning to the list after editing a Scene in place: the list's counts
+  // come from `scenes`, which only mount/activation refresh otherwise.
+  if (!newId && sceneWatcherRanOnce)
+    loadScenes()
   loadScene()
 }, { immediate: true })
 </script>
