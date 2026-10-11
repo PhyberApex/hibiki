@@ -1,0 +1,98 @@
+{
+  "name": "High Seas Voyage",
+  "slug": "high-seas-voyage",
+  "description": "Aboard a creaking wooden ship under open sky. Waves, gulls, and a port-town theme, with cannon fire and the ship's bell ready for trouble on the horizon.",
+  "author": "PhyberApex",
+  "version": "1.0.0",
+  "tags": ["sea", "ship", "ocean", "pirates", "travel", "cc0"],
+  "category": "travel",
+  "license": "CC0-1.0",
+  "audioBundled": false,
+  "createdAt": "2026-10-11T00:00:00Z",
+  "updatedAt": "2026-10-11T00:00:00Z",
+  "scene": {
+    "music": [
+      {
+        "soundName": "Merchants and Sea Salt",
+        "volume": 45,
+        "loop": true,
+        "source": {
+          "name": "Merchants and Sea Salt by NBJDLukasAbsolute",
+          "url": "https://opengameart.org/content/merchants-and-sea-salt",
+          "note": "CC0. Port-town theme for calm sailing and harbour scenes."
+        }
+      },
+      {
+        "soundName": "Pirates Libertaires",
+        "volume": 55,
+        "loop": true,
+        "source": {
+          "name": "Pirates libertaires by Komiku (Loyalty Freak Music)",
+          "url": "https://opengameart.org/content/pirates-libertaires",
+          "note": "CC0. Upbeat pirate adventure track for chases and boarding actions."
+        }
+      }
+    ],
+    "ambience": [
+      {
+        "soundName": "Creaking Ship",
+        "volume": 50,
+        "enabled": true,
+        "source": {
+          "name": "LargeWoodenShip.mp3 by PimFeijen",
+          "url": "https://freesound.org/people/PimFeijen/sounds/195193/",
+          "note": "CC0. 10 minutes of creaking hull and waves. Carries the whole scene on its own."
+        }
+      },
+      {
+        "soundName": "Ocean Waves",
+        "volume": 35,
+        "enabled": false,
+        "source": {
+          "name": "Calm ocean waves by SamsterBirdies",
+          "url": "https://freesound.org/people/SamsterBirdies/sounds/578524/",
+          "note": "CC0. 3-minute looping shoreline. Enable when anchored or on the beach."
+        }
+      },
+      {
+        "soundName": "Seagulls",
+        "volume": 30,
+        "enabled": true,
+        "source": {
+          "name": "sea gulls.wav by Snapper4298",
+          "url": "https://freesound.org/people/Snapper4298/sounds/166703/",
+          "note": "CC0. 7-second gull calls. Let the random interval scatter them."
+        }
+      }
+    ],
+    "effects": [
+      {
+        "soundName": "Cannon Fire",
+        "volume": 80,
+        "source": {
+          "name": "Cannon Shot by qubodup",
+          "url": "https://freesound.org/people/qubodup/sounds/187767/",
+          "note": "CC0. 12-second real cannon with echo."
+        }
+      },
+      {
+        "soundName": "Ship's Bell",
+        "volume": 65,
+        "source": {
+          "name": "Ship Bell Two Chimes by Sojan",
+          "url": "https://freesound.org/people/Sojan/sounds/353232/",
+          "note": "CC0. 3-second double chime for 'land ho' or all hands on deck."
+        }
+      },
+      {
+        "soundName": "Thunder Strike",
+        "volume": 75,
+        "source": {
+          "name": "Heavy Thunder Strike - no Rain - QUADRO.wav by BlueDelta",
+          "url": "https://freesound.org/people/BlueDelta/sounds/446753/",
+          "note": "CC0. For the storm rolling in. Trim the first 10 seconds."
+        }
+      }
+    ]
+  }
+}

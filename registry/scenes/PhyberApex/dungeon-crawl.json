@@ -1,0 +1,88 @@
+{
+  "name": "Dungeon Crawl",
+  "slug": "dungeon-crawl",
+  "description": "Torchlit corridors deep underground: a low dungeon drone, dripping water, and the rattle of chains. Stone doors and distant rumbles ready as effects.",
+  "author": "PhyberApex",
+  "version": "1.0.0",
+  "tags": ["dungeon", "cave", "underground", "exploration", "tension", "cc0"],
+  "category": "environment",
+  "license": "CC0-1.0",
+  "audioBundled": false,
+  "createdAt": "2026-10-11T00:00:00Z",
+  "updatedAt": "2026-10-11T00:00:00Z",
+  "scene": {
+    "music": [
+      {
+        "soundName": "Dungeon Theme",
+        "volume": 40,
+        "loop": true,
+        "source": {
+          "name": "Dungeon Ambience by yd",
+          "url": "https://opengameart.org/content/dungeon-ambience",
+          "note": "CC0. Download dungeon002.ogg. Alternative: Dark Theme by JaggedStone, https://opengameart.org/content/dark-theme (CC0)."
+        }
+      }
+    ],
+    "ambience": [
+      {
+        "soundName": "Dungeon Drone",
+        "volume": 45,
+        "enabled": true,
+        "source": {
+          "name": "Loopable Dungeon Ambience by JaggedStone",
+          "url": "https://opengameart.org/content/loopable-dungeon-ambience",
+          "note": "CC0. Download dungeon_ambient_1.ogg. Low wind with water drips, loops cleanly."
+        }
+      },
+      {
+        "soundName": "Dripping Water",
+        "volume": 30,
+        "enabled": true,
+        "source": {
+          "name": "Water Dripping in Cave.wav by Sclolex",
+          "url": "https://freesound.org/people/Sclolex/sounds/177958/",
+          "note": "CC0. 90 seconds of processed cave drips."
+        }
+      },
+      {
+        "soundName": "Deep Echoes",
+        "volume": 25,
+        "enabled": false,
+        "source": {
+          "name": "A_Dungeon_Ambience_Loop.wav by Grubzyy",
+          "url": "https://freesound.org/people/Grubzyy/sounds/422720/",
+          "note": "CC0. 29-second loop of distant ominous rumbles. Enable when the party nears something big."
+        }
+      }
+    ],
+    "effects": [
+      {
+        "soundName": "Stone Door",
+        "volume": 70,
+        "source": {
+          "name": "Heavy stone door opens 2 by PostProdDog",
+          "url": "https://freesound.org/people/PostProdDog/sounds/578491/",
+          "note": "CC0. 14-second slab dragging open. Works for sarcophagus lids too."
+        }
+      },
+      {
+        "soundName": "Chains Rattle",
+        "volume": 60,
+        "source": {
+          "name": "Chain Rattling by Kp69606",
+          "url": "https://freesound.org/people/Kp69606/sounds/448917/",
+          "note": "CC0. 13 seconds of chains dragging on the ground. Shorter alternative: Chains.wav by cribbler, https://freesound.org/people/cribbler/sounds/370877/ (CC0, 6 s)."
+        }
+      },
+      {
+        "soundName": "Distant Explosion",
+        "volume": 65,
+        "source": {
+          "name": "Explosion.mp3 by florianreichelt",
+          "url": "https://freesound.org/people/florianreichelt/sounds/563010/",
+          "note": "CC0. 5-second blast for collapsing tunnels or a triggered trap."
+        }
+      }
+    ]
+  }
+}

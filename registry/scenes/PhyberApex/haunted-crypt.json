@@ -1,0 +1,97 @@
+{
+  "name": "Haunted Crypt",
+  "slug": "haunted-crypt",
+  "description": "Something is awake beneath the chapel. Dungeon-synth dread, ghostly whispers, tolling funeral bells, and a scream for the moment the lid slides off.",
+  "author": "PhyberApex",
+  "version": "1.0.0",
+  "tags": ["horror", "undead", "crypt", "haunted", "tension", "cc0"],
+  "category": "horror",
+  "license": "CC0-1.0",
+  "audioBundled": false,
+  "createdAt": "2026-10-11T00:00:00Z",
+  "updatedAt": "2026-10-11T00:00:00Z",
+  "scene": {
+    "music": [
+      {
+        "soundName": "Eternal Sleep",
+        "volume": 40,
+        "loop": true,
+        "source": {
+          "name": "Eternal Sleep by Kaiser (uploaded by The Oracle)",
+          "url": "https://opengameart.org/content/eternal-sleep",
+          "note": "CC0. Dark ambient / dungeon synth FLAC. Alternative: Horror Atmosphere by Juhani Junkala, https://opengameart.org/content/horror-atmosphere (CC0, loop-ready)."
+        }
+      }
+    ],
+    "ambience": [
+      {
+        "soundName": "Horror Cave Drone",
+        "volume": 45,
+        "enabled": true,
+        "source": {
+          "name": "HorrorCaveAmbience.mp3 by shelbyshark",
+          "url": "https://freesound.org/people/shelbyshark/sounds/512513/",
+          "note": "CC0. 38-second loopable spooky ambience."
+        }
+      },
+      {
+        "soundName": "Ghost Whispers",
+        "volume": 30,
+        "enabled": true,
+        "source": {
+          "name": "Ghost Whispers by Litruv",
+          "url": "https://freesound.org/people/Litruv/sounds/175944/",
+          "note": "CC0. 23 seconds of reversed whispering. Hibiki's random interval makes it drift in and out."
+        }
+      },
+      {
+        "soundName": "Dark Cavern",
+        "volume": 35,
+        "enabled": false,
+        "source": {
+          "name": "Dark Cavern Ambient by Paul Wortmann",
+          "url": "https://opengameart.org/content/dark-cavern-ambient",
+          "note": "CC0. Download dark_cavern_ambient_002.ogg, the continuous loop version."
+        }
+      }
+    ],
+    "effects": [
+      {
+        "soundName": "Funeral Bell",
+        "volume": 60,
+        "source": {
+          "name": "funeral bell-cloche funèbre.wav by aoristos",
+          "url": "https://freesound.org/people/aoristos/sounds/329324/",
+          "note": "CC0. 29 seconds of real church bells from a medieval chapel in France."
+        }
+      },
+      {
+        "soundName": "Demonic Scream",
+        "volume": 75,
+        "source": {
+          "name": "Demonic Woman Scream.wav by nick121087",
+          "url": "https://freesound.org/people/nick121087/sounds/333832/",
+          "note": "CC0. 4-second processed scream. Use sparingly."
+        }
+      },
+      {
+        "soundName": "Sarcophagus Lid",
+        "volume": 70,
+        "source": {
+          "name": "Heavy stone door opens 2 by PostProdDog",
+          "url": "https://freesound.org/people/PostProdDog/sounds/578491/",
+          "note": "CC0. 14-second stone slab dragging open."
+        }
+      },
+      {
+        "soundName": "Chains",
+        "volume": 55,
+        "source": {
+          "name": "Chains.wav by cribbler",
+          "url": "https://freesound.org/people/cribbler/sounds/370877/",
+          "note": "CC0. 6-second chain shake."
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "name": "Market Day",
+  "slug": "market-day",
+  "description": "A bustling town square on market day: vendor chatter, a blacksmith at work, coin changing hands, and a cheerful minstrel tune. Built for shopping and rumour gathering.",
+  "author": "PhyberApex",
+  "version": "1.0.0",
+  "tags": ["market", "town", "social", "shopping", "city", "cc0"],
+  "category": "social",
+  "license": "CC0-1.0",
+  "audioBundled": false,
+  "createdAt": "2026-10-11T00:00:00Z",
+  "updatedAt": "2026-10-11T00:00:00Z",
+  "scene": {
+    "music": [
+      {
+        "soundName": "Market Day Theme",
+        "volume": 50,
+        "loop": true,
+        "source": {
+          "name": "Medieval: Market Day by RandomMind",
+          "url": "https://opengameart.org/content/medieval-market-day",
+          "note": "CC0, no attribution required. Download Loop_Market_Day.mp3 for the seamless version."
+        }
+      }
+    ],
+    "ambience": [
+      {
+        "soundName": "Market Crowd",
+        "volume": 45,
+        "enabled": true,
+        "source": {
+          "name": "Street-Market-Gap-France.wav by Astounded",
+          "url": "https://freesound.org/people/Astounded/sounds/483561/",
+          "note": "CC0. 15 minutes of a real French street market with vendor chatter. The uploader asks to be contacted for commercial use, which does not apply to running your own game."
+        }
+      },
+      {
+        "soundName": "Blacksmith",
+        "volume": 30,
+        "enabled": true,
+        "source": {
+          "name": "Hammer and anvil by Duasun",
+          "url": "https://freesound.org/people/Duasun/sounds/321889/",
+          "note": "CC0. 26 seconds of anvil strikes. The random interval makes it feel like a smithy across the square."
+        }
+      },
+      {
+        "soundName": "Tavern Chatter",
+        "volume": 30,
+        "enabled": false,
+        "source": {
+          "name": "Ambience_Bar_No_Music.wav by Dokuta_Gerovv",
+          "url": "https://freesound.org/people/Dokuta_Gerovv/sounds/661686/",
+          "note": "CC0. 41-second indoor crowd murmur for stepping into a shop or tavern."
+        }
+      }
+    ],
+    "effects": [
+      {
+        "soundName": "Coins",
+        "volume": 60,
+        "source": {
+          "name": "Coins Being Dropped-Assorted by TheWoodlandNomad",
+          "url": "https://freesound.org/people/TheWoodlandNomad/sounds/363090/",
+          "note": "CC0. 24 seconds of assorted coin drops. Trim a short clip for a purchase."
+        }
+      },
+      {
+        "soundName": "Town Bell",
+        "volume": 55,
+        "source": {
+          "name": "funeral bell-cloche funèbre.wav by aoristos",
+          "url": "https://freesound.org/people/aoristos/sounds/329324/",
+          "note": "CC0. Real medieval church bells. Trim a few tolls to mark the hour."
+        }
+      },
+      {
+        "soundName": "Shop Door",
+        "volume": 60,
+        "source": {
+          "name": "Door, Church, Close, E.wav by InspectorJ",
+          "url": "https://freesound.org/people/InspectorJ/sounds/339677/",
+          "note": "CC BY 4.0: credit 'InspectorJ (freesound.org)' if you redistribute a recording of your session. Any wooden door works."
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "name": "Deep Forest Trail",
+  "slug": "forest-trail",
+  "description": "Daylight travel through old woods: birdsong, a trickling creek, and gentle exploration music. Wolves and owls on call for when the sun goes down.",
+  "author": "PhyberApex",
+  "version": "1.0.0",
+  "tags": ["forest", "travel", "exploration", "nature", "wilderness", "cc0"],
+  "category": "environment",
+  "license": "CC0-1.0",
+  "audioBundled": false,
+  "createdAt": "2026-10-11T00:00:00Z",
+  "updatedAt": "2026-10-11T00:00:00Z",
+  "scene": {
+    "music": [
+      {
+        "soundName": "Exploration Theme",
+        "volume": 50,
+        "loop": true,
+        "source": {
+          "name": "Medieval: Exploration by RandomMind",
+          "url": "https://opengameart.org/content/medieval-exploration",
+          "note": "CC0, no attribution required. Download Exploration.mp3. Any calm medieval travel track works."
+        }
+      }
+    ],
+    "ambience": [
+      {
+        "soundName": "Woodland Birds",
+        "volume": 45,
+        "enabled": true,
+        "source": {
+          "name": "Quiet Spring Woodland Ambience by ecfike",
+          "url": "https://freesound.org/people/ecfike/sounds/160893/",
+          "note": "CC0. Seamless 1-minute forest loop. Alternative: Spring Birds & Woodpeckers (Loop) by Resaural, https://freesound.org/people/Resaural/sounds/634511/ (CC0, 7 min)."
+        }
+      },
+      {
+        "soundName": "Forest Creek",
+        "volume": 35,
+        "enabled": true,
+        "source": {
+          "name": "Creek 06 (loop) by VKProduktion",
+          "url": "https://freesound.org/people/VKProduktion/sounds/231536/",
+          "note": "CC0. 36-second loopable creek. Any small stream loop works."
+        }
+      },
+      {
+        "soundName": "Rolling Wind",
+        "volume": 20,
+        "enabled": false,
+        "source": {
+          "name": "Rolling Wind - looping by ERR0",
+          "url": "https://freesound.org/people/ERR0/sounds/210220/",
+          "note": "CC0. 30-second seamless wind loop. Enable for high ground or an approaching storm."
+        }
+      }
+    ],
+    "effects": [
+      {
+        "soundName": "Wolf Howl",
+        "volume": 60,
+        "source": {
+          "name": "Wolf howl by NaturesTemper",
+          "url": "https://freesound.org/people/NaturesTemper/sounds/398430/",
+          "note": "CC0. 8-second single howl. Good for distant danger."
+        }
+      },
+      {
+        "soundName": "Owl Hoot",
+        "volume": 55,
+        "source": {
+          "name": "Owl Hoot by Breviceps",
+          "url": "https://freesound.org/people/Breviceps/sounds/465697/",
+          "note": "CC0. 4-second hoot for night-time travel."
+        }
+      },
+      {
+        "soundName": "Crossbow Shot",
+        "volume": 70,
+        "source": {
+          "name": "Crossbow Firing and Hitting Target by Ali_6868",
+          "url": "https://freesound.org/people/Ali_6868/sounds/384919/",
+          "note": "CC0. For a sudden ambush from the treeline."
+        }
+      }
+    ]
+  }
+}
