@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.0](https://github.com/PhyberApex/hibiki/compare/v1.3.0...v1.4.0) (2026-10-11)
+
+
+### Features
+
+* **registry:** add seven showcase scenes and link the scene packs ([#474](https://github.com/PhyberApex/hibiki/issues/474)) ([35382da](https://github.com/PhyberApex/hibiki/commit/35382da9347bd7a09d017641a6f63d68da489051))
+
+
+### Bug Fixes
+
+* **browser:** make browser tab creation non-blocking ([#473](https://github.com/PhyberApex/hibiki/issues/473)) ([95aaaea](https://github.com/PhyberApex/hibiki/commit/95aaaea110a8356a34a3616a9af6959597702cc0))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.132.0 ([#469](https://github.com/PhyberApex/hibiki/issues/469)) ([d44f937](https://github.com/PhyberApex/hibiki/commit/d44f9379daab0278e762b5f095aaad3f4ffbd378))
+* **docs:** keep bold words inline in setup steps ([#459](https://github.com/PhyberApex/hibiki/issues/459)) ([aa15f4d](https://github.com/PhyberApex/hibiki/commit/aa15f4d8a5604ea0b16035570a61b70d864039a1))
+* **electron:** allow CORS media requests on the hibiki:// scheme ([#472](https://github.com/PhyberApex/hibiki/issues/472)) ([dafd519](https://github.com/PhyberApex/hibiki/commit/dafd5194aad5937a10faa009ea5c239886e7ddaf))
+* **scenes:** reload the sound library after importing a scene ([#470](https://github.com/PhyberApex/hibiki/issues/470)) ([68c9668](https://github.com/PhyberApex/hibiki/commit/68c966893301507ce3579f6b0690a66aed56fd97))
+
 ## [1.3.0](https://github.com/PhyberApex/hibiki/compare/v1.2.0...v1.3.0) (2026-10-07)
 
 
