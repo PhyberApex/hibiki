@@ -250,6 +250,44 @@ describe('sceneView — Scene import', () => {
     expect(vi.mocked(listAmbience).mock.calls.length).toBe(callsBefore.ambience + 1)
     expect(vi.mocked(listEffects).mock.calls.length).toBe(callsBefore.effects + 1)
     expect(wrapper.find('.sound-missing-badge').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('sceneView — Scene list refresh', () => {
+  beforeAll(stubMediaElement)
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
+
+  it('reloads the Scene list when navigating back from an edited Scene so its counts are not stale', async () => {
+    const { getScene, listScenes } = await import('@/api/scenes')
+    const empty = { id: 's3', name: 'Fresh', ambience: [], music: [], effects: [] }
+    const withTrack = { ...empty, music: [{ soundId: 'amb-1', soundName: 'Rain', volume: 80, loop: true }] }
+    vi.mocked(listScenes).mockResolvedValue([empty as never])
+    vi.mocked(getScene).mockResolvedValue(JSON.parse(JSON.stringify(withTrack)))
+
+    await router.push('/scenes/s3')
+    await router.isReady()
+    const wrapper = mount(SceneView, {
+      global: {
+        plugins: [createPinia(), router],
+        stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+      },
+    })
+    await flushPromises()
+
+    vi.mocked(listScenes).mockResolvedValue([withTrack as never])
+    await router.push('/scenes')
+    await flushPromises()
+
+    expect(wrapper.find('.count-badge-empty').exists()).toBe(false)
+    expect(wrapper.find('.count-badge-music').text()).toBe('1 music')
+    wrapper.unmount()
+    vi.mocked(listScenes).mockResolvedValue([])
   })
 })
 

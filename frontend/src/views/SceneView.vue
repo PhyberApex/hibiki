@@ -1387,6 +1387,10 @@ watch(sceneId, (newId) => {
     stopAllEffectInstances()
   }
   sceneWatcherRanOnce = true
+  // Returning to the list after editing a Scene in place: the list's counts
+  // come from `scenes`, which only mount/activation refresh otherwise.
+  if (!newId && sceneWatcherRanOnce)
+    loadScenes()
   loadScene()
 }, { immediate: true })
 </script>
