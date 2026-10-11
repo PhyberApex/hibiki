@@ -4,7 +4,11 @@ const { PassThrough } = require('node:stream')
 const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
 
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'hibiki', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  // `corsEnabled` lets audio elements with `crossOrigin = 'anonymous'` (needed
+  // to capture them into Web Audio for Discord streaming) load hibiki://sound
+  // URLs; without it Chromium rejects the request before it reaches the
+  // handler. `stream` marks media responses as streamable.
+  { scheme: 'hibiki', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
 ])
 
 let appHandle = null
