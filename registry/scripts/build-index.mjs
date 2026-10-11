@@ -47,9 +47,17 @@ for (const file of sceneFiles) {
 
 scenes.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
+// Derived from the entries rather than the clock so rebuilding an unchanged
+// registry yields a byte-identical index (CI commits the rebuilt file).
+const updatedAt = scenes
+  .map(s => s.updatedAt)
+  .filter(Boolean)
+  .sort()
+  .at(-1) ?? new Date(0).toISOString()
+
 const index = {
   version: 1,
-  updatedAt: new Date().toISOString(),
+  updatedAt,
   scenes,
 }
 

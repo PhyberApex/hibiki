@@ -1,24 +1,129 @@
 {
   "version": 1,
-  "updatedAt": "2026-03-18T14:14:10.257Z",
+  "updatedAt": "2026-10-11T00:00:00Z",
   "scenes": [
+    {
+      "name": "Battlefield Clash",
+      "slug": "battlefield-clash",
+      "description": "Initiative is rolled. Driving medieval battle music with sword clashes, war horns, crossbow fire, and a charging mob on the effects board.",
+      "author": "PhyberApex",
+      "version": "1.0.0",
+      "tags": [
+        "combat",
+        "battle",
+        "war",
+        "encounter",
+        "action",
+        "cc0"
+      ],
+      "category": "combat",
+      "license": "CC0-1.0",
+      "audioBundled": false,
+      "createdAt": "2026-10-11T00:00:00Z",
+      "updatedAt": "2026-10-11T00:00:00Z",
+      "scene": {
+        "music": [
+          {
+            "soundName": "Battle Theme",
+            "volume": 65,
+            "loop": true,
+            "source": {
+              "name": "Medieval: Battle by RandomMind",
+              "url": "https://opengameart.org/content/medieval-battle",
+              "note": "CC0, no attribution required. Download battle.mp3."
+            }
+          },
+          {
+            "soundName": "Boss Battle",
+            "volume": 65,
+            "loop": true,
+            "source": {
+              "name": "Boss Battle Loop 1 (155 BPM) by kanaizo",
+              "url": "https://freesound.org/people/kanaizo/sounds/739177/",
+              "note": "CC0. 78-second loop with a detuned piano hook. Switch to this for the big bad."
+            }
+          }
+        ],
+        "ambience": [
+          {
+            "soundName": "Battlefield Wind",
+            "volume": 20,
+            "enabled": true,
+            "source": {
+              "name": "Cold Howling Wind/Breeze (Loopable) by The_Isot_is_Back",
+              "url": "https://freesound.org/people/The_Isot_is_Back/sounds/638434/",
+              "note": "CC0. 20-second loopable wind bed under the music."
+            }
+          }
+        ],
+        "effects": [
+          {
+            "soundName": "Sword Clash",
+            "volume": 75,
+            "source": {
+              "name": "sword against sword.wav by Fenodyrie",
+              "url": "https://freesound.org/people/Fenodyrie/sounds/568790/",
+              "note": "CC0. 79 seconds of real steel on steel. Trim a 2 to 3 second hit from it."
+            }
+          },
+          {
+            "soundName": "War Horn",
+            "volume": 80,
+            "source": {
+              "name": "war horn.wav by adharca",
+              "url": "https://freesound.org/people/adharca/sounds/539956/",
+              "note": "CC0. 4-second horn blast to open combat."
+            }
+          },
+          {
+            "soundName": "Crossbow Shot",
+            "volume": 70,
+            "source": {
+              "name": "Crossbow Firing and Hitting Target by Ali_6868",
+              "url": "https://freesound.org/people/Ali_6868/sounds/384919/",
+              "note": "CC0. Short fire-and-hit, great for ranged attacks."
+            }
+          },
+          {
+            "soundName": "Battle Charge",
+            "volume": 65,
+            "source": {
+              "name": "People screaming in agony when charging into battle by florianreichelt",
+              "url": "https://freesound.org/people/florianreichelt/sounds/563011/",
+              "note": "CC0. 18-second crowd charge for reinforcements arriving."
+            }
+          },
+          {
+            "soundName": "Explosion",
+            "volume": 75,
+            "source": {
+              "name": "Explosion.mp3 by florianreichelt",
+              "url": "https://freesound.org/people/florianreichelt/sounds/563010/",
+              "note": "CC0. 5-second blast for fireballs and siege engines."
+            }
+          }
+        ]
+      }
+    },
     {
       "name": "Cozy Tavern",
       "slug": "cozy-tavern",
       "description": "A warm tavern with crackling fire, gentle chatter, and a bard playing in the corner. Perfect for social encounters and downtime.",
       "author": "PhyberApex",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "tags": [
         "tavern",
         "social",
         "ambient",
         "fantasy",
-        "example"
+        "example",
+        "cc0"
       ],
       "category": "environment",
+      "license": "CC0-1.0",
       "audioBundled": false,
       "createdAt": "2026-03-18T00:00:00Z",
-      "updatedAt": "2026-03-18T00:00:00Z",
+      "updatedAt": "2026-10-11T00:00:00Z",
       "scene": {
         "music": [
           {
@@ -26,9 +131,9 @@
             "volume": 60,
             "loop": true,
             "source": {
-              "name": "Medieval Fantasy Tavern Music",
-              "url": "https://freesound.org/people/sonically_sound/sounds/649132/",
-              "note": "Any gentle bard or lute tavern music works"
+              "name": "Medieval: King's Feast by RandomMind",
+              "url": "https://opengameart.org/content/medieval-kings-feast",
+              "note": "CC0, no attribution required. Download Loop_Kings_Feast.wav. Any gentle bard or lute tavern music works."
             }
           }
         ],
@@ -38,9 +143,9 @@
             "volume": 45,
             "enabled": true,
             "source": {
-              "name": "Fireplace Crackle Loop",
+              "name": "Fireplace.wav by inchadney",
               "url": "https://freesound.org/people/inchadney/sounds/132534/",
-              "note": "Any fireplace or campfire loop"
+              "note": "CC0. 4-minute fireplace recording. Any fireplace or campfire loop works."
             }
           },
           {
@@ -48,9 +153,9 @@
             "volume": 30,
             "enabled": true,
             "source": {
-              "name": "Bar Crowd Ambience",
+              "name": "Ambience_Bar_No_Music.wav by Dokuta_Gerovv",
               "url": "https://freesound.org/people/Dokuta_Gerovv/sounds/661686/",
-              "note": "Low background crowd murmur"
+              "note": "CC0. 41-second low background crowd murmur."
             }
           }
         ],
@@ -59,18 +164,608 @@
             "soundName": "Tavern Door",
             "volume": 70,
             "source": {
-              "name": "Wooden Door Open Close",
+              "name": "Door, Church, Close, E.wav by InspectorJ",
               "url": "https://freesound.org/people/InspectorJ/sounds/339677/",
-              "note": "Heavy wooden door creak"
+              "note": "CC BY 4.0: credit 'InspectorJ (freesound.org)' if you redistribute a recording of your session. Any heavy wooden door works."
             }
           },
           {
             "soundName": "Mug Slam",
             "volume": 65,
             "source": {
-              "name": "Glass Slam on Table",
+              "name": "Mug slam and slosh.mp3 by Gingie",
               "url": "https://freesound.org/people/Gingie/sounds/345599/",
-              "note": "Mug or tankard hitting a wooden table"
+              "note": "CC0. Mug or tankard hitting a wooden table."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Deep Forest Trail",
+      "slug": "forest-trail",
+      "description": "Daylight travel through old woods: birdsong, a trickling creek, and gentle exploration music. Wolves and owls on call for when the sun goes down.",
+      "author": "PhyberApex",
+      "version": "1.0.0",
+      "tags": [
+        "forest",
+        "travel",
+        "exploration",
+        "nature",
+        "wilderness",
+        "cc0"
+      ],
+      "category": "environment",
+      "license": "CC0-1.0",
+      "audioBundled": false,
+      "createdAt": "2026-10-11T00:00:00Z",
+      "updatedAt": "2026-10-11T00:00:00Z",
+      "scene": {
+        "music": [
+          {
+            "soundName": "Exploration Theme",
+            "volume": 50,
+            "loop": true,
+            "source": {
+              "name": "Medieval: Exploration by RandomMind",
+              "url": "https://opengameart.org/content/medieval-exploration",
+              "note": "CC0, no attribution required. Download Exploration.mp3. Any calm medieval travel track works."
+            }
+          }
+        ],
+        "ambience": [
+          {
+            "soundName": "Woodland Birds",
+            "volume": 45,
+            "enabled": true,
+            "source": {
+              "name": "Quiet Spring Woodland Ambience by ecfike",
+              "url": "https://freesound.org/people/ecfike/sounds/160893/",
+              "note": "CC0. Seamless 1-minute forest loop. Alternative: Spring Birds & Woodpeckers (Loop) by Resaural, https://freesound.org/people/Resaural/sounds/634511/ (CC0, 7 min)."
+            }
+          },
+          {
+            "soundName": "Forest Creek",
+            "volume": 35,
+            "enabled": true,
+            "source": {
+              "name": "Creek 06 (loop) by VKProduktion",
+              "url": "https://freesound.org/people/VKProduktion/sounds/231536/",
+              "note": "CC0. 36-second loopable creek. Any small stream loop works."
+            }
+          },
+          {
+            "soundName": "Rolling Wind",
+            "volume": 20,
+            "enabled": false,
+            "source": {
+              "name": "Rolling Wind - looping by ERR0",
+              "url": "https://freesound.org/people/ERR0/sounds/210220/",
+              "note": "CC0. 30-second seamless wind loop. Enable for high ground or an approaching storm."
+            }
+          }
+        ],
+        "effects": [
+          {
+            "soundName": "Wolf Howl",
+            "volume": 60,
+            "source": {
+              "name": "Wolf howl by NaturesTemper",
+              "url": "https://freesound.org/people/NaturesTemper/sounds/398430/",
+              "note": "CC0. 8-second single howl. Good for distant danger."
+            }
+          },
+          {
+            "soundName": "Owl Hoot",
+            "volume": 55,
+            "source": {
+              "name": "Owl Hoot by Breviceps",
+              "url": "https://freesound.org/people/Breviceps/sounds/465697/",
+              "note": "CC0. 4-second hoot for night-time travel."
+            }
+          },
+          {
+            "soundName": "Crossbow Shot",
+            "volume": 70,
+            "source": {
+              "name": "Crossbow Firing and Hitting Target by Ali_6868",
+              "url": "https://freesound.org/people/Ali_6868/sounds/384919/",
+              "note": "CC0. For a sudden ambush from the treeline."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Dungeon Crawl",
+      "slug": "dungeon-crawl",
+      "description": "Torchlit corridors deep underground: a low dungeon drone, dripping water, and the rattle of chains. Stone doors and distant rumbles ready as effects.",
+      "author": "PhyberApex",
+      "version": "1.0.0",
+      "tags": [
+        "dungeon",
+        "cave",
+        "underground",
+        "exploration",
+        "tension",
+        "cc0"
+      ],
+      "category": "environment",
+      "license": "CC0-1.0",
+      "audioBundled": false,
+      "createdAt": "2026-10-11T00:00:00Z",
+      "updatedAt": "2026-10-11T00:00:00Z",
+      "scene": {
+        "music": [
+          {
+            "soundName": "Dungeon Theme",
+            "volume": 40,
+            "loop": true,
+            "source": {
+              "name": "Dungeon Ambience by yd",
+              "url": "https://opengameart.org/content/dungeon-ambience",
+              "note": "CC0. Download dungeon002.ogg. Alternative: Dark Theme by JaggedStone, https://opengameart.org/content/dark-theme (CC0)."
+            }
+          }
+        ],
+        "ambience": [
+          {
+            "soundName": "Dungeon Drone",
+            "volume": 45,
+            "enabled": true,
+            "source": {
+              "name": "Loopable Dungeon Ambience by JaggedStone",
+              "url": "https://opengameart.org/content/loopable-dungeon-ambience",
+              "note": "CC0. Download dungeon_ambient_1.ogg. Low wind with water drips, loops cleanly."
+            }
+          },
+          {
+            "soundName": "Dripping Water",
+            "volume": 30,
+            "enabled": true,
+            "source": {
+              "name": "Water Dripping in Cave.wav by Sclolex",
+              "url": "https://freesound.org/people/Sclolex/sounds/177958/",
+              "note": "CC0. 90 seconds of processed cave drips."
+            }
+          },
+          {
+            "soundName": "Deep Echoes",
+            "volume": 25,
+            "enabled": false,
+            "source": {
+              "name": "A_Dungeon_Ambience_Loop.wav by Grubzyy",
+              "url": "https://freesound.org/people/Grubzyy/sounds/422720/",
+              "note": "CC0. 29-second loop of distant ominous rumbles. Enable when the party nears something big."
+            }
+          }
+        ],
+        "effects": [
+          {
+            "soundName": "Stone Door",
+            "volume": 70,
+            "source": {
+              "name": "Heavy stone door opens 2 by PostProdDog",
+              "url": "https://freesound.org/people/PostProdDog/sounds/578491/",
+              "note": "CC0. 14-second slab dragging open. Works for sarcophagus lids too."
+            }
+          },
+          {
+            "soundName": "Chains Rattle",
+            "volume": 60,
+            "source": {
+              "name": "Chain Rattling by Kp69606",
+              "url": "https://freesound.org/people/Kp69606/sounds/448917/",
+              "note": "CC0. 13 seconds of chains dragging on the ground. Shorter alternative: Chains.wav by cribbler, https://freesound.org/people/cribbler/sounds/370877/ (CC0, 6 s)."
+            }
+          },
+          {
+            "soundName": "Distant Explosion",
+            "volume": 65,
+            "source": {
+              "name": "Explosion.mp3 by florianreichelt",
+              "url": "https://freesound.org/people/florianreichelt/sounds/563010/",
+              "note": "CC0. 5-second blast for collapsing tunnels or a triggered trap."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Haunted Crypt",
+      "slug": "haunted-crypt",
+      "description": "Something is awake beneath the chapel. Dungeon-synth dread, ghostly whispers, tolling funeral bells, and a scream for the moment the lid slides off.",
+      "author": "PhyberApex",
+      "version": "1.0.0",
+      "tags": [
+        "horror",
+        "undead",
+        "crypt",
+        "haunted",
+        "tension",
+        "cc0"
+      ],
+      "category": "horror",
+      "license": "CC0-1.0",
+      "audioBundled": false,
+      "createdAt": "2026-10-11T00:00:00Z",
+      "updatedAt": "2026-10-11T00:00:00Z",
+      "scene": {
+        "music": [
+          {
+            "soundName": "Eternal Sleep",
+            "volume": 40,
+            "loop": true,
+            "source": {
+              "name": "Eternal Sleep by Kaiser (uploaded by The Oracle)",
+              "url": "https://opengameart.org/content/eternal-sleep",
+              "note": "CC0. Dark ambient / dungeon synth FLAC. Alternative: Horror Atmosphere by Juhani Junkala, https://opengameart.org/content/horror-atmosphere (CC0, loop-ready)."
+            }
+          }
+        ],
+        "ambience": [
+          {
+            "soundName": "Horror Cave Drone",
+            "volume": 45,
+            "enabled": true,
+            "source": {
+              "name": "HorrorCaveAmbience.mp3 by shelbyshark",
+              "url": "https://freesound.org/people/shelbyshark/sounds/512513/",
+              "note": "CC0. 38-second loopable spooky ambience."
+            }
+          },
+          {
+            "soundName": "Ghost Whispers",
+            "volume": 30,
+            "enabled": true,
+            "source": {
+              "name": "Ghost Whispers by Litruv",
+              "url": "https://freesound.org/people/Litruv/sounds/175944/",
+              "note": "CC0. 23 seconds of reversed whispering. Hibiki's random interval makes it drift in and out."
+            }
+          },
+          {
+            "soundName": "Dark Cavern",
+            "volume": 35,
+            "enabled": false,
+            "source": {
+              "name": "Dark Cavern Ambient by Paul Wortmann",
+              "url": "https://opengameart.org/content/dark-cavern-ambient",
+              "note": "CC0. Download dark_cavern_ambient_002.ogg, the continuous loop version."
+            }
+          }
+        ],
+        "effects": [
+          {
+            "soundName": "Funeral Bell",
+            "volume": 60,
+            "source": {
+              "name": "funeral bell-cloche funèbre.wav by aoristos",
+              "url": "https://freesound.org/people/aoristos/sounds/329324/",
+              "note": "CC0. 29 seconds of real church bells from a medieval chapel in France."
+            }
+          },
+          {
+            "soundName": "Demonic Scream",
+            "volume": 75,
+            "source": {
+              "name": "Demonic Woman Scream.wav by nick121087",
+              "url": "https://freesound.org/people/nick121087/sounds/333832/",
+              "note": "CC0. 4-second processed scream. Use sparingly."
+            }
+          },
+          {
+            "soundName": "Sarcophagus Lid",
+            "volume": 70,
+            "source": {
+              "name": "Heavy stone door opens 2 by PostProdDog",
+              "url": "https://freesound.org/people/PostProdDog/sounds/578491/",
+              "note": "CC0. 14-second stone slab dragging open."
+            }
+          },
+          {
+            "soundName": "Chains",
+            "volume": 55,
+            "source": {
+              "name": "Chains.wav by cribbler",
+              "url": "https://freesound.org/people/cribbler/sounds/370877/",
+              "note": "CC0. 6-second chain shake."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "High Seas Voyage",
+      "slug": "high-seas-voyage",
+      "description": "Aboard a creaking wooden ship under open sky. Waves, gulls, and a port-town theme, with cannon fire and the ship's bell ready for trouble on the horizon.",
+      "author": "PhyberApex",
+      "version": "1.0.0",
+      "tags": [
+        "sea",
+        "ship",
+        "ocean",
+        "pirates",
+        "travel",
+        "cc0"
+      ],
+      "category": "travel",
+      "license": "CC0-1.0",
+      "audioBundled": false,
+      "createdAt": "2026-10-11T00:00:00Z",
+      "updatedAt": "2026-10-11T00:00:00Z",
+      "scene": {
+        "music": [
+          {
+            "soundName": "Merchants and Sea Salt",
+            "volume": 45,
+            "loop": true,
+            "source": {
+              "name": "Merchants and Sea Salt by NBJDLukasAbsolute",
+              "url": "https://opengameart.org/content/merchants-and-sea-salt",
+              "note": "CC0. Port-town theme for calm sailing and harbour scenes."
+            }
+          },
+          {
+            "soundName": "Pirates Libertaires",
+            "volume": 55,
+            "loop": true,
+            "source": {
+              "name": "Pirates libertaires by Komiku (Loyalty Freak Music)",
+              "url": "https://opengameart.org/content/pirates-libertaires",
+              "note": "CC0. Upbeat pirate adventure track for chases and boarding actions."
+            }
+          }
+        ],
+        "ambience": [
+          {
+            "soundName": "Creaking Ship",
+            "volume": 50,
+            "enabled": true,
+            "source": {
+              "name": "LargeWoodenShip.mp3 by PimFeijen",
+              "url": "https://freesound.org/people/PimFeijen/sounds/195193/",
+              "note": "CC0. 10 minutes of creaking hull and waves. Carries the whole scene on its own."
+            }
+          },
+          {
+            "soundName": "Ocean Waves",
+            "volume": 35,
+            "enabled": false,
+            "source": {
+              "name": "Calm ocean waves by SamsterBirdies",
+              "url": "https://freesound.org/people/SamsterBirdies/sounds/578524/",
+              "note": "CC0. 3-minute looping shoreline. Enable when anchored or on the beach."
+            }
+          },
+          {
+            "soundName": "Seagulls",
+            "volume": 30,
+            "enabled": true,
+            "source": {
+              "name": "sea gulls.wav by Snapper4298",
+              "url": "https://freesound.org/people/Snapper4298/sounds/166703/",
+              "note": "CC0. 7-second gull calls. Let the random interval scatter them."
+            }
+          }
+        ],
+        "effects": [
+          {
+            "soundName": "Cannon Fire",
+            "volume": 80,
+            "source": {
+              "name": "Cannon Shot by qubodup",
+              "url": "https://freesound.org/people/qubodup/sounds/187767/",
+              "note": "CC0. 12-second real cannon with echo."
+            }
+          },
+          {
+            "soundName": "Ship's Bell",
+            "volume": 65,
+            "source": {
+              "name": "Ship Bell Two Chimes by Sojan",
+              "url": "https://freesound.org/people/Sojan/sounds/353232/",
+              "note": "CC0. 3-second double chime for 'land ho' or all hands on deck."
+            }
+          },
+          {
+            "soundName": "Thunder Strike",
+            "volume": 75,
+            "source": {
+              "name": "Heavy Thunder Strike - no Rain - QUADRO.wav by BlueDelta",
+              "url": "https://freesound.org/people/BlueDelta/sounds/446753/",
+              "note": "CC0. For the storm rolling in. Trim the first 10 seconds."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Market Day",
+      "slug": "market-day",
+      "description": "A bustling town square on market day: vendor chatter, a blacksmith at work, coin changing hands, and a cheerful minstrel tune. Built for shopping and rumour gathering.",
+      "author": "PhyberApex",
+      "version": "1.0.0",
+      "tags": [
+        "market",
+        "town",
+        "social",
+        "shopping",
+        "city",
+        "cc0"
+      ],
+      "category": "social",
+      "license": "CC0-1.0",
+      "audioBundled": false,
+      "createdAt": "2026-10-11T00:00:00Z",
+      "updatedAt": "2026-10-11T00:00:00Z",
+      "scene": {
+        "music": [
+          {
+            "soundName": "Market Day Theme",
+            "volume": 50,
+            "loop": true,
+            "source": {
+              "name": "Medieval: Market Day by RandomMind",
+              "url": "https://opengameart.org/content/medieval-market-day",
+              "note": "CC0, no attribution required. Download Loop_Market_Day.mp3 for the seamless version."
+            }
+          }
+        ],
+        "ambience": [
+          {
+            "soundName": "Market Crowd",
+            "volume": 45,
+            "enabled": true,
+            "source": {
+              "name": "Street-Market-Gap-France.wav by Astounded",
+              "url": "https://freesound.org/people/Astounded/sounds/483561/",
+              "note": "CC0. 15 minutes of a real French street market with vendor chatter. The uploader asks to be contacted for commercial use, which does not apply to running your own game."
+            }
+          },
+          {
+            "soundName": "Blacksmith",
+            "volume": 30,
+            "enabled": true,
+            "source": {
+              "name": "Hammer and anvil by Duasun",
+              "url": "https://freesound.org/people/Duasun/sounds/321889/",
+              "note": "CC0. 26 seconds of anvil strikes. The random interval makes it feel like a smithy across the square."
+            }
+          },
+          {
+            "soundName": "Tavern Chatter",
+            "volume": 30,
+            "enabled": false,
+            "source": {
+              "name": "Ambience_Bar_No_Music.wav by Dokuta_Gerovv",
+              "url": "https://freesound.org/people/Dokuta_Gerovv/sounds/661686/",
+              "note": "CC0. 41-second indoor crowd murmur for stepping into a shop or tavern."
+            }
+          }
+        ],
+        "effects": [
+          {
+            "soundName": "Coins",
+            "volume": 60,
+            "source": {
+              "name": "Coins Being Dropped-Assorted by TheWoodlandNomad",
+              "url": "https://freesound.org/people/TheWoodlandNomad/sounds/363090/",
+              "note": "CC0. 24 seconds of assorted coin drops. Trim a short clip for a purchase."
+            }
+          },
+          {
+            "soundName": "Town Bell",
+            "volume": 55,
+            "source": {
+              "name": "funeral bell-cloche funèbre.wav by aoristos",
+              "url": "https://freesound.org/people/aoristos/sounds/329324/",
+              "note": "CC0. Real medieval church bells. Trim a few tolls to mark the hour."
+            }
+          },
+          {
+            "soundName": "Shop Door",
+            "volume": 60,
+            "source": {
+              "name": "Door, Church, Close, E.wav by InspectorJ",
+              "url": "https://freesound.org/people/InspectorJ/sounds/339677/",
+              "note": "CC BY 4.0: credit 'InspectorJ (freesound.org)' if you redistribute a recording of your session. Any wooden door works."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Stormy Night at the Inn",
+      "slug": "stormy-night-inn",
+      "description": "Rain against the shutters, a fire in the hearth, and thunder rolling over the hills. A rest scene for long nights and quiet roleplay.",
+      "author": "PhyberApex",
+      "version": "1.0.0",
+      "tags": [
+        "rain",
+        "storm",
+        "rest",
+        "inn",
+        "night",
+        "cozy",
+        "cc0"
+      ],
+      "category": "environment",
+      "license": "CC0-1.0",
+      "audioBundled": false,
+      "createdAt": "2026-10-11T00:00:00Z",
+      "updatedAt": "2026-10-11T00:00:00Z",
+      "scene": {
+        "music": [
+          {
+            "soundName": "Hearthside Tune",
+            "volume": 35,
+            "loop": true,
+            "source": {
+              "name": "Medieval: King's Feast by RandomMind",
+              "url": "https://opengameart.org/content/medieval-kings-feast",
+              "note": "CC0, no attribution required. Download Loop_Kings_Feast.wav. Keep it low under the rain."
+            }
+          }
+        ],
+        "ambience": [
+          {
+            "soundName": "Rain, Thunder and Fire",
+            "volume": 55,
+            "enabled": true,
+            "source": {
+              "name": "Ambiance_Atmosphere_Interior_Wood_Rain_Thunders_Fire_Loop_Stereo.ogg by Nox_Sound",
+              "url": "https://freesound.org/people/Nox_Sound/sounds/553887/",
+              "note": "CC0. 56-second indoor loop that already mixes rain, thunder and a fireplace. This one track carries the whole scene."
+            }
+          },
+          {
+            "soundName": "Rain on the Window",
+            "volume": 40,
+            "enabled": false,
+            "source": {
+              "name": "Rain from Indoors - Perfect loop by samesamesame",
+              "url": "https://freesound.org/people/samesamesame/sounds/242889/",
+              "note": "CC0. 48-second seamless indoor rain loop. Enable instead of the combined track for rain without fire."
+            }
+          },
+          {
+            "soundName": "Crackling Fireplace",
+            "volume": 40,
+            "enabled": false,
+            "source": {
+              "name": "Fireplace.wav by inchadney",
+              "url": "https://freesound.org/people/inchadney/sounds/132534/",
+              "note": "CC0. 4-minute fireplace recording, pairs with the plain rain loop."
+            }
+          }
+        ],
+        "effects": [
+          {
+            "soundName": "Thunder Strike",
+            "volume": 75,
+            "source": {
+              "name": "Heavy Thunder Strike - no Rain - QUADRO.wav by BlueDelta",
+              "url": "https://freesound.org/people/BlueDelta/sounds/446753/",
+              "note": "CC0. Big close strike with a long tail. Trim the first 10 seconds for a punchy hit."
+            }
+          },
+          {
+            "soundName": "Thunder Rumble",
+            "volume": 60,
+            "source": {
+              "name": "rain_thunder_loop.flac by Nimlos",
+              "url": "https://freesound.org/people/Nimlos/sounds/423610/",
+              "note": "CC0. 36-second rain with a single distant rumble. Also works as a third ambience layer."
+            }
+          },
+          {
+            "soundName": "Inn Door",
+            "volume": 65,
+            "source": {
+              "name": "Door, Church, Close, E.wav by InspectorJ",
+              "url": "https://freesound.org/people/InspectorJ/sounds/339677/",
+              "note": "CC BY 4.0: credit 'InspectorJ (freesound.org)' if you redistribute a recording of your session. Any heavy wooden door works."
             }
           }
         ]

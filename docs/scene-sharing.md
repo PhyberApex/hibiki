@@ -10,6 +10,16 @@ Hibiki scenes can be shared with other users through a community registry or as 
 
 ### Installing community scenes
 
+#### Ready-made scene packs (bundled audio)
+
+The quickest way to a playable soundboard. The [hibiki-scene-packs](https://github.com/PhyberApex/hibiki-scene-packs) repository publishes `.hibiki.zip` packs that include both the scene and its sound files, all public domain (CC0) with one CC BY 4.0 door sound credited inside each pack.
+
+1. Download a pack from the [latest release](https://github.com/PhyberApex/hibiki-scene-packs/releases/latest): Cozy Tavern, Deep Forest Trail, Dungeon Crawl, Battlefield Clash, Stormy Night at the Inn, Haunted Crypt, High Seas Voyage, or Market Day.
+2. Open the **Scenes** tab in Hibiki and click **Import**.
+3. Select the zip. The scene and its sounds land in your library, ready to play.
+
+Every pack ships a `CREDITS.txt` listing each track's author, source URL and license. The same scenes also exist as reference-only entries in the community registry below.
+
 #### Browse the community registry
 
 1. Open the **Scenes** tab in Hibiki.
@@ -132,9 +142,9 @@ Key fields:
 
 ---
 
-### Example scene
+### Example scenes
 
-The registry includes a reference example at [`registry/scenes/PhyberApex/cozy-tavern.json`](https://github.com/PhyberApex/hibiki/blob/main/registry/scenes/PhyberApex/cozy-tavern.json). It demonstrates all required fields and shows how to structure tracks with source blocks across music, ambience, and effects. Use it as a template when creating your own submission.
+The registry ships eight reference scenes under [`registry/scenes/PhyberApex/`](https://github.com/PhyberApex/hibiki/tree/main/registry/scenes/PhyberApex), starting with [`cozy-tavern.json`](https://github.com/PhyberApex/hibiki/blob/main/registry/scenes/PhyberApex/cozy-tavern.json). They demonstrate all required fields, show how to structure tracks with source blocks across music, ambience, and effects, and spell out each track's license in the `source.note`. Use one as a template when creating your own submission. The same eight scenes are available with bundled audio as [scene packs](https://github.com/PhyberApex/hibiki-scene-packs).
 
 ### Registry entry reference
 

@@ -1,0 +1,96 @@
+{
+  "name": "Battlefield Clash",
+  "slug": "battlefield-clash",
+  "description": "Initiative is rolled. Driving medieval battle music with sword clashes, war horns, crossbow fire, and a charging mob on the effects board.",
+  "author": "PhyberApex",
+  "version": "1.0.0",
+  "tags": ["combat", "battle", "war", "encounter", "action", "cc0"],
+  "category": "combat",
+  "license": "CC0-1.0",
+  "audioBundled": false,
+  "createdAt": "2026-10-11T00:00:00Z",
+  "updatedAt": "2026-10-11T00:00:00Z",
+  "scene": {
+    "music": [
+      {
+        "soundName": "Battle Theme",
+        "volume": 65,
+        "loop": true,
+        "source": {
+          "name": "Medieval: Battle by RandomMind",
+          "url": "https://opengameart.org/content/medieval-battle",
+          "note": "CC0, no attribution required. Download battle.mp3."
+        }
+      },
+      {
+        "soundName": "Boss Battle",
+        "volume": 65,
+        "loop": true,
+        "source": {
+          "name": "Boss Battle Loop 1 (155 BPM) by kanaizo",
+          "url": "https://freesound.org/people/kanaizo/sounds/739177/",
+          "note": "CC0. 78-second loop with a detuned piano hook. Switch to this for the big bad."
+        }
+      }
+    ],
+    "ambience": [
+      {
+        "soundName": "Battlefield Wind",
+        "volume": 20,
+        "enabled": true,
+        "source": {
+          "name": "Cold Howling Wind/Breeze (Loopable) by The_Isot_is_Back",
+          "url": "https://freesound.org/people/The_Isot_is_Back/sounds/638434/",
+          "note": "CC0. 20-second loopable wind bed under the music."
+        }
+      }
+    ],
+    "effects": [
+      {
+        "soundName": "Sword Clash",
+        "volume": 75,
+        "source": {
+          "name": "sword against sword.wav by Fenodyrie",
+          "url": "https://freesound.org/people/Fenodyrie/sounds/568790/",
+          "note": "CC0. 79 seconds of real steel on steel. Trim a 2 to 3 second hit from it."
+        }
+      },
+      {
+        "soundName": "War Horn",
+        "volume": 80,
+        "source": {
+          "name": "war horn.wav by adharca",
+          "url": "https://freesound.org/people/adharca/sounds/539956/",
+          "note": "CC0. 4-second horn blast to open combat."
+        }
+      },
+      {
+        "soundName": "Crossbow Shot",
+        "volume": 70,
+        "source": {
+          "name": "Crossbow Firing and Hitting Target by Ali_6868",
+          "url": "https://freesound.org/people/Ali_6868/sounds/384919/",
+          "note": "CC0. Short fire-and-hit, great for ranged attacks."
+        }
+      },
+      {
+        "soundName": "Battle Charge",
+        "volume": 65,
+        "source": {
+          "name": "People screaming in agony when charging into battle by florianreichelt",
+          "url": "https://freesound.org/people/florianreichelt/sounds/563011/",
+          "note": "CC0. 18-second crowd charge for reinforcements arriving."
+        }
+      },
+      {
+        "soundName": "Explosion",
+        "volume": 75,
+        "source": {
+          "name": "Explosion.mp3 by florianreichelt",
+          "url": "https://freesound.org/people/florianreichelt/sounds/563010/",
+          "note": "CC0. 5-second blast for fireballs and siege engines."
+        }
+      }
+    ]
+  }
+}

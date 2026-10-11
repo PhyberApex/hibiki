@@ -1,0 +1,88 @@
+{
+  "name": "Stormy Night at the Inn",
+  "slug": "stormy-night-inn",
+  "description": "Rain against the shutters, a fire in the hearth, and thunder rolling over the hills. A rest scene for long nights and quiet roleplay.",
+  "author": "PhyberApex",
+  "version": "1.0.0",
+  "tags": ["rain", "storm", "rest", "inn", "night", "cozy", "cc0"],
+  "category": "environment",
+  "license": "CC0-1.0",
+  "audioBundled": false,
+  "createdAt": "2026-10-11T00:00:00Z",
+  "updatedAt": "2026-10-11T00:00:00Z",
+  "scene": {
+    "music": [
+      {
+        "soundName": "Hearthside Tune",
+        "volume": 35,
+        "loop": true,
+        "source": {
+          "name": "Medieval: King's Feast by RandomMind",
+          "url": "https://opengameart.org/content/medieval-kings-feast",
+          "note": "CC0, no attribution required. Download Loop_Kings_Feast.wav. Keep it low under the rain."
+        }
+      }
+    ],
+    "ambience": [
+      {
+        "soundName": "Rain, Thunder and Fire",
+        "volume": 55,
+        "enabled": true,
+        "source": {
+          "name": "Ambiance_Atmosphere_Interior_Wood_Rain_Thunders_Fire_Loop_Stereo.ogg by Nox_Sound",
+          "url": "https://freesound.org/people/Nox_Sound/sounds/553887/",
+          "note": "CC0. 56-second indoor loop that already mixes rain, thunder and a fireplace. This one track carries the whole scene."
+        }
+      },
+      {
+        "soundName": "Rain on the Window",
+        "volume": 40,
+        "enabled": false,
+        "source": {
+          "name": "Rain from Indoors - Perfect loop by samesamesame",
+          "url": "https://freesound.org/people/samesamesame/sounds/242889/",
+          "note": "CC0. 48-second seamless indoor rain loop. Enable instead of the combined track for rain without fire."
+        }
+      },
+      {
+        "soundName": "Crackling Fireplace",
+        "volume": 40,
+        "enabled": false,
+        "source": {
+          "name": "Fireplace.wav by inchadney",
+          "url": "https://freesound.org/people/inchadney/sounds/132534/",
+          "note": "CC0. 4-minute fireplace recording, pairs with the plain rain loop."
+        }
+      }
+    ],
+    "effects": [
+      {
+        "soundName": "Thunder Strike",
+        "volume": 75,
+        "source": {
+          "name": "Heavy Thunder Strike - no Rain - QUADRO.wav by BlueDelta",
+          "url": "https://freesound.org/people/BlueDelta/sounds/446753/",
+          "note": "CC0. Big close strike with a long tail. Trim the first 10 seconds for a punchy hit."
+        }
+      },
+      {
+        "soundName": "Thunder Rumble",
+        "volume": 60,
+        "source": {
+          "name": "rain_thunder_loop.flac by Nimlos",
+          "url": "https://freesound.org/people/Nimlos/sounds/423610/",
+          "note": "CC0. 36-second rain with a single distant rumble. Also works as a third ambience layer."
+        }
+      },
+      {
+        "soundName": "Inn Door",
+        "volume": 65,
+        "source": {
+          "name": "Door, Church, Close, E.wav by InspectorJ",
+          "url": "https://freesound.org/people/InspectorJ/sounds/339677/",
+          "note": "CC BY 4.0: credit 'InspectorJ (freesound.org)' if you redistribute a recording of your session. Any heavy wooden door works."
+        }
+      }
+    ]
+  }
+}

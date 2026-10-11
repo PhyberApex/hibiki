@@ -27,7 +27,7 @@ Pre-built binaries for macOS, Windows, and Linux are available on the GitHub Rel
 
 <div class="features">
 <div class="feature"><h3>Scenes</h3>
-<p>Build soundboards with music tracks, ambience loops (with random interval repeats), and one-shot effects. Play an entire scene or individual tracks. Export and import scenes as zip files. <a href="{{ site.baseurl }}/scene-sharing">Share scenes</a> with the community or install scenes from a public registry.</p></div>
+<p>Build soundboards with music tracks, ambience loops (with random interval repeats), and one-shot effects. Play an entire scene or individual tracks. Export and import scenes as zip files. <a href="{{ site.baseurl }}/scene-sharing">Share scenes</a> with the community, install scenes from a public registry, or start with <a href="https://github.com/PhyberApex/hibiki-scene-packs">ready-made scene packs</a> that bundle free audio.</p></div>
 <div class="feature"><h3>Browser streaming</h3>
 <p>Open any URL (YouTube, Spotify web, etc.) in the built-in browser tab and stream its audio directly to Discord. Bookmark your favourite sites for quick access.</p></div>
 <div class="feature"><h3>Media library</h3>
