@@ -167,6 +167,10 @@ function registerBrowserViewHandlers() {
       if (mainWindow)
         mainWindow.webContents.send('browserView:titleUpdated', id, title)
     })
+    view.webContents.on('did-finish-load', () => {
+      if (mainWindow)
+        mainWindow.webContents.send('browserView:titleUpdated', id, view.webContents.getTitle())
+    })
     view.webContents.on('page-favicon-updated', (_, favicons) => {
       if (mainWindow) {
         const faviconUrl = Array.isArray(favicons) && favicons.length > 0
@@ -190,12 +194,7 @@ function registerBrowserViewHandlers() {
 
     browserViews.set(id, view)
 
-    await view.webContents.loadURL(url).catch(() => {})
-
-    // Send initial title after page loads
-    const initialTitle = view.webContents.getTitle()
-    if (initialTitle && mainWindow)
-      mainWindow.webContents.send('browserView:titleUpdated', id, initialTitle)
+    view.webContents.loadURL(url).catch(() => {})
 
     return id
   })
@@ -219,7 +218,7 @@ function registerBrowserViewHandlers() {
   ipcMain.handle('browserView:loadURL', async (_, { id, url }) => {
     const view = browserViews.get(id)
     if (view)
-      await view.webContents.loadURL(url).catch(() => {})
+      view.webContents.loadURL(url).catch(() => {})
   })
 
   ipcMain.handle('browserView:goBack', async (_, { id }) => {
