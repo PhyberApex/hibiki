@@ -168,9 +168,8 @@ function registerBrowserViewHandlers() {
         mainWindow.webContents.send('browserView:titleUpdated', id, title)
     })
     view.webContents.on('did-finish-load', () => {
-      const title = view.webContents.getTitle()
-      if (title && mainWindow)
-        mainWindow.webContents.send('browserView:titleUpdated', id, title)
+      if (mainWindow)
+        mainWindow.webContents.send('browserView:titleUpdated', id, view.webContents.getTitle())
     })
     view.webContents.on('page-favicon-updated', (_, favicons) => {
       if (mainWindow) {
