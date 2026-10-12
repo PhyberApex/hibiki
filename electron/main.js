@@ -1,6 +1,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
-const { PassThrough } = require('node:stream')
+const { PassThrough, Readable } = require('node:stream')
 const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
 
 protocol.registerSchemesAsPrivileged([
@@ -270,6 +270,19 @@ function registerBrowserViewHandlers() {
   })
 }
 
+/**
+ * A `Response` whose body streams `filePath` from disk. The file stream is
+ * converted with `Readable.toWeb` rather than handed to `Response` directly:
+ * undici's own Node-stream adapter closes its controller from a microtask
+ * without checking whether Chromium cancelled the request in the meantime,
+ * which surfaces as an uncaught "ReadableStream is already closed" error in
+ * the main process whenever an audio element stops or seeks near the end of
+ * a file. Node's adapter tolerates that cancellation.
+ */
+function fileResponse(filePath, init, readOptions) {
+  return new Response(Readable.toWeb(fs.createReadStream(filePath, readOptions)), init)
+}
+
 function serveSoundFile(request, filePath) {
   const stats = fs.statSync(filePath)
   const totalSize = stats.size
@@ -283,8 +296,7 @@ function serveSoundFile(request, filePath) {
       const start = Number.parseInt(match[1], 10)
       const end = match[2] ? Number.parseInt(match[2], 10) : totalSize - 1
       const chunkSize = end - start + 1
-      const stream = fs.createReadStream(filePath, { start, end })
-      return new Response(stream, {
+      return fileResponse(filePath, {
         status: 206,
         headers: {
           'Content-Type': mime,
@@ -293,13 +305,11 @@ function serveSoundFile(request, filePath) {
           'Accept-Ranges': 'bytes',
           'Access-Control-Allow-Origin': '*',
         },
-      })
+      }, { start, end })
     }
   }
 
-  // Use streaming instead of readFileSync to avoid blocking the main thread
-  const stream = fs.createReadStream(filePath)
-  return new Response(stream, {
+  return fileResponse(filePath, {
     headers: {
       'Content-Type': mime,
       'Content-Length': String(totalSize),
@@ -332,10 +342,9 @@ function registerHibikiProtocol(api, webDistDir) {
       // SPA fallback: serve index.html for routes that don't match a static file
       if (!fs.existsSync(filePath))
         filePath = path.join(webDistDir, 'index.html')
-      const stream = fs.createReadStream(filePath)
       const ext = path.extname(filePath).toLowerCase()
       const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.ico': 'image/x-icon', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2' }[ext] || 'application/octet-stream'
-      return new Response(stream, { headers: { 'Content-Type': mime } })
+      return fileResponse(filePath, { headers: { 'Content-Type': mime } })
     }
 
     return new Response('Not Found', { status: 404 })
