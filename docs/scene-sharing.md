@@ -1,16 +1,33 @@
 ---
 layout: default
-title: Scene Sharing
+title: Scene sharing
 description: Share and discover Hibiki scenes through the community registry or portable .hibiki.zip archives.
 ---
 
-## Scene Sharing
+<div class="read-layout">
+<nav class="toc" aria-label="On this page">
+  <span class="map-label"><span class="ring ring-music"></span>On this page</span>
+  <ol>
+      <li><a href="#install">Installing community scenes</a></li>
+      <li><a href="#registry">How the registry works</a></li>
+      <li><a href="#create">Creating and sharing a scene</a></li>
+      <li><a href="#examples">Example scenes</a></li>
+      <li><a href="#reference">Registry entry reference</a></li>
+      <li><a href="#validation">Registry validation</a></li>
+  </ol>
+</nav>
+<article class="prose" markdown="1">
 
-Hibiki scenes can be shared with other users through a community registry or as portable `.hibiki.zip` archives. You can browse community scenes, import a zip from a friend, or share your own creations.
+# Scene sharing
 
-### Installing community scenes
+Scenes travel two ways: as portable `.hibiki.zip` archives you hand to a friend, or as reference recipes in a community registry you browse from inside the app.
+{: .lede}
 
-#### Ready-made scene packs (bundled audio)
+
+## Installing community scenes
+{: #install}
+
+### Ready-made scene packs (bundled audio)
 
 The quickest way to a playable soundboard. The [hibiki-scene-packs](https://github.com/PhyberApex/hibiki-scene-packs) repository publishes `.hibiki.zip` packs that include both the scene and its sound files, all public domain (CC0) with one CC BY 4.0 door sound credited inside each pack.
 
@@ -20,7 +37,7 @@ The quickest way to a playable soundboard. The [hibiki-scene-packs](https://gith
 
 Every pack ships a `CREDITS.txt` listing each track's author, source URL and license. The same scenes also exist as reference-only entries in the community registry below.
 
-#### Browse the community registry
+### Browse the community registry
 
 1. Open the **Scenes** tab in Hibiki.
 2. Click **Browse** in the scene actions bar.
@@ -31,16 +48,16 @@ Since registry scenes are reference-only (no bundled audio), installed tracks wi
 
 The registry index is cached for 24 hours. Click **Refresh** in the modal to force-update.
 
-#### Import a local file
+### Import a local file
 
 If someone sends you a `.hibiki.zip` file:
 
 1. Open the **Scenes** tab.
 2. Click **Import** and select the zip file.
 
----
 
-### How the registry works
+## How the registry works
+{: #registry}
 
 The community registry lives in the [`registry/`](https://github.com/PhyberApex/hibiki/tree/main/registry) directory of the Hibiki repo. Each scene is a single JSON file containing the full scene definition — track names, volumes, and source references. **No audio files are stored or distributed.**
 
@@ -64,19 +81,19 @@ Each track includes a `source` block that tells the user where to find the audio
 }
 ```
 
-#### Bundled exports (personal use)
+### Bundled exports (personal use)
 
 When you export a scene from Hibiki for personal sharing (e.g. sending a zip to a friend), the export includes bundled audio files. This is fine for direct sharing — the registry restriction only applies to scenes submitted to the community registry.
 
----
 
-### Creating and sharing a scene
+## Creating and sharing a scene
+{: #create}
 
-#### 1. Build the scene
+### 1. Build the scene
 
 Create a scene in Hibiki as you normally would: add music, ambience, and effects tracks, set volumes and loop options.
 
-#### 2. Create the registry entry
+### 2. Create the registry entry
 
 Create a JSON file with your scene definition. Each track needs a `source` block describing where to find the audio.
 
@@ -133,22 +150,23 @@ Key fields:
 - **`source.url`** — A link to where the audio can be found (optional but helpful).
 - **`source.note`** — A hint if the exact track doesn't matter (e.g. "any rain loop works").
 
-#### 3. Submit to the community registry
+### 3. Submit to the community registry
 
 1. Fork the Hibiki repo.
 2. Create a file at `registry/scenes/<your-username>/<scene-slug>.json` with your scene entry.
 3. Open a pull request against the Hibiki repo. The **Registry** CI workflow validates your entry automatically (schema check, slug uniqueness, track source blocks).
 4. Once merged, the index is rebuilt and the scene appears in the **Browse** modal for all Hibiki users.
 
----
 
-### Example scenes
+## Example scenes
+{: #examples}
 
 The registry ships eight reference scenes under [`registry/scenes/PhyberApex/`](https://github.com/PhyberApex/hibiki/tree/main/registry/scenes/PhyberApex), starting with [`cozy-tavern.json`](https://github.com/PhyberApex/hibiki/blob/main/registry/scenes/PhyberApex/cozy-tavern.json). They demonstrate all required fields, show how to structure tracks with source blocks across music, ambience, and effects, and spell out each track's license in the `source.note`. Use one as a template when creating your own submission. The same eight scenes are available with bundled audio as [scene packs](https://github.com/PhyberApex/hibiki-scene-packs).
 
-### Registry entry reference
+## Registry entry reference
+{: #reference}
 
-#### Scene fields
+### Scene fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -167,7 +185,7 @@ The registry ships eight reference scenes under [`registry/scenes/PhyberApex/`](
 | `scene.ambience` | array | Yes | Ambience track definitions |
 | `scene.effects` | array | Yes | Effect definitions |
 
-#### Track fields
+### Track fields
 
 Each track in `scene.music`, `scene.ambience`, or `scene.effects`:
 
@@ -182,7 +200,8 @@ Each track in `scene.music`, `scene.ambience`, or `scene.effects`:
 | `source.url` | string | No | Link to the audio source |
 | `source.note` | string | No | Free-text hint (e.g. "any rain loop works") |
 
-### Registry validation
+## Registry validation
+{: #validation}
 
 The registry has a JSON Schema at [`registry/schema/scene-entry.schema.json`](https://github.com/PhyberApex/hibiki/blob/main/registry/schema/scene-entry.schema.json) that all entries must conform to. You can validate locally before submitting:
 
@@ -198,3 +217,6 @@ CI runs this automatically on PRs that touch `registry/scenes/`. It checks:
 - Every track has a `source` block with at least a `name`
 - Scene has at least one track
 - No duplicate slugs across the registry
+
+</article>
+</div>
