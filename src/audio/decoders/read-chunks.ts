@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs'
 
-const DEFAULT_CHUNK_SIZE = 64 * 1024
+const DEFAULT_CHUNK_SIZE = 16 * 1024
 
 /** Reads a file in fixed-size chunks without loading it into memory at once. */
 export async function* readFileChunks(filePath: string, chunkSize = DEFAULT_CHUNK_SIZE): AsyncGenerator<Uint8Array> {

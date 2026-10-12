@@ -248,13 +248,10 @@ export class GuildAudioManager extends EventEmitter {
   playMusicFromStream(stream: Readable, metadata?: TrackMetadata, streamId?: string) {
     const seq = ++this.musicStreamSeq
     this.musicStreams.set(streamId, { metadata, seq })
-    const clearEntry = () => {
+    this.engine.playMusicFromStream(stream, streamId, undefined, () => {
       if (this.musicStreams.get(streamId)?.seq === seq)
         this.musicStreams.delete(streamId)
-    }
-    stream.once('end', clearEntry)
-    stream.once('error', clearEntry)
-    this.engine.playMusicFromStream(stream, streamId)
+    })
   }
 
   /** Ends the music stream for `streamId` (or the default slot when omitted). Other ids keep playing. */
@@ -308,11 +305,6 @@ export class GuildAudioManager extends EventEmitter {
         return
       }
 
-      this.musicStreams.set(streamId, { metadata, seq, loop })
-      this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0 ? 0 : options.volume)
-      if (startFadeMs > 0)
-        this.engine.rampStreamVolume(streamId, options.volume, startFadeMs)
-
       const onEnded = () => {
         if (this.musicStreams.get(streamId)?.seq !== seq)
           return
@@ -326,8 +318,11 @@ export class GuildAudioManager extends EventEmitter {
           this.clearBackendTrack(streamId)
         }
       }
-      stream.once('end', onEnded)
-      stream.once('error', onEnded)
+
+      this.musicStreams.set(streamId, { metadata, seq, loop })
+      this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0 ? 0 : options.volume, onEnded)
+      if (startFadeMs > 0)
+        this.engine.rampStreamVolume(streamId, options.volume, startFadeMs)
     }
 
     await startStream(fadeMs)
@@ -446,11 +441,6 @@ export class GuildAudioManager extends EventEmitter {
         return
       }
 
-      this.ambienceEntries.set(soundId, entry)
-      this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0 ? 0 : entry.volume)
-      if (startFadeMs > 0)
-        this.engine.rampStreamVolume(streamId, entry.volume, startFadeMs)
-
       const onEnded = () => {
         if (this.ambienceGenerations.get(soundId) !== myGeneration)
           return
@@ -475,8 +465,11 @@ export class GuildAudioManager extends EventEmitter {
           }, delay)
         }
       }
-      stream.once('end', onEnded)
-      stream.once('error', onEnded)
+
+      this.ambienceEntries.set(soundId, entry)
+      this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0 ? 0 : entry.volume, onEnded)
+      if (startFadeMs > 0)
+        this.engine.rampStreamVolume(streamId, entry.volume, startFadeMs)
     }
 
     await startStream(options.fadeInMs ?? 0)
@@ -609,10 +602,7 @@ export class GuildAudioManager extends EventEmitter {
       return
     }
 
-    this.engine.playMusicFromStream(stream, streamId, options.volume)
-    const onEnded = () => this.effectStreamIds.delete(streamId)
-    stream.once('end', onEnded)
-    stream.once('error', onEnded)
+    this.engine.playMusicFromStream(stream, streamId, options.volume, () => this.effectStreamIds.delete(streamId))
   }
 
   /** Ends every backend-decoded Effect instance for this guild (Scene stop, leave, disconnect). */

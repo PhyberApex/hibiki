@@ -4,6 +4,7 @@ import type {
 } from '@discordjs/voice'
 import type { AudioInput } from 'node-audio-mixer'
 import type { Readable } from 'node:stream'
+import type { MixerFeed } from './mixer-feed'
 import { PassThrough } from 'node:stream'
 import {
   createAudioPlayer,
@@ -12,12 +13,14 @@ import {
   StreamType,
 } from '@discordjs/voice'
 import { AudioMixer } from 'node-audio-mixer'
+import { feedMixerInput } from './mixer-feed'
 import { rampVolume } from './volume-ramp'
 
 /** One active stream (music or effect) feeding into the mixer */
 interface ActiveStream {
   source: Readable
   input: AudioInput
+  feed: MixerFeed
   volume: number
   /** Cancels an in-progress volume ramp started by `rampStreamVolume`, if any. */
   cancelRamp?: () => void
@@ -66,32 +69,30 @@ export class AudioEngine {
     return this.player
   }
 
-  playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.music) {
+  /**
+   * Starts `stream` as the music stream under `streamId` (replacing any
+   * stream already under that id). `onEnded` fires once the stream has
+   * played out through the mixer, or errored; never after a stop or a
+   * replacement.
+   */
+  playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.music, onEnded?: () => void) {
     this.stopMusicStream(streamId)
-    const active = this.spawnInputFromStream(stream, CLAMP(initialVolume))
+    const active = this.spawnInputFromStream(stream, CLAMP(initialVolume), (ended) => {
+      if (this.musicStreams.get(streamId) !== ended)
+        return
+      ended.input.destroy()
+      this.musicStreams.delete(streamId)
+      onEnded?.()
+    })
     this.musicStreams.set(streamId, active)
-
-    const onEnded = () => {
-      if (this.musicStreams.get(streamId) === active) {
-        active.input.destroy()
-        this.musicStreams.delete(streamId)
-      }
-    }
-    stream.once('end', onEnded)
-    stream.once('error', onEnded)
   }
 
   playEffectFromStream(stream: Readable) {
-    const effectStream = this.spawnInputFromStream(stream, DEFAULT_VOLUMES.effects)
+    const effectStream = this.spawnInputFromStream(stream, DEFAULT_VOLUMES.effects, (ended) => {
+      ended.input.destroy()
+      this.effectStreams.delete(ended)
+    })
     this.effectStreams.add(effectStream)
-
-    // Auto-cleanup when stream ends
-    stream.once('end', () => {
-      this.effectStreams.delete(effectStream)
-    })
-    stream.once('error', () => {
-      this.effectStreams.delete(effectStream)
-    })
   }
 
   /** Ends the music stream for `streamId` (or the default stream when omitted). Other ids are untouched. */
@@ -155,18 +156,15 @@ export class AudioEngine {
   destroy() {
     this.stopAllMusic()
     // Clean up all effect streams
-    for (const effect of this.effectStreams) {
-      effect.source.removeAllListeners?.()
-      effect.source.destroy?.()
-      effect.input.destroy()
-    }
+    for (const effect of this.effectStreams)
+      this.teardown(effect)
     this.effectStreams.clear()
     this.mixer.destroy()
     this.player.stop(true)
     this.mixerOutput.destroy()
   }
 
-  private spawnInputFromStream(stream: Readable, volume: number): ActiveStream {
+  private spawnInputFromStream(stream: Readable, volume: number, onEnded: (active: ActiveStream) => void): ActiveStream {
     const input = this.mixer.createAudioInput({
       sampleRate: 48000,
       channels: 2,
@@ -174,9 +172,9 @@ export class AudioEngine {
       volume,
     })
 
-    stream.pipe(input)
-
-    return { source: stream, input, volume }
+    const active: ActiveStream = { source: stream, input, volume, feed: { stop: () => {} } }
+    active.feed = feedMixerInput(stream, input, { onEnded: () => onEnded(active) })
+    return active
   }
 
   private stopMusicStream(streamId?: string) {
@@ -184,9 +182,19 @@ export class AudioEngine {
     if (!active)
       return
     active.cancelRamp?.()
+    this.teardown(active)
+    this.musicStreams.delete(streamId)
+  }
+
+  /**
+   * Cuts a stream immediately. Without `forceClose`, a destroyed input stays
+   * in the mixer until whatever it still holds has played out.
+   */
+  private teardown(active: ActiveStream) {
+    active.feed.stop()
     active.source.removeAllListeners?.()
     active.source.destroy?.()
+    active.input.params = { forceClose: true }
     active.input.destroy()
-    this.musicStreams.delete(streamId)
   }
 }
