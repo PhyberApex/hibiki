@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.0](https://github.com/PhyberApex/hibiki/compare/v1.4.0...v1.5.0) (2026-10-12)
+
+
+### Features
+
+* **docs:** redesign the GitHub Pages site as a battle map ([#476](https://github.com/PhyberApex/hibiki/issues/476)) ([9251076](https://github.com/PhyberApex/hibiki/commit/925107654c07b8f7d8b3fbe40694d40d5a055eff))
+* **docs:** screenshots, FAQ, comparison page, privacy page and Umami ([#478](https://github.com/PhyberApex/hibiki/issues/478)) ([c9d5bb5](https://github.com/PhyberApex/hibiki/commit/c9d5bb5deb7259f90572d900a2b0c6003a1b84c4))
+* **welcome:** replace the start screen with a minimal typographic one ([#482](https://github.com/PhyberApex/hibiki/issues/482)) ([208b852](https://github.com/PhyberApex/hibiki/commit/208b8523772a6f79df43b1d1b2ddaa39bcb312ff)), closes [#481](https://github.com/PhyberApex/hibiki/issues/481)
+
+
+### Bug Fixes
+
+* **audio:** bound mixer input queue so backend playback stops running away ([#483](https://github.com/PhyberApex/hibiki/issues/483)) ([948cada](https://github.com/PhyberApex/hibiki/commit/948cadadc27ba55302ab2e3a6310aab7131ca2bd))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.133.0 ([#491](https://github.com/PhyberApex/hibiki/issues/491)) ([6ad3c64](https://github.com/PhyberApex/hibiki/commit/6ad3c6492f270ce3ee81eb8382ce8464c8cc22a8))
+* **electron:** stop hibiki:// file responses crashing the main process on cancel ([#486](https://github.com/PhyberApex/hibiki/issues/486)) ([8284053](https://github.com/PhyberApex/hibiki/commit/82840530f216e1e79e22512ad5f02dbd38a3a89c))
+
 ## [1.4.0](https://github.com/PhyberApex/hibiki/compare/v1.3.0...v1.4.0) (2026-10-11)
 
 
