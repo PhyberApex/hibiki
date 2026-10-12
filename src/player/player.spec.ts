@@ -173,7 +173,7 @@ describe('createPlayer', () => {
 
       player.startStream('guild-1', stream, undefined, 'a')
 
-      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, 'a')
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, 'a', undefined, expect.any(Function))
     })
 
     it('stopStream forwards an optional streamId to the manager, without stopping other streams', async () => {
@@ -215,7 +215,7 @@ describe('createPlayer', () => {
 
       expect(sounds.getFile).toHaveBeenCalledWith('music', 's1')
       expect(createPcmStream).toHaveBeenCalledWith('/music/s1.mp3')
-      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 80)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 80, expect.any(Function))
     })
 
     it('throws when the guild is not connected', async () => {
@@ -289,7 +289,7 @@ describe('createPlayer', () => {
 
       expect(sounds.getFile).toHaveBeenCalledWith('ambience', 'rain')
       expect(createPcmStream).toHaveBeenCalledWith('/ambience/rain.mp3')
-      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 70)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 70, expect.any(Function))
     })
 
     it('throws when the guild is not connected', async () => {
@@ -394,7 +394,7 @@ describe('createPlayer', () => {
 
       expect(sounds.getFilePath).toHaveBeenCalledWith('effects', 'fx1')
       expect(createPcmStream).toHaveBeenCalledWith('/effects/fx1.mp3')
-      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(expect.anything(), expect.any(String), 90)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(expect.anything(), expect.any(String), 90, expect.any(Function))
     })
 
     it('throws when the guild is not connected', async () => {

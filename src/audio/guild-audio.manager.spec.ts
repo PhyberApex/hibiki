@@ -21,7 +21,12 @@ jest.mock('@discordjs/voice', () => ({
 jest.mock('./audio-engine', () => ({
   AudioEngine: jest.fn().mockImplementation(() => ({
     audioPlayer: { on: jest.fn(), play: jest.fn(), state: { status: 'idle' } },
-    playMusicFromStream: jest.fn(),
+    playMusicFromStream: jest.fn((stream: EventEmitter, _streamId?: string, _volume?: number, onEnded?: () => void) => {
+      if (!onEnded)
+        return
+      stream.once('end', onEnded)
+      stream.once('error', onEnded)
+    }),
     playEffectFromStream: jest.fn(),
     stopMusic: jest.fn(),
     stopAllMusic: jest.fn(),
@@ -232,7 +237,7 @@ describe('guildAudioManager', () => {
       manager.stopMusic('a')
 
       const engine = getEngineMock()
-      expect(engine.playMusicFromStream).toHaveBeenCalledWith(stream, 'a')
+      expect(engine.playMusicFromStream).toHaveBeenCalledWith(stream, 'a', undefined, expect.any(Function))
       expect(engine.stopMusic).toHaveBeenCalledWith('a')
       expect(engine.stopAllMusic).not.toHaveBeenCalled()
     })
@@ -321,7 +326,7 @@ describe('guildAudioManager', () => {
 
       expect(factory).toHaveBeenCalledTimes(1)
       const engine = getEngineMock()
-      expect(engine.playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 80)
+      expect(engine.playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 80, expect.any(Function))
       expect(manager.track).toEqual(meta)
     })
 
@@ -337,7 +342,7 @@ describe('guildAudioManager', () => {
       await flushAsync()
 
       expect(factory).toHaveBeenCalledTimes(2)
-      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, streamId, 80)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, streamId, 80, expect.any(Function))
       expect(manager.track).toEqual(meta)
     })
 
@@ -376,6 +381,26 @@ describe('guildAudioManager', () => {
       // Simulate the ramp completing.
       getEngineMock().rampStreamVolume.mock.calls[0][3]()
       expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
+    })
+
+    it('the same track can be played again after being stopped', async () => {
+      const firstStream = createFakeStream()
+      const secondStream = createFakeStream()
+      await manager.playMusic(jest.fn().mockReturnValue(firstStream), meta, { volume: 80 })
+      manager.stopCurrentTrack()
+      expect(manager.track).toBeUndefined()
+
+      await manager.playMusic(jest.fn().mockReturnValue(secondStream), meta, { volume: 80 })
+
+      const calls = getEngineMock().playMusicFromStream.mock.calls
+      expect(calls).toHaveLength(2)
+      expect(calls[1][0]).toBe(secondStream)
+      expect(calls[1][1]).not.toBe(calls[0][1])
+      expect(manager.track).toEqual(meta)
+
+      manager.stopCurrentTrack()
+      expect(getEngineMock().stopMusic).toHaveBeenLastCalledWith(calls[1][1])
+      expect(manager.track).toBeUndefined()
     })
 
     it('stopCurrentTrack is a no-op when nothing is playing', () => {
@@ -419,7 +444,7 @@ describe('guildAudioManager', () => {
       const idB = getEngineMock().playMusicFromStream.mock.calls[1][1]
 
       // Incoming track starts silent and ramps up to its target volume.
-      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, streamB, idB, 0)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, streamB, idB, 0, expect.any(Function))
       expect(getEngineMock().rampStreamVolume).toHaveBeenCalledWith(idB, 60, 400)
       // Outgoing track ramps to silence over the same duration, then stops.
       expect(getEngineMock().rampStreamVolume).toHaveBeenCalledWith(idA, 0, 400, expect.any(Function))
@@ -521,7 +546,7 @@ describe('guildAudioManager', () => {
         // becomes audible even briefly.
         expect(manager.track).toEqual(metaB)
         expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
-        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(streamB, idB, 60)
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(streamB, idB, 60, expect.any(Function))
       })
 
       it('stopCurrentTrack called while a playMusic is mid-decode prevents that track from resurrecting playback', async () => {
@@ -581,7 +606,7 @@ describe('guildAudioManager', () => {
 
       expect(factory).toHaveBeenCalledTimes(1)
       const engine = getEngineMock()
-      expect(engine.playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 70)
+      expect(engine.playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 70, expect.any(Function))
       expect(manager.activeAmbience).toEqual(['rain'])
     })
 
@@ -608,7 +633,7 @@ describe('guildAudioManager', () => {
       await flushAsync()
 
       expect(factory).toHaveBeenCalledTimes(2)
-      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, streamId, 70)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, streamId, 70, expect.any(Function))
       expect(manager.activeAmbience).toEqual(['rain'])
     })
 
@@ -680,6 +705,26 @@ describe('guildAudioManager', () => {
       expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
     })
 
+    it('the same sound can be played again after being stopped', async () => {
+      const firstStream = createFakeStream()
+      const secondStream = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(firstStream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      manager.stopAmbience('rain')
+      expect(manager.activeAmbience).toEqual([])
+
+      await manager.playAmbience(jest.fn().mockReturnValue(secondStream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+
+      const calls = getEngineMock().playMusicFromStream.mock.calls
+      expect(calls).toHaveLength(2)
+      expect(calls[1][0]).toBe(secondStream)
+      expect(calls[1][1]).not.toBe(calls[0][1])
+      expect(manager.activeAmbience).toEqual(['rain'])
+
+      manager.stopAmbience('rain')
+      expect(getEngineMock().stopMusic).toHaveBeenLastCalledWith(calls[1][1])
+      expect(manager.activeAmbience).toEqual([])
+    })
+
     it('stopAmbience is a no-op for a soundId that is not playing', () => {
       expect(() => manager.stopAmbience('rain')).not.toThrow()
       expect(getEngineMock().stopMusic).not.toHaveBeenCalled()
@@ -691,7 +736,7 @@ describe('guildAudioManager', () => {
       await manager.playAmbience(jest.fn().mockReturnValue(stream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0, fadeInMs: 400 })
       const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
 
-      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, streamId, 0)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, streamId, 0, expect.any(Function))
       expect(getEngineMock().rampStreamVolume).toHaveBeenCalledWith(streamId, 70, 400)
     })
 
@@ -705,7 +750,7 @@ describe('guildAudioManager', () => {
       const idB = getEngineMock().playMusicFromStream.mock.calls[1][1]
 
       // Incoming sound starts silent and ramps up to its target volume.
-      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, streamB, idB, 0)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, streamB, idB, 0, expect.any(Function))
       expect(getEngineMock().rampStreamVolume).toHaveBeenCalledWith(idB, 40, 300)
       // Outgoing sound ramps to silence over the same duration, then stops.
       expect(getEngineMock().rampStreamVolume).toHaveBeenCalledWith(idA, 0, 300, expect.any(Function))
@@ -766,7 +811,7 @@ describe('guildAudioManager', () => {
 
       await jest.advanceTimersByTimeAsync(5_000)
 
-      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, expect.any(String), 20)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, expect.any(String), 20, expect.any(Function))
       randomSpy.mockRestore()
     })
 
@@ -850,7 +895,7 @@ describe('guildAudioManager', () => {
 
         expect(manager.activeAmbience).toEqual(['rain'])
         expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
-        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(streamB, idB, 40)
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(streamB, idB, 40, expect.any(Function))
       })
 
       it('stopAmbience called while a playAmbience is mid-decode prevents that sound from resurrecting playback', async () => {
@@ -922,7 +967,7 @@ describe('guildAudioManager', () => {
       await manager.playEffect(factory, { volume: 90 })
 
       expect(factory).toHaveBeenCalledTimes(1)
-      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 90)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 90, expect.any(Function))
     })
 
     it('layers two different instances without stopping either', async () => {
@@ -943,8 +988,8 @@ describe('guildAudioManager', () => {
       await manager.playEffect(factory, { volume: 90 })
       await manager.playEffect(factory, { volume: 90 })
 
-      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(1, streamA, expect.any(String), 90)
-      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, streamB, expect.any(String), 90)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(1, streamA, expect.any(String), 90, expect.any(Function))
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, streamB, expect.any(String), 90, expect.any(Function))
       expect(getEngineMock().stopMusic).not.toHaveBeenCalled()
     })
 

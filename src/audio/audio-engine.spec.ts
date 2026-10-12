@@ -1,8 +1,17 @@
 import type { Readable } from 'node:stream'
-import { EventEmitter } from 'node:events'
+import { once } from 'node:events'
+import { PassThrough } from 'node:stream'
 import { AudioEngine } from './audio-engine'
 
-const createdInputs: { destroy: jest.Mock, params?: { volume?: number } }[] = []
+interface FakeInput {
+  destroy: jest.Mock
+  write: jest.Mock
+  end: jest.Mock
+  dataSize: number
+  params?: { volume?: number, forceClose?: boolean }
+}
+
+const createdInputs: FakeInput[] = []
 
 jest.mock('@discordjs/voice', () => ({
   createAudioPlayer: jest.fn().mockReturnValue({ play: jest.fn(), on: jest.fn(), stop: jest.fn() }),
@@ -16,7 +25,7 @@ jest.mock('node-audio-mixer', () => ({
     pipe: jest.fn(),
     destroy: jest.fn(),
     createAudioInput: jest.fn().mockImplementation((params: { volume?: number }) => {
-      const input = { destroy: jest.fn(), params: { volume: params.volume } }
+      const input: FakeInput = { destroy: jest.fn(), write: jest.fn(), end: jest.fn(), dataSize: 0, params: { volume: params.volume } }
       createdInputs.push(input)
       return input
     }),
@@ -24,10 +33,14 @@ jest.mock('node-audio-mixer', () => ({
 }))
 
 function createFakeStream(): Readable {
-  const stream = new EventEmitter() as unknown as Readable
-  ;(stream as unknown as { pipe: jest.Mock }).pipe = jest.fn()
-  ;(stream as unknown as { destroy: jest.Mock }).destroy = jest.fn()
-  return stream
+  return new PassThrough()
+}
+
+/** Ends `stream` and waits for the engine to observe it (the feed consumes the stream asynchronously). */
+async function endStream(stream: Readable): Promise<void> {
+  const ended = once(stream, 'end')
+  ;(stream as PassThrough).end()
+  await ended
 }
 
 describe('audioEngine', () => {
@@ -184,15 +197,18 @@ describe('audioEngine', () => {
       expect(createdInputs[1].destroy).toHaveBeenCalledTimes(1)
     })
 
-    it('removes an ended stream on its own without affecting others', () => {
+    it('removes an ended stream on its own without affecting others', async () => {
       const streamA = createFakeStream()
       const streamB = createFakeStream()
-      engine.playMusicFromStream(streamA, 'a')
+      const onEnded = jest.fn()
+      engine.playMusicFromStream(streamA, 'a', 80, onEnded)
       engine.playMusicFromStream(streamB, 'b')
 
-      streamA.emit('end')
+      await endStream(streamA)
 
+      expect(createdInputs[0].end).toHaveBeenCalledTimes(1)
       expect(createdInputs[0].destroy).toHaveBeenCalledTimes(1)
+      expect(onEnded).toHaveBeenCalledTimes(1)
       expect(createdInputs[1].destroy).not.toHaveBeenCalled()
 
       // Stopping the already-ended id again must not throw or double-destroy.
@@ -200,16 +216,100 @@ describe('audioEngine', () => {
       expect(createdInputs[0].destroy).toHaveBeenCalledTimes(1)
     })
 
+    it('reports onEnded only once the mixer input has drained, not when the source ends', async () => {
+      jest.useFakeTimers()
+      try {
+        const stream = createFakeStream()
+        const onEnded = jest.fn()
+        engine.playMusicFromStream(stream, 'a', 80, onEnded)
+        createdInputs[0].dataSize = 3840
+
+        const ended = once(stream, 'end')
+        ;(stream as PassThrough).end()
+        await ended
+
+        expect(createdInputs[0].end).toHaveBeenCalledTimes(1)
+        expect(onEnded).not.toHaveBeenCalled()
+
+        createdInputs[0].dataSize = 0
+        jest.advanceTimersByTime(50)
+
+        expect(onEnded).toHaveBeenCalledTimes(1)
+      }
+      finally {
+        jest.useRealTimers()
+      }
+    })
+
     it('removes an errored stream on its own without affecting others', () => {
       const streamA = createFakeStream()
       const streamB = createFakeStream()
-      engine.playMusicFromStream(streamA, 'a')
+      const onEnded = jest.fn()
+      engine.playMusicFromStream(streamA, 'a', 80, onEnded)
       engine.playMusicFromStream(streamB, 'b')
 
       streamA.emit('error', new Error('boom'))
 
       expect(createdInputs[0].destroy).toHaveBeenCalledTimes(1)
+      expect(onEnded).toHaveBeenCalledTimes(1)
       expect(createdInputs[1].destroy).not.toHaveBeenCalled()
+    })
+
+    it('does not report onEnded for a stream that was stopped', async () => {
+      const stream = createFakeStream()
+      const onEnded = jest.fn()
+      engine.playMusicFromStream(stream, 'a', 80, onEnded)
+
+      engine.stopMusic('a')
+      stream.emit('end')
+      await new Promise(resolve => setImmediate(resolve))
+
+      expect(onEnded).not.toHaveBeenCalled()
+      expect(createdInputs[0].params?.forceClose).toBe(true)
+    })
+
+    it('does not report onEnded for a stream replaced under the same id', async () => {
+      const first = createFakeStream()
+      const second = createFakeStream()
+      const onEnded = jest.fn()
+      engine.playMusicFromStream(first, 'a', 80, onEnded)
+      engine.playMusicFromStream(second, 'a')
+
+      first.emit('end')
+      await endStream(second)
+
+      expect(onEnded).not.toHaveBeenCalled()
+      expect(createdInputs[1].destroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('a stream started again under the same id after a stop plays fresh and reports its own onEnded', async () => {
+      const first = createFakeStream()
+      const second = createFakeStream()
+      const firstEnded = jest.fn()
+      const secondEnded = jest.fn()
+      engine.playMusicFromStream(first, 'a', 80, firstEnded)
+      engine.stopMusic('a')
+
+      engine.playMusicFromStream(second, 'a', 60, secondEnded)
+      ;(second as PassThrough).write(Buffer.alloc(3840))
+      await endStream(second)
+
+      expect(createdInputs).toHaveLength(2)
+      expect(createdInputs[1].params?.volume).toBe(60)
+      expect(createdInputs[1].write).toHaveBeenCalledTimes(1)
+      expect(firstEnded).not.toHaveBeenCalled()
+      expect(secondEnded).toHaveBeenCalledTimes(1)
+    })
+
+    it('hands PCM to the mixer input through the feed', async () => {
+      const stream = createFakeStream()
+      engine.playMusicFromStream(stream, 'a')
+
+      ;(stream as PassThrough).write(Buffer.alloc(3840))
+      await endStream(stream)
+
+      expect(createdInputs[0].write).toHaveBeenCalledTimes(1)
+      expect((createdInputs[0].write.mock.calls[0][0] as Buffer).length).toBe(3840)
     })
 
     it('stopAllMusic ends every music stream', () => {
