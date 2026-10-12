@@ -11,6 +11,11 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'hibiki', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
 ])
 
+if (process.env.HIBIKI_USER_DATA_DIR) {
+  app.setPath('userData', process.env.HIBIKI_USER_DATA_DIR)
+  app.setPath('sessionData', process.env.HIBIKI_USER_DATA_DIR)
+}
+
 let appHandle = null
 let mainWindow = null
 

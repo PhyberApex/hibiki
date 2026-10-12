@@ -34,6 +34,7 @@
     "test:coverage:backend": "node --experimental-vm-modules node_modules/.bin/jest --coverage --config jest.config.js",
     "test:coverage:frontend": "cd frontend && vitest run --coverage",
     "test:e2e": "cd e2e && pnpm install --frozen-lockfile && pnpm test",
+    "screenshots": "pnpm run build && cd e2e && pnpm install --frozen-lockfile && pnpm run screenshots",
     "registry:validate": "node registry/scripts/validate.mjs",
     "registry:build-index": "node registry/scripts/build-index.mjs",
     "docs": "cd docs && bundle exec jekyll serve --baseurl \"\" --livereload"

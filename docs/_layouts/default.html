@@ -15,6 +15,9 @@
   <link rel="preload" href="{{ site.baseurl }}/assets/fonts/AlegreyaSans-800.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ site.baseurl }}/assets/css/fonts.css">
   <link rel="stylesheet" href="{{ site.baseurl }}/assets/css/site.css">
+  {% if site.umami.script_url and site.umami.website_id %}
+  <script defer src="{{ site.umami.script_url }}" data-website-id="{{ site.umami.website_id }}"></script>
+  {% endif %}
 </head>
 <body class="{% if page.url == "/" or page.url == "/index.html" %}page-home{% else %}page-read{% endif %}">
 <!--
@@ -35,6 +38,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
     <a href="{{ site.baseurl }}/#scenes">Scenes</a>
     <a href="{{ site.baseurl }}/#setup">Setup</a>
     <a href="{{ site.baseurl }}/scene-sharing"{% if page.url contains "scene-sharing" %} aria-current="page"{% endif %}>Scene sharing</a>
+    <a href="{{ site.baseurl }}/compare"{% if page.url contains "compare" %} aria-current="page"{% endif %}>Compare</a>
     <a href="https://github.com/PhyberApex/hibiki" class="nav-github">GitHub</a>
   </nav>
 </header>
@@ -45,7 +49,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 <footer class="site-footer">
   <p class="footer-line"><span class="footer-name">Hibiki</span> is free and open source under the MIT license. Made by <a href="https://github.com/PhyberApex">PhyberApex</a>.</p>
-  <p class="footer-links"><a href="https://github.com/PhyberApex/hibiki">Source</a><a href="https://github.com/PhyberApex/hibiki/releases">Releases</a><a href="https://github.com/PhyberApex/hibiki/issues">Issues</a><a href="https://github.com/PhyberApex/hibiki-scene-packs">Scene packs</a></p>
+  <p class="footer-links"><a href="https://github.com/PhyberApex/hibiki">Source</a><a href="https://github.com/PhyberApex/hibiki/releases">Releases</a><a href="https://github.com/PhyberApex/hibiki/issues">Issues</a><a href="https://github.com/PhyberApex/hibiki-scene-packs">Scene packs</a><a href="{{ site.baseurl }}/privacy">Privacy</a></p>
 </footer>
 <script src="{{ site.baseurl }}/assets/js/site.js" defer></script>
 </body>

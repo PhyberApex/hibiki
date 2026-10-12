@@ -15,7 +15,14 @@ const APP_ROOT = process.cwd().endsWith('e2e') ? join(process.cwd(), '..') : pro
  *
  * Example: HIBIKI_E2E_HEADED=1 pnpm test:e2e
  */
-export async function launchElectronApp(): Promise<ElectronApplication> {
+export interface LaunchOptions {
+  /** Extra variables for the app process, applied after the defaults. */
+  env?: Record<string, string>
+  /** Variables inherited from the current process that must not reach the app. */
+  stripEnv?: string[]
+}
+
+export async function launchElectronApp(options: LaunchOptions = {}): Promise<ElectronApplication> {
   const mainPath = join(APP_ROOT, 'electron', 'main.js')
 
   // Resolve Electron executable - pnpm may store it in node_modules/.pnpm
@@ -35,16 +42,23 @@ export async function launchElectronApp(): Promise<ElectronApplication> {
   const isCI = !!process.env.CI
   const args = isCI ? ['--no-sandbox', mainPath] : [mainPath]
 
+  // ELECTRON_RUN_AS_NODE (set by some editors and agent shells) would turn the
+  // Electron binary into a plain Node process that rejects Chromium flags.
+  const stripEnv = new Set(['ELECTRON_RUN_AS_NODE', ...(options.stripEnv ?? [])])
+  const inheritedEnv = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !stripEnv.has(key)),
+  )
+
   const app = await electron.launch({
     executablePath,
     args,
     cwd: APP_ROOT,
     env: {
-      ...process.env,
-      // Use test user data to avoid polluting dev data
+      ...inheritedEnv,
       ELECTRON_IS_DEV: '0',
       // Headless by default (ELECTRON_TEST_MODE=1), headed if HIBIKI_E2E_HEADED=1
       ELECTRON_TEST_MODE: headed ? '0' : '1',
+      ...options.env,
     },
     timeout: 60_000,
   })

@@ -58,6 +58,20 @@ pnpm exec playwright install chromium  # Install Playwright browser
 
 The root `pnpm test:e2e` script handles `pnpm install` automatically, but you still need to install the Playwright browser once.
 
+## Marketing screenshots
+
+`screenshots/capture.spec.ts` launches the built app against a throwaway, seeded user-data directory (three scenes, silent WAV files with Sound Tags, a few bookmarks) and saves 1440x900 PNGs to `docs/assets/screenshots/`. It needs no Discord token or network: the bot stays disconnected, secrets from your shell and the root `.env` are pinned to empty values, and the temp directory is deleted afterwards.
+
+```bash
+# From repo root (builds first)
+pnpm run screenshots
+
+# Or from the e2e package against an existing build
+pnpm run screenshots
+```
+
+The window is shown while capturing (hidden windows never paint), so expect it to pop up briefly. The Browser tab's page area stays empty because the embedded `WebContentsView` is not part of the renderer capture.
+
 ## Running CI locally with `act`
 
 [`nektos/act`](https://github.com/nektos/act) runs GitHub Actions workflows locally in Docker, reproducing the exact Linux CI environment. This is useful for debugging CI-specific failures (like Electron sandbox issues) without pushing to GitHub.

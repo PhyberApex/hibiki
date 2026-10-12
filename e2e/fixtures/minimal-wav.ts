@@ -8,6 +8,11 @@ import { join } from 'node:path'
  */
 export function createMinimalWavPath(filename: string): string {
   const path = join(tmpdir(), filename)
+  writeMinimalWav(path)
+  return path
+}
+
+export function writeMinimalWav(path: string): void {
   // RIFF header + fmt chunk + data chunk with a few silent samples
   const sampleRate = 44100
   const numChannels = 1
@@ -49,5 +54,4 @@ export function createMinimalWavPath(filename: string): string {
   // rest of buffer is already 0 (silence)
 
   writeFileSync(path, buffer)
-  return path
 }
