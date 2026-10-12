@@ -159,7 +159,7 @@ const showStorageWarnings = computed(() =>
   <div v-else class="layout">
     <aside class="sidebar">
       <div class="brand-mini">
-        <img src="/logo.png" alt="Hibiki" class="brand-logo" width="24" height="24">
+        <img src="/logo.svg" alt="Hibiki" class="brand-logo" width="24" height="24">
         <span class="brand-title">Hibiki</span>
       </div>
 

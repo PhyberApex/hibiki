@@ -9,7 +9,7 @@ The site is built with **Jekyll** and published by **GitHub Pages** from **Setti
 - **`_layouts/default.html`** — the shared shell: header, nav, footer, font loading. The first comment in `<body>` is the design direction contract for the site.
 - **`assets/css/site.css`** — all styles. The page background draws the battle-map grid; the three category colours (`--music`, `--ambience`, `--effects`) mirror the app's palette in `frontend/src/assets/base.css`.
 - **`assets/js/site.js`** — progressive enhancement only: fills the download links from the latest GitHub release and highlights the current section in the guide's TOC. The site works without it.
-- **`logo.png`**, **`banner.png`** — mascot art. The logo is the favicon, the header token, and the party token in the hero; the banner is the Open Graph image.
+- **`logo.png`**, **`social.png`** — brand art, both rendered from `frontend/public/logo.svg` (the echo mark). The logo is the favicon, the header token, and the party token in the hero; `social.png` is the Open Graph image.
 - **`DESIGN.md`** (repo root) — the recorded design system for the site; read it before changing the look.
 
 ## Previewing locally

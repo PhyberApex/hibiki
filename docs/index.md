@@ -25,7 +25,7 @@ title: Home
   <div class="hero-map">
   <svg class="radii" viewBox="0 0 640 530" role="img" aria-labelledby="radii-title radii-desc">
     <title id="radii-title">Three sound layers around the party</title>
-    <desc id="radii-desc">An illustration of three overlapping sound layers drawn as circles on a battle-map grid: Tavern Bard music in amber, Crackling Fireplace ambience in teal, and a Mug Slam effect in rose, with the Hibiki mascot where all three overlap. Hibiki mixes all layers into one stream for the whole voice channel.</desc>
+    <desc id="radii-desc">An illustration of three overlapping sound layers drawn as circles on a battle-map grid: Tavern Bard music in amber, Crackling Fireplace ambience in teal, and a Mug Slam effect in rose, with the Hibiki mark where all three overlap. Hibiki mixes all layers into one stream for the whole voice channel.</desc>
     <g class="radius radius-music">
       <circle cx="300" cy="230" r="190"/>
       <circle class="radius-core" cx="300" cy="230"/>
