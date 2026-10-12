@@ -27,6 +27,17 @@ We run these checks in CI; PRs are expected to pass lint and tests.
 3. **Push and open a PR:** Push your branch and open a pull request against the base branch. Describe what you changed and why. Link any related issues if applicable.
 4. **Review:** Address review feedback. Once the PR is approved and CI is green, it can be merged.
 
+## AI policy
+
+Hibiki is developed with heavy use of AI coding tools. Agents help triage issues, write specs and Architecture Decision Records, implement features, and review pull requests, all steered by a human maintainer. Nothing is merged without a human having reviewed it. The agent-facing instructions live in [`CLAUDE.md`](CLAUDE.md), [`CONTEXT.md`](CONTEXT.md), and [`agent-docs`](agent-docs), so the same guidelines apply whether code is written by a person or a model.
+
+Contributions made with the help of LLMs or AI coding tools are welcome, as long as:
+
+- they follow the [code of conduct](#code-of-conduct) and the checks under [Before you submit](#before-you-submit), and
+- a human has reviewed the change at least once before it is submitted. You are responsible for what you submit: understand it, be able to explain it, and make sure it actually works.
+
+Unreviewed, bulk-generated issues or pull requests may be closed without further discussion.
+
 ## Project layout
 
 - **electron/** — Electron main process (IPC handlers, protocol handler, window management)
