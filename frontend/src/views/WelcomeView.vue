@@ -12,133 +12,113 @@ function enter() {
 
 <template>
   <div class="welcome" @click="enter" @keydown.enter="enter">
-    <div class="welcome-banner">
-      <img src="/banner.png" alt="Hibiki" class="banner-img">
-      <div class="banner-overlay" />
-    </div>
+    <h1 class="welcome-title">
+      Hibiki
+    </h1>
 
-    <div class="welcome-content">
-      <img src="/logo.png" alt="" class="welcome-logo">
-      <h1 class="welcome-title">
-        Hibiki
-      </h1>
-      <p class="welcome-tagline">
-        Your private bard bot for Discord
-      </p>
-      <button type="button" class="btn-enter" @click.stop="enter">
-        Continue
-      </button>
-      <span class="welcome-version">v{{ appVersion }}</span>
-    </div>
+    <svg class="welcome-wave" viewBox="0 0 260 36" aria-hidden="true">
+      <path class="wave-base" d="M0 18 H260" />
+      <path
+        class="wave-line"
+        d="M0 18 C 20 18 25 6 40 6 S 60 30 80 30 S 100 10 120 10 S 140 26 160 26 S 180 12 200 12 S 220 22 240 22 S 255 18 260 18"
+      />
+    </svg>
+
+    <p class="welcome-tagline">
+      Music, ambience and effects for your Discord table.
+    </p>
+
+    <button type="button" class="btn-enter" @click.stop="enter">
+      Continue
+    </button>
+
+    <span class="welcome-version">v{{ appVersion }}</span>
   </div>
 </template>
 
 <style scoped>
 .welcome {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2.25rem;
   min-height: 100vh;
+  padding: 3rem;
   background: var(--color-bg);
-  position: relative;
-  overflow: hidden;
   cursor: pointer;
   user-select: none;
 }
 
-.welcome-banner {
-  position: absolute;
-  inset: 0;
-}
-
-.banner-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.35;
-}
-
-.banner-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to bottom,
-    transparent 30%,
-    color-mix(in srgb, var(--color-bg) 60%, transparent) 60%,
-    color-mix(in srgb, var(--color-bg) 95%, transparent) 85%
-  );
-}
-
-.welcome-content {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 2rem;
-  margin-top: 30vh;
-  animation: welcome-enter 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes welcome-enter {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.welcome-logo {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-lg);
-  object-fit: contain;
-  filter: drop-shadow(var(--shadow-card));
-}
-
 .welcome-title {
-  font-size: 2.5rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  color: var(--color-text);
   margin: 0;
-  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
+  font-size: 2.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--color-text);
+}
+
+.welcome-wave {
+  display: block;
+  width: 260px;
+  height: 36px;
+  overflow: visible;
+}
+
+.welcome-wave path {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.wave-base {
+  stroke: var(--color-border);
+}
+
+.wave-line {
+  stroke: var(--color-accent);
+  stroke-dasharray: 420;
+  stroke-dashoffset: 420;
+  animation: wave-draw 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards;
+}
+
+@keyframes wave-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 .welcome-tagline {
-  font-size: 1rem;
-  color: var(--color-text-muted);
   margin: 0;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
+  text-align: center;
 }
 
 .btn-enter {
-  margin-top: 1.5rem;
-  padding: 0.7rem 2.5rem;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-accent-text);
-  background: var(--color-accent);
-  border: none;
+  appearance: none;
+  padding: 0.6rem 1.5rem;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: var(--shadow-accent-glow);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: border-color var(--transition), background var(--transition);
 }
 
 .btn-enter:hover {
-  transform: scale(1.04);
-  box-shadow: var(--shadow-accent-glow-hover);
+  border-color: var(--color-accent);
+  background: var(--color-accent-muted);
 }
 
 .welcome-version {
-  margin-top: 0.5rem;
-  font-size: 0.7rem;
+  position: absolute;
+  bottom: 1.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
   color: var(--color-text-dim);
 }
 </style>
