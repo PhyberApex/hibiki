@@ -7,6 +7,8 @@
 
 ![Hibiki](logo.png)
 
+![The Cozy Tavern scene in Hibiki: two ambience loops with random repeat intervals, two music tracks, and four effect buttons](docs/assets/screenshots/scene-editor.png)
+
 **Desktop audio companion for Discord** — play music, ambience, and sound effects in voice channels from an Electron app. Built with **Dungeons & Dragons** in mind (background music, ambient soundscapes, one-shot effects at the table) but works for any server.
 
 - **Scenes** — Build soundboards with music tracks, ambience loops (with random interval repeats), and one-shot effects. Play an entire scene or individual tracks. Share scenes with the community or install from a [public registry](docs/scene-sharing.md). Grab ready-made [scene packs](https://github.com/PhyberApex/hibiki-scene-packs) with bundled CC0 audio to get started.
@@ -14,6 +16,14 @@
 - **Media library** — Upload and manage your own sound files (music, effects, ambience). Import/export scenes as portable bundles.
 - **Vision to Vibe** *(opt-in)* — Drop a battle map or mood-board image into a scene and get Music and Ambience suggestions from your own tagged library. Choose your Vision Provider in Settings: Claude (set a key via Settings or `HIBIKI_VISION_API_KEY`), or an OpenAI-compatible endpoint — OpenAI itself, a compatible gateway, or a local server like Ollama or LM Studio (key via Settings or `HIBIKI_VISION_OPENAI_API_KEY`, plus an editable Base URL and Model). Images are sent to the selected provider for analysis and never stored.
 - **App-only control** — The bot has no slash or prefix commands; everything is driven from the desktop UI.
+
+## Screenshots
+
+| Scenes | Sound library | Settings |
+|---|---|---|
+| ![Scenes list](docs/assets/screenshots/scenes.png) | ![Sound library with tagged files](docs/assets/screenshots/media.png) | ![Settings](docs/assets/screenshots/settings.png) |
+
+Regenerate these with `pnpm screenshots` (see [e2e/README.md](e2e/README.md)).
 
 ## Stack
 
@@ -60,9 +70,9 @@ Pre-built binaries for **macOS**, **Windows**, and **Linux** are available on th
 
 | Platform | Format |
 |----------|--------|
-| macOS    | `.dmg`, `.zip` (x64 + Apple Silicon) |
+| macOS    | `.dmg`, `.zip` (Apple Silicon only) |
 | Windows  | `.exe` (NSIS installer) |
-| Linux    | `.AppImage`, `.deb` |
+| Linux    | `.deb`, `.zip` |
 
 > **macOS note:** The app is not code-signed. macOS will quarantine it on first launch.
 > After downloading, remove the quarantine flag before opening:
@@ -72,6 +82,23 @@ Pre-built binaries for **macOS**, **Windows**, and **Linux** are available on th
 > ```
 >
 > Or right-click the app → **Open** → confirm in the dialog.
+
+## FAQ
+
+**Why not just use Discord's built-in soundboard?**
+Discord's soundboard is for short clips, one at a time, with no looping and no layering. Hibiki is built for a whole session: a music track, several ambience loops, and one-shot effects all play at once, mixed into a single stream, and you can switch the entire scene with one click.
+
+**Does Hibiki run on someone else's server?**
+No. The bot runs inside the desktop app on your machine using a bot token you create. Nothing is hosted, nothing is metered, and your audio files never leave your computer (except as the voice stream Discord hears).
+
+**Can I play YouTube or Spotify?**
+Yes. The Browser tab opens any website inside Hibiki and streams its audio to the voice channel. Please respect the terms of service of the site you are streaming from.
+
+**Do my players need to install anything?**
+No. Only the Game Master runs Hibiki. Players just sit in the voice channel.
+
+**How does it compare to Kenku FM, Syrinscape, or Tabletop Audio?**
+See the [comparison page](https://phyberapex.github.io/hibiki/compare).
 
 ## Quick start (from source)
 

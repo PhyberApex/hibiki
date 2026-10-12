@@ -9,3 +9,8 @@ markdown: kramdown
 kramdown:
   input: GFM
   hardwrap: false
+
+# Self-hosted Umami analytics. Both values must be set for the script to render.
+umami:
+  script_url: https://analytics.phyberapex.de/script.js
+  website_id: 9d917c28-68c2-4619-a599-e9f2f3f28122

@@ -8,14 +8,14 @@ title: Home
     <h1 id="hero-title">Music, ambience and effects, <em>played into Discord</em> from your own desk.</h1>
     <p class="hero-lede">Hibiki is a free desktop app for Game Masters. Build a scene, join your voice channel, and the table hears the tavern, the storm, and the door slam, <strong>with no slash commands and no hosted bot</strong>.</p>
     <div class="download">
-      <a class="download-primary" href="https://github.com/PhyberApex/hibiki/releases/latest">
+      <a class="download-primary" href="https://github.com/PhyberApex/hibiki/releases/latest" data-umami-event="download" data-umami-event-platform="primary">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
         Download Hibiki <span class="download-version" data-release-version>v1.4.0</span>
       </a>
       <ul class="download-platforms">
-        <li><a href="https://github.com/PhyberApex/hibiki/releases/latest" data-asset="mac">macOS .dmg</a></li>
-        <li><a href="https://github.com/PhyberApex/hibiki/releases/latest" data-asset="win">Windows installer</a></li>
-        <li><a href="https://github.com/PhyberApex/hibiki/releases/latest" data-asset="deb">Linux .deb</a></li>
+        <li><a href="https://github.com/PhyberApex/hibiki/releases/latest" data-asset="mac" data-umami-event="download" data-umami-event-platform="mac">macOS .dmg</a></li>
+        <li><a href="https://github.com/PhyberApex/hibiki/releases/latest" data-asset="win" data-umami-event="download" data-umami-event-platform="win">Windows installer</a></li>
+        <li><a href="https://github.com/PhyberApex/hibiki/releases/latest" data-asset="deb" data-umami-event="download" data-umami-event-platform="deb">Linux .deb</a></li>
         <li><a href="https://github.com/PhyberApex/hibiki/releases">All releases</a></li>
       </ul>
       <p class="download-note">Open source, MIT. You bring your own Discord bot token; nothing runs on anyone else's server.</p>
@@ -131,6 +131,23 @@ title: Home
   </div>
 </section>
 
+<section class="region" id="shots" aria-labelledby="shots-title">
+  <div class="region-head">
+    <h2 id="shots-title">The real thing.</h2>
+    <p>Screenshots of the current release, captured straight from the app.</p>
+  </div>
+  <div class="shots">
+    <figure class="shot">
+      <img src="{{ site.baseurl }}/assets/screenshots/scene-editor.png" alt="The Cozy Tavern scene: two ambience loops, one repeating every 30 seconds to 2 minutes, two music tracks, and four effect buttons" width="1440" height="900" loading="lazy">
+      <figcaption>A scene. Ambience on top, music in the middle, effects along the bottom.</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="{{ site.baseurl }}/assets/screenshots/media.png" alt="The sound library with tagged music files and a get started checklist" width="1440" height="900" loading="lazy">
+      <figcaption>The sound library. Your files, your tags, nothing uploaded anywhere.</figcaption>
+    </figure>
+  </div>
+</section>
+
 <section class="region" id="legend" aria-labelledby="legend-title">
   <div class="region-head">
     <h2 id="legend-title">Everything else on the map.</h2>
@@ -211,6 +228,30 @@ pnpm dev</code></pre>
       </div>
     </aside>
   </div>
+</section>
+
+<section class="region" id="faq" aria-labelledby="faq-title">
+  <div class="region-head">
+    <h2 id="faq-title">Questions GMs ask first.</h2>
+  </div>
+  <dl class="layers faq">
+    <div class="layer">
+      <dt><span class="ring ring-effects"></span><span>Why not Discord's own soundboard?</span></dt>
+      <dd>Discord's soundboard plays short clips, one at a time, with no loops and no layering. Hibiki runs a whole session: music, several ambience loops, and effects at once, mixed into one stream, and the entire scene switches with one click.</dd>
+    </div>
+    <div class="layer">
+      <dt><span class="ring ring-ambience"></span><span>Does anything run on a server?</span></dt>
+      <dd>No. The bot lives inside the app on your machine with a token you create. Nothing hosted, nothing metered, no account with us.</dd>
+    </div>
+    <div class="layer">
+      <dt><span class="ring ring-music"></span><span>Do my players install anything?</span></dt>
+      <dd>No. Only the Game Master runs Hibiki. Players sit in the voice channel and hear the mix.</dd>
+    </div>
+    <div class="layer">
+      <dt><span class="ring"></span><span>How is it different from Kenku FM or Syrinscape?</span></dt>
+      <dd>Read the <a href="{{ site.baseurl }}/compare">honest comparison</a>, including when you should pick one of those instead.</dd>
+    </div>
+  </dl>
 </section>
 
 <section class="region" id="packs" aria-labelledby="packs-title">
