@@ -1,69 +1,31 @@
 # Docs site (Jekyll)
 
-The docs are built with **Jekyll** and published by **GitHub Pages** when you use **Settings → Pages** → source **Deploy from a branch** → branch **main** → folder **/docs**.
+The site is built with **Jekyll** and published by **GitHub Pages** from **Settings → Pages** → source **Deploy from a branch** → branch **main** → folder **/docs**. It is served at `https://phyberapex.github.io/hibiki/`, so `_config.yml` sets `baseurl: /hibiki`.
 
-## How it works
+## Files
 
-1. **Source files** (what you edit):
-   - **`index.md`** — Homepage content in Markdown (setup, features, Scenes, volume, E2E). The front matter (`layout: default`, `title: ...`) tells Jekyll to wrap it in the default layout.
-   - **`_layouts/default.html`** — Shared layout: simple text header (title + tagline, no banner), main content area, footer. All CSS lives here.
-   - **`_config.yml`** — Site title, description (tagline), and `baseurl` (e.g. `/hibiki` so links work when the site is at `https://<user>.github.io/hibiki/`).
-   - **Assets** — `logo.png` and `banner.png` in `docs/` (favicon uses logo; layout shows banner at top and logo in header). Copy from repo root if you replace them.
+- **`index.md`** — the landing page. Mostly hand-written HTML inside the Markdown file: hero with the sound-radii illustration, the scene board illustration, the feature legend, the three-step bot setup, and the scene pack list.
+- **`scene-sharing.md`** — the Scene Sharing guide, written in Markdown inside a `.read-layout` wrapper with a table of contents. Section ids (`{: #install}` and friends) feed the TOC.
+- **`_layouts/default.html`** — the shared shell: header, nav, footer, font loading. The first comment in `<body>` is the design direction contract for the site.
+- **`assets/css/site.css`** — all styles. The page background draws the battle-map grid; the three category colours (`--music`, `--ambience`, `--effects`) mirror the app's palette in `frontend/src/assets/base.css`.
+- **`assets/js/site.js`** — progressive enhancement only: fills the download links from the latest GitHub release and highlights the current section in the guide's TOC. The site works without it.
+- **`logo.png`**, **`banner.png`** — mascot art. The logo is the favicon, the header token, and the party token in the hero; the banner is the Open Graph image.
+- **`DESIGN.md`** (repo root) — the recorded design system for the site; read it before changing the look.
 
-2. **Build (on GitHub)**
-   When you push to `main`, GitHub Pages runs Jekyll on the `docs/` folder. Jekyll:
-   - Reads `_config.yml`.
-   - Renders `index.md` with the `default` layout into HTML.
-   - Outputs the site (e.g. to a temporary `_site`). GitHub serves that at `https://<owner>.github.io/hibiki/`.
+## Previewing locally
 
-3. **No local build required**
-   You can edit `index.md` (and the layout or config) and push; GitHub builds and publishes. You don’t need to run Jekyll on your machine unless you want to preview.
-
-## Editing content
-
-- **Change the homepage:** Edit **`index.md`**. Use normal Markdown: `##` headings, `**bold**`, `[text](url)`, `` `code` ``, fenced code blocks (triple backticks), and lists. The layout wraps content in a single `.container`; use `##` for sections so headings and paragraphs render correctly.
-- **Change the look (header, footer, styles):** Edit **`_layouts/default.html`** (and keep `{{ content }}` so the page body still appears).
-- **Change site title/description or base URL:** Edit **`_config.yml`**. If the repo is under a different path (e.g. different org or repo name), set `baseurl` to match (e.g. `"/my-repo"`).
-
-## Adding more pages
-
-1. Create e.g. **`docs/setup.md`** with front matter and content:
-   ```yaml
-   ---
-   layout: default
-   title: Setup guide
-   ---
-   Your Markdown here...
-   ```
-2. Jekyll will generate `setup.html`. Link to it from `index.md` as `[Setup guide]({{ site.baseurl }}/setup)` or `[Setup guide](/hibiki/setup)` (depending on how you’re viewing the site).
-3. The same layout and styles apply to every page that uses `layout: default`.
-
-## Preview locally (optional)
-
-You need **Ruby** and **Bundler** to run `bundle` and Jekyll locally:
-
-- **Ruby** — Check with `ruby -v`. macOS often has a system Ruby; if it’s missing or too old, install via [Homebrew](https://brew.sh/) (`brew install ruby`) or use [rbenv](https://github.com/rbenv/rbenv) / [rvm](https://rvm.io/).
-- **Bundler** — Install with `gem install bundler`. Then run `bundle install` (or the commands below) in the directory that has a `Gemfile`.
-
-From the repo root:
+GitHub builds the site on push, so no local build is required. To preview:
 
 ```bash
+gem install --user-install jekyll kramdown-parser-gfm
 cd docs
-bundle init
-bundle add jekyll github-pages
-bundle exec jekyll serve --lazy
+jekyll serve --baseurl /hibiki
 ```
 
-Then open **http://localhost:4000/hibiki/** (the path includes `baseurl`). To test without a base path: `bundle exec jekyll serve --baseurl ""` and open http://localhost:4000.
+Then open `http://127.0.0.1:4000/hibiki/`.
 
-The built site is in `docs/_site/`; that folder is in `.gitignore` and is not committed.
+## Editing
 
-## Summary
-
-| What            | Where                |
-|-----------------|----------------------|
-| Homepage text   | `index.md` (D&D-focused intro, setup, volume, known issues) |
-| Layout + CSS    | `_layouts/default.html` (simple header, no banner) |
-| Site settings   | `_config.yml` (title, tagline “Echoes of Adventure…”, baseurl) |
-| Logo & banner   | `docs/logo.png`, `docs/banner.png` (layout uses both) |
-| Build           | Done by GitHub Pages on push to `main` (folder `/docs`) |
+- **Copy on the landing page:** edit the HTML in `index.md`. Keep real facts only (release formats, permissions, scene names); the scene board is labelled as an illustration and must stay that way until real screenshots replace it.
+- **The guide:** normal Markdown in `scene-sharing.md`. Use `##` for sections that should appear in the TOC and add a matching `<li>` in the `.toc` list.
+- **Adding a page:** create `docs/<name>.md` with `layout: default` front matter, wrap the body in `<div class="read-layout">` + `<article class="prose" markdown="1">` to get the reading layout, and link it from the nav in `_layouts/default.html`.

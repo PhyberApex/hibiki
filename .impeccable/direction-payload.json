@@ -1,0 +1,129 @@
+{
+  "title": "Choose the visual world for the Hibiki site",
+  "question": "The roll assigned The Battle Map. Keep it, take an alternate, or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "The Battle Map",
+      "kicker": "THE ROLL",
+      "lineage": "the gridded battle map under the table lamp, and the VTT's ambient-sound radii drawn on it",
+      "thesis": "The landing page is one map; sound sources are glowing radii on the grid, and Hibiki is what lights them.",
+      "palette": ["#0e0f14", "#1a1b22", "#f59e0b", "#2dd4bf", "#fb7185", "#f3efe6"],
+      "materials": ["dry-erase vinyl grid", "lamp-pooled light", "token rings", "ink labels"],
+      "viewport": "Full-bleed dark grid. Three overlapping sound radii (amber music, teal ambience, rose effects) breathe around a party token at the centre; the title and one-line pitch sit top-left on the map, Download for macOS/Windows/Linux as the single framed object beneath. The real Cozy Tavern scene board floats as a window at the right edge, labelled as an illustration.",
+      "risk": "A grid on dark can slide toward a technical dashboard if the lines are cold or the type is small; warmth has to come from the lamp light and the lettering.",
+      "raised": [
+        {"from": "challenger-vu-bridge", "raise": "One orchestrated motion: the three radii light in sequence on load and then breathe at their own tempo, like real level meters, instead of scattered hover effects."},
+        {"from": "challenger-glazier", "raise": "Saturated colour only where it matters now: the three radii own the colour; everything else is charcoal ink, and hierarchy comes from field size and colour, not type weight."},
+        {"from": "challenger-ebru", "raise": "One continuous ground: every section is a region on the same map, no boxed cards, the grid runs under the whole page."},
+        {"from": "challenger-deco", "raise": "The download is staged as the one framed object on the page; secondary actions recede into plain ink links."},
+        {"from": "challenger-blackbook", "raise": "A fast version in the corner: a three-line quick start for people who refuse to read the setup walkthrough."}
+      ]
+    },
+    {
+      "id": "model-pick",
+      "label": "The DM Screen",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "the four-panel folding GM screen: art facing the players, reference tables facing the GM",
+      "thesis": "Two faces of one object: the players' side is the mascot art, the GM's side is the setup tables.",
+      "palette": ["#141210", "#2a2420", "#f59e0b", "#e9dfcf"],
+      "materials": ["folded board", "printed card stock", "lamplit art panel"],
+      "viewport": "A wide folded screen spanning the viewport: left panels carry the campfire art and the pitch, right panels carry download and the setup checklist as reference tables.",
+      "risk": "Familiar: dark panels with reference tables is where most landing pages in this category land, and the folded conceit can read as decoration."
+    },
+    {
+      "id": "challenger-vu-bridge",
+      "label": "VU-Meter Bridge",
+      "verdict": "competitive",
+      "lineage": "a row of ballistic VU needles across a recording desk",
+      "thesis": "Hibiki as a desk: one meter per layer, all leaning into the downbeat together.",
+      "palette": ["#f3ead8", "#1b1a17", "#7a5230", "#c0392b"],
+      "materials": ["ivory meter faces", "walnut frame", "glass"],
+      "viewport": "A bridge of three meters (music, ambience, effects) across the top, needles moving to the real scene; download beneath the desk edge.",
+      "case": "Wins product clarity (sound layers as channels) but GMs do not identify with a studio desk; the brand explicitly refuses the recording-studio feel.",
+      "risk": "Reads as pro-audio gear, not a game table.",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-vu-meter-bridge-hero.webp"
+    },
+    {
+      "id": "challenger-glazier",
+      "label": "Glazier's Colourfield Partition",
+      "verdict": "competitive",
+      "lineage": "a steel-framed glass partition, mostly clear with a few saturated panes",
+      "thesis": "The soundboard as a glazing grid: one pane, one statement, colour only where it plays.",
+      "palette": ["#111111", "#f4f4f0", "#1e3fa8", "#f59e0b", "#7a1f1f"],
+      "materials": ["black glazing bars", "seeded glass", "backlit colour panes"],
+      "viewport": "A wall elevation of panes read left to right; the scene board is the lit section, download a single amber pane.",
+      "case": "Strong clarity through the pane grid, weak audience identification: nobody at a game table thinks in glazing.",
+      "risk": "Could read as a generic bento layout.",
+      "hero": "https://impeccable.style/worlds/cards/craft-making-glazier-colorfield-partition-hero.webp"
+    },
+    {
+      "id": "challenger-ebru",
+      "label": "Ebru Floated Pigment",
+      "verdict": "declined",
+      "lineage": "pigment combed on a water bath and lifted in one contact",
+      "thesis": "Sound layers as pigment displacing on one surface.",
+      "palette": ["#1a2a3a", "#c9a227", "#7b2d26", "#e8e1d0"],
+      "materials": ["floating pigment", "sized paper"],
+      "viewport": "A full-frame fluid canvas with the title lifted off it.",
+      "case": "Beautiful but tells a GM nothing about what Hibiki does.",
+      "kept": "Everything on one continuous ground, no stacked boxes.",
+      "risk": "Pure mood.",
+      "hero": "https://impeccable.style/worlds/cards/medium-native-ebru-floated-pigment-hero.webp"
+    },
+    {
+      "id": "challenger-deco",
+      "label": "Deco Cinema Lobby",
+      "verdict": "declined",
+      "lineage": "an Art Deco cinema lobby at premiere hour",
+      "thesis": "Arrival staged as marquee, lobby, house.",
+      "palette": ["#0b0b0b", "#c9a45c", "#8b1e2d"],
+      "materials": ["lacquer", "brass sunburst", "velvet rope"],
+      "viewport": "A sunburst marquee with the name climbing stepped tiers.",
+      "case": "Loses both axes: not the audience's world, and the staging hides the product.",
+      "kept": "The primary action gets the one framed treatment; secondaries recede.",
+      "risk": "Costume.",
+      "hero": "https://impeccable.style/worlds/cards/design-canon-deco-cinema-lobby-hero.webp"
+    },
+    {
+      "id": "challenger-blackbook",
+      "label": "Wildstyle Blackbook Page",
+      "verdict": "declined",
+      "lineage": "a writer's blackbook with interlocked letters and a fast throw-up in the corner",
+      "thesis": "The name is the map.",
+      "palette": ["#f1e9d6", "#111111", "#ff6a00", "#2b7bff"],
+      "materials": ["marker", "cream book paper"],
+      "viewport": "The word HIBIKI interlocked across the page.",
+      "case": "Loses both axes for a TTRPG audience and buries the download.",
+      "kept": "A fast version sketched in the corner: the three-line quick start.",
+      "risk": "Illegible.",
+      "hero": "https://impeccable.style/worlds/cards/vernacular-ephemera-wildstyle-blackbook-page-hero.webp"
+    },
+    {
+      "id": "challenger-versailles",
+      "label": "Versailles Bosquet Vistas",
+      "verdict": "declined",
+      "lineage": "axial garden vistas and hidden green rooms",
+      "thesis": "The page as one sightline that reveals rooms.",
+      "palette": ["#3a5a2a", "#c9b58a", "#b8973f", "#f6f3ea"],
+      "materials": ["clipped hedge", "raked gravel", "gilt bronze"],
+      "viewport": "A long central axis from terrace to canal.",
+      "case": "Loses both axes.",
+      "kept": "One reading axis: a single column aligned to the grid.",
+      "risk": "Ornamental.",
+      "hero": "https://impeccable.style/worlds/cards/architecture-inhabitable-space-versailles-bosquet-vistas-hero.webp"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "code", "toggle": false },
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "Dark landing page: mascot banner hero, three feature cards, download buttons, setup steps, executed cleanly.",
+    "palette": ["#0c0c0e", "#1c1a18", "#f59e0b", "#f5f4f2"],
+    "materials": ["banner image", "cards", "buttons"],
+    "viewport": "Banner, headline, two buttons, a row of cards.",
+    "risk": "What the site already is, just tidier."
+  },
+  "steer": true
+}

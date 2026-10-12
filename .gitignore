@@ -33,3 +33,7 @@ skills-lock.json
 .windsurf
 .cursor
 .agents
+
+# Impeccable working files (screenshots and decision-page state)
+.impeccable/review/
+.impeccable/questions/
