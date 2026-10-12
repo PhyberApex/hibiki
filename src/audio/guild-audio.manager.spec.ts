@@ -383,6 +383,26 @@ describe('guildAudioManager', () => {
       expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
     })
 
+    it('the same track can be played again after being stopped', async () => {
+      const firstStream = createFakeStream()
+      const secondStream = createFakeStream()
+      await manager.playMusic(jest.fn().mockReturnValue(firstStream), meta, { volume: 80 })
+      manager.stopCurrentTrack()
+      expect(manager.track).toBeUndefined()
+
+      await manager.playMusic(jest.fn().mockReturnValue(secondStream), meta, { volume: 80 })
+
+      const calls = getEngineMock().playMusicFromStream.mock.calls
+      expect(calls).toHaveLength(2)
+      expect(calls[1][0]).toBe(secondStream)
+      expect(calls[1][1]).not.toBe(calls[0][1])
+      expect(manager.track).toEqual(meta)
+
+      manager.stopCurrentTrack()
+      expect(getEngineMock().stopMusic).toHaveBeenLastCalledWith(calls[1][1])
+      expect(manager.track).toBeUndefined()
+    })
+
     it('stopCurrentTrack is a no-op when nothing is playing', () => {
       expect(() => manager.stopCurrentTrack()).not.toThrow()
       expect(getEngineMock().stopMusic).not.toHaveBeenCalled()
@@ -683,6 +703,26 @@ describe('guildAudioManager', () => {
 
       getEngineMock().rampStreamVolume.mock.calls[0][3]()
       expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
+    })
+
+    it('the same sound can be played again after being stopped', async () => {
+      const firstStream = createFakeStream()
+      const secondStream = createFakeStream()
+      await manager.playAmbience(jest.fn().mockReturnValue(firstStream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+      manager.stopAmbience('rain')
+      expect(manager.activeAmbience).toEqual([])
+
+      await manager.playAmbience(jest.fn().mockReturnValue(secondStream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+
+      const calls = getEngineMock().playMusicFromStream.mock.calls
+      expect(calls).toHaveLength(2)
+      expect(calls[1][0]).toBe(secondStream)
+      expect(calls[1][1]).not.toBe(calls[0][1])
+      expect(manager.activeAmbience).toEqual(['rain'])
+
+      manager.stopAmbience('rain')
+      expect(getEngineMock().stopMusic).toHaveBeenLastCalledWith(calls[1][1])
+      expect(manager.activeAmbience).toEqual([])
     })
 
     it('stopAmbience is a no-op for a soundId that is not playing', () => {

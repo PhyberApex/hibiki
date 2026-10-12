@@ -282,6 +282,25 @@ describe('audioEngine', () => {
       expect(createdInputs[1].destroy).toHaveBeenCalledTimes(1)
     })
 
+    it('a stream started again under the same id after a stop plays fresh and reports its own onEnded', async () => {
+      const first = createFakeStream()
+      const second = createFakeStream()
+      const firstEnded = jest.fn()
+      const secondEnded = jest.fn()
+      engine.playMusicFromStream(first, 'a', 80, firstEnded)
+      engine.stopMusic('a')
+
+      engine.playMusicFromStream(second, 'a', 60, secondEnded)
+      ;(second as PassThrough).write(Buffer.alloc(3840))
+      await endStream(second)
+
+      expect(createdInputs).toHaveLength(2)
+      expect(createdInputs[1].params?.volume).toBe(60)
+      expect(createdInputs[1].write).toHaveBeenCalledTimes(1)
+      expect(firstEnded).not.toHaveBeenCalled()
+      expect(secondEnded).toHaveBeenCalledTimes(1)
+    })
+
     it('hands PCM to the mixer input through the feed', async () => {
       const stream = createFakeStream()
       engine.playMusicFromStream(stream, 'a')
