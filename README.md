@@ -17,6 +17,10 @@
 - **Vision to Vibe** *(opt-in)* — Drop a battle map or mood-board image into a scene and get Music and Ambience suggestions from your own tagged library. Choose your Vision Provider in Settings: Claude (set a key via Settings or `HIBIKI_VISION_API_KEY`), or an OpenAI-compatible endpoint — OpenAI itself, a compatible gateway, or a local server like Ollama or LM Studio (key via Settings or `HIBIKI_VISION_OPENAI_API_KEY`, plus an editable Base URL and Model). Images are sent to the selected provider for analysis and never stored.
 - **App-only control** — The bot has no slash or prefix commands; everything is driven from the desktop UI.
 
+## 🤖 AI Disclaimer
+
+> **Heads up!** Hibiki is developed with heavy use of AI coding tools. Issues and pull requests may be triaged, commented on, or authored by an AI agent, with a human maintainer reviewing before anything is merged. AI-assisted contributions are welcome too; see the [AI policy](CONTRIBUTING.md#ai-policy) for the ground rules.
+
 ## Screenshots
 
 | Scenes | Sound library | Settings |
@@ -192,7 +196,7 @@ See [e2e/README.md](e2e/README.md) for details on sidecar bot setup and optional
 
 ## Contributing
 
-Contributions are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, running lint and tests, and how to submit changes.
+Contributions are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, running lint and tests, how to submit changes, and our [AI policy](CONTRIBUTING.md#ai-policy).
 
 ## License
 
