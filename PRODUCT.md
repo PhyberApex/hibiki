@@ -42,7 +42,7 @@ A desktop companion, not a hosted bot: the audio engine runs on the GM's own mac
 ## Brand Commitments
 
 - Name: Hibiki (響). Tagline in use: "Echoes of Adventure."
-- Mascot: the hooded bard robot with a lute, in two confirmed assets: `docs/logo.png` (819x819, dark ground with HIBIKI lettering) and `docs/banner.png` (1536x1024, campfire scene with castle, dice, spellbook). The user confirmed that the mascot art and the name are the only untouchable elements; colors and typography of the site are open (the app itself uses a dark warm ground with amber accent and Plus Jakarta Sans, which the site may echo but need not).
+- Mark: the amber echo mark (three fading arcs around a single note, `frontend/public/logo.svg`), rendered to `logo.png` for the app icon, README and site token, and to `docs/social.png` for Open Graph. It replaced the earlier AI-generated bard robot mascot; no character art is used anywhere. The name is the only untouchable element; colors and typography of the site are open (the app itself uses a dark warm ground with amber accent and Plus Jakarta Sans, which the site may echo but need not).
 - Tone: warm, crafted, inviting; a companion to storytelling, not a studio tool. Anti-references: sterile dashboards, neon gamer, clinical minimalism.
 - License: MIT. Author: PhyberApex.
 

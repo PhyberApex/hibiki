@@ -66,9 +66,7 @@ pnpm test:coverage:frontend               # Frontend only
 .                      # Repo root = the application package
 ├── electron/          # Electron main process
 │   ├── main.js        # Entry point: boots backend, creates window, IPC handlers
-│   ├── preload.js     # Bridge: exposes safe IPC to renderer
-│   ├── splash.html    # Splash screen shown during app initialization
-│   └── splash-logo.png # Logo for splash screen
+│   └── preload.js     # Bridge: exposes safe IPC to renderer
 ├── src/               # Backend (runs in Electron main process)
 │   ├── bootstrap-embedded.ts    # Wires services, exposes IPC API
 │   ├── discord/       # Discord.js client (login, voice, guild directory)
@@ -130,15 +128,6 @@ Data lives in platform user data directory (e.g., `~/Library/Application Support
 Override paths with env vars: `HIBIKI_STORAGE_PATH`, `HIBIKI_MUSIC_DIR`, `HIBIKI_EFFECTS_DIR`, `HIBIKI_DATA_PATH` (see `.env.example`). `HIBIKI_USER_DATA_DIR` moves Electron's whole user data directory (used by the screenshot capture in `e2e/screenshots/` to run against a throwaway profile). The Vision to Vibe API keys can also come from env — `HIBIKI_VISION_API_KEY` for Claude, `HIBIKI_VISION_OPENAI_API_KEY` for the OpenAI-compatible provider — each env var winning over its stored counterpart, like `DISCORD_TOKEN`. There is no env var for provider selection; that lives only in `app-config.json`.
 
 ## Key Development Patterns
-
-### Splash Screen
-
-The app shows a splash screen during initialization for better UX:
-- **Loads immediately** when app starts (before backend initialization)
-- **Frameless transparent window** with app logo and loading spinner
-- **Closes automatically** when main window is ready to show
-- Files: `electron/splash.html` and `electron/splash-logo.png`
-- Handles errors: closes splash if initialization fails
 
 ### IPC API Addition
 

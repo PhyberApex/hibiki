@@ -5,7 +5,7 @@
 [![codecov](https://codecov.io/gh/PhyberApex/hibiki/graph/badge.svg?token=XAZJ3X18SE)](https://codecov.io/gh/PhyberApex/hibiki)
 [![GitHub Repo stars](https://img.shields.io/github/stars/phyberapex/hibiki?style=social)](https://github.com/PhyberApex/hibiki/stargazers)
 
-![Hibiki](logo.png)
+<p align="center"><img src="logo.png" alt="" width="112" height="112"></p>
 
 ![The Cozy Tavern scene in Hibiki: two ambience loops with random repeat intervals, two music tracks, and four effect buttons](docs/assets/screenshots/scene-editor.png)
 
@@ -134,17 +134,13 @@ All scripts are run from the **repo root**.
 | `pnpm test` | Run backend (Jest) and frontend (Vitest) tests |
 | `pnpm test:e2e` | Run E2E tests (requires a running Hibiki instance and Discord config — see below) |
 
-![Banner](banner.png)
-
 ## Project structure
 
 ```text
 hibiki/
 ├── electron/               # Electron main process + preload scripts
 │   ├── main.js             # Entry point, IPC handlers, protocol handler
-│   ├── preload.js          # Secure IPC bridge to renderer
-│   ├── splash.html         # Splash screen during initialization
-│   └── splash-logo.png     # Splash screen logo
+│   └── preload.js          # Secure IPC bridge to renderer
 ├── src/                    # Backend (runs in Electron main process)
 │   ├── discord/            # Discord.js client
 │   ├── player/             # Playback, volume, voice connections
