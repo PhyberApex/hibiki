@@ -72,7 +72,7 @@
     "@electron-forge/maker-zip": "^8.0.0",
     "@electron-forge/plugin-vite": "^8.0.0",
     "@tsconfig/node24": "^24.0.4",
-    "@types/adm-zip": "^0.5.7",
+    "@types/adm-zip": "^0.6.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue": "^6.0.3",
