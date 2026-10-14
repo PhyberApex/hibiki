@@ -146,6 +146,30 @@ export interface EmbeddedApp {
  */
 const log = createLogger('hibiki')
 
+/**
+ * `@snazzah/davey` (Discord's end-to-end voice encryption) silently falls
+ * back from its native binary to a WASM build when the native one fails to
+ * load; the dependency report only prints the package version, so this is
+ * the only place that says which one is actually running.
+ */
+function describeDaveBackend(): string {
+  try {
+    // eslint-disable-next-line ts/no-require-imports -- probing what the voice library itself loads
+    require('@snazzah/davey')
+  }
+  catch (err) {
+    return `failed to load: ${err instanceof Error ? err.message : String(err)}`
+  }
+  const loaded = Object.keys(require.cache).filter(file => /[\\/]@snazzah[\\/]davey/.test(file))
+  const native = loaded.find(file => file.endsWith('.node'))
+  if (native)
+    return `native (${native})`
+  const wasm = loaded.find(file => /wasi|wasm/.test(file))
+  if (wasm)
+    return `WASM fallback (${wasm}); the native binary did not load`
+  return `unknown (${loaded.length} module(s) loaded)`
+}
+
 export function createShutdownHandler(
   player: Pick<ReturnType<typeof createPlayer>, 'destroyAll'>,
   discord: Pick<ReturnType<typeof createDiscordClient>, 'destroy'>,
@@ -168,6 +192,7 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
   process.env.HIBIKI_EMBEDDED = '1'
   const report = generateDependencyReport()
   log.info('Voice dependency report:\n', report)
+  log.info(`DAVE library backend: ${describeDaveBackend()}`)
   const config = getConfig()
   await ensureStorageDirs(config)
   log.info(`Storage root ${config.audio.storageRoot}: music ${config.audio.musicDir}, effects ${config.audio.effectsDir}, ambience ${config.audio.ambienceDir}, data ${config.database.path}`)

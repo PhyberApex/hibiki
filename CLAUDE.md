@@ -125,7 +125,7 @@ Data lives in platform user data directory (e.g., `~/Library/Application Support
 - `sound-tags.json` — Sound Tags keyed by `<category>/<soundId>` (see `CONTEXT.md` glossary)
 - `music/`, `effects/`, `ambience/` — Sound files (copied on upload, keyed by UUID)
 
-Override paths with env vars: `HIBIKI_STORAGE_PATH`, `HIBIKI_MUSIC_DIR`, `HIBIKI_EFFECTS_DIR`, `HIBIKI_DATA_PATH` (see `.env.example`). `HIBIKI_USER_DATA_DIR` moves Electron's whole user data directory (used by the screenshot capture in `e2e/screenshots/` to run against a throwaway profile). The Vision to Vibe API keys can also come from env — `HIBIKI_VISION_API_KEY` for Claude, `HIBIKI_VISION_OPENAI_API_KEY` for the OpenAI-compatible provider — each env var winning over its stored counterpart, like `DISCORD_TOKEN`. There is no env var for provider selection; that lives only in `app-config.json`.
+Override paths with env vars: `HIBIKI_STORAGE_PATH`, `HIBIKI_MUSIC_DIR`, `HIBIKI_EFFECTS_DIR`, `HIBIKI_DATA_PATH` (see `.env.example`). `HIBIKI_USER_DATA_DIR` moves Electron's whole user data directory (used by the screenshot capture in `e2e/screenshots/` to run against a throwaway profile). The Vision to Vibe API keys can also come from env — `HIBIKI_VISION_API_KEY` for Claude, `HIBIKI_VISION_OPENAI_API_KEY` for the OpenAI-compatible provider — each env var winning over its stored counterpart, like `DISCORD_TOKEN`. There is no env var for provider selection; that lives only in `app-config.json`. `HIBIKI_DAVE_ENCRYPTION=off` joins voice without Discord's end-to-end encryption (DAVE), a diagnostic for "bot shows as speaking but nobody hears it" (`src/audio/voice-options.ts`).
 
 ## Key Development Patterns
 

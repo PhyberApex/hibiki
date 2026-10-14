@@ -8,12 +8,41 @@ import {
   entersState,
   getVoiceConnection,
   joinVoiceChannel,
+  NetworkingStatusCode,
   VoiceConnectionStatus,
 } from '@discordjs/voice'
 import { createLogger } from '../logger'
 import { AudioEngine } from './audio-engine'
+import { resolveVoiceOptions } from './voice-options'
 
 const log = createLogger('voice')
+
+/** How long after Ready to log the encryption state again: the DAVE (end-to-end encryption) handshake completes asynchronously after the connection is ready. */
+const ENCRYPTION_RECHECK_MS = 3_000
+
+/**
+ * One-line summary of what protects the audio on this connection. Discord
+ * shows the bot as speaking for every packet it receives, decryptable or
+ * not, so when a GM reports "green ring but no sound" this line is the
+ * first thing to read: a DAVE session that is "NOT ready" means every
+ * packet is sent without end-to-end encryption and gets discarded by
+ * clients in an encrypted call.
+ */
+function describeEncryption(connection: VoiceConnection): string {
+  const state = connection.state
+  if (!state)
+    return 'connection state unknown'
+  if (state.status !== VoiceConnectionStatus.Ready)
+    return `connection ${state.status}`
+  const networking = state.networking?.state
+  if (!networking || networking.code !== NetworkingStatusCode.Ready)
+    return `networking not ready (code ${networking?.code ?? 'unknown'})`
+  const transport = networking.connectionData?.encryptionMode ?? 'unknown'
+  const dave = networking.dave
+  if (!dave)
+    return `transport ${transport}, no DAVE session (end-to-end encryption off or unsupported)`
+  return `transport ${transport}, DAVE protocol v${dave.protocolVersion}, session ${dave.session?.ready ? 'ready' : 'NOT ready'}, privacy code ${dave.voicePrivacyCode ?? 'none'}`
+}
 
 interface TrackMetadata {
   id: string
@@ -145,16 +174,19 @@ export class GuildAudioManager extends EventEmitter {
 
     this.destroyConnection()
 
+    const voiceOptions = resolveVoiceOptions()
     const connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
       adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
       selfDeaf: false,
+      debug: true,
+      daveEncryption: voiceOptions.daveEncryption,
     })
     this.connection = connection
     this.channelName = channel.name
 
-    log.info(`Connecting to "${channel.name}" (${channel.id}) in guild ${this.guildId}`)
+    log.info(`Connecting to "${channel.name}" (${channel.id}) in guild ${this.guildId}, DAVE end-to-end encryption ${voiceOptions.daveEncryption ? 'on' : 'OFF (HIBIKI_DAVE_ENCRYPTION=off)'}`)
     connection.on('error', (error) => {
       log.error(`VoiceConnection error (guild ${this.guildId}):`, error.message)
     })
@@ -176,8 +208,33 @@ export class GuildAudioManager extends EventEmitter {
       log.error(`Voice connection to "${channel.name}" did not become ready within 20 s (guild ${this.guildId})`, err)
       throw err
     }
-    log.info(`Voice connection ready in "${channel.name}" (guild ${this.guildId})`)
+    log.info(`Voice connection ready in "${channel.name}" (guild ${this.guildId}): ${describeEncryption(connection)}`)
+    this.scheduleEncryptionRecheck(connection)
     return connection
+  }
+
+  private encryptionRecheck?: ReturnType<typeof setTimeout>
+
+  private scheduleEncryptionRecheck(connection: VoiceConnection): void {
+    this.clearEncryptionRecheck()
+    this.encryptionRecheck = setTimeout(() => {
+      this.encryptionRecheck = undefined
+      if (this.connection === connection)
+        log.info(`Encryption ${ENCRYPTION_RECHECK_MS} ms after ready (guild ${this.guildId}): ${describeEncryption(connection)}`)
+    }, ENCRYPTION_RECHECK_MS)
+    this.encryptionRecheck.unref?.()
+  }
+
+  private clearEncryptionRecheck(): void {
+    if (this.encryptionRecheck !== undefined) {
+      clearTimeout(this.encryptionRecheck)
+      this.encryptionRecheck = undefined
+    }
+  }
+
+  /** Current encryption summary for playback logs, or a placeholder when not connected. */
+  private get encryptionSummary(): string {
+    return this.connection ? describeEncryption(this.connection) : 'no connection'
   }
 
   /**
@@ -240,6 +297,7 @@ export class GuildAudioManager extends EventEmitter {
 
   disconnect() {
     log.info(`Leaving voice channel (guild ${this.guildId})`)
+    this.clearEncryptionRecheck()
     this.stopAllMusic()
     this.stopAllAmbience()
     this.stopAllEffects()
@@ -249,6 +307,7 @@ export class GuildAudioManager extends EventEmitter {
   }
 
   destroy() {
+    this.clearEncryptionRecheck()
     this.stopAllMusic()
     this.stopAllAmbience()
     this.stopAllEffects()
@@ -338,7 +397,7 @@ export class GuildAudioManager extends EventEmitter {
         }
       }
 
-      log.info(`Music "${metadata.name}" starting as ${streamId}: volume ${options.volume}, loop ${loop}, fadeIn ${startFadeMs} ms`)
+      log.info(`Music "${metadata.name}" starting as ${streamId}: volume ${options.volume}, loop ${loop}, fadeIn ${startFadeMs} ms; ${this.encryptionSummary}`)
       this.musicStreams.set(streamId, { metadata, seq, loop })
       this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0 ? 0 : options.volume, onEnded)
       if (startFadeMs > 0)
@@ -490,7 +549,7 @@ export class GuildAudioManager extends EventEmitter {
         }
       }
 
-      log.info(`Ambience ${soundId} starting as ${streamId}: volume ${entry.volume}, ${entry.loop ? 'seamless loop' : `repeat every ${entry.repeatMin}-${entry.repeatMax} s`}, fadeIn ${startFadeMs} ms`)
+      log.info(`Ambience ${soundId} starting as ${streamId}: volume ${entry.volume}, ${entry.loop ? 'seamless loop' : `repeat every ${entry.repeatMin}-${entry.repeatMax} s`}, fadeIn ${startFadeMs} ms; ${this.encryptionSummary}`)
       this.ambienceEntries.set(soundId, entry)
       this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0 ? 0 : entry.volume, onEnded)
       if (startFadeMs > 0)
@@ -630,7 +689,7 @@ export class GuildAudioManager extends EventEmitter {
       return
     }
 
-    log.info(`Effect starting as ${streamId}: volume ${options.volume} (${this.effectStreamIds.size} active)`)
+    log.info(`Effect starting as ${streamId}: volume ${options.volume} (${this.effectStreamIds.size} active); ${this.encryptionSummary}`)
     this.engine.playMusicFromStream(stream, streamId, options.volume, () => {
       log.debug(`Effect ${streamId} played out`)
       this.effectStreamIds.delete(streamId)
