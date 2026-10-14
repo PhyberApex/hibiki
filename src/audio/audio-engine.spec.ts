@@ -13,9 +13,19 @@ interface FakeInput {
 
 const createdInputs: FakeInput[] = []
 
+const playerListeners = new Map<string, (...args: unknown[]) => void>()
+const fakePlayer = {
+  play: jest.fn(),
+  stop: jest.fn(),
+  on: jest.fn((event: string, listener: (...args: unknown[]) => void) => {
+    playerListeners.set(event, listener)
+  }),
+}
+
 jest.mock('@discordjs/voice', () => ({
-  createAudioPlayer: jest.fn().mockReturnValue({ play: jest.fn(), on: jest.fn(), stop: jest.fn() }),
-  createAudioResource: jest.fn().mockReturnValue({}),
+  AudioPlayerStatus: { Idle: 'idle', Playing: 'playing' },
+  createAudioPlayer: jest.fn(() => fakePlayer),
+  createAudioResource: jest.fn(() => ({})),
   NoSubscriberBehavior: { Pause: 'pause' },
   StreamType: { Raw: 'raw' },
 }))
@@ -23,6 +33,7 @@ jest.mock('@discordjs/voice', () => ({
 jest.mock('node-audio-mixer', () => ({
   AudioMixer: jest.fn().mockImplementation(() => ({
     pipe: jest.fn(),
+    unpipe: jest.fn(),
     destroy: jest.fn(),
     createAudioInput: jest.fn().mockImplementation((params: { volume?: number }) => {
       const input: FakeInput = { destroy: jest.fn(), write: jest.fn(), end: jest.fn(), dataSize: 0, params: { volume: params.volume } }
@@ -49,7 +60,40 @@ describe('audioEngine', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     createdInputs.length = 0
+    playerListeners.clear()
     engine = new AudioEngine()
+  })
+
+  describe('voice player liveness', () => {
+    const flush = () => new Promise(resolve => setImmediate(resolve))
+
+    it('emits one Discord frame of silence per mixer tick and tolerates a second of missed frames', async () => {
+      const { AudioMixer } = await import('node-audio-mixer')
+      const { createAudioPlayer } = await import('@discordjs/voice')
+
+      expect(AudioMixer).toHaveBeenCalledWith(expect.objectContaining({ generateSilence: true, silentDuration: 20 }))
+      expect(createAudioPlayer).toHaveBeenCalledWith({ behaviors: expect.objectContaining({ maxMissedFrames: 50 }) })
+    })
+
+    it('reattaches a fresh mixer output and plays again when the player goes idle', async () => {
+      const { createAudioResource } = await import('@discordjs/voice')
+      expect(fakePlayer.play).toHaveBeenCalledTimes(1)
+
+      playerListeners.get('stateChange')!({ status: 'playing' }, { status: 'idle' })
+      await flush()
+
+      expect(createAudioResource).toHaveBeenCalledTimes(2)
+      expect(fakePlayer.play).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not restart playback after destroy()', async () => {
+      engine.destroy()
+
+      playerListeners.get('stateChange')!({ status: 'playing' }, { status: 'idle' })
+      await flush()
+
+      expect(fakePlayer.play).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('initial volume and live volume control', () => {

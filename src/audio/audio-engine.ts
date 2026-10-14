@@ -7,6 +7,7 @@ import type { Readable } from 'node:stream'
 import type { MixerFeed } from './mixer-feed'
 import { PassThrough } from 'node:stream'
 import {
+  AudioPlayerStatus,
   createAudioPlayer,
   createAudioResource,
   NoSubscriberBehavior,
@@ -32,11 +33,30 @@ interface ActiveStream {
 const DEFAULT_VOLUMES = { music: 85, effects: 90 }
 const CLAMP = (v: number) => Math.min(100, Math.max(0, Math.round(v)))
 
+/**
+ * Length of each silence frame the mixer emits when no input has data. The
+ * mixer ticks on a 1 ms `setTimeout`, which Windows only honours at ~15 ms
+ * granularity; with the library default of 1 ms of silence per tick the
+ * output falls far below real time there, the voice player starves and stops
+ * itself (see `MAX_MISSED_FRAMES`). One Discord frame per tick keeps the
+ * output at or above real time on every platform; downstream backpressure
+ * caps how far ahead it can run.
+ */
+const SILENCE_FRAME_MS = 20
+/**
+ * Consecutive 20 ms frames the voice player tolerates without data before it
+ * stops the resource (library default: 5, i.e. 100 ms). A one-second budget
+ * turns a scheduling hiccup into a moment of silence instead of a dead
+ * player.
+ */
+const MAX_MISSED_FRAMES = 50
+
 export class AudioEngine {
   private readonly mixer: AudioMixer
-  private readonly mixerOutput = new PassThrough()
+  private mixerOutput?: PassThrough
   private readonly player: AudioPlayer
-  private readonly resource: AudioResource<null>
+  private resource?: AudioResource<null>
+  private destroyed = false
   /** Music streams by id; a start without an id keys to the `undefined` slot. */
   private readonly musicStreams = new Map<string | undefined, ActiveStream>()
   private readonly effectStreams = new Set<ActiveStream>()
@@ -53,28 +73,45 @@ export class AudioEngine {
       channels: 2,
       bitDepth: 16,
       generateSilence: true,
+      silentDuration: SILENCE_FRAME_MS,
       autoClose: false,
       highWaterMark: MIXER_PACKET_BYTES,
     })
 
-    // Pipe mixer directly to output (no Opus encoding - Discord.js handles it)
-    this.mixer.pipe(this.mixerOutput)
-
-    // Create audio player with raw PCM stream
     this.player = createAudioPlayer({
-      behaviors: { noSubscriber: NoSubscriberBehavior.Pause },
+      behaviors: { noSubscriber: NoSubscriberBehavior.Pause, maxMissedFrames: MAX_MISSED_FRAMES },
     })
-    this.resource = createAudioResource<null>(this.mixerOutput, {
-      inputType: StreamType.Raw, // Raw PCM - let Discord.js handle Opus encoding
-    })
-    this.player.play(this.resource)
+    this.attachMixerOutput()
 
     this.player.on('error', (error) => {
       log.error('AudioPlayer error:', error.message)
     })
     this.player.on('stateChange', (oldState, newState) => {
       log.info(`AudioPlayer state: ${oldState.status} -> ${newState.status}`)
+      if (newState.status === AudioPlayerStatus.Idle && !this.destroyed) {
+        log.error('AudioPlayer went idle; reattaching the mixer output')
+        setImmediate(() => {
+          if (!this.destroyed)
+            this.attachMixerOutput()
+        })
+      }
     })
+  }
+
+  /**
+   * Feeds the mixer into the voice player through a fresh raw-PCM resource
+   * (the player does the Opus encoding). Stopping a resource destroys its
+   * whole pipeline, mixer output included, so a restart needs a new one.
+   */
+  private attachMixerOutput() {
+    if (this.mixerOutput) {
+      this.mixer.unpipe(this.mixerOutput)
+      this.mixerOutput.destroy()
+    }
+    this.mixerOutput = new PassThrough()
+    this.mixer.pipe(this.mixerOutput)
+    this.resource = createAudioResource<null>(this.mixerOutput, { inputType: StreamType.Raw })
+    this.player.play(this.resource)
   }
 
   get audioPlayer() {
@@ -168,6 +205,7 @@ export class AudioEngine {
   }
 
   destroy() {
+    this.destroyed = true
     this.stopAllMusic()
     // Clean up all effect streams
     for (const effect of this.effectStreams)
@@ -175,7 +213,7 @@ export class AudioEngine {
     this.effectStreams.clear()
     this.mixer.destroy()
     this.player.stop(true)
-    this.mixerOutput.destroy()
+    this.mixerOutput?.destroy()
   }
 
   private spawnInputFromStream(stream: Readable, volume: number, onEnded: (active: ActiveStream) => void): ActiveStream {
