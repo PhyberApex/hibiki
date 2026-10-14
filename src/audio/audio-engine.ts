@@ -34,22 +34,11 @@ const DEFAULT_VOLUMES = { music: 85, effects: 90 }
 const CLAMP = (v: number) => Math.min(100, Math.max(0, Math.round(v)))
 
 /**
- * Length of each silence frame the mixer emits when no input has data. The
- * mixer ticks on a 1 ms `setTimeout`, which Windows only honours at ~15 ms
- * granularity; with the library default of 1 ms of silence per tick the
- * output falls far below real time there, the voice player starves and stops
- * itself (see `MAX_MISSED_FRAMES`). One Discord frame per tick keeps the
- * output at or above real time on every platform; downstream backpressure
- * caps how far ahead it can run.
+ * One Discord frame of 48 kHz stereo 16-bit PCM (20 ms). Written into every
+ * fresh mixer output so the voice player leaves `buffering` immediately
+ * instead of waiting for the first sound.
  */
-const SILENCE_FRAME_MS = 20
-/**
- * Consecutive 20 ms frames the voice player tolerates without data before it
- * stops the resource (library default: 5, i.e. 100 ms). A one-second budget
- * turns a scheduling hiccup into a moment of silence instead of a dead
- * player.
- */
-const MAX_MISSED_FRAMES = 50
+const SILENCE_FRAME = Buffer.alloc(3840)
 
 export class AudioEngine {
   private readonly mixer: AudioMixer
@@ -68,18 +57,24 @@ export class AudioEngine {
     // and since each feed tops its input up on its own 20 ms poll, two
     // concurrent sounds (music plus ambience) come out as alternating solo
     // bursts instead of a mix.
+    // Silence is the voice player's job, not the mixer's: with
+    // `generateSilence` the mixer inserts a silence frame on every one of its
+    // 1 ms ticks that finds the inputs momentarily empty, which chops gaps
+    // into music between feed refills (and, on Windows' ~15 ms timers, once
+    // starved the player entirely). With no data the player sends its own
+    // silence frames instead; `maxMissedFrames: Infinity` keeps it from ever
+    // treating a quiet mixer as a finished track.
     this.mixer = new AudioMixer({
       sampleRate: 48000,
       channels: 2,
       bitDepth: 16,
-      generateSilence: true,
-      silentDuration: SILENCE_FRAME_MS,
+      generateSilence: false,
       autoClose: false,
       highWaterMark: MIXER_PACKET_BYTES,
     })
 
     this.player = createAudioPlayer({
-      behaviors: { noSubscriber: NoSubscriberBehavior.Pause, maxMissedFrames: MAX_MISSED_FRAMES },
+      behaviors: { noSubscriber: NoSubscriberBehavior.Pause, maxMissedFrames: Number.POSITIVE_INFINITY },
     })
     this.attachMixerOutput()
 
@@ -109,6 +104,7 @@ export class AudioEngine {
       this.mixerOutput.destroy()
     }
     this.mixerOutput = new PassThrough()
+    this.mixerOutput.write(SILENCE_FRAME)
     this.mixer.pipe(this.mixerOutput)
     this.resource = createAudioResource<null>(this.mixerOutput, { inputType: StreamType.Raw })
     this.player.play(this.resource)

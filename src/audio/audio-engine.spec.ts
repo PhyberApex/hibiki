@@ -67,12 +67,19 @@ describe('audioEngine', () => {
   describe('voice player liveness', () => {
     const flush = () => new Promise(resolve => setImmediate(resolve))
 
-    it('emits one Discord frame of silence per mixer tick and tolerates a second of missed frames', async () => {
+    it('leaves silence to the voice player: no mixer-generated silence, no missed-frame limit', async () => {
       const { AudioMixer } = await import('node-audio-mixer')
       const { createAudioPlayer } = await import('@discordjs/voice')
 
-      expect(AudioMixer).toHaveBeenCalledWith(expect.objectContaining({ generateSilence: true, silentDuration: 20 }))
-      expect(createAudioPlayer).toHaveBeenCalledWith({ behaviors: expect.objectContaining({ maxMissedFrames: 50 }) })
+      expect(AudioMixer).toHaveBeenCalledWith(expect.objectContaining({ generateSilence: false }))
+      expect(createAudioPlayer).toHaveBeenCalledWith({ behaviors: expect.objectContaining({ maxMissedFrames: Number.POSITIVE_INFINITY }) })
+    })
+
+    it('primes each mixer output with one frame of silence so the player starts playing right away', async () => {
+      const { createAudioResource } = await import('@discordjs/voice')
+      const output = (createAudioResource as jest.Mock).mock.calls[0][0] as import('node:stream').PassThrough
+
+      expect(output.readableLength).toBe(3840)
     })
 
     it('reattaches a fresh mixer output and plays again when the player goes idle', async () => {
