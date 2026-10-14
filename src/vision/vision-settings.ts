@@ -1,6 +1,7 @@
 import type { Config } from '../config'
 import type { createAppConfig } from '../persistence'
 import type { VisionProviderConfig, VisionProviderId } from './vision.service'
+import { createLogger } from '../logger'
 import { OPENAI_COMPATIBLE_DEFAULT_BASE_URL, OPENAI_COMPATIBLE_DEFAULT_MODEL } from './vision.service'
 
 export interface VisionProviderState {
@@ -37,6 +38,8 @@ const ENABLED_CONFIG_KEY = 'vision.enabled'
 function isVisionProviderId(value: string | null): value is VisionProviderId {
   return value === 'claude' || value === 'openai-compatible'
 }
+
+const log = createLogger('vision-settings')
 
 export function createVisionSettings(config: Config, appConfig: ReturnType<typeof createAppConfig>) {
   async function getProvider(): Promise<VisionProviderId> {
@@ -119,11 +122,13 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
     getProviderConfig,
     get,
     async setProvider(provider: VisionProviderId): Promise<VisionSettingsState> {
+      log.info(`Vision Provider set to ${provider}`)
       await appConfig.set(PROVIDER_CONFIG_KEY, provider)
       return get()
     },
     async setApiKey(provider: VisionProviderId, apiKey: string): Promise<VisionSettingsState> {
       const key = provider === 'openai-compatible' ? OPENAI_API_KEY_CONFIG_KEY : CLAUDE_API_KEY_CONFIG_KEY
+      log.info(`${provider} API key ${apiKey.trim() ? 'updated' : 'cleared'}`)
       await setStored(key, apiKey)
       return get()
     },
@@ -136,6 +141,7 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
       return get()
     },
     async setEnabled(enabled: boolean): Promise<VisionSettingsState> {
+      log.info(`Vision to Vibe ${enabled ? 'enabled' : 'disabled'}`)
       await appConfig.set(ENABLED_CONFIG_KEY, enabled ? 'true' : 'false')
       return get()
     },

@@ -8,9 +8,41 @@ import {
   entersState,
   getVoiceConnection,
   joinVoiceChannel,
+  NetworkingStatusCode,
   VoiceConnectionStatus,
 } from '@discordjs/voice'
+import { createLogger } from '../logger'
 import { AudioEngine } from './audio-engine'
+import { resolveVoiceOptions } from './voice-options'
+
+const log = createLogger('voice')
+
+/** How long after Ready to log the encryption state again: the DAVE (end-to-end encryption) handshake completes asynchronously after the connection is ready. */
+const ENCRYPTION_RECHECK_MS = 3_000
+
+/**
+ * One-line summary of what protects the audio on this connection. Discord
+ * shows the bot as speaking for every packet it receives, decryptable or
+ * not, so when a GM reports "green ring but no sound" this line is the
+ * first thing to read: a DAVE session that is "NOT ready" means every
+ * packet is sent without end-to-end encryption and gets discarded by
+ * clients in an encrypted call.
+ */
+function describeEncryption(connection: VoiceConnection): string {
+  const state = connection.state
+  if (!state)
+    return 'connection state unknown'
+  if (state.status !== VoiceConnectionStatus.Ready)
+    return `connection ${state.status}`
+  const networking = state.networking?.state
+  if (!networking || networking.code !== NetworkingStatusCode.Ready)
+    return `networking not ready (code ${networking?.code ?? 'unknown'})`
+  const transport = networking.connectionData?.encryptionMode ?? 'unknown'
+  const dave = networking.dave
+  if (!dave)
+    return `transport ${transport}, no DAVE session (end-to-end encryption off or unsupported)`
+  return `transport ${transport}, DAVE protocol v${dave.protocolVersion}, session ${dave.session?.ready ? 'ready' : 'NOT ready'}, privacy code ${dave.voicePrivacyCode ?? 'none'}`
+}
 
 interface TrackMetadata {
   id: string
@@ -142,31 +174,67 @@ export class GuildAudioManager extends EventEmitter {
 
     this.destroyConnection()
 
+    const voiceOptions = resolveVoiceOptions()
     const connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
       adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
       selfDeaf: false,
+      debug: true,
+      daveEncryption: voiceOptions.daveEncryption,
     })
     this.connection = connection
     this.channelName = channel.name
 
+    log.info(`Connecting to "${channel.name}" (${channel.id}) in guild ${this.guildId}, DAVE end-to-end encryption ${voiceOptions.daveEncryption ? 'on' : 'OFF (HIBIKI_DAVE_ENCRYPTION=off)'}`)
     connection.on('error', (error) => {
-      console.error(`[GuildAudioManager] VoiceConnection error (guild ${this.guildId}):`, error.message)
+      log.error(`VoiceConnection error (guild ${this.guildId}):`, error.message)
     })
     connection.on('debug', (message) => {
-      console.warn(`[GuildAudioManager] VoiceConnection debug (guild ${this.guildId}): ${message}`)
+      log.debug(`VoiceConnection (guild ${this.guildId}): ${message}`)
     })
     connection.on('stateChange', (oldState, newState) => {
-      console.warn(`[GuildAudioManager] VoiceConnection state: ${oldState.status} -> ${newState.status} (guild ${this.guildId})`)
+      log.info(`VoiceConnection state: ${oldState.status} -> ${newState.status} (guild ${this.guildId})`)
       if (newState.status === VoiceConnectionStatus.Disconnected)
         this.handleDisconnect(connection)
       if (newState.status === VoiceConnectionStatus.Destroyed)
         this.handleTeardown(connection)
     })
     connection.subscribe(this.engine.audioPlayer)
-    await entersState(connection, VoiceConnectionStatus.Ready, 20_000)
+    try {
+      await entersState(connection, VoiceConnectionStatus.Ready, 20_000)
+    }
+    catch (err) {
+      log.error(`Voice connection to "${channel.name}" did not become ready within 20 s (guild ${this.guildId})`, err)
+      throw err
+    }
+    log.info(`Voice connection ready in "${channel.name}" (guild ${this.guildId}): ${describeEncryption(connection)}`)
+    this.scheduleEncryptionRecheck(connection)
     return connection
+  }
+
+  private encryptionRecheck?: ReturnType<typeof setTimeout>
+
+  private scheduleEncryptionRecheck(connection: VoiceConnection): void {
+    this.clearEncryptionRecheck()
+    this.encryptionRecheck = setTimeout(() => {
+      this.encryptionRecheck = undefined
+      if (this.connection === connection)
+        log.info(`Encryption ${ENCRYPTION_RECHECK_MS} ms after ready (guild ${this.guildId}): ${describeEncryption(connection)}`)
+    }, ENCRYPTION_RECHECK_MS)
+    this.encryptionRecheck.unref?.()
+  }
+
+  private clearEncryptionRecheck(): void {
+    if (this.encryptionRecheck !== undefined) {
+      clearTimeout(this.encryptionRecheck)
+      this.encryptionRecheck = undefined
+    }
+  }
+
+  /** Current encryption summary for playback logs, or a placeholder when not connected. */
+  private get encryptionSummary(): string {
+    return this.connection ? describeEncryption(this.connection) : 'no connection'
   }
 
   /**
@@ -184,6 +252,7 @@ export class GuildAudioManager extends EventEmitter {
     catch {
       if (this.connection !== connection)
         return
+      log.warn(`Voice connection did not recover within ${RECONNECT_GRACE_PERIOD_MS} ms; tearing it down (guild ${this.guildId})`)
       try {
         connection.destroy()
       }
@@ -201,6 +270,7 @@ export class GuildAudioManager extends EventEmitter {
   private handleTeardown(connection: VoiceConnection) {
     if (this.connection !== connection || this.intentionalTeardown)
       return
+    log.warn(`Voice connection was destroyed externally; stopping all playback (guild ${this.guildId})`)
     this.stopAllMusic()
     this.stopAllAmbience()
     this.stopAllEffects()
@@ -226,6 +296,8 @@ export class GuildAudioManager extends EventEmitter {
   }
 
   disconnect() {
+    log.info(`Leaving voice channel (guild ${this.guildId})`)
+    this.clearEncryptionRecheck()
     this.stopAllMusic()
     this.stopAllAmbience()
     this.stopAllEffects()
@@ -235,6 +307,7 @@ export class GuildAudioManager extends EventEmitter {
   }
 
   destroy() {
+    this.clearEncryptionRecheck()
     this.stopAllMusic()
     this.stopAllAmbience()
     this.stopAllEffects()
@@ -312,16 +385,19 @@ export class GuildAudioManager extends EventEmitter {
         if (this.musicStreams.get(streamId)?.seq !== seq)
           return
         if (loop) {
+          log.debug(`Music ${streamId} reached its end; looping`)
           startStream(0).catch((err) => {
-            console.error('[GuildAudioManager] Failed to restart looping track:', err)
+            log.error('Failed to restart looping track:', err)
             this.clearBackendTrack(streamId)
           })
         }
         else {
+          log.info(`Music ${streamId} played out`)
           this.clearBackendTrack(streamId)
         }
       }
 
+      log.info(`Music "${metadata.name}" starting as ${streamId}: volume ${options.volume}, loop ${loop}, fadeIn ${startFadeMs} ms; ${this.encryptionSummary}`)
       this.musicStreams.set(streamId, { metadata, seq, loop })
       this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0 ? 0 : options.volume, onEnded)
       if (startFadeMs > 0)
@@ -349,8 +425,11 @@ export class GuildAudioManager extends EventEmitter {
   stopCurrentTrack(options: { fadeOutMs?: number } = {}): void {
     this.musicGeneration++
     const streamId = this.backendTrackId
-    if (streamId === undefined)
+    if (streamId === undefined) {
+      log.debug(`stopCurrentTrack: nothing playing (guild ${this.guildId})`)
       return
+    }
+    log.info(`Stopping music ${streamId}, fadeOut ${options.fadeOutMs ?? 0} ms`)
     this.backendTrackId = undefined
     this.fadeOutAndStopBackendTrack(streamId, options.fadeOutMs ?? 0)
     this.emit('trackChanged')
@@ -451,7 +530,7 @@ export class GuildAudioManager extends EventEmitter {
           return
         if (entry.loop) {
           startStream(0).catch((err) => {
-            console.error('[GuildAudioManager] Failed to restart looping ambience:', err)
+            log.error('Failed to restart looping ambience:', err)
             this.clearAmbienceEntry(soundId, entry)
           })
         }
@@ -459,16 +538,18 @@ export class GuildAudioManager extends EventEmitter {
           const minMs = entry.repeatMin * 1000
           const maxMs = entry.repeatMax * 1000
           const delay = minMs + Math.random() * (maxMs - minMs)
+          log.debug(`Ambience ${soundId} played out; next repeat in ${Math.round(delay)} ms`)
           entry.repeatTimer = setTimeout(() => {
             entry.repeatTimer = undefined
             startStream(0).catch((err) => {
-              console.error('[GuildAudioManager] Failed to restart interval-repeat ambience:', err)
+              log.error('Failed to restart interval-repeat ambience:', err)
               this.clearAmbienceEntry(soundId, entry)
             })
           }, delay)
         }
       }
 
+      log.info(`Ambience ${soundId} starting as ${streamId}: volume ${entry.volume}, ${entry.loop ? 'seamless loop' : `repeat every ${entry.repeatMin}-${entry.repeatMax} s`}, fadeIn ${startFadeMs} ms; ${this.encryptionSummary}`)
       this.ambienceEntries.set(soundId, entry)
       this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0 ? 0 : entry.volume, onEnded)
       if (startFadeMs > 0)
@@ -494,8 +575,11 @@ export class GuildAudioManager extends EventEmitter {
   stopAmbience(soundId: string, options: { fadeOutMs?: number } = {}): void {
     this.ambienceGenerations.set(soundId, (this.ambienceGenerations.get(soundId) ?? 0) + 1)
     const entry = this.ambienceEntries.get(soundId)
-    if (!entry)
+    if (!entry) {
+      log.debug(`stopAmbience ${soundId}: not playing (guild ${this.guildId})`)
       return
+    }
+    log.info(`Stopping ambience ${soundId} (${entry.streamId}), fadeOut ${options.fadeOutMs ?? 0} ms`)
     this.clearAmbienceRepeatTimer(entry)
     this.ambienceEntries.delete(soundId)
     this.fadeOutAndStopStream(entry.streamId, options.fadeOutMs ?? 0)
@@ -605,7 +689,11 @@ export class GuildAudioManager extends EventEmitter {
       return
     }
 
-    this.engine.playMusicFromStream(stream, streamId, options.volume, () => this.effectStreamIds.delete(streamId))
+    log.info(`Effect starting as ${streamId}: volume ${options.volume} (${this.effectStreamIds.size} active); ${this.encryptionSummary}`)
+    this.engine.playMusicFromStream(stream, streamId, options.volume, () => {
+      log.debug(`Effect ${streamId} played out`)
+      this.effectStreamIds.delete(streamId)
+    })
   }
 
   /** Ends every backend-decoded Effect instance for this guild (Scene stop, leave, disconnect). */
@@ -621,6 +709,7 @@ export class GuildAudioManager extends EventEmitter {
       const oldestStreamId: string | undefined = this.effectStreamIds.values().next().value
       if (oldestStreamId === undefined)
         break
+      log.info(`Effect cap of ${GuildAudioManager.EFFECT_INSTANCE_CAP} reached; stopping oldest ${oldestStreamId}`)
       this.effectStreamIds.delete(oldestStreamId)
       this.engine.stopMusic(oldestStreamId)
     }

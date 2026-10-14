@@ -1,6 +1,7 @@
 import type { Config } from './config'
 import { dirname, join, resolve } from 'node:path'
 import { createJsonFileStore, isPlainObject } from './json-file'
+import { createLogger } from './logger'
 
 const CONFIG_FILENAME = 'app-config.json'
 
@@ -32,6 +33,8 @@ function getConfigFilePath(config: Config): string {
   return join(dir, CONFIG_FILENAME)
 }
 
+const log = createLogger('app-config')
+
 export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC) {
   const filePath = getConfigFilePath(config)
   const store = createJsonFileStore<Record<string, string>>(filePath, { defaultValue: {}, isValid: isPlainObject })
@@ -51,12 +54,14 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
         }
         catch {
           // Undecryptable (e.g. written on another machine/user) — treat as not configured, not a crash.
+          log.warn(`Stored secret "${key}" could not be decrypted on this machine; treating it as not configured`)
           return null
         }
       }
 
       // Legacy plaintext value: hand it back as-is, and migrate it to encrypted storage if we can.
       if (codec.available) {
+        log.info(`Migrating plaintext secret "${key}" to encrypted storage`)
         const encrypted = ENCRYPTED_PREFIX + codec.encrypt(raw)
         await store.update(latest => ({ next: { ...latest, [key]: encrypted }, result: undefined }))
       }
@@ -66,6 +71,7 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
       const toStore = SECRET_KEYS.has(key) && codec.available
         ? ENCRYPTED_PREFIX + codec.encrypt(value)
         : value
+      log.info(SECRET_KEYS.has(key) ? `Set "${key}" (secret, ${value ? 'non-empty' : 'cleared'})` : `Set "${key}" = ${value.length > 120 ? `${value.slice(0, 117)}...` : value}`)
       return store.update(data => ({ next: { ...data, [key]: toStore }, result: undefined }))
     },
     /** Whether secret keys (`discord.token`, `vision.apiKey`) are being encrypted at rest right now. */

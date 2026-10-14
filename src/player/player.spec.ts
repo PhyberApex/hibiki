@@ -11,6 +11,7 @@ jest.mock('@discordjs/voice', () => ({
   getVoiceConnection: jest.fn(),
   joinVoiceChannel: jest.fn(),
   entersState: jest.fn().mockResolvedValue(undefined),
+  NetworkingStatusCode: { Ready: 4 },
   VoiceConnectionStatus: {
     Ready: 'ready',
     Signalling: 'signalling',

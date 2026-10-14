@@ -23,8 +23,21 @@ const CLIENT_OPTIONS = {
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 } as const
 
+function attachClientLogging(client: Client): Client {
+  client.on(Events.ClientReady, (ready) => {
+    log.info(`Ready as ${ready.user.tag} in ${ready.guilds.cache.size} guild(s)`)
+  })
+  client.on(Events.Error, error => log.error('Client error:', error))
+  client.on(Events.Warn, message => log.warn(message))
+  client.on(Events.ShardDisconnect, (event, shardId) => log.warn(`Gateway disconnected (shard ${shardId}, code ${event.code})`))
+  client.on(Events.ShardReconnecting, shardId => log.info(`Gateway reconnecting (shard ${shardId})`))
+  client.on(Events.ShardResume, (shardId, replayed) => log.info(`Gateway resumed (shard ${shardId}, ${replayed} events replayed)`))
+  client.on(Events.Invalidated, () => log.error('Session invalidated by Discord; a reconnect is required'))
+  return client
+}
+
 export function createDiscordClient(config: Config, appConfig: AppConfig) {
-  let client = new Client(CLIENT_OPTIONS)
+  let client = attachClientLogging(new Client(CLIENT_OPTIONS))
 
   async function login(): Promise<void> {
     let token = config.discord.token
@@ -48,9 +61,15 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
       client.on(Events.ClientReady, onReady)
     })
 
-    await client.login(token)
-    if (!client.isReady())
-      await readyPromise
+    try {
+      await client.login(token)
+      if (!client.isReady())
+        await readyPromise
+    }
+    catch (err) {
+      log.error('Login failed:', err)
+      throw err
+    }
 
     log.info('Login complete')
   }
@@ -65,7 +84,7 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
   async function reconnect(): Promise<void> {
     log.info('Reconnecting…')
     await destroy()
-    client = new Client(CLIENT_OPTIONS)
+    client = attachClientLogging(new Client(CLIENT_OPTIONS))
     await login()
   }
 
@@ -85,9 +104,11 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
       return false
     try {
       await voice.setChannel(null)
+      log.info(`Left voice channel in guild ${guildId} via gateway`)
       return true
     }
-    catch {
+    catch (err) {
+      log.warn(`Could not leave voice channel in guild ${guildId}:`, err)
       return false
     }
   }

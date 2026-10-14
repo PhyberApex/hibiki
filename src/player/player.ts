@@ -72,6 +72,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     const manager = managers.get(guildId)
     if (!manager)
       return
+    log.info(`Stopping everything in guild ${guildId}`)
     manager.stopAllMusic()
     manager.stopAllAmbience()
     manager.stopAllEffects()
@@ -84,35 +85,42 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     streamId?: string,
   ): void {
     const manager = managers.get(guildId)
-    if (!manager)
+    if (!manager || !manager.connected) {
+      log.warn(`startStream refused for guild ${guildId}: not connected`)
       throw new Error('Not connected to a voice channel. Join first.')
-    if (!manager.connected)
-      throw new Error('Not connected to a voice channel. Join first.')
+    }
+    log.info(`Renderer music stream ${streamId ?? '(default)'} started in guild ${guildId}${metadata ? ` for "${metadata.name}"` : ''}`)
     manager.playMusicFromStream(stream, metadata, streamId)
   }
 
   function startEffectStream(guildId: string, stream: Readable): void {
     const manager = managers.get(guildId)
-    if (!manager)
+    if (!manager || !manager.connected) {
+      log.warn(`startEffectStream refused for guild ${guildId}: not connected`)
       throw new Error('Not connected to a voice channel. Join first.')
-    if (!manager.connected)
-      throw new Error('Not connected to a voice channel. Join first.')
+    }
+    log.info(`Renderer effect stream started in guild ${guildId}`)
     manager.playEffectFromStream(stream)
   }
 
   /** Stops a raw chunked-IPC music stream (Browser tab / renderer fallback) — not the backend-decoded track; see `stopMusic` below for that. */
   function stopStream(guildId: string, streamId?: string): void {
     const manager = managers.get(guildId)
-    if (manager)
-      manager.stopMusic(streamId)
+    if (!manager)
+      return
+    log.info(`Renderer music stream ${streamId ?? '(default)'} stopped in guild ${guildId}`)
+    manager.stopMusic(streamId)
   }
 
   /** Plays a Sound Library Music track decoded straight into the mixer (see ADR-0003). */
   async function playMusic(guildId: string, soundId: string, options: PlayMusicOptions): Promise<void> {
     const manager = managers.get(guildId)
-    if (!manager || !manager.connected)
+    if (!manager || !manager.connected) {
+      log.warn(`playMusic refused for guild ${guildId}: not connected`)
       throw new Error('Not connected to a voice channel. Join first.')
+    }
     const file = await sounds.getFile('music', soundId)
+    log.info(`playMusic "${file.name}" (${file.filename}) in guild ${guildId}: volume ${options.volume}, loop ${options.loop ?? false}, fadeIn ${options.fadeInMs ?? 0} ms`)
     await manager.playMusic(
       () => createPcmStream(file.path),
       { id: file.id, name: file.name, filename: file.filename, category: file.category },
@@ -122,6 +130,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
 
   /** Stops the currently playing backend-decoded Music track (started via `playMusic` above), if any — distinct from `stopStream`'s chunked-IPC path. */
   function stopMusic(guildId: string, options: { fadeOutMs?: number } = {}): void {
+    log.info(`stopMusic in guild ${guildId}, fadeOut ${options.fadeOutMs ?? 0} ms`)
     managers.get(guildId)?.stopCurrentTrack(options)
   }
 
@@ -130,20 +139,25 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     const manager = managers.get(guildId)
     if (!manager)
       throw new Error('No player for this guild. Join a voice channel first.')
+    log.debug(`setMusicVolume ${volume} in guild ${guildId}, ramp ${options.rampMs ?? 0} ms`)
     manager.setMusicVolume(volume, options)
   }
 
   /** Plays a Sound Library Ambience sound decoded straight into the mixer (see ADR-0003). Several can be active at once per guild, keyed by soundId. */
   async function playAmbience(guildId: string, soundId: string, options: PlayAmbienceOptions): Promise<void> {
     const manager = managers.get(guildId)
-    if (!manager || !manager.connected)
+    if (!manager || !manager.connected) {
+      log.warn(`playAmbience refused for guild ${guildId}: not connected`)
       throw new Error('Not connected to a voice channel. Join first.')
+    }
     const file = await sounds.getFile('ambience', soundId)
+    log.info(`playAmbience "${file.name}" (${file.filename}) in guild ${guildId}: volume ${options.volume}, repeat ${options.repeatMin}-${options.repeatMax} s, fadeIn ${options.fadeInMs ?? 0} ms`)
     await manager.playAmbience(() => createPcmStream(file.path), soundId, options)
   }
 
   /** Stops a backend-decoded Ambience sound (started via `playAmbience` above), if playing. */
   function stopAmbience(guildId: string, soundId: string, options: { fadeOutMs?: number } = {}): void {
+    log.info(`stopAmbience ${soundId} in guild ${guildId}, fadeOut ${options.fadeOutMs ?? 0} ms`)
     managers.get(guildId)?.stopAmbience(soundId, options)
   }
 
@@ -152,6 +166,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     const manager = managers.get(guildId)
     if (!manager)
       throw new Error('No player for this guild. Join a voice channel first.')
+    log.debug(`setAmbienceVolume ${soundId} -> ${volume} in guild ${guildId}, ramp ${options.rampMs ?? 0} ms`)
     manager.setAmbienceVolume(soundId, volume, options)
   }
 
@@ -168,14 +183,18 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
    */
   async function playEffect(guildId: string, soundId: string, options: PlayEffectOptions): Promise<void> {
     const manager = managers.get(guildId)
-    if (!manager || !manager.connected)
+    if (!manager || !manager.connected) {
+      log.warn(`playEffect refused for guild ${guildId}: not connected`)
       throw new Error('Not connected to a voice channel. Join first.')
+    }
     const path = await sounds.getFilePath('effects', soundId)
+    log.info(`playEffect ${soundId} in guild ${guildId}: volume ${options.volume}`)
     await manager.playEffect(() => effectPcmCache.get(path, () => createPcmStream(path)), options)
   }
 
   /** Ends every backend-decoded Effect instance for this guild (distinct from the chunked-IPC `audio:stopEffectStream` path). */
   function stopEffects(guildId: string): void {
+    log.info(`stopEffects in guild ${guildId}`)
     managers.get(guildId)?.stopAllEffects()
   }
 

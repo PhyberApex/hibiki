@@ -72,4 +72,17 @@ function setupFileLogging(logsDir, header) {
   return { logFile, logsDir }
 }
 
-module.exports = { setupFileLogging }
+/** Tagged logger for main-process code, mirroring `src/logger.ts`; every level reaches the log file through the console mirror above. */
+function createLogger(tag) {
+  const prefix = `[${tag}]`
+  return {
+    // eslint-disable-next-line no-console
+    debug: (...args) => console.debug(prefix, ...args),
+    // eslint-disable-next-line no-console
+    info: (...args) => console.info(prefix, ...args),
+    warn: (...args) => console.warn(prefix, ...args),
+    error: (...args) => console.error(prefix, ...args),
+  }
+}
+
+module.exports = { setupFileLogging, createLogger }
