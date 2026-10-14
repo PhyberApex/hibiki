@@ -1,5 +1,6 @@
 import type { Readable } from 'node:stream'
-import { extname } from 'node:path'
+import { basename, extname } from 'node:path'
+import { createLogger } from '../../logger'
 import { createFlacPcmStream, probeFlac } from './flac-decoder'
 import { createMp3PcmStream, probeMp3 } from './mp3-decoder'
 import { createOggOpusPcmStream } from './ogg-opus-decoder'
@@ -8,6 +9,8 @@ import { createOggVorbisPcmStream } from './ogg-vorbis-decoder'
 import { createWavPcmStream, probeWav } from './wav-decoder'
 
 export { MIXER_CHANNELS, MIXER_SAMPLE_RATE } from './pcm-resample'
+
+const log = createLogger('decoders')
 
 interface FormatDecoder {
   probe: (filePath: string) => Promise<boolean>
@@ -45,14 +48,26 @@ const DECODERS: Record<string, FormatDecoder> = {
  * never the whole file.
  */
 export async function canDecode(filePath: string): Promise<boolean> {
-  const decoder = DECODERS[extname(filePath).toLowerCase()]
-  return decoder ? decoder.probe(filePath) : false
+  const ext = extname(filePath).toLowerCase()
+  const decoder = DECODERS[ext]
+  if (!decoder) {
+    log.info(`No backend decoder for "${ext}" (${basename(filePath)}); renderer fallback will be used`)
+    return false
+  }
+  const decodable = await decoder.probe(filePath)
+  if (!decodable)
+    log.warn(`${basename(filePath)} has a "${ext}" extension but its header does not look like that format; renderer fallback will be used`)
+  return decodable
 }
 
 /** Decodes a Sound Library file into 48 kHz stereo signed 16-bit LE PCM for the mixer. Throws if `canDecode` would return false. */
 export async function createPcmStream(filePath: string): Promise<Readable> {
-  const decoder = DECODERS[extname(filePath).toLowerCase()]
-  if (!decoder)
+  const ext = extname(filePath).toLowerCase()
+  const decoder = DECODERS[ext]
+  if (!decoder) {
+    log.error(`createPcmStream called for ${basename(filePath)} but there is no "${ext}" decoder`)
     throw new Error(`No backend decoder for ${filePath}`)
+  }
+  log.debug(`Decoding ${basename(filePath)} with the "${ext}" decoder`)
   return decoder.create(filePath)
 }

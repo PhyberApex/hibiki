@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 import Anthropic from '@anthropic-ai/sdk'
+import { createLogger } from '../logger'
 
 export interface VibeAnalysis {
   description: string
@@ -190,6 +191,8 @@ export interface VisionServiceOptions {
   createProvider?: (config: VisionProviderConfig) => VisionProvider
 }
 
+const log = createLogger('vision')
+
 export function createVisionService(options: VisionServiceOptions) {
   const createProvider = options.createProvider ?? defaultCreateProvider
 
@@ -202,7 +205,17 @@ export function createVisionService(options: VisionServiceOptions) {
       if (!mediaType)
         throw new Error('Unsupported image format. Use a PNG, JPEG, GIF, or WebP image.')
       const data = await readFile(imagePath)
-      return createProvider(providerConfig).analyzeImage({ data, mediaType })
+      const target = providerConfig.provider === 'openai-compatible' ? `${providerConfig.baseUrl ?? ''} (${providerConfig.model ?? 'default model'})` : 'claude'
+      log.info(`Analyzing ${mediaType} image (${data.length} bytes) with ${target}`)
+      try {
+        const result = await createProvider(providerConfig).analyzeImage({ data, mediaType })
+        log.info(`Vision analysis returned ${result.tags?.length ?? 0} tag(s)`)
+        return result
+      }
+      catch (err) {
+        log.error('Vision analysis failed:', err)
+        throw err
+      }
     },
   }
 }

@@ -19,6 +19,7 @@ Be respectful and constructive. This is a hobby-friendly project; we're here to 
 - **Tests:** Run `pnpm test`. All tests should pass. Fix or update tests if your change affects behavior.
 
 We run these checks in CI; PRs are expected to pass lint and tests.
+- Log what your change does. Backend code uses `createLogger` from `src/logger.ts`; main-process code uses prefixed `console.*`; renderer code uses `console.warn`/`console.error`. All of it ends up in `<userData>/logs/hibiki.log`, which is the only thing a bug report from a packaged build comes with. Never log tokens, API keys or media contents. See the "Logging" section in `CLAUDE.md`.
 
 ## Submitting changes
 

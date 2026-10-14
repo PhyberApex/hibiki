@@ -15,6 +15,7 @@ import { normalizeMasterVolume, parseMasterVolume } from './config/master-volume
 import { normalizeSceneFadeLength, parseSceneFadeLength } from './config/scene-fade-settings'
 import { createDiscordClient } from './discord/discord-client'
 import { getStorageWarnings } from './json-file'
+import { createLogger } from './logger'
 import { createAppConfig } from './persistence'
 import { createPlayer } from './player/player'
 import { exportScene } from './scenes/scene-export'
@@ -143,6 +144,8 @@ export interface EmbeddedApp {
  * would already be isolated per-guild internally; this only needs to chain
  * it ahead of destroying the Discord client.
  */
+const log = createLogger('hibiki')
+
 export function createShutdownHandler(
   player: Pick<ReturnType<typeof createPlayer>, 'destroyAll'>,
   discord: Pick<ReturnType<typeof createDiscordClient>, 'destroy'>,
@@ -151,8 +154,10 @@ export function createShutdownHandler(
   return function close(): Promise<void> {
     if (!closePromise) {
       closePromise = (async () => {
+        log.info('Shutting down: tearing down voice and Discord client')
         await player.destroyAll()
         await discord.destroy()
+        log.info('Shutdown complete')
       })()
     }
     return closePromise
@@ -162,10 +167,12 @@ export function createShutdownHandler(
 export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> {
   process.env.HIBIKI_EMBEDDED = '1'
   const report = generateDependencyReport()
-  console.warn('[Hibiki] Voice dependency report:\n', report)
+  log.info('Voice dependency report:\n', report)
   const config = getConfig()
   await ensureStorageDirs(config)
+  log.info(`Storage root ${config.audio.storageRoot}: music ${config.audio.musicDir}, effects ${config.audio.effectsDir}, ambience ${config.audio.ambienceDir}, data ${config.database.path}`)
   const appConfig = createAppConfig(config, codec)
+  log.info(`Secrets at rest are ${appConfig.secretsEncrypted ? 'encrypted' : 'NOT encrypted (no OS keychain backend available)'}`)
 
   async function getDiscordStatus(): Promise<{ tokenConfigured: boolean, encrypted: boolean }> {
     const tokenConfigured = Boolean(config.discord.token) || Boolean(await appConfig.get('discord.token'))
@@ -192,14 +199,15 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
     visionSettings.get(),
     sounds.list('music'),
   ]).catch((err) => {
-    console.error('[Hibiki] Storage warm-up failed:', err)
+    log.error('Storage warm-up failed:', err)
   })
+  log.info('Services ready; Discord login scheduled')
 
   // Defer login to avoid blocking app startup
   // Discord will connect in background after main window shows
   setImmediate(() => {
     discord.login().catch((err) => {
-      console.error('Discord login failed:', err)
+      log.error('Discord login failed:', err)
     })
   })
 

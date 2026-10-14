@@ -5,6 +5,7 @@ import { extname, join } from 'node:path'
 import fg from 'fast-glob'
 import slugify from 'slugify'
 import { canDecode as canDecodeFile } from '../audio/decoders'
+import { createLogger } from '../logger'
 import { createSoundTagsStore } from './sound-tags.store'
 
 function resolvePath(config: Config, category: SoundCategory, filename?: string): string {
@@ -40,6 +41,8 @@ function buildId(name: string): string {
   return `${slugify(name.replace(extname(name), ''), { lower: true, strict: true })}-${Date.now()}`
 }
 
+const log = createLogger('sounds')
+
 export function createSoundLibrary(config: Config) {
   const tagsStore = createSoundTagsStore(config)
 
@@ -50,7 +53,8 @@ export function createSoundLibrary(config: Config) {
       try {
         entries = await fg('*', { cwd: base, onlyFiles: true })
       }
-      catch {
+      catch (err) {
+        log.warn(`Could not list ${category} in ${base}:`, err)
         return []
       }
       const tagsById = await tagsStore.getAll(category)
@@ -126,10 +130,12 @@ export function createSoundLibrary(config: Config) {
       const path = resolvePath(config, category, file)
       await unlink(path)
       await tagsStore.remove(category, id)
+      log.info(`Deleted ${category} "${file}"`)
     },
 
     async setTags(category: SoundCategory, id: string, tags: string[]): Promise<string[]> {
       await findFilename(config, category, id)
+      log.debug(`Tags for ${category}/${id} set to ${tags.length} tag(s)`)
       return tagsStore.set(category, id, tags)
     },
 
@@ -149,6 +155,7 @@ export function createSoundLibrary(config: Config) {
       const target = join(base, filename)
       await writeFile(target, file.buffer)
       const stats = await stat(target)
+      log.info(`Saved ${category} "${filename}" (${stats.size} bytes) from "${file.originalname}"`)
       return {
         id: safeId,
         name: humanize(filename),

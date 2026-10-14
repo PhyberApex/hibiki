@@ -2,7 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { PassThrough, Readable } = require('node:stream')
 const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
-const { setupFileLogging } = require('./logger')
+const { createLogger, setupFileLogging } = require('./logger')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
 // install/update/uninstall. Quitting here means `app.whenReady()` below never
@@ -28,6 +28,18 @@ const logging = setupFileLogging(
   path.join(app.getPath('userData'), 'logs'),
   `Hibiki ${app.getVersion()} starting (electron ${process.versions.electron}, node ${process.versions.node}, ${process.platform} ${process.arch})`,
 )
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception in the main process:', err)
+  dialog.showErrorBox('Hibiki ran into an unexpected error', `${err?.stack || err}\n\nDetails were written to the log file (Settings → Diagnostics).`)
+})
+
+const ipcLog = createLogger('ipc')
+const windowLog = createLogger('window')
+const browserLog = createLogger('browser')
+const protocolLog = createLogger('protocol')
+const rendererLog = createLogger('renderer')
+const appLog = createLogger('app')
 
 let appHandle = null
 let mainWindow = null
@@ -66,9 +78,20 @@ function createWindow(loadUrl) {
     },
   })
   win.loadURL(loadUrl)
+  win.webContents.on('console-message', (details) => {
+    if (details.level === 'error' || details.level === 'warning')
+      rendererLog[details.level === 'error' ? 'error' : 'warn'](`${details.message} (${details.sourceId}:${details.lineNumber})`)
+  })
+  win.webContents.on('render-process-gone', (_, details) => {
+    windowLog.error(`Renderer process gone: ${details.reason} (exit code ${details.exitCode})`)
+  })
+  win.webContents.on('unresponsive', () => windowLog.warn('Renderer became unresponsive'))
+  win.webContents.on('responsive', () => windowLog.info('Renderer responsive again'))
   win.on('closed', () => {
+    windowLog.info('Main window closed')
     mainWindow = null
   })
+  windowLog.info('Main window created')
   mainWindow = win
   return win
 }
@@ -91,11 +114,19 @@ function getOrCreateEffectStreams(guildId) {
 }
 
 function registerIpcHandlers(api) {
-  ipcMain.handle('api', (_, { domain, method, args }) => {
+  ipcMain.handle('api', async (_, { domain, method, args }) => {
     const obj = api[domain]
-    if (!obj || typeof obj[method] !== 'function')
+    if (!obj || typeof obj[method] !== 'function') {
+      ipcLog.error(`Unknown API: ${domain}.${method}`)
       throw new Error(`Unknown API: ${domain}.${method}`)
-    return obj[method](...args)
+    }
+    try {
+      return await obj[method](...args)
+    }
+    catch (err) {
+      ipcLog.error(`${domain}.${method} failed:`, err)
+      throw err
+    }
   })
 
   ipcMain.handle('audio:startStream', async (_, { guildId, metadata, streamId }) => {
@@ -106,6 +137,7 @@ function registerIpcHandlers(api) {
     }
     const stream = new PassThrough()
     streams.set(streamId, stream)
+    ipcLog.info(`audio:startStream ${streamId} for guild ${guildId}`)
     api.player.startStream(guildId, stream, metadata, streamId)
   })
 
@@ -127,6 +159,7 @@ function registerIpcHandlers(api) {
         stream.end()
       }
     }
+    ipcLog.info(`audio:stopStream ${streamId} for guild ${guildId}`)
     api.player.stopStream(guildId, streamId)
   })
 
@@ -139,6 +172,7 @@ function registerIpcHandlers(api) {
     }
     const stream = new PassThrough()
     streams.set(id, stream)
+    ipcLog.info(`audio:startEffectStream ${id} for guild ${guildId}`)
     api.player.startEffectStream(guildId, stream)
     return id
   })
@@ -156,6 +190,7 @@ function registerIpcHandlers(api) {
     const streams = effectStreams.get(guildId)
     if (!streams)
       return
+    ipcLog.info(`audio:stopEffectStream ${streamId ?? '(all)'} for guild ${guildId}`)
     if (streamId) {
       const stream = streams.get(streamId)
       if (stream) {
@@ -214,8 +249,16 @@ function registerBrowserViewHandlers() {
       return { action: 'deny' }
     })
 
+    view.webContents.on('did-fail-load', (_, errorCode, errorDescription, failedUrl, isMainFrame) => {
+      if (isMainFrame)
+        browserLog.warn(`Tab ${id} failed to load ${failedUrl}: ${errorDescription} (${errorCode})`)
+    })
+    view.webContents.on('render-process-gone', (_, details) => {
+      browserLog.error(`Tab ${id} renderer gone: ${details.reason}`)
+    })
     browserViews.set(id, view)
 
+    browserLog.info(`Tab ${id} opened at ${url}`)
     view.webContents.loadURL(url).catch(() => {})
 
     return id
@@ -225,6 +268,7 @@ function registerBrowserViewHandlers() {
     const view = browserViews.get(id)
     if (!view)
       return
+    browserLog.info(`Tab ${id} closed`)
     browserViews.delete(id)
     if (mainWindow)
       mainWindow.contentView.removeChildView(view)
@@ -343,10 +387,15 @@ function registerHibikiProtocol(api, webDistDir) {
       const [type, id] = parts
       if ((type === 'music' || type === 'effects' || type === 'ambience') && id) {
         return api.sounds.getFilePath(type, decodeURIComponent(id)).then((filePath) => {
-          if (!fs.existsSync(filePath))
+          if (!fs.existsSync(filePath)) {
+            protocolLog.warn(`${type}/${id} resolved to a missing file: ${filePath}`)
             return new Response('Not Found', { status: 404 })
+          }
           return serveSoundFile(request, filePath)
-        }).catch(() => new Response('Not Found', { status: 404 }))
+        }).catch((err) => {
+          protocolLog.warn(`Could not serve ${type}/${id}:`, err)
+          return new Response('Not Found', { status: 404 })
+        })
       }
     }
 
@@ -510,6 +559,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', (event) => {
   if (appHandle === null)
     return
+  appLog.info('Quit requested; tearing down')
   event.preventDefault()
   teardownBeforeQuit().then(() => app.quit())
 })

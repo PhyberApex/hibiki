@@ -2,6 +2,7 @@ import type { Config } from '../config'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { createJsonFileStore } from '../json-file'
+import { createLogger } from '../logger'
 
 export interface SoundSource {
   name: string
@@ -41,6 +42,8 @@ function isSceneArray(data: unknown): data is Scene[] {
   return Array.isArray(data)
 }
 
+const log = createLogger('scenes')
+
 export function createSceneStore(config: Config) {
   const filePath = getScenesPath(config)
   const store = createJsonFileStore<Scene[]>(filePath, { defaultValue: [], isValid: isSceneArray })
@@ -79,6 +82,7 @@ export function createSceneStore(config: Config) {
         const next = existing
           ? scenes.map(s => (s.id === saved.id ? saved : s))
           : [...scenes, saved]
+        log.info(`${existing ? 'Updated' : 'Created'} scene "${saved.name}" (${saved.id}): ${saved.music.length} music, ${saved.ambience.length} ambience, ${saved.effects.length} effects`)
         return { next, result: saved }
       })
     },
@@ -88,6 +92,7 @@ export function createSceneStore(config: Config) {
         const filtered = scenes.filter(s => s.id !== id)
         if (filtered.length === scenes.length)
           throw new Error(`Scene '${id}' not found`)
+        log.info(`Deleted scene ${id}`)
         return { next: filtered, result: undefined }
       })
     },
@@ -103,6 +108,8 @@ export function createSceneStore(config: Config) {
             changed = true
           }
         }
+        if (changed)
+          log.info(`Removed deleted ${category} sound ${soundId} from scenes`)
         return { next: scenes, result: undefined, skipWrite: !changed }
       })
     },

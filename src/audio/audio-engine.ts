@@ -13,8 +13,11 @@ import {
   StreamType,
 } from '@discordjs/voice'
 import { AudioMixer } from 'node-audio-mixer'
+import { createLogger } from '../logger'
 import { feedMixerInput } from './mixer-feed'
 import { rampVolume } from './volume-ramp'
+
+const log = createLogger('audio-engine')
 
 /** One active stream (music or effect) feeding into the mixer */
 interface ActiveStream {
@@ -61,10 +64,10 @@ export class AudioEngine {
     this.player.play(this.resource)
 
     this.player.on('error', (error) => {
-      console.error('[AudioEngine] AudioPlayer error:', error.message)
+      log.error('AudioPlayer error:', error.message)
     })
     this.player.on('stateChange', (oldState, newState) => {
-      console.warn(`[AudioEngine] AudioPlayer state: ${oldState.status} -> ${newState.status}`)
+      log.info(`AudioPlayer state: ${oldState.status} -> ${newState.status}`)
     })
   }
 
@@ -80,9 +83,11 @@ export class AudioEngine {
    */
   playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.music, onEnded?: () => void) {
     this.stopMusicStream(streamId)
+    log.debug(`Mixer input opened for ${streamId ?? '(default)'} at volume ${CLAMP(initialVolume)}`)
     const active = this.spawnInputFromStream(stream, CLAMP(initialVolume), (ended) => {
       if (this.musicStreams.get(streamId) !== ended)
         return
+      log.debug(`Mixer input for ${streamId ?? '(default)'} drained`)
       ended.input.destroy()
       this.musicStreams.delete(streamId)
       onEnded?.()
@@ -184,6 +189,7 @@ export class AudioEngine {
     const active = this.musicStreams.get(streamId)
     if (!active)
       return
+    log.debug(`Mixer input for ${streamId ?? '(default)'} cut`)
     active.cancelRamp?.()
     this.teardown(active)
     this.musicStreams.delete(streamId)

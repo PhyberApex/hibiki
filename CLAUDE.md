@@ -164,6 +164,16 @@ Sound Library playback for Discord decodes and mixes in the main process, feedin
 - `sounds.canDecode(type, id)` is exposed over IPC (`src/bootstrap-embedded.ts`, wrapped in `frontend/src/api/sounds.ts#canDecode`) so playback code can pick the right path per sound.
 - These decoder packages are ESM-only; the backend's CommonJS output `require()`s them using Node 24's native `require(esm)` support. Jest needs the `--experimental-vm-modules` flag for its own equivalent support, which is why `test:backend`/`test:watch`/`test:coverage:backend` invoke `node --experimental-vm-modules node_modules/.bin/jest` instead of the `jest` bin directly.
 
+### Logging
+
+Every bug report from a packaged build arrives with exactly one artifact: `<userData>/logs/hibiki.log` (Settings → Diagnostics → Open log folder). Code that does not log there is invisible in production, so logging is part of the feature, not an afterthought.
+
+- **Backend (`src/`)**: `const log = createLogger('module')` from `src/logger.ts`. Levels: `debug` for hot-path detail worth having after the fact (per-stream, per-tick), `info` for every user-triggered action and state change (join/leave, play/stop, config writes, voice connection and AudioPlayer state transitions), `warn` for degraded-but-handled, `error` for failures (include the error object). Never `console.*` directly outside `src/logger.ts`.
+- **Main process (`electron/`)**: `createLogger('area')` from `electron/logger.js` (`ipc`, `window`, `browser`, `protocol`, `app`, `renderer`), same levels as the backend. The same module mirrors every console method into the log file with timestamps and rotates it at 5 MB. The generic `api` IPC handler logs every failed call, so a backend method only needs to log what the error alone would not explain.
+- **Renderer (`frontend/`)**: `console.warn`/`console.error` with a `[view]` prefix. The main process captures renderer `warning`/`error` console messages into the same log file; `frontend/src/main.ts` routes Vue errors, uncaught errors and unhandled rejections there too. Nothing else is needed on the renderer side.
+- **Never log** tokens, API keys, image contents, or anything a GM would not want in a bug report. Log that a secret was set or cleared, not its value.
+- **When adding a feature**, log its entry point (what was asked, with ids and the few parameters that matter), its outcome, and every failure path. If a future "it does nothing on my machine" report could not be diagnosed from the log alone, the logging is incomplete.
+
 ### Scene Playback
 
 Scenes are **not** played directly in a single action. The frontend (SceneView) iterates over scene items and calls the player API individually:
@@ -180,6 +190,10 @@ The scene is a **template**, not a runtime object. Playback state lives in `Guil
 ### After Every Code Change
 
 **ALWAYS** run `nvm use` first, then `pnpm lint` and `pnpm test` after editing backend or frontend code. Fix any issues before considering the change complete. This is a **blocking requirement** (from `.cursor/rules/verify-after-changes.mdc`).
+
+### Logging Is Part of Every Change
+
+New or changed behaviour must leave a trace in `hibiki.log` (see "Logging" above): entry point, outcome, failure paths. The Windows "bot joins but is silent" bugs of 1.4.0 went undiagnosed for a release because the packaged app logged nothing anywhere.
 
 ### Discord Bot Token
 

@@ -12,7 +12,7 @@ function loadEnvFiles(): void {
       resolve(process.cwd(), '.env'),
     ]
     for (const p of paths)
-      config({ path: p })
+      config({ path: p, quiet: true })
   }
   catch {
     // dotenv is optional — ignored when not installed
