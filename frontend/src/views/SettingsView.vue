@@ -19,6 +19,7 @@ import {
   updateVisionOpenAiModel,
   updateVisionProvider,
 } from '@/api/config'
+import { fetchLogPath, openLogFolder } from '@/api/logs'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
 
@@ -30,6 +31,7 @@ const saving = ref(false)
 const message = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
 const storagePath = ref<string | null>(null)
+const logPath = ref<string | null>(null)
 const savingStorage = ref(false)
 const storageMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
@@ -72,14 +74,16 @@ function syncVisionAdvancedInputs() {
 
 async function load() {
   try {
-    const [config, storage, vision, fadeLength] = await Promise.all([
+    const [config, storage, vision, fadeLength, logs] = await Promise.all([
       fetchDiscordConfig(),
       fetchStoragePath().catch(() => ({ path: null })),
       fetchVisionConfig().catch(() => DEFAULT_VISION_CONFIG),
       fetchSceneFadeLength().catch(() => 3),
+      fetchLogPath().catch(() => null),
     ])
     discordConfig.value = config
     storagePath.value = storage.path
+    logPath.value = logs
     visionConfig.value = vision
     sceneFadeLength.value = fadeLength
     syncVisionAdvancedInputs()
@@ -435,6 +439,39 @@ onMounted(load)
       >
         {{ storageMessage.text }}
       </p>
+    </section>
+
+    <hr class="divider">
+
+    <section class="section">
+      <div class="section-header">
+        <h2 class="section-title">
+          Diagnostics
+        </h2>
+      </div>
+      <p class="section-desc">
+        Hibiki writes what happens behind the scenes (Discord voice connection, audio playback, errors) to a log file. If the bot joins but you hear nothing, this file is what to send along with a bug report.
+      </p>
+      <div class="field">
+        <label for="log-path" class="field-label">Log file</label>
+        <div class="field-row">
+          <input
+            id="log-path"
+            :value="logPath ?? '(unavailable)'"
+            type="text"
+            readonly
+            class="input field-input input-readonly"
+          >
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="!logPath"
+            @click="openLogFolder"
+          >
+            Open log folder
+          </button>
+        </div>
+      </div>
     </section>
 
     <hr class="divider">

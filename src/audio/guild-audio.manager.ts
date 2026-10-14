@@ -154,6 +154,9 @@ export class GuildAudioManager extends EventEmitter {
     connection.on('error', (error) => {
       console.error(`[GuildAudioManager] VoiceConnection error (guild ${this.guildId}):`, error.message)
     })
+    connection.on('debug', (message) => {
+      console.warn(`[GuildAudioManager] VoiceConnection debug (guild ${this.guildId}): ${message}`)
+    })
     connection.on('stateChange', (oldState, newState) => {
       console.warn(`[GuildAudioManager] VoiceConnection state: ${oldState.status} -> ${newState.status} (guild ${this.guildId})`)
       if (newState.status === VoiceConnectionStatus.Disconnected)
