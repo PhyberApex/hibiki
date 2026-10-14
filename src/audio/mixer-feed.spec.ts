@@ -3,7 +3,7 @@ import { once } from 'node:events'
 import { PassThrough, Readable } from 'node:stream'
 import { AudioMixer } from 'node-audio-mixer'
 import { createProducerStream } from './decoders/pcm-stream'
-import { DEFAULT_LEAD_BYTES, feedMixerInput } from './mixer-feed'
+import { DEFAULT_LEAD_BYTES, feedMixerInput, MIXER_PACKET_BYTES } from './mixer-feed'
 
 interface FakeInput extends MixerFeedInput {
   dataSize: number
@@ -140,12 +140,46 @@ describe('feedMixerInput', () => {
       await flush()
 
       expect(input.ended).toBe(true)
+      expect(input.dataSize).toBe(MIXER_PACKET_BYTES)
       expect(onEnded).not.toHaveBeenCalled()
 
-      input.consume(400)
+      input.consume(MIXER_PACKET_BYTES)
       jest.advanceTimersByTime(20)
 
       expect(onEnded).toHaveBeenCalledTimes(1)
+    })
+
+    it('pads a trailing partial packet with silence before ending the input', async () => {
+      const source = new PassThrough()
+      const input = createFakeInput()
+      const onEnded = jest.fn()
+      feedMixerInput(source, input, { onEnded })
+
+      source.write(Buffer.alloc(MIXER_PACKET_BYTES + 100, 1))
+      const ended = once(source, 'end')
+      source.end()
+      await ended
+
+      expect(input.ended).toBe(true)
+      expect(input.dataSize).toBe(MIXER_PACKET_BYTES * 2)
+      expect(input.written).toHaveLength(2)
+      expect(input.written[1].length).toBe(MIXER_PACKET_BYTES - 100)
+      expect(input.written[1].every(byte => byte === 0)).toBe(true)
+      expect(onEnded).not.toHaveBeenCalled()
+    })
+
+    it('does not pad a source whose length is already whole packets', async () => {
+      const source = new PassThrough()
+      const input = createFakeInput()
+      feedMixerInput(source, input, {})
+
+      source.write(Buffer.alloc(MIXER_PACKET_BYTES * 3, 1))
+      const ended = once(source, 'end')
+      source.end()
+      await ended
+
+      expect(input.ended).toBe(true)
+      expect(input.written).toHaveLength(1)
     })
 
     it('fires immediately for a source that ends with nothing left queued', async () => {
@@ -195,8 +229,33 @@ describe('feedMixerInput', () => {
   })
 
   describe('against the real mixer', () => {
+    it('drains a file that is not a whole number of packets and reports its end', async () => {
+      const mixer = new AudioMixer({ sampleRate: 48000, channels: 2, bitDepth: 16, generateSilence: false, autoClose: false, highWaterMark: MIXER_PACKET_BYTES })
+      const sink = new PassThrough()
+      let outBytes = 0
+      sink.on('data', (chunk: Buffer) => {
+        outBytes += chunk.length
+      })
+      mixer.pipe(sink)
+      const input = mixer.createAudioInput({ sampleRate: 48000, channels: 2, bitDepth: 16, volume: 100 })
+      const source = Readable.from([Buffer.alloc(MIXER_PACKET_BYTES * 2 + 1000, 1)])
+
+      try {
+        await new Promise<void>((resolve) => {
+          feedMixerInput(source, input, { pollMs: 5, onEnded: resolve })
+        })
+
+        expect(input.dataSize).toBe(0)
+        await flush()
+        expect(outBytes).toBe(MIXER_PACKET_BYTES * 3)
+      }
+      finally {
+        mixer.destroy()
+      }
+    })
+
     it('streams a whole file through at bounded lead and reports the end after playout', async () => {
-      const mixer = new AudioMixer({ sampleRate: 48000, channels: 2, bitDepth: 16, generateSilence: false, autoClose: false })
+      const mixer = new AudioMixer({ sampleRate: 48000, channels: 2, bitDepth: 16, generateSilence: false, autoClose: false, highWaterMark: MIXER_PACKET_BYTES })
       const sink = new PassThrough()
       let outBytes = 0
       sink.on('data', (chunk: Buffer) => {

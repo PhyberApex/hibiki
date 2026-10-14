@@ -14,7 +14,7 @@ import {
 } from '@discordjs/voice'
 import { AudioMixer } from 'node-audio-mixer'
 import { createLogger } from '../logger'
-import { feedMixerInput } from './mixer-feed'
+import { feedMixerInput, MIXER_PACKET_BYTES } from './mixer-feed'
 import { rampVolume } from './volume-ramp'
 
 const log = createLogger('audio-engine')
@@ -42,13 +42,19 @@ export class AudioEngine {
   private readonly effectStreams = new Set<ActiveStream>()
 
   constructor() {
-    // Create mixer for combining audio streams
+    // `highWaterMark` fixes each mixer tick to one packet from every input
+    // that holds at least one. Without it a tick takes the *smallest*
+    // non-empty input's whole queue and leaves empty inputs out of the sum,
+    // and since each feed tops its input up on its own 20 ms poll, two
+    // concurrent sounds (music plus ambience) come out as alternating solo
+    // bursts instead of a mix.
     this.mixer = new AudioMixer({
       sampleRate: 48000,
       channels: 2,
       bitDepth: 16,
       generateSilence: true,
       autoClose: false,
+      highWaterMark: MIXER_PACKET_BYTES,
     })
 
     // Pipe mixer directly to output (no Opus encoding - Discord.js handles it)

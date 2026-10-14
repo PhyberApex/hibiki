@@ -1,5 +1,8 @@
 import type { Readable } from 'node:stream'
+import { createLogger } from '../logger'
 import { MIXER_CHANNELS, MIXER_SAMPLE_RATE } from './decoders/pcm-resample'
+
+const log = createLogger('mixer-feed')
 
 /** The subset of `node-audio-mixer`'s `AudioInput` the feed drives. */
 export interface MixerFeedInput {
@@ -28,6 +31,10 @@ export interface MixerFeed {
 
 const BYTES_PER_FRAME = MIXER_CHANNELS * 2
 const BYTES_PER_MS = (MIXER_SAMPLE_RATE * BYTES_PER_FRAME) / 1000
+
+/** One 20 ms Discord packet of mixer-format PCM, the unit the mixer consumes per tick. */
+export const MIXER_PACKET_MS = 20
+export const MIXER_PACKET_BYTES = MIXER_PACKET_MS * BYTES_PER_MS
 
 export const DEFAULT_LEAD_MS = 300
 export const DEFAULT_LEAD_BYTES = DEFAULT_LEAD_MS * BYTES_PER_MS
@@ -60,6 +67,12 @@ function exactCopy(source: Buffer, length: number): Buffer {
  * The source is read in paused mode, so the bytes it buffers while the feed
  * waits for room are capped by its own `highWaterMark`, which propagates the
  * backpressure to the decode loop behind it (see `createProducerStream`).
+ *
+ * The mixer only ever takes whole `MIXER_PACKET_BYTES` packets from an input
+ * (`AudioEngine` sets that as its `highWaterMark`), so a trailing partial
+ * packet would sit in the input forever and the feed would never see it
+ * drain. The tail is padded with silence to a packet boundary before the
+ * input is ended.
  */
 export function feedMixerInput(source: Readable, input: MixerFeedInput, options: MixerFeedOptions = {}): MixerFeed {
   const leadBytes = options.leadBytes ?? DEFAULT_LEAD_BYTES
@@ -124,6 +137,11 @@ export function feedMixerInput(source: Readable, input: MixerFeedInput, options:
 
     if (!inputEnded) {
       inputEnded = true
+      const tail = input.dataSize % MIXER_PACKET_BYTES
+      if (tail > 0) {
+        log.debug(`Padding ${tail}-byte trailing partial packet with ${MIXER_PACKET_BYTES - tail} bytes of silence`)
+        input.write(Buffer.alloc(MIXER_PACKET_BYTES - tail))
+      }
       input.end()
     }
     if (input.dataSize === 0)
