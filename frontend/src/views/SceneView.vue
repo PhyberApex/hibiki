@@ -26,6 +26,7 @@ import {
 } from '@/api/player'
 import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
 import { canDecode, listAmbience, listEffects, listMusic, soundStreamUrl } from '@/api/sounds'
+import { logInfo, waitForPlayable, watchAudioElement } from '@/audio/audio-element-diagnostics'
 import { selectBackendPlaybackPath } from '@/audio/backend-playback-path'
 import {
   captureFromAudioElement,
@@ -138,7 +139,7 @@ const SCENE_START_FLASH = 'start'
 function createAudioEl(): HTMLAudioElement {
   const el = new Audio()
   el.crossOrigin = 'anonymous'
-  return el
+  return watchAudioElement(el)
 }
 
 function getAmbienceAudio(soundId: string): HTMLAudioElement {
@@ -572,10 +573,7 @@ async function playAmbience(item: SceneItem, initialVolume?: number, fadeInMs = 
     el.loop = isLooping(item)
     el.volume = initialVolume ?? computeVolume(item.volume ?? 80)
     el.load()
-    await new Promise<void>((resolve, reject) => {
-      el.addEventListener('canplaythrough', () => resolve(), { once: true })
-      el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
-    })
+    await waitForPlayable(el, `ambience ${item.soundId} (Discord fallback)`)
     const onChunk = (chunk: ArrayBuffer) => sendEffectChunk(guildId.value!, chunk, streamId)
     const sess = await captureFromAudioElement(el, onChunk)
     captureSessions.set(`ambience-${item.soundId}`, sess)
@@ -615,14 +613,12 @@ async function playAmbienceLocal(item: SceneItem, initialVolume?: number) {
       stopAmbience(item.soundId)
     stopAmbienceLocal(item.soundId)
     const el = getAmbienceAudio(item.soundId)
+    logInfo(`[scene] playAmbienceLocal ${item.soundId}`)
     el.src = soundStreamUrl('ambience', item.soundId)
     el.loop = isLooping(item)
     el.volume = initialVolume ?? computeVolume(item.volume ?? 80)
     el.load()
-    await new Promise<void>((resolve, reject) => {
-      el.addEventListener('canplaythrough', () => resolve(), { once: true })
-      el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
-    })
+    await waitForPlayable(el, `ambience ${item.soundId} (local)`)
     if (!el.loop) {
       el.onended = () => {
         const min = (item.repeatMin ?? 0) * 1000
@@ -744,10 +740,7 @@ async function playMusic(item: SceneItem, channel: MusicChannel = primaryMusicCh
     el.loop = item.loop ?? false
     el.volume = initialVolume ?? computeVolume(item.volume ?? 80)
     el.load()
-    await new Promise<void>((resolve, reject) => {
-      el.addEventListener('canplaythrough', () => resolve(), { once: true })
-      el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
-    })
+    await waitForPlayable(el, `music ${item.soundId} (Discord fallback)`)
     const onChunk = (chunk: ArrayBuffer) => sendAudioChunk(guildId.value!, chunk, channel.streamId)
     const sess = await captureFromAudioElement(el, onChunk)
     captureSessions.set(channel.streamId, sess)
@@ -770,14 +763,12 @@ async function playMusicLocal(item: SceneItem, channel: MusicChannel = primaryMu
     if (channel === primaryMusicChannel)
       playingMusicId.value = item.soundId
     const el = channel.el
+    logInfo(`[scene] playMusicLocal ${item.soundId} on channel ${channel.streamId}`)
     el.src = soundStreamUrl('music', item.soundId)
     el.loop = item.loop ?? false
     el.volume = initialVolume ?? computeVolume(item.volume ?? 80)
     el.load()
-    await new Promise<void>((resolve, reject) => {
-      el.addEventListener('canplaythrough', () => resolve(), { once: true })
-      el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
-    })
+    await waitForPlayable(el, `music ${item.soundId} (local)`)
     el.onended = () => clearMusicChannel(channel)
     el.onerror = () => clearMusicChannel(channel)
     await el.play()
@@ -814,6 +805,7 @@ function stopMusicPlayback() {
 function playEffectLocal(item: SceneItem) {
   effectFlash.trigger(item.soundId)
   const { id, el } = registerEffectInstance(false)
+  logInfo(`[scene] playEffectLocal ${item.soundId} as ${id}`)
   el.onended = () => cleanupEffectInstance(id)
   el.onerror = () => cleanupEffectInstance(id)
   el.src = soundStreamUrl('effects', item.soundId)
@@ -864,10 +856,7 @@ async function playEffect(item: SceneItem) {
     el.src = soundStreamUrl('effects', item.soundId)
     el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
     el.load()
-    await new Promise<void>((resolve, reject) => {
-      el.addEventListener('canplaythrough', () => resolve(), { once: true })
-      el.addEventListener('error', () => reject(el.error ?? new Error('Audio load failed')), { once: true })
-    })
+    await waitForPlayable(el, `effect ${item.soundId} (Discord fallback)`)
     const onChunk = (chunk: ArrayBuffer) => sendEffectChunk(guildId.value!, chunk, streamId)
     const sess = await captureFromAudioElement(el, onChunk)
     captureSessions.set(id, sess)

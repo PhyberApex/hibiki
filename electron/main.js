@@ -81,6 +81,8 @@ function createWindow(loadUrl) {
   win.webContents.on('console-message', (details) => {
     if (details.level === 'error' || details.level === 'warning')
       rendererLog[details.level === 'error' ? 'error' : 'warn'](`${details.message} (${details.sourceId}:${details.lineNumber})`)
+    else if (details.level === 'info' && details.message.startsWith('['))
+      rendererLog.info(details.message)
   })
   win.webContents.on('render-process-gone', (_, details) => {
     windowLog.error(`Renderer process gone: ${details.reason} (exit code ${details.exitCode})`)
@@ -353,6 +355,7 @@ function serveSoundFile(request, filePath) {
       const start = Number.parseInt(match[1], 10)
       const end = match[2] ? Number.parseInt(match[2], 10) : totalSize - 1
       const chunkSize = end - start + 1
+      protocolLog.debug(`${path.basename(filePath)} 206 bytes ${start}-${end}/${totalSize}`)
       return fileResponse(filePath, {
         status: 206,
         headers: {
@@ -366,6 +369,7 @@ function serveSoundFile(request, filePath) {
     }
   }
 
+  protocolLog.debug(`${path.basename(filePath)} 200 full ${totalSize} bytes${rangeHeader ? ` (unparsed range "${rangeHeader}")` : ''}`)
   return fileResponse(filePath, {
     headers: {
       'Content-Type': mime,
