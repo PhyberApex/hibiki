@@ -3,6 +3,13 @@ const path = require('node:path')
 const { PassThrough, Readable } = require('node:stream')
 const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
 
+// Squirrel.Windows relaunches the installed app with lifecycle flags during
+// install/update/uninstall. Quitting here means `app.whenReady()` below never
+// resolves, so the window, backend boot and Discord login never happen.
+if (require('electron-squirrel-startup')) {
+  app.quit()
+}
+
 protocol.registerSchemesAsPrivileged([
   // `corsEnabled` lets audio elements with `crossOrigin = 'anonymous'` (needed
   // to capture them into Web Audio for Discord streaming) load hibiki://sound

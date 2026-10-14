@@ -75,8 +75,10 @@ Pre-built binaries for **macOS**, **Windows**, and **Linux** are available on th
 | Platform | Format |
 |----------|--------|
 | macOS    | `.dmg`, `.zip` (Apple Silicon only) |
-| Windows  | `.exe` (NSIS installer) |
+| Windows  | `.exe` (Squirrel installer), `.zip` (portable) |
 | Linux    | `.deb`, `.zip` |
+
+> **Windows note:** `Setup.exe` installs Hibiki to `%LocalAppData%\hibiki` and creates Start Menu/desktop shortcuts; the `.zip` is the portable, no-install build.
 
 > **macOS note:** The app is not code-signed. macOS will quarantine it on first launch.
 > After downloading, remove the quarantine flag before opening:
