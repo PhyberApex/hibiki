@@ -63,6 +63,9 @@ export class AudioEngine {
     this.player.on('error', (error) => {
       console.error('[AudioEngine] AudioPlayer error:', error.message)
     })
+    this.player.on('stateChange', (oldState, newState) => {
+      console.warn(`[AudioEngine] AudioPlayer state: ${oldState.status} -> ${newState.status}`)
+    })
   }
 
   get audioPlayer() {

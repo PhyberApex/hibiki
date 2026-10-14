@@ -2,6 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { PassThrough, Readable } = require('node:stream')
 const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { setupFileLogging } = require('./logger')
 
 protocol.registerSchemesAsPrivileged([
   // `corsEnabled` lets audio elements with `crossOrigin = 'anonymous'` (needed
@@ -15,6 +16,11 @@ if (process.env.HIBIKI_USER_DATA_DIR) {
   app.setPath('userData', process.env.HIBIKI_USER_DATA_DIR)
   app.setPath('sessionData', process.env.HIBIKI_USER_DATA_DIR)
 }
+
+const logging = setupFileLogging(
+  path.join(app.getPath('userData'), 'logs'),
+  `Hibiki ${app.getVersion()} starting (electron ${process.versions.electron}, node ${process.versions.node}, ${process.platform} ${process.arch})`,
+)
 
 let appHandle = null
 let mainWindow = null
@@ -452,6 +458,9 @@ app.whenReady().then(async () => {
       return null
     return result.filePaths[0]
   })
+
+  ipcMain.handle('logs:getPath', () => logging.logFile)
+  ipcMain.handle('logs:openFolder', () => shell.openPath(logging.logsDir))
 
   ipcMain.handle('shell:openExternal', (_, url) => {
     if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://')))
