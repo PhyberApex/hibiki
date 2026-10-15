@@ -98,4 +98,16 @@ describe('importScene', () => {
     expect(scene.music[0]!.soundName).toBe('Epic Theme')
     expect(scene.music[0]!.source).toEqual({ name: 'Some Track', url: 'https://example.com', note: 'Any epic track' })
   })
+
+  it('drops any hotkey present in the archive', async () => {
+    const pkg = { bundled: false, hotkey: 'F2' }
+    const zipPath = createManifestZip(makeManifest({
+      displayName: 'Hotkey Import',
+      hotkey: 'F1',
+      scene: { music: [], ambience: [], effects: [{ ...pkg, soundName: 'Boom' }] },
+    }))
+    const scene = await importScene(config, zipPath)
+    expect(scene).not.toHaveProperty('hotkey')
+    expect(scene.effects[0]).not.toHaveProperty('hotkey')
+  })
 })

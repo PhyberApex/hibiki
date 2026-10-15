@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { createJsonFileStore } from '../json-file'
 import { createLogger } from '../logger'
+import { assertSceneHotkeysAvailable, normalizeOptionalAccelerator } from './hotkeys'
 
 export interface SoundSource {
   name: string
@@ -17,6 +18,8 @@ export interface SceneItem {
   enabled?: boolean
   loop?: boolean
   source?: SoundSource
+  /** Effect Hotkey (Electron accelerator). Only meaningful on `effects` items. Personal to this machine. */
+  hotkey?: string
 }
 
 export interface Scene {
@@ -25,6 +28,8 @@ export interface Scene {
   ambience: SceneItem[]
   music: SceneItem[]
   effects: SceneItem[]
+  /** Scene Hotkey (Electron accelerator). Personal to this machine: never exported. */
+  hotkey?: string
   createdAt: string
   updatedAt: string
 }
@@ -44,7 +49,24 @@ function isSceneArray(data: unknown): data is Scene[] {
 
 const log = createLogger('scenes')
 
-export function createSceneStore(config: Config) {
+export interface SceneStoreOptions {
+  /** Current Stop Hotkey, so Scene and Effect Hotkeys can be checked against it. */
+  getStopHotkey?: () => Promise<string | undefined>
+}
+
+function withoutHotkey(items: SceneItem[]): SceneItem[] {
+  return items.map(({ hotkey: _hotkey, ...rest }) => rest)
+}
+
+function normalizeEffects(effects: SceneItem[]): SceneItem[] {
+  return effects.map((item) => {
+    const { hotkey: raw, ...rest } = item
+    const hotkey = normalizeOptionalAccelerator(raw)
+    return hotkey ? { ...rest, hotkey } : rest
+  })
+}
+
+export function createSceneStore(config: Config, options: SceneStoreOptions = {}) {
   const filePath = getScenesPath(config)
   const store = createJsonFileStore<Scene[]>(filePath, { defaultValue: [], isValid: isSceneArray })
 
@@ -64,7 +86,9 @@ export function createSceneStore(config: Config) {
       ambience?: SceneItem[]
       music?: SceneItem[]
       effects?: SceneItem[]
+      hotkey?: string
     }): Promise<Scene> {
+      const stopHotkey = await options.getStopHotkey?.()
       return store.update((scenes) => {
         const now = new Date().toISOString()
         const existing = scene.id ? scenes.find(s => s.id === scene.id) : null
@@ -72,12 +96,30 @@ export function createSceneStore(config: Config) {
         const saved: Scene = {
           id: existing?.id ?? scene.id ?? randomUUID(),
           name: scene.name,
-          ambience: scene.ambience ?? [],
-          music: scene.music ?? [],
-          effects: scene.effects ?? [],
+          ambience: withoutHotkey(scene.ambience ?? []),
+          music: withoutHotkey(scene.music ?? []),
+          effects: normalizeEffects(scene.effects ?? []),
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
         }
+
+        const hotkey = normalizeOptionalAccelerator(scene.hotkey)
+        if (hotkey)
+          saved.hotkey = hotkey
+
+        try {
+          assertSceneHotkeysAvailable(saved, scenes.filter(s => s.id !== saved.id), stopHotkey)
+        }
+        catch (e) {
+          log.info(`Rejected hotkey binding on scene "${saved.name}" (${saved.id}): ${(e as Error).message}`)
+          throw e
+        }
+        const bound = [
+          ...(saved.hotkey ? [`scene ${saved.hotkey}`] : []),
+          ...saved.effects.filter(e => e.hotkey).map(e => `effect ${e.soundName ?? e.soundId} ${e.hotkey}`),
+        ]
+        if (bound.length > 0)
+          log.info(`Hotkey bindings on scene "${saved.name}" (${saved.id}): ${bound.join(', ')}`)
 
         const next = existing
           ? scenes.map(s => (s.id === saved.id ? saved : s))

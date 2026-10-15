@@ -15,6 +15,8 @@ export interface SceneItem {
   repeatMin?: number
   repeatMax?: number
   source?: SoundSource
+  /** Effect Hotkey (Electron accelerator); only on `effects` items. */
+  hotkey?: string
 }
 
 export interface Scene {
@@ -23,6 +25,8 @@ export interface Scene {
   ambience: SceneItem[]
   music: SceneItem[]
   effects: SceneItem[]
+  /** Scene Hotkey (Electron accelerator). */
+  hotkey?: string
   createdAt: string
   updatedAt: string
 }
@@ -48,6 +52,7 @@ export function saveScene(scene: {
   ambience?: SceneItem[]
   music?: SceneItem[]
   effects?: SceneItem[]
+  hotkey?: string
 }): Promise<Scene> {
   requireElectron()
   const plain = JSON.parse(JSON.stringify(scene))

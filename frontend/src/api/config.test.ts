@@ -3,6 +3,7 @@ import {
   fetchAccessibilitySettings,
   fetchActiveOutputTarget,
   fetchDiscordConfig,
+  fetchHotkeySettings,
   fetchMasterVolume,
   fetchSceneFadeLength,
   fetchStoragePath,
@@ -16,6 +17,7 @@ import {
   updateAccessibilitySettings,
   updateActiveOutputTarget,
   updateDiscordToken,
+  updateHotkeySettings,
   updateMasterVolume,
   updateSceneFadeLength,
   updateStoragePath,
@@ -300,5 +302,13 @@ describe('config API', () => {
   it('selectStorageFolder throws when not in Electron', async () => {
     delete (window as any).hibiki
     await expect(selectStorageFolder()).rejects.toThrow('Electron app')
+  })
+
+  it('hotkey settings use the config domain', async () => {
+    mockInvoke.mockResolvedValue({ enabled: true })
+    expect(await fetchHotkeySettings()).toEqual({ enabled: true })
+    expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'getHotkeySettings', args: [] })
+    await updateHotkeySettings({ enabled: false, stopHotkey: 'F12' })
+    expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'setHotkeySettings', args: [{ enabled: false, stopHotkey: 'F12' }] })
   })
 })
