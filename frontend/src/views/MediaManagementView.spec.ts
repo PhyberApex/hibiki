@@ -1,8 +1,9 @@
-import { mount } from '@vue/test-utils'
-import { createPinia } from 'pinia'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { describe, expect, it, vi } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
 import SoundListManage from '@/components/SoundListManage.vue'
+import { usePlayerStore } from '@/stores/player'
 import MediaManagementView from './MediaManagementView.vue'
 
 const router = createRouter({
@@ -11,6 +12,7 @@ const router = createRouter({
 })
 
 vi.mock('@/api/config', () => ({
+  LOCAL_TARGET_ID: 'local',
   fetchDiscordConfig: vi.fn().mockResolvedValue({ tokenConfigured: false }),
 }))
 
@@ -67,5 +69,16 @@ describe('mediaManagementView', () => {
     await tabs[1]!.trigger('click')
     const list = wrapper.findComponent(SoundListManage)
     expect(list.props('type')).toBe('ambience')
+  })
+})
+
+describe('mediaManagementView local target', () => {
+  it('shows no Discord setup or connecting guidance while Local is active', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    usePlayerStore().activeTarget = 'local'
+    const wrapper = mount(MediaManagementView, { global: { plugins: [pinia, router] } })
+    await flushPromises()
+    expect(wrapper.find('.setup-guide').exists()).toBe(false)
   })
 })

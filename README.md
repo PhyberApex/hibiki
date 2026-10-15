@@ -48,7 +48,7 @@ Regenerate these with `pnpm screenshots` (see [e2e/README.md](e2e/README.md)).
 
 ## Setting up a Discord bot
 
-Before running Hibiki you need a Discord bot token.
+A Discord bot token is only needed to play into Discord voice channels. To play through your computer's speakers, skip this section and choose **Play at the table** on the welcome screen.
 
 ### 1. Create an application and bot
 
@@ -113,12 +113,15 @@ git clone https://github.com/phyberapex/hibiki.git
 cd hibiki
 nvm use
 corepack enable && pnpm install
-cp .env.example .env   # set DISCORD_TOKEN here, or configure it in Settings after starting
+cp .env.example .env   # optional: set DISCORD_TOKEN here, or configure it in Settings later
 pnpm dev
 ```
 
 This builds the backend and frontend, then launches the Electron app.
-Set the Discord token in **Settings** if you haven't set `DISCORD_TOKEN`, then use the sidebar to join a voice channel and start playing scenes or streaming browser audio.
+On the welcome screen pick a path:
+
+- **Play at the table** — plays through this computer's speakers; no token needed.
+- **Play in Discord** — set the bot token in **Settings** (or `DISCORD_TOKEN`), then use the sidebar to join a voice channel and start playing scenes or streaming browser audio.
 
 ## Scripts
 
