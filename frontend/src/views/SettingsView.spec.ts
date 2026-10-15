@@ -83,7 +83,9 @@ describe('settingsView', () => {
       global: { plugins: [createPinia()] },
     })
     await flushPromises()
-    expect(wrapper.find('h2').text()).toBe('Discord bot')
+    expect(wrapper.find('h2').text()).toBe('Discord bot (optional)')
+    expect(wrapper.text()).toContain('only needed to play into Discord')
+    expect(wrapper.text()).toContain('No token — optional')
   })
 
   it('renders Storage location section', async () => {

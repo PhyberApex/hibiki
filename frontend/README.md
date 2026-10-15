@@ -23,7 +23,7 @@ pnpm build         # Build frontend only (outputs to web-dist/)
 - `src/api/` — IPC wrappers that call Electron main process
 - `src/audio/` — Web Audio API capture (AudioWorklet for browser streaming)
 - `src/stores/` — Pinia stores (player state, guild directory)
-- `src/views/` — Pages (Welcome, Scenes, Browser, Media, Settings)
+- `src/views/` — Pages (Welcome, Scenes, Browser, Media, Settings). Welcome offers two equal paths: "Play at the table" (sets the Local Output Target, no token needed) and "Play in Discord" (Discord Target; token set up in Settings, where it is optional).
 
 ### Communication
 

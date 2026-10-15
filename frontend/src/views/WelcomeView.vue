@@ -1,17 +1,36 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { fetchDiscordConfig } from '@/api/config'
+import { logInfo } from '@/audio/audio-element-diagnostics'
+import { usePlayerStore } from '@/stores/player'
 
 declare const __APP_VERSION__: string
 const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
 const router = useRouter()
+const player = usePlayerStore()
 
-function enter() {
-  router.replace('/media')
+async function playAtTheTable() {
+  logInfo('[welcome] onboarding path chosen: local (play at the table)')
+  await player.setActiveTarget('local')
+  router.replace('/scenes')
+}
+
+async function playInDiscord() {
+  logInfo('[welcome] onboarding path chosen: discord')
+  await player.setActiveTarget('discord')
+  let tokenConfigured = false
+  try {
+    tokenConfigured = (await fetchDiscordConfig()).tokenConfigured
+  }
+  catch (err) {
+    console.warn('[welcome] could not read the Discord config:', err)
+  }
+  router.replace(tokenConfigured ? '/scenes' : '/settings')
 }
 </script>
 
 <template>
-  <div class="welcome" @click="enter" @keydown.enter="enter">
+  <div class="welcome">
     <h1 class="welcome-title">
       Hibiki
     </h1>
@@ -25,12 +44,19 @@ function enter() {
     </svg>
 
     <p class="welcome-tagline">
-      Music, ambience and effects for your Discord table.
+      Music, ambience and effects for your table.
     </p>
 
-    <button type="button" class="btn-enter" @click.stop="enter">
-      Continue
-    </button>
+    <div class="welcome-paths">
+      <button type="button" class="btn-path btn-path-local" @click="playAtTheTable">
+        <span class="path-title">Play at the table</span>
+        <span class="path-desc">Play through this computer's speakers. No setup needed.</span>
+      </button>
+      <button type="button" class="btn-path btn-path-discord" @click="playInDiscord">
+        <span class="path-title">Play in Discord</span>
+        <span class="path-desc">Play into a voice channel with your own bot token.</span>
+      </button>
+    </div>
 
     <span class="welcome-version">v{{ appVersion }}</span>
   </div>
@@ -47,7 +73,6 @@ function enter() {
   min-height: 100vh;
   padding: 3rem;
   background: var(--color-bg);
-  cursor: pointer;
   user-select: none;
 }
 
@@ -97,21 +122,43 @@ function enter() {
   text-align: center;
 }
 
-.btn-enter {
+.welcome-paths {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.btn-path {
   appearance: none;
-  padding: 0.6rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 15rem;
+  padding: 1rem 1.25rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-lg, 12px);
   background: transparent;
   color: var(--color-text);
-  font-size: 0.9rem;
-  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
   transition: border-color var(--transition), background var(--transition);
 }
 
-.btn-enter:hover {
+.btn-path:hover,
+.btn-path:focus-visible {
   border-color: var(--color-accent);
   background: var(--color-accent-muted);
+}
+
+.path-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.path-desc {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
 }
 
 .welcome-version {

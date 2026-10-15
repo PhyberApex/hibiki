@@ -323,7 +323,7 @@ onMounted(load)
     <section class="section">
       <div class="section-header">
         <h2 class="section-title">
-          Discord bot
+          Discord bot (optional)
         </h2>
         <p v-if="discordConfig" class="section-status">
           <span v-if="discordConfig.tokenConfigured && player.botStatus?.ready" class="status-connected">
@@ -341,11 +341,12 @@ onMounted(load)
             </button>
           </span>
           <span v-else class="status-missing">
-            No token yet
+            No token — optional
           </span>
         </p>
       </div>
       <p class="section-desc">
+        A bot token is only needed to play into Discord voice channels. Playing at the table through this computer's speakers works without one.
         <template v-if="!discordConfig?.tokenConfigured">
           Create a bot in the
           <a

@@ -42,8 +42,9 @@ function onUpdated() {
   loadCounts()
 }
 
-const showSetupGuide = computed(() => !player.botStatus?.ready && tokenConfigured.value === false)
-const showConnecting = computed(() => !player.botStatus?.ready && tokenConfigured.value !== false)
+// The bot only matters for the Discord Target; Local needs no token or connection.
+const showSetupGuide = computed(() => !player.isLocalActive && !player.botStatus?.ready && tokenConfigured.value === false)
+const showConnecting = computed(() => !player.isLocalActive && !player.botStatus?.ready && tokenConfigured.value !== false)
 </script>
 
 <template>
