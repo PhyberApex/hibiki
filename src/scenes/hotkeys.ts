@@ -25,11 +25,15 @@ const KEY_ALIASES: Record<string, string> = {
   spacebar: 'Space',
 }
 
+/** Multi-word Electron key codes whose canonical spelling is camel-cased. */
+const CAMEL_KEYS = ['PageUp', 'PageDown', 'PrintScreen', 'NumLock', 'ScrollLock', 'CapsLock', 'MediaNextTrack', 'MediaPreviousTrack', 'MediaStop', 'MediaPlayPause', 'VolumeUp', 'VolumeDown', 'VolumeMute']
+const CAMEL_KEY_LOOKUP = new Map(CAMEL_KEYS.map(k => [k.toLowerCase(), k]))
+
 function normalizeKey(key: string): string {
   if (key.length === 1)
     return key.toUpperCase()
   const lower = key.toLowerCase()
-  return KEY_ALIASES[lower] ?? (lower[0].toUpperCase() + lower.slice(1))
+  return KEY_ALIASES[lower] ?? CAMEL_KEY_LOOKUP.get(lower) ?? (lower[0].toUpperCase() + lower.slice(1))
 }
 
 /**

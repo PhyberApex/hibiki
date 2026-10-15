@@ -13,6 +13,11 @@ describe('normalizeAccelerator', () => {
     expect(normalizeAccelerator('Option+Return')).toBe('Alt+Enter')
   })
 
+  it('keeps the camel-cased spelling of multi-word keys', () => {
+    expect(normalizeAccelerator('ctrl+pageup')).toBe('Ctrl+PageUp')
+    expect(normalizeAccelerator('mediaplaypause')).toBe('MediaPlayPause')
+  })
+
   it('collapses duplicate modifiers and keeps a literal plus key', () => {
     expect(normalizeAccelerator('Ctrl+ctrl+X')).toBe('Ctrl+X')
     expect(normalizeAccelerator('Ctrl++')).toBe('Ctrl++')

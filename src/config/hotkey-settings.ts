@@ -29,7 +29,8 @@ function parse(raw: string | null | undefined): HotkeySettings {
       settings.stopHotkey = stopHotkey
     return settings
   }
-  catch {
+  catch (e) {
+    log.warn('Stored hotkey settings are unreadable; using defaults:', e)
     return { ...DEFAULTS }
   }
 }
