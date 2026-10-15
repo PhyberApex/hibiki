@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { fetchStorageWarnings } from '@/api/config'
 import AppToasts from '@/components/AppToasts.vue'
+import { reportHotkeyRegistrationFailures, startHotkeyDispatch } from '@/hotkeys'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
 import { useScenePlaybackStore } from '@/stores/scene-playback'
@@ -14,9 +15,10 @@ const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0
 const route = useRoute()
 const player = usePlayerStore()
 // Instantiated app-wide so Scene playback (and its watchers) outlives any view.
-useScenePlaybackStore()
+const scenePlayback = useScenePlaybackStore()
 const accessibility = useAccessibilityStore()
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let stopHotkeyDispatch: (() => void) | null = null
 
 const storageWarnings = ref<StorageWarning[]>([])
 const storageWarningsDismissed = ref(false)
@@ -57,7 +59,10 @@ function startPollingWhenDisconnected() {
 
 onMounted(() => {
   accessibility.load()
-  player.loadActiveTarget()
+  // A Hotkey can play a Scene before the Scene view was ever opened, so the master volume loads app-wide, once the active Target is known.
+  player.loadActiveTarget().then(() => scenePlayback.loadMasterVolume())
+  stopHotkeyDispatch = startHotkeyDispatch()
+  reportHotkeyRegistrationFailures()
   player.loadState().then(() => {
     if (player.botStatus?.ready)
       player.loadDirectory()
@@ -72,6 +77,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopHotkeyDispatch?.()
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null

@@ -1,7 +1,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { PassThrough, Readable } = require('node:stream')
-const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { createHotkeys, HOTKEY_AFFECTING_CALLS } = require('./hotkeys')
 const { createLogger, setupFileLogging } = require('./logger')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
@@ -43,6 +44,7 @@ const appLog = createLogger('app')
 
 let appHandle = null
 let mainWindow = null
+let hotkeys = null
 
 /**
  * On Linux without a keyring, `safeStorage` reports encryption as available
@@ -152,7 +154,10 @@ function registerIpcHandlers(api) {
       throw new Error(`Unknown API: ${domain}.${method}`)
     }
     try {
-      return await obj[method](...args)
+      const result = await obj[method](...args)
+      if (hotkeys && HOTKEY_AFFECTING_CALLS.has(`${domain}.${method}`))
+        await hotkeys.sync()
+      return result
     }
     catch (err) {
       ipcLog.error(`${domain}.${method} failed:`, err)
@@ -492,6 +497,9 @@ app.whenReady().then(async () => {
   }
 
   registerIpcHandlers(api)
+  hotkeys = createHotkeys({ globalShortcut, getApi: () => api, getWindow: () => mainWindow })
+  ipcMain.handle('hotkeys:getStatus', () => hotkeys.getStatus())
+  await hotkeys.sync()
   registerBrowserViewHandlers()
   registerHibikiProtocol(api, webDistDir)
 
@@ -587,6 +595,11 @@ async function teardownBeforeQuit() {
 
 app.on('window-all-closed', () => {
   app.quit()
+})
+
+app.on('will-quit', () => {
+  hotkeys?.releaseAll()
+  globalShortcut.unregisterAll()
 })
 
 app.on('before-quit', (event) => {

@@ -11,6 +11,13 @@ vi.mock('@/api/config', () => ({
   fetchAccessibilitySettings: vi.fn().mockResolvedValue({ luminancePulses: true, reduceMotion: null }),
   updateAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
   fetchStorageWarnings: vi.fn().mockResolvedValue([]),
+  fetchMasterVolume: vi.fn().mockResolvedValue(80),
+  LOCAL_TARGET_ID: 'local',
+}))
+
+vi.mock('@/api/hotkeys', () => ({
+  fetchHotkeyStatus: vi.fn().mockResolvedValue({ enabled: true, registered: [], failures: [] }),
+  onHotkeyFired: vi.fn().mockReturnValue(() => {}),
 }))
 
 vi.mock('@/api/player', () => ({
