@@ -134,7 +134,8 @@ function createLocalSink() {
       ipcLog.info('audio:localSinkStart')
       send('audio:localSinkStart')
     },
-    write: packet => send('audio:localSinkChunk', packet),
+    // Copy: a Buffer from the mixer may be a slice of a larger pooled ArrayBuffer, which IPC would clone whole.
+    write: packet => send('audio:localSinkChunk', Uint8Array.from(packet)),
     stop: () => {
       ipcLog.info('audio:localSinkStop')
       if (mainWindow && !mainWindow.isDestroyed())

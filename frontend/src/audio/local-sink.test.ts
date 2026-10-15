@@ -113,8 +113,44 @@ describe('localSink', () => {
     expect(events.at(-1)).toMatchObject({ type: 'failed' })
     expect(sink.active).toBe(false)
     ctx.state = 'running'
+    sink.start()
     sink.handleChunk(packet(1))
     expect(createContext).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores late packets after a failure until the next start', () => {
+    const { sink, ctx, createContext } = setup()
+    sink.handleChunk(packet(1))
+    ctx.state = 'closed'
+    ctx.onstatechange?.()
+    ctx.state = 'running'
+    sink.handleChunk(packet(1))
+    expect(createContext).toHaveBeenCalledTimes(1)
+    sink.start()
+    sink.handleChunk(packet(1))
+    expect(createContext).toHaveBeenCalledTimes(2)
+  })
+
+  it('treats a context that stays suspended as failed', () => {
+    const { sink, ctx, events } = setup()
+    sink.handleChunk(packet(1))
+    ctx.state = 'suspended'
+    ctx.onstatechange?.()
+    vi.advanceTimersByTime(5000)
+    expect(events.at(-1)).toMatchObject({ type: 'failed' })
+    expect(sink.active).toBe(false)
+  })
+
+  it('does not fail a context that resumes in time', () => {
+    const { sink, ctx, events } = setup()
+    sink.handleChunk(packet(1))
+    ctx.state = 'suspended'
+    ctx.onstatechange?.()
+    vi.advanceTimersByTime(2000)
+    ctx.state = 'running'
+    ctx.onstatechange?.()
+    vi.advanceTimersByTime(10000)
+    expect(events.some(e => e.type === 'failed')).toBe(false)
   })
 
   it('reports a lost device', () => {

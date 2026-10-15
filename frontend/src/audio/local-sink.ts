@@ -1,3 +1,4 @@
+import { reportLocalSinkHealth } from '../api/player'
 import { JitterBuffer, SAMPLE_RATE } from './jitter-buffer'
 
 /**
@@ -43,6 +44,8 @@ export interface LocalSinkDeps {
 
 const DEFAULT_UNDERRUN_REPORT_MS = 2000
 const BYTES_PER_FRAME = 4
+/** A context suspended this long is treated as dead (device gone, or nothing can resume it). */
+const SUSPENDED_FATAL_MS = 5000
 
 export class LocalSink {
   private ctx?: SinkAudioContextLike
@@ -51,6 +54,9 @@ export class LocalSink {
   private reportTimer?: ReturnType<typeof setInterval>
   private closeTimer?: ReturnType<typeof setTimeout>
   private lastState = ''
+  private suspendTimer?: ReturnType<typeof setTimeout>
+  /** Set after a failure so late packets do not reopen a context before the backend has stopped the stream; cleared by the next `audio:localSinkStart`. */
+  private failed = false
 
   constructor(private readonly deps: LocalSinkDeps) {}
 
@@ -60,10 +66,13 @@ export class LocalSink {
 
   /** `audio:localSinkStart`: nothing to prepare; the first packet opens the context (which also covers a reloaded renderer). */
   start(): void {
+    this.failed = false
     this.cancelClose()
   }
 
   handleChunk(chunk: ArrayBuffer | ArrayBufferView): void {
+    if (this.failed)
+      return
     this.cancelClose()
     const ctx = this.ctx ?? this.open()
     if (!ctx)
@@ -122,6 +131,7 @@ export class LocalSink {
       ctx = this.deps.createContext()
     }
     catch (err) {
+      this.failed = true
       this.deps.report({ type: 'failed', message: `could not create AudioContext: ${describe(err)}` })
       return undefined
     }
@@ -135,6 +145,7 @@ export class LocalSink {
     this.deps.report({ type: 'started', sampleRate: ctx.sampleRate })
     if (ctx.state === 'suspended') {
       this.deps.report({ type: 'suspended' })
+      this.armSuspendTimer(ctx)
       void ctx.resume().catch(() => {})
     }
     return ctx
@@ -148,10 +159,11 @@ export class LocalSink {
       return
     const previous = this.lastState
     this.lastState = state
+    if (state !== 'suspended')
+      this.clearSuspendTimer()
     if (state === 'closed') {
       // Not our own close(): that detaches this handler first.
-      this.deps.report({ type: 'failed', message: 'AudioContext was closed' })
-      this.release()
+      this.fail('AudioContext was closed')
     }
     else if (state === 'running' && previous !== 'running') {
       // Audio scheduled while suspended is stale: restart the run with a fresh lead.
@@ -160,12 +172,36 @@ export class LocalSink {
     }
     else if (state !== 'running') {
       this.deps.report({ type: 'suspended' })
+      this.armSuspendTimer(ctx)
     }
   }
 
   private onError(ev: unknown): void {
+    this.failed = true
     this.deps.report({ type: 'deviceLost', message: describe(ev) })
-    this.release()
+    this.close()
+  }
+
+  private fail(message: string): void {
+    this.failed = true
+    this.deps.report({ type: 'failed', message })
+    this.close()
+  }
+
+  private armSuspendTimer(ctx: SinkAudioContextLike): void {
+    this.clearSuspendTimer()
+    this.suspendTimer = setTimeout(() => {
+      this.suspendTimer = undefined
+      if (ctx === this.ctx && ctx.state !== 'running')
+        this.fail(`AudioContext stayed ${ctx.state} for ${SUSPENDED_FATAL_MS} ms`)
+    }, SUSPENDED_FATAL_MS)
+  }
+
+  private clearSuspendTimer(): void {
+    if (this.suspendTimer) {
+      clearTimeout(this.suspendTimer)
+      this.suspendTimer = undefined
+    }
   }
 
   private flushUnderruns(): void {
@@ -197,6 +233,7 @@ export class LocalSink {
       this.ctx.onerror = null
     }
     this.ctx = undefined
+    this.clearSuspendTimer()
     if (this.reportTimer) {
       clearInterval(this.reportTimer)
       this.reportTimer = undefined
@@ -224,7 +261,7 @@ export function installLocalSink(): () => void {
     report: (event) => {
       if (event.type === 'failed' || event.type === 'deviceLost')
         console.error(`[local-sink] ${event.type}${'message' in event && event.message ? `: ${event.message}` : ''}`)
-      void hibiki.invoke('api', { domain: 'player', method: 'reportLocalSinkHealth', args: [event] }).catch((err) => {
+      reportLocalSinkHealth(event).catch((err) => {
         console.warn('[local-sink] could not report sink health:', err)
       })
     },
