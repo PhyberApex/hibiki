@@ -9,6 +9,8 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { fetchVisionConfig, LOCAL_TARGET_ID, openFileDialog, saveFileDialog } from '@/api/config'
 import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
 import { listAmbience, listEffects, listMusic } from '@/api/sounds'
+import { logInfo } from '@/audio/audio-element-diagnostics'
+import HotkeyRecorder from '@/components/HotkeyRecorder.vue'
 import RegistryBrowser from '@/components/RegistryBrowser.vue'
 import ResolveSoundDialog from '@/components/ResolveSoundDialog.vue'
 import VisionToVibeDialog from '@/components/VisionToVibeDialog.vue'
@@ -88,6 +90,39 @@ const effectCards = computed(() => {
     return []
   return scene.value.effects.map(item => ({ item, status: player.effectStatus(item.soundId) }))
 })
+
+// Hotkey bindings are validated when the Scene is saved (uniqueness, Stop Hotkey), so a rejection
+// surfaces here: revert the edit and show the message on the recorder that caused it.
+const hotkeyErrors = ref<Record<string, string>>({})
+watch(() => scene.value?.id, () => {
+  hotkeyErrors.value = {}
+})
+
+async function bindHotkey(errorKey: string, target: { hotkey?: string }, value: string | undefined) {
+  if (!scene.value)
+    return
+  const previous = target.hotkey
+  logInfo(`[scenes] ${value ? `Binding hotkey ${value}` : 'Clearing hotkey'} on ${errorKey} in scene ${scene.value.id}`)
+  if (value)
+    target.hotkey = value
+  else
+    delete target.hotkey
+  const { [errorKey]: _cleared, ...rest } = hotkeyErrors.value
+  hotkeyErrors.value = rest
+  try {
+    await saveScene(scene.value)
+    // The Scene list shows the Scene Hotkey chip, so refresh it from the store.
+    await loadScenes()
+  }
+  catch (e) {
+    if (previous)
+      target.hotkey = previous
+    else
+      delete target.hotkey
+    console.warn(`[scenes] Hotkey ${value ?? '(cleared)'} rejected for ${errorKey} in scene ${scene.value.id}:`, e)
+    hotkeyErrors.value = { ...hotkeyErrors.value, [errorKey]: e instanceof Error ? e.message : 'Couldn\'t bind that hotkey.' }
+  }
+}
 
 function updateRepeat(item: SceneItem, field: 'repeatMin' | 'repeatMax', value: number) {
   item[field] = value
@@ -513,6 +548,7 @@ watch(sceneId, (newId) => {
               :aria-label="player.playingSceneMode === LOCAL_TARGET_ID ? 'Playing locally' : 'Playing on Discord'"
             >{{ player.playingSceneMode === LOCAL_TARGET_ID ? '🔊' : '💬' }}</span>
             <span class="scene-list-name">{{ s.name }}</span>
+            <kbd v-if="s.hotkey" class="hotkey-chip" :title="`Scene Hotkey: ${s.hotkey}`" data-testid="scene-hotkey-chip">{{ s.hotkey }}</kbd>
             <span class="scene-list-counts">
               <span v-if="s.music.length" class="count-badge count-badge-music">{{ s.music.length }} music</span>
               <span v-if="s.ambience.length" class="count-badge count-badge-ambience">{{ s.ambience.length }} ambience</span>
@@ -571,6 +607,13 @@ watch(sceneId, (newId) => {
           <h1 class="detail-title">
             {{ scene?.name ?? 'Loading…' }}
           </h1>
+          <HotkeyRecorder
+            v-if="scene"
+            :model-value="scene.hotkey"
+            label="Scene Hotkey"
+            :error="hotkeyErrors.scene"
+            @update:model-value="bindHotkey('scene', scene, $event)"
+          />
           <div v-if="scene" class="detail-actions">
             <button
               v-if="visionAvailable"
@@ -929,6 +972,7 @@ watch(sceneId, (newId) => {
                 />
                 <span class="effect-trigger-content">
                   <span class="effect-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
+                  <kbd v-if="item.hotkey" class="hotkey-chip" :title="`Effect Hotkey: ${item.hotkey}`" data-testid="effect-hotkey-chip">{{ item.hotkey }}</kbd>
                   <span v-if="status" class="effect-timer">{{ effectTimerLabel(status) }}</span>
                 </span>
                 <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing-badge">
@@ -957,6 +1001,13 @@ watch(sceneId, (newId) => {
               >
                 ×
               </button>
+              <HotkeyRecorder
+                class="effect-hotkey-recorder"
+                :model-value="item.hotkey"
+                :label="`Effect Hotkey for ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
+                :error="hotkeyErrors[`effect:${item.soundId}`]"
+                @update:model-value="bindHotkey(`effect:${item.soundId}`, item, $event)"
+              />
               <div v-if="isSoundMissing('effects', item.soundId)" class="sound-source-hint effect-resolve-hint">
                 <button
                   type="button"
@@ -1006,6 +1057,22 @@ watch(sceneId, (newId) => {
 </template>
 
 <style scoped>
+.hotkey-chip {
+  flex: none;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 0.3rem;
+  background: rgba(251, 191, 36, 0.08);
+  color: #fbbf24;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.effect-hotkey-recorder {
+  padding: 0.25rem 0.5rem;
+}
+
 .scene-view {
   display: flex;
   flex-direction: column;

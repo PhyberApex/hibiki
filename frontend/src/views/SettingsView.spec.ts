@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchSceneFadeLength,
   fetchVisionConfig,
+  updateHotkeySettings,
   updateSceneFadeLength,
   updateVisionApiKey,
   updateVisionEnabled,
@@ -53,6 +54,16 @@ vi.mock('@/api/config', () => ({
   updateVisionOpenAiBaseUrl: vi.fn(),
   updateVisionOpenAiModel: vi.fn(),
   updateVisionEnabled: vi.fn(),
+  fetchHotkeySettings: vi.fn().mockResolvedValue({ enabled: true, stopHotkey: 'F24' }),
+  updateHotkeySettings: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/api/hotkeys', () => ({
+  fetchHotkeyStatus: vi.fn().mockResolvedValue({
+    enabled: true,
+    registered: [],
+    failures: [{ accelerator: 'F13', owner: 'Scene "Tavern"', reason: 'Global hotkeys are not supported under Wayland' }],
+  }),
 }))
 
 function mountSettings() {
@@ -95,6 +106,37 @@ describe('settingsView', () => {
     await flushPromises()
     const headings = wrapper.findAll('h2')
     expect(headings.some(h => h.text() === 'Storage location')).toBe(true)
+  })
+
+  describe('hotkeys section', () => {
+    it('shows the Stop Hotkey and saves the enable toggle', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="hotkeys-section"]').text()).toContain('F24')
+      await wrapper.find('#hotkeys-enabled').setValue(false)
+      await flushPromises()
+      expect(updateHotkeySettings).toHaveBeenCalledWith({ enabled: false, stopHotkey: 'F24' })
+    })
+
+    it('binds the Stop Hotkey and shows a rejection inline', async () => {
+      vi.mocked(updateHotkeySettings).mockRejectedValueOnce(new Error('F13 is already used by Scene \'Tavern\''))
+      const wrapper = mountSettings()
+      await flushPromises()
+      const button = wrapper.find('[data-testid="hotkeys-section"] [data-testid="hotkey-recorder-button"]')
+      await button.trigger('click')
+      await button.trigger('keydown', { code: 'F13' })
+      await flushPromises()
+      expect(updateHotkeySettings).toHaveBeenCalledWith({ enabled: true, stopHotkey: 'F13' })
+      expect(wrapper.find('[data-testid="hotkey-recorder-error"]').text()).toContain('Tavern')
+    })
+
+    it('lists refused hotkeys with the reason under Diagnostics', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      const failures = wrapper.find('[data-testid="hotkey-failures"]')
+      expect(failures.text()).toContain('F13')
+      expect(failures.text()).toContain('Wayland')
+    })
   })
 
   describe('accessibility section', () => {
