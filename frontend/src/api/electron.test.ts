@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { apiCall, getPathForFile, useElectronApi } from './electron'
+import { apiCall, getPathForFile, unwrapIpcError, useElectronApi } from './electron'
 
 describe('electron API', () => {
   afterEach(() => {
@@ -12,6 +12,20 @@ describe('electron API', () => {
 
   it('apiCall throws when hibiki not available', () => {
     expect(() => apiCall('x', 'y', [])).toThrow('Electron API not available')
+  })
+
+  it('apiCall rethrows the backend message without Electron\'s IPC wrapper', async () => {
+    ;(window as any).hibiki = {
+      invoke: () => Promise.reject(new Error('Error invoking remote method \'api\': Error: Hotkey F13 is already used by Scene "Tavern"')),
+    }
+    await expect(apiCall('scenes', 'save', [])).rejects.toThrow('Hotkey F13 is already used by Scene "Tavern"')
+    await expect(apiCall('scenes', 'save', [])).rejects.not.toThrow('invoking remote method')
+  })
+
+  it('unwrapIpcError leaves errors without the wrapper untouched', () => {
+    const plain = new Error('boom')
+    expect(unwrapIpcError(plain)).toBe(plain)
+    expect(unwrapIpcError('string')).toBe('string')
   })
 
   it('getPathForFile returns null when the bridge is missing', () => {

@@ -1802,7 +1802,7 @@ describe('sceneView hotkeys', () => {
     await record(wrapper, 1, 'F14')
     const saved = vi.mocked(saveScene).mock.calls.at(-1)![0] as { effects: { hotkey?: string }[] }
     expect(saved.effects[0].hotkey).toBe('F14')
-    expect(wrapper.find('[data-testid="effect-hotkey-chip"]').text()).toBe('F14')
+    expect(wrapper.find('[data-testid="effect-hotkey-recorder"] .hotkey-chip').text()).toBe('F14')
   })
 
   it('reverts and shows the rejection inline when the model refuses the key', async () => {
