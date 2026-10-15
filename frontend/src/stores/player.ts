@@ -1,6 +1,8 @@
+import type { OutputTargetKind } from '@/api/config'
 import type { BotStatus, GuildDirectoryEntry, PlayerStateItem } from '@/api/player'
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { fetchActiveOutputTarget, LOCAL_TARGET_ID, updateActiveOutputTarget } from '@/api/config'
 import {
   fetchBotStatus,
   fetchGuildDirectory,
@@ -57,8 +59,22 @@ export const usePlayerStore = defineStore('player', () => {
   // fields together via setPlayingScene/clearPlayingScene, never directly,
   // so "id set, mode null" can't happen.
   const playingSceneId = ref<string | null>(null)
-  const playingSceneMode = ref<'discord' | 'local' | null>(null)
+  // The Output Target the Playing Scene is on: `LOCAL_TARGET_ID` or a guild id.
+  const playingSceneMode = ref<string | null>(null)
+  // Which Output Target the Scene view routes to (persisted via the `config` domain).
+  const activeTarget = ref<OutputTargetKind>('discord')
+  const isLocalActive = computed(() => activeTarget.value === 'local')
   const scenePlaying = computed(() => playingSceneId.value !== null)
+
+  const selectedGuildState = computed(() =>
+    playerState.value.find(g => g.guildId === guildId.value),
+  )
+  const isJoined = computed(() => !!selectedGuildState.value?.connectedChannelId)
+  /** The id playback calls are addressed to: `LOCAL_TARGET_ID` while Local is active, else the selected guild. */
+  const targetId = computed(() => (activeTarget.value === 'local' ? LOCAL_TARGET_ID : guildId.value))
+  const activeTargetState = computed(() => playerState.value.find(g => g.guildId === targetId.value))
+  /** Local plays with no voice connection; Discord needs a joined channel. */
+  const canPlay = computed(() => activeTarget.value === 'local' || isJoined.value)
 
   // Effect Instances (#509) — a single reactive view merging backend-reported
   // instances (synced from playerState below) with renderer-tracked ones
@@ -88,7 +104,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   /** Replaces every backend-origin entry with the current guild's live Effect Instances; renderer-origin entries are untouched. Runs on every playerState update, so an instance starting or ending (played out, evicted, stopped) shows up as soon as the backend's `stateChanged` push lands. */
   function syncBackendEffects() {
-    const live = playerState.value.find(g => g.guildId === guildId.value)
+    const live = activeTargetState.value
     const backendList = (live?.effects ?? []).filter(e => !pendingBackendStops.has(e.instanceId))
     const backendIds = new Set(backendList.map(e => e.instanceId))
     for (const [id, entry] of effectInstances.value) {
@@ -108,8 +124,6 @@ export const usePlayerStore = defineStore('player', () => {
     else
       stopEffectTickingIfIdle()
   }
-
-  watch([playerState, guildId], syncBackendEffects, { deep: true })
 
   /** Registers a new renderer-tracked (Discord-fallback or local-preview) Effect Instance, evicting the oldest renderer-tracked one first if already at the renderer-side cap — the backend enforces its own cap independently (overlap parity, #408). Returns the new instance's id. */
   function registerRendererEffectInstance(soundId: string, stop: () => void): string {
@@ -180,7 +194,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   /** Stops every active instance of `soundId`, across every path (backend-decoded and renderer-tracked alike) — the Effect card's Stop control. Backend-origin entries are dropped immediately rather than waiting for the backend's own `stateChanged` confirmation, so the card goes idle with no animation. */
   async function stopEffectSound(soundId: string): Promise<void> {
-    const gid = guildId.value
+    const gid = targetId.value
     const backendIds: string[] = []
     const rendererIds: string[] = []
     for (const [id, entry] of effectInstances.value) {
@@ -213,15 +227,37 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
-  function setPlayingScene(id: string, mode: 'discord' | 'local') {
+  function setPlayingScene(id: string, target: string) {
     playingSceneId.value = id
-    playingSceneMode.value = mode
+    playingSceneMode.value = target
   }
 
-  function clearPlayingScene(mode: 'discord' | 'local') {
-    if (playingSceneMode.value === mode) {
+  /** Clears the Playing Scene; with `target`, only if it is on that Target. */
+  function clearPlayingScene(target?: string) {
+    if (target === undefined || playingSceneMode.value === target) {
       playingSceneId.value = null
       playingSceneMode.value = null
+    }
+  }
+
+  async function loadActiveTarget() {
+    try {
+      activeTarget.value = await fetchActiveOutputTarget()
+    }
+    catch (err) {
+      // Outside Electron (tests, Vite dev) this is expected; keep the default.
+      console.warn('[player] could not read the active Output Target, keeping the default:', err)
+    }
+  }
+
+  /** Switches the active Output Target and persists it; callers own stopping playback on the old Target first. */
+  async function setActiveTarget(kind: OutputTargetKind) {
+    activeTarget.value = kind
+    try {
+      await updateActiveOutputTarget(kind)
+    }
+    catch (err) {
+      console.error('[player] could not persist the active Output Target:', err)
     }
   }
 
@@ -230,10 +266,7 @@ export const usePlayerStore = defineStore('player', () => {
     return guild?.channels ?? []
   })
 
-  const selectedGuildState = computed(() =>
-    playerState.value.find(g => g.guildId === guildId.value),
-  )
-  const isJoined = computed(() => !!selectedGuildState.value?.connectedChannelId)
+  watch([playerState, targetId], syncBackendEffects, { deep: true })
   const connectedGuildId = computed(() =>
     playerState.value.find(g => g.connectedChannelId)?.guildId ?? '',
   )
@@ -387,6 +420,13 @@ export const usePlayerStore = defineStore('player', () => {
     channels,
     selectedGuildState,
     isJoined,
+    activeTarget,
+    isLocalActive,
+    targetId,
+    activeTargetState,
+    canPlay,
+    loadActiveTarget,
+    setActiveTarget,
     channelJoinBusy,
     loadState,
     loadDirectory,
