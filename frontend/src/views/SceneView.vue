@@ -3,6 +3,7 @@ import type { VisionProviderId } from '@/api/config'
 import type { Scene, SceneItem } from '@/api/scenes'
 import type { SoundFile } from '@/api/sounds'
 import type { CaptureSession } from '@/audio/browser-audio-capture'
+import type { EffectSoundStatus } from '@/stores/player'
 import { computed, onActivated, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
@@ -171,21 +172,24 @@ function formatEffectSeconds(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-/** `m:ss / m:ss` (elapsed / total) for the sound's longest-remaining active instance, or '' while none are active. */
-function effectTimerLabel(soundId: string): string {
-  const status = player.effectStatus(soundId)
-  if (!status)
-    return ''
+/** `m:ss / m:ss` (elapsed / total) for a sound's longest-remaining active instance. */
+function effectTimerLabel(status: EffectSoundStatus): string {
   return `${formatEffectSeconds(status.elapsedMs)} / ${formatEffectSeconds(status.totalMs)}`
 }
 
-/** 0-100 fill percentage for the sound's longest-remaining active instance, or 0 while none are active or its duration isn't known yet. */
-function effectProgressPercent(soundId: string): number {
-  const status = player.effectStatus(soundId)
-  if (!status || status.totalMs <= 0)
+/** 0-100 fill percentage, or 0 while the duration isn't known yet. */
+function effectProgressPercent(status: EffectSoundStatus): number {
+  if (status.totalMs <= 0)
     return 0
   return Math.min(100, (status.elapsedMs / status.totalMs) * 100)
 }
+
+// One `player.effectStatus()` scan per Effect item per reactive tick, shared by the whole card.
+const effectCards = computed(() => {
+  if (!scene.value)
+    return []
+  return scene.value.effects.map(item => ({ item, status: player.effectStatus(item.soundId) }))
+})
 
 function updateRepeat(item: SceneItem, field: 'repeatMin' | 'repeatMax', value: number) {
   item[field] = value
@@ -1837,7 +1841,7 @@ watch(sceneId, (newId) => {
           </div>
           <div class="sound-cards effect-cards">
             <div
-              v-for="item in scene.effects"
+              v-for="{ item, status } in effectCards"
               :key="item.soundId"
               class="effect-card"
               :class="{
@@ -1853,23 +1857,23 @@ watch(sceneId, (newId) => {
                 @click="isJoined ? playEffect(item) : playEffectLocal(item)"
               >
                 <span
-                  v-if="player.effectStatus(item.soundId)"
+                  v-if="status"
                   class="effect-progress-fill"
-                  :style="{ width: `${effectProgressPercent(item.soundId)}%` }"
+                  :style="{ width: `${effectProgressPercent(status)}%` }"
                 />
                 <span class="effect-trigger-content">
                   <span class="effect-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
-                  <span v-if="player.effectStatus(item.soundId)" class="effect-timer">{{ effectTimerLabel(item.soundId) }}</span>
+                  <span v-if="status" class="effect-timer">{{ effectTimerLabel(status) }}</span>
                 </span>
                 <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing-badge">
                   missing
                 </span>
-                <span v-if="(player.effectStatus(item.soundId)?.count ?? 0) > 1" class="effect-count-badge">
-                  ×{{ player.effectStatus(item.soundId)!.count }}
+                <span v-if="status && status.count > 1" class="effect-count-badge">
+                  ×{{ status.count }}
                 </span>
               </button>
               <button
-                v-if="player.effectStatus(item.soundId)"
+                v-if="status"
                 type="button"
                 class="btn-icon effect-stop"
                 title="Stop"

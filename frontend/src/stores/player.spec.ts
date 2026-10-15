@@ -591,6 +591,32 @@ describe('player store', () => {
       expect(store.effectStatus('fx2')).not.toBeNull()
     })
 
+    it('a stale snapshot arriving while a stop is in flight does not resurrect the stopped instance', async () => {
+      let resolveStop!: () => void
+      stopEffect.mockImplementation(() => new Promise<void>((resolve) => {
+        resolveStop = resolve
+      }))
+      const state = [{
+        guildId: 'g1',
+        isIdle: false,
+        track: null,
+        source: 'live' as const,
+        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date().toISOString(), durationMs: 2000 }],
+      }]
+      fetchPlayerState.mockResolvedValue(state)
+      fetchBotStatus.mockResolvedValue({ ready: true })
+      const store = usePlayerStore()
+      store.guildId = 'g1'
+      await store.loadState()
+
+      const stopPromise = store.stopEffectSound('fx1')
+      await store.loadState() // stale snapshot still lists the instance
+
+      expect(store.effectStatus('fx1')).toBeNull()
+      resolveStop()
+      await stopPromise
+    })
+
     it('stopEffectSound drops the backend-origin entry immediately, without waiting for the IPC call to resolve', async () => {
       let resolveStop!: () => void
       stopEffect.mockImplementation(() => new Promise<void>((resolve) => {

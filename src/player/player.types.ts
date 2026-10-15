@@ -1,3 +1,4 @@
+import type { EffectInstanceInfo } from '../audio/guild-audio.manager'
 import type { SoundCategory } from '../sound/sound.types'
 
 export interface TrackSummary {
@@ -5,14 +6,6 @@ export interface TrackSummary {
   name: string
   filename: string
   category: SoundCategory
-}
-
-/** One active backend-decoded Effect Instance (#509) — see `GuildAudioManager.activeEffects`. */
-export interface EffectInstanceSummary {
-  instanceId: string
-  soundId: string
-  startedAt: string
-  durationMs: number
 }
 
 export interface GuildPlaybackState {
@@ -26,5 +19,5 @@ export interface GuildPlaybackState {
   /** soundIds of backend-decoded Ambience sounds currently active; present when live. */
   ambience?: string[]
   /** Active backend-decoded Effect Instances; present when live. */
-  effects?: EffectInstanceSummary[]
+  effects?: EffectInstanceInfo[]
 }

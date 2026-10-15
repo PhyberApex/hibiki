@@ -68,6 +68,8 @@ export const usePlayerStore = defineStore('player', () => {
   const effectTick = ref(Date.now())
   let effectTickTimer: ReturnType<typeof setInterval> | undefined
   let rendererEffectSeq = 0
+  /** Backend-origin ids with a `stopEffect` call in flight: a stale `stateChanged` snapshot must not resurrect them via `syncBackendEffects`. Cleared once the call settles. */
+  const pendingBackendStops = new Set<string>()
 
   function ensureEffectTicking() {
     if (effectTickTimer !== undefined)
@@ -87,7 +89,7 @@ export const usePlayerStore = defineStore('player', () => {
   /** Replaces every backend-origin entry with the current guild's live Effect Instances; renderer-origin entries are untouched. Runs on every playerState update, so an instance starting or ending (played out, evicted, stopped) shows up as soon as the backend's `stateChanged` push lands. */
   function syncBackendEffects() {
     const live = playerState.value.find(g => g.guildId === guildId.value)
-    const backendList = live?.effects ?? []
+    const backendList = (live?.effects ?? []).filter(e => !pendingBackendStops.has(e.instanceId))
     const backendIds = new Set(backendList.map(e => e.instanceId))
     for (const [id, entry] of effectInstances.value) {
       if (entry.origin === 'backend' && !backendIds.has(id))
@@ -191,13 +193,23 @@ export const usePlayerStore = defineStore('player', () => {
     }
     for (const id of rendererIds)
       removeRendererEffectInstance(id)
-    for (const id of backendIds)
+    for (const id of backendIds) {
       effectInstances.value.delete(id)
+      pendingBackendStops.add(id)
+    }
     stopEffectTickingIfIdle()
     if (gid) {
-      await Promise.all(backendIds.map(id =>
-        stopBackendEffectInstance(gid, id).catch(() => {}),
-      ))
+      await Promise.all(backendIds.map(async (id) => {
+        try {
+          await stopBackendEffectInstance(gid, id)
+        }
+        catch {
+          // Logged by the IPC layer; the next playerState sync is the source of truth.
+        }
+        finally {
+          pendingBackendStops.delete(id)
+        }
+      }))
     }
   }
 

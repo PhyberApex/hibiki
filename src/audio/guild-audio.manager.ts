@@ -674,7 +674,10 @@ export class GuildAudioManager extends EventEmitter {
    * `streamFactory` fails. Resolves with the new instance's id and
    * duration (#509) — `streamFactory` reports the duration alongside the
    * stream since the Effect PCM cache always decodes the whole file first
-   * (see `effect-pcm-cache.ts`).
+   * (see `effect-pcm-cache.ts`). If this slot is evicted or bulk-cleared
+   * while its decode is in flight it still resolves with a well-formed
+   * id/duration though it never started: `activeEffects` is the source of
+   * truth for liveness, and `stopEffect` on such an id is a safe no-op.
    */
   async playEffect(
     streamFactory: () => { stream: Readable, durationMs: number } | Promise<{ stream: Readable, durationMs: number }>,
