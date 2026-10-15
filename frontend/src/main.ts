@@ -2,6 +2,7 @@ import { createPinia } from 'pinia'
 
 import { createApp } from 'vue'
 import App from './App.vue'
+import { installLocalSink } from './audio/local-sink'
 
 import router from './router'
 import './assets/main.css'
@@ -19,6 +20,9 @@ window.addEventListener('unhandledrejection', (event) => {
 window.addEventListener('error', (event) => {
   console.error('[renderer] Uncaught error:', event.error ?? event.message)
 })
+
+// The Local Target's speakers: plays the backend mix whenever the main process sends it.
+installLocalSink()
 
 app.use(createPinia())
 app.use(router)

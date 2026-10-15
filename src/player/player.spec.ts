@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events'
 import { Readable } from 'node:stream'
 import * as voice from '@discordjs/voice'
 import { AudioEngine } from '../audio/audio-engine'
+import { createPcmStream } from '../audio/decoders'
 import { LOCAL_TARGET_ID } from './output-target'
 import { createPlayer } from './player'
 
@@ -25,6 +26,8 @@ jest.mock('@discordjs/voice', () => ({
 jest.mock('../audio/audio-engine', () => ({
   AudioEngine: jest.fn().mockImplementation(() => ({
     audioPlayer: { on: jest.fn(), play: jest.fn(), state: { status: 'idle' } },
+    isIdle: true,
+    stopLocalSink: jest.fn(),
     playMusicFromStream: jest.fn(),
     playEffectFromStream: jest.fn(),
     stopMusic: jest.fn(),
@@ -45,6 +48,7 @@ function getEngineMock(): {
   stopAllMusic: jest.Mock
   setStreamVolume: jest.Mock
   rampStreamVolume: jest.Mock
+  stopLocalSink: jest.Mock
 } {
   const results = (AudioEngine as unknown as jest.Mock).mock.results
   return results[results.length - 1].value
@@ -107,9 +111,11 @@ describe('createPlayer', () => {
   })
 
   describe('local Target', () => {
+    const localSink = () => ({ start: jest.fn(), write: jest.fn(), stop: jest.fn() })
+
     it('reports no Local entry until the Target is used, then one without a channel', async () => {
-      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn() })
-      const player = createPlayer(createFakeDiscordClient(), sounds)
+      const sounds = createFakeSoundLibrary({ getFile: jest.fn().mockResolvedValue({ id: 'song', name: 'Song', filename: 's.mp3', category: 'music', path: '/s.mp3' }) })
+      const player = createPlayer(createFakeDiscordClient(), sounds, { localSink: localSink() })
       expect(await player.getState()).toEqual([])
 
       await player.playMusic(LOCAL_TARGET_ID, 'song', { volume: 50 })
@@ -120,17 +126,41 @@ describe('createPlayer', () => {
       expect(state[0].connectedChannelId).toBeUndefined()
     })
 
-    it('makes playback calls a no-op that never touch the Sound Library', async () => {
-      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn() })
-      const player = createPlayer(createFakeDiscordClient(), sounds)
+    it('plays Music, Ambience and Effects on the Local Target without a voice connection', async () => {
+      const sounds = createFakeSoundLibrary({
+        getFile: jest.fn().mockResolvedValue({ id: 'x', name: 'X', filename: 'x.mp3', category: 'music', path: '/x.mp3' }),
+        getFilePath: jest.fn().mockResolvedValue('/x.mp3'),
+      })
+      ;(createPcmStream as jest.Mock).mockImplementation(() => fakePcmStream())
+      const player = createPlayer(createFakeDiscordClient(), sounds, { localSink: localSink() })
 
       await player.playMusic(LOCAL_TARGET_ID, 'a', { volume: 50 })
-      await player.playAmbience(LOCAL_TARGET_ID, 'b', { volume: 50, repeatMin: 1, repeatMax: 2 })
-      await expect(player.playEffect(LOCAL_TARGET_ID, 'c', { volume: 50 })).resolves.toBeUndefined()
-      expect(() => player.startStream(LOCAL_TARGET_ID, new Readable({ read() {} }))).not.toThrow()
+      await player.playAmbience(LOCAL_TARGET_ID, 'b', { volume: 50, repeatMin: 0, repeatMax: 0 })
+      await player.playEffect(LOCAL_TARGET_ID, 'c', { volume: 50 })
 
-      expect(sounds.getFile).not.toHaveBeenCalled()
-      expect(sounds.getFilePath).not.toHaveBeenCalled()
+      expect(sounds.getFile).toHaveBeenCalledTimes(2)
+      expect(sounds.getFilePath).toHaveBeenCalledWith('effects', 'c')
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(3)
+      expect(() => player.startStream(LOCAL_TARGET_ID, new Readable({ read() {} }))).not.toThrow()
+    })
+
+    it('refuses Local playback when no sink exists', async () => {
+      const player = createPlayer(createFakeDiscordClient(), createFakeSoundLibrary())
+      await expect(player.playMusic(LOCAL_TARGET_ID, 'a', { volume: 50 })).rejects.toThrow('Local output is not available')
+    })
+
+    it('stops local playback when the sink reports it is dead', async () => {
+      const sounds = createFakeSoundLibrary({ getFile: jest.fn().mockResolvedValue({ id: 'x', name: 'X', filename: 'x.mp3', category: 'music', path: '/x.mp3' }) })
+      const player = createPlayer(createFakeDiscordClient(), sounds, { localSink: localSink() })
+      await player.playMusic(LOCAL_TARGET_ID, 'a', { volume: 50 })
+
+      player.reportLocalSinkHealth({ type: 'underruns', count: 3 })
+      player.reportLocalSinkHealth({ type: 'suspended' })
+      expect(getEngineMock().stopLocalSink).not.toHaveBeenCalled()
+
+      player.reportLocalSinkHealth({ type: 'failed', message: 'context closed' })
+      expect(getEngineMock().stopAllMusic).toHaveBeenCalled()
+      expect(getEngineMock().stopLocalSink).toHaveBeenCalled()
     })
 
     it('does not touch Discord on disconnect', async () => {

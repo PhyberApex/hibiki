@@ -1,3 +1,4 @@
+import type { LocalSinkHealth } from '../audio/local-sink'
 import { apiCall, useElectronApi } from './electron'
 
 export interface PlayerTrackInfo {
@@ -158,4 +159,9 @@ export function onPlayerStateChanged(callback: () => void): () => void {
   if (!window.hibiki?.on)
     return () => {}
   return window.hibiki.on('player:stateChanged', callback)
+}
+
+/** Reports the renderer's Local sink health to the backend (it lands in hibiki.log; a dead sink stops local playback). */
+export function reportLocalSinkHealth(event: LocalSinkHealth): Promise<void> {
+  return apiCall<void>('player', 'reportLocalSinkHealth', [event])
 }

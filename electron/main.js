@@ -74,6 +74,8 @@ function createWindow(loadUrl) {
     minHeight: 600,
     show: !isTestMode,
     webPreferences: {
+      // The Local sink starts playing on backend demand, not on a click.
+      autoplayPolicy: 'no-user-gesture-required',
       preload: path.join(__dirname, 'preload.js'),
     },
   })
@@ -113,6 +115,33 @@ function getOrCreateEffectStreams(guildId) {
   if (!effectStreams.has(guildId))
     effectStreams.set(guildId, new Map())
   return effectStreams.get(guildId)
+}
+
+/**
+ * The Local Target's sink (ADR-0004): the backend mix goes to the renderer as
+ * `audio:localSinkStart` / `audio:localSinkChunk` / `audio:localSinkStop`, the
+ * main -> renderer mirror of the `audio:*` chunk pattern. The renderer reports
+ * health back through the `player.reportLocalSinkHealth` API call.
+ */
+function createLocalSink() {
+  const send = (channel, ...args) => {
+    if (!mainWindow || mainWindow.isDestroyed())
+      throw new Error('No renderer to play local audio in')
+    mainWindow.webContents.send(channel, ...args)
+  }
+  return {
+    start: () => {
+      ipcLog.info('audio:localSinkStart')
+      send('audio:localSinkStart')
+    },
+    // Copy: a Buffer from the mixer may be a slice of a larger pooled ArrayBuffer, which IPC would clone whole.
+    write: packet => send('audio:localSinkChunk', Uint8Array.from(packet)),
+    stop: () => {
+      ipcLog.info('audio:localSinkStop')
+      if (mainWindow && !mainWindow.isDestroyed())
+        mainWindow.webContents.send('audio:localSinkStop')
+    },
+  }
 }
 
 function registerIpcHandlers(api) {
@@ -440,7 +469,7 @@ app.whenReady().then(async () => {
   let handle
   let api
   try {
-    const embedded = await getEmbeddedApp(createSecretCodec())
+    const embedded = await getEmbeddedApp(createSecretCodec(), { localSink: createLocalSink() })
     handle = embedded
     api = embedded.api
   }

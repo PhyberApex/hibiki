@@ -2,9 +2,9 @@ import type { DiscordGatewayAdapterCreator, VoiceConnection } from '@discordjs/v
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Readable } from 'node:stream'
 import type { SoundCategory } from '../sound/sound.types'
+import type { LocalSink } from './local-sink-pump'
 import { EventEmitter } from 'node:events'
 import {
-  AudioPlayerStatus,
   entersState,
   getVoiceConnection,
   joinVoiceChannel,
@@ -111,7 +111,7 @@ interface AmbienceEntry {
 
 export class GuildAudioManager extends EventEmitter {
   private connection?: VoiceConnection
-  private readonly engine = new AudioEngine()
+  private readonly engine: AudioEngine
   private channelName?: string
   /** Bookkeeping for current-track reporting; keyed the same way as the engine's music streams. */
   private readonly musicStreams = new Map<string | undefined, MusicStreamEntry>()
@@ -178,8 +178,30 @@ export class GuildAudioManager extends EventEmitter {
    */
   private intentionalTeardown = false
 
-  constructor(private readonly guildId: string) {
+  /**
+   * `localSink` makes this the Local Target's engine (ADR-0004): no voice
+   * connection, the mix goes to the sink and `connected` is always true.
+   */
+  constructor(private readonly guildId: string, private readonly localSink?: LocalSink) {
     super()
+    this.engine = new AudioEngine({
+      localSink,
+      onLocalSinkFailure: () => this.stopEverything(),
+    })
+  }
+
+  /** Stops all Music, Ambience and Effects on this Target. */
+  stopEverything(): void {
+    this.stopAllMusic()
+    this.stopAllAmbience()
+    this.stopAllEffects()
+  }
+
+  /** The Local sink died (device lost, context closed, ...): stop all playback instead of mixing into silence. */
+  handleSinkDead(reason: string): void {
+    log.error(`Local sink is dead (${reason}); stopping all local playback`)
+    this.stopEverything()
+    this.engine.stopLocalSink()
   }
 
   async connect(channel: VoiceBasedChannel) {
@@ -776,7 +798,7 @@ export class GuildAudioManager extends EventEmitter {
   }
 
   get isIdle() {
-    return this.engine.audioPlayer.state.status === AudioPlayerStatus.Idle
+    return this.engine.isIdle
   }
 
   get channelId() {
@@ -798,6 +820,6 @@ export class GuildAudioManager extends EventEmitter {
   }
 
   get connected() {
-    return Boolean(this.connection)
+    return Boolean(this.localSink) || Boolean(this.connection)
   }
 }
