@@ -3,6 +3,7 @@ import type { StorageWarning } from '@/api/config'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { fetchStorageWarnings } from '@/api/config'
+import AppToasts from '@/components/AppToasts.vue'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
 import { useScenePlaybackStore } from '@/stores/scene-playback'
@@ -145,6 +146,7 @@ const showStorageWarnings = computed(() =>
 </script>
 
 <template>
+  <AppToasts />
   <div v-if="showStorageWarnings" class="storage-warning-banner" role="alert">
     <div class="storage-warning-messages">
       <p v-for="warning in storageWarnings" :key="warning.file" class="storage-warning-message">

@@ -11,9 +11,11 @@ import {
   uploadSound,
   uploadSoundsBulk,
 } from '@/api/sounds'
+import { useToastStore } from '@/stores/toast'
 
 const props = defineProps<{ type: 'music' | 'effects' | 'ambience' }>()
 const emit = defineEmits<{ updated: [] }>()
+const toastStore = useToastStore()
 
 const categoryHint: Record<string, string> = {
   music: 'Background tracks that play one at a time — tavern themes, battle scores, travel music.',
@@ -33,8 +35,6 @@ const playingId = ref<string | null>(null)
 const dragOver = ref(false)
 const audioEl = ref<HTMLAudioElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
-const toast = ref<{ type: 'success' | 'error', text: string } | null>(null)
-let toastTimer: ReturnType<typeof setTimeout> | null = null
 const editingTagsId = ref<string | null>(null)
 const tagsDraft = ref('')
 const savingTags = ref(false)
@@ -43,13 +43,7 @@ const tagsInputRef = ref<HTMLInputElement[]>([])
 const supportsTags = computed(() => props.type !== 'effects')
 
 function showToast(type: 'success' | 'error', text: string) {
-  if (toastTimer)
-    clearTimeout(toastTimer)
-  toast.value = { type, text }
-  toastTimer = setTimeout(() => {
-    toast.value = null
-    toastTimer = null
-  }, 4000)
+  toastStore.show({ type, text })
 }
 
 function fileExt(filename: string): string {
@@ -321,10 +315,6 @@ onActivated(() => {
       </div>
     </header>
 
-    <p v-if="toast" class="toast" :class="[`toast-${toast.type}`]">
-      {{ toast.text }}
-    </p>
-
     <audio ref="audioEl" class="sr-only" @ended="onAudioEnded" />
 
     <p v-if="loading" class="empty-state">
@@ -488,37 +478,6 @@ onActivated(() => {
 .btn-upload:disabled {
   opacity: 0.6;
   cursor: wait;
-}
-
-.toast {
-  margin: 0 0 0.5rem;
-  padding: 0.35rem 0.6rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-  font-weight: 500;
-  flex-shrink: 0;
-  animation: toast-in 0.25s ease-out;
-}
-
-@keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.toast-success {
-  background: var(--color-success-muted);
-  color: var(--color-success);
-}
-
-.toast-error {
-  background: var(--color-error-muted);
-  color: var(--color-error);
 }
 
 .empty-state {
