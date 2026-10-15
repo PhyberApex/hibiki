@@ -1771,3 +1771,55 @@ describe('sceneView — Output Target routing (#517)', () => {
     expect(wrapper.find('.playing-badge').attributes('aria-label')).toBe('Playing on Discord')
   })
 })
+
+describe('sceneView hotkeys', () => {
+  beforeAll(stubMediaElement)
+
+  beforeEach(async () => {
+    const { getScene, saveScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValue(JSON.parse(JSON.stringify(scene)))
+    vi.mocked(saveScene).mockReset()
+    vi.mocked(saveScene).mockResolvedValue(undefined as never)
+  })
+
+  async function record(wrapper: Awaited<ReturnType<typeof mountScene>>, index: number, code: string) {
+    const button = wrapper.findAll('[data-testid="hotkey-recorder-button"]')[index]
+    await button.trigger('click')
+    await button.trigger('keydown', { code })
+    await flushPromises()
+  }
+
+  it('binds a Scene Hotkey from the editor header and saves the Scene', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    const wrapper = await mountScene()
+    await record(wrapper, 0, 'F13')
+    expect(vi.mocked(saveScene).mock.calls.at(-1)![0]).toMatchObject({ id: 's1', hotkey: 'F13' })
+  })
+
+  it('binds an Effect Hotkey on the Effect card and shows it as a chip', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    const wrapper = await mountScene()
+    await record(wrapper, 1, 'F14')
+    const saved = vi.mocked(saveScene).mock.calls.at(-1)![0] as { effects: { hotkey?: string }[] }
+    expect(saved.effects[0].hotkey).toBe('F14')
+    expect(wrapper.find('[data-testid="effect-hotkey-chip"]').text()).toBe('F14')
+  })
+
+  it('reverts and shows the rejection inline when the model refuses the key', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    vi.mocked(saveScene).mockRejectedValue(new Error('F13 is already used by Scene \'Tavern\''))
+    const wrapper = await mountScene()
+    await record(wrapper, 0, 'F13')
+    expect(wrapper.find('[data-testid="hotkey-recorder-error"]').text()).toContain('Tavern')
+    expect(wrapper.find('[data-testid="hotkey-recorder-clear"]').exists()).toBe(false)
+  })
+
+  it('shows the bound key as a chip on the Scene list', async () => {
+    const { listScenes } = await import('@/api/scenes')
+    vi.mocked(listScenes).mockResolvedValue([{ ...JSON.parse(JSON.stringify(scene)), hotkey: 'F15' }])
+    const wrapper = await mountScene()
+    await router.push('/scenes')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="scene-hotkey-chip"]').text()).toBe('F15')
+  })
+})

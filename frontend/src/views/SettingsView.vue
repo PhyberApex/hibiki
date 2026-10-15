@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import type { DiscordConfig, VisionConfig, VisionProviderId } from '@/api/config'
+import type { DiscordConfig, HotkeySettings, VisionConfig, VisionProviderId } from '@/api/config'
+import type { HotkeyFailure } from '@/api/hotkeys'
 import { computed, onMounted, ref } from 'vue'
 import {
   fetchDiscordConfig,
+  fetchHotkeySettings,
   fetchSceneFadeLength,
   fetchStoragePath,
   fetchVisionConfig,
@@ -11,6 +13,7 @@ import {
   SCENE_FADE_LENGTH_STEP_SECONDS,
   selectStorageFolder,
   updateDiscordToken,
+  updateHotkeySettings,
   updateSceneFadeLength,
   updateStoragePath,
   updateVisionApiKey,
@@ -19,7 +22,9 @@ import {
   updateVisionOpenAiModel,
   updateVisionProvider,
 } from '@/api/config'
+import { fetchHotkeyStatus } from '@/api/hotkeys'
 import { fetchLogPath, openLogFolder } from '@/api/logs'
+import HotkeyRecorder from '@/components/HotkeyRecorder.vue'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
 
@@ -59,6 +64,12 @@ const savingVisionAdvanced = ref(false)
 const savingVisionToggle = ref(false)
 const visionMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
+const hotkeySettings = ref<HotkeySettings>({ enabled: true })
+const hotkeyFailures = ref<HotkeyFailure[]>([])
+const savingHotkeys = ref(false)
+const stopHotkeyError = ref<string | null>(null)
+const hotkeyMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+
 const isOpenAiCompatible = computed(() => visionConfig.value?.provider === 'openai-compatible')
 const providerLabel = computed(() => isOpenAiCompatible.value ? 'OpenAI-compatible' : 'Anthropic')
 const selectedProviderStatus = computed(() => {
@@ -74,13 +85,17 @@ function syncVisionAdvancedInputs() {
 
 async function load() {
   try {
-    const [config, storage, vision, fadeLength, logs] = await Promise.all([
+    const [config, storage, vision, fadeLength, logs, hotkeys, hotkeyStatus] = await Promise.all([
       fetchDiscordConfig(),
       fetchStoragePath().catch(() => ({ path: null })),
       fetchVisionConfig().catch(() => DEFAULT_VISION_CONFIG),
       fetchSceneFadeLength().catch(() => 3),
       fetchLogPath().catch(() => null),
+      fetchHotkeySettings().catch((): HotkeySettings => ({ enabled: true })),
+      fetchHotkeyStatus().catch(() => null),
     ])
+    hotkeySettings.value = hotkeys
+    hotkeyFailures.value = hotkeyStatus?.failures ?? []
     discordConfig.value = config
     storagePath.value = storage.path
     logPath.value = logs
@@ -311,6 +326,36 @@ async function toggleVision(event: Event) {
   }
 }
 
+async function saveHotkeySettings(next: HotkeySettings) {
+  savingHotkeys.value = true
+  stopHotkeyError.value = null
+  hotkeyMessage.value = null
+  try {
+    await updateHotkeySettings(next)
+    hotkeySettings.value = next
+    hotkeyFailures.value = (await fetchHotkeyStatus().catch(() => null))?.failures ?? hotkeyFailures.value
+  }
+  catch (e) {
+    const text = e instanceof Error ? e.message : 'Couldn\'t save hotkey settings.'
+    if (next.stopHotkey !== hotkeySettings.value.stopHotkey)
+      stopHotkeyError.value = text
+    else
+      hotkeyMessage.value = { type: 'error', text }
+  }
+  finally {
+    savingHotkeys.value = false
+  }
+}
+
+function toggleHotkeys(event: Event) {
+  return saveHotkeySettings({ ...hotkeySettings.value, enabled: (event.target as HTMLInputElement).checked })
+}
+
+function setStopHotkey(value: string | undefined) {
+  const { stopHotkey: _previous, ...rest } = hotkeySettings.value
+  return saveHotkeySettings(value ? { ...rest, stopHotkey: value } : rest)
+}
+
 onMounted(load)
 </script>
 
@@ -444,6 +489,51 @@ onMounted(load)
 
     <hr class="divider">
 
+    <section class="section" data-testid="hotkeys-section">
+      <div class="section-header">
+        <h2 class="section-title">
+          Hotkeys
+        </h2>
+      </div>
+      <p class="section-desc">
+        Global hotkeys work while Hibiki is in the background, for example from a Stream Deck. Scene Hotkeys are always live; Effect Hotkeys are live for the Playing Scene only, so Scenes can reuse the same keys. Bind them in the Scene editor.
+      </p>
+      <div class="toggle-list">
+        <div class="toggle-row">
+          <input
+            id="hotkeys-enabled"
+            type="checkbox"
+            class="toggle-input"
+            :checked="hotkeySettings.enabled"
+            :disabled="savingHotkeys"
+            @change="toggleHotkeys"
+          >
+          <div class="toggle-text">
+            <label for="hotkeys-enabled" class="toggle-title">Enable global hotkeys</label>
+            <span class="toggle-desc">Turn off to hand every key back to the OS without losing your bindings.</span>
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <span class="field-label">Stop Hotkey</span>
+        <HotkeyRecorder
+          :model-value="hotkeySettings.stopHotkey"
+          label="Stop Hotkey"
+          :error="stopHotkeyError"
+          @update:model-value="setStopHotkey"
+        />
+      </div>
+      <p
+        v-if="hotkeyMessage"
+        class="status-message settings-message"
+        :class="[hotkeyMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
+        {{ hotkeyMessage.text }}
+      </p>
+    </section>
+
+    <hr class="divider">
+
     <section class="section">
       <div class="section-header">
         <h2 class="section-title">
@@ -472,6 +562,17 @@ onMounted(load)
             Open log folder
           </button>
         </div>
+      </div>
+      <div class="field" data-testid="hotkey-failures">
+        <span class="field-label">Hotkeys the OS refused</span>
+        <ul v-if="hotkeyFailures.length > 0" class="hotkey-failure-list">
+          <li v-for="f in hotkeyFailures" :key="`${f.accelerator}-${f.owner}`">
+            <kbd class="hotkey-failure-key">{{ f.accelerator }}</kbd> ({{ f.owner }}): {{ f.reason }}
+          </li>
+        </ul>
+        <p v-else class="section-desc">
+          None. Every bound hotkey is registered.
+        </p>
       </div>
     </section>
 
@@ -742,6 +843,17 @@ onMounted(load)
 </template>
 
 <style scoped>
+.hotkey-failure-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.hotkey-failure-key {
+  font-family: inherit;
+  font-weight: 600;
+}
+
 .settings {
   max-width: 40rem;
 }
