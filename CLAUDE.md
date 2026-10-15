@@ -166,6 +166,10 @@ Sound Library playback for Discord decodes and mixes in the main process, feedin
 - `sounds.canDecode(type, id)` is exposed over IPC (`src/bootstrap-embedded.ts`, wrapped in `frontend/src/api/sounds.ts#canDecode`) so playback code can pick the right path per sound.
 - These decoder packages are ESM-only; the backend's CommonJS output `require()`s them using Node 24's native `require(esm)` support. Jest needs the `--experimental-vm-modules` flag for its own equivalent support, which is why `test:backend`/`test:watch`/`test:coverage:backend` invoke `node --experimental-vm-modules node_modules/.bin/jest` instead of the `jest` bin directly.
 
+### Local Target Sink
+
+The Local Target (`LOCAL_TARGET_ID`) plays through the same backend mixer as Discord (ADR-0004). `AudioEngine({ localSink })` has no voice player; `LocalSinkPump` (`src/audio/local-sink-pump.ts`) paces the mixer output to real time (one 20 ms packet per tick, silence when empty) into a `LocalSink`, which `electron/main.js#createLocalSink` implements as `audio:localSinkStart`/`audio:localSinkChunk`/`audio:localSinkStop` sent to the renderer. The pump runs while any stream is active and stops 10 s after the last. Renderer: `frontend/src/audio/local-sink.ts` schedules packets on the Web Audio clock behind a ~100 ms jitter lead (`jitter-buffer.ts`) and reports health (`started`, `suspended`, `resumed`, `underruns` every 2 s, `deviceLost`, `failed`) via `player.reportLocalSinkHealth`; `deviceLost`/`failed` stop all playback on the Local Target. Output device selection is out of scope.
+
 ### Logging
 
 Every bug report from a packaged build arrives with exactly one artifact: `<userData>/logs/hibiki.log` (Settings → Diagnostics → Open log folder). Code that does not log there is invisible in production, so logging is part of the feature, not an afterthought.

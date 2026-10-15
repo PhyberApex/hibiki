@@ -4,6 +4,7 @@ import type {
 } from '@discordjs/voice'
 import type { AudioInput } from 'node-audio-mixer'
 import type { Readable } from 'node:stream'
+import type { LocalSink } from './local-sink-pump'
 import type { MixerFeed } from './mixer-feed'
 import { PassThrough } from 'node:stream'
 import {
@@ -15,6 +16,7 @@ import {
 } from '@discordjs/voice'
 import { AudioMixer } from 'node-audio-mixer'
 import { createLogger } from '../logger'
+import { LocalSinkPump } from './local-sink-pump'
 import { feedMixerInput, MIXER_PACKET_BYTES } from './mixer-feed'
 import { rampVolume } from './volume-ramp'
 
@@ -40,17 +42,29 @@ const CLAMP = (v: number) => Math.min(100, Math.max(0, Math.round(v)))
  */
 const SILENCE_FRAME = Buffer.alloc(3840)
 
+/** How long the Local sink keeps running (sending silence) after the last stream ended, before it is shut down. */
+const LOCAL_SINK_IDLE_MS = 10_000
+
+export interface AudioEngineOptions {
+  /** Deliver the mix to the Local Target's sink instead of a Discord voice player. */
+  localSink?: LocalSink
+  /** Called when the Local sink dies mid-playback (a write threw); the engine has already stopped its pump. */
+  onLocalSinkFailure?: (err: unknown) => void
+}
+
 export class AudioEngine {
   private readonly mixer: AudioMixer
   private mixerOutput?: PassThrough
-  private readonly player: AudioPlayer
+  private readonly player?: AudioPlayer
+  private readonly sinkPump?: LocalSinkPump
+  private sinkIdleTimer?: ReturnType<typeof setTimeout>
   private resource?: AudioResource<null>
   private destroyed = false
   /** Music streams by id; a start without an id keys to the `undefined` slot. */
   private readonly musicStreams = new Map<string | undefined, ActiveStream>()
   private readonly effectStreams = new Set<ActiveStream>()
 
-  constructor() {
+  constructor(options: AudioEngineOptions = {}) {
     // `highWaterMark` fixes each mixer tick to one packet from every input
     // that holds at least one. Without it a tick takes the *smallest*
     // non-empty input's whole queue and leaves empty inputs out of the sum,
@@ -72,6 +86,17 @@ export class AudioEngine {
       autoClose: false,
       highWaterMark: MIXER_PACKET_BYTES,
     })
+
+    if (options.localSink) {
+      this.mixerOutput = new PassThrough({ highWaterMark: MIXER_PACKET_BYTES * 8 })
+      this.mixer.pipe(this.mixerOutput)
+      this.sinkPump = new LocalSinkPump(this.mixerOutput, options.localSink, (err) => {
+        log.error('Local sink failed; stopping local playback:', err)
+        this.stopAllMusic()
+        options.onLocalSinkFailure?.(err)
+      })
+      return
+    }
 
     this.player = createAudioPlayer({
       behaviors: { noSubscriber: NoSubscriberBehavior.Pause, maxMissedFrames: Number.POSITIVE_INFINITY },
@@ -99,6 +124,7 @@ export class AudioEngine {
    * whole pipeline, mixer output included, so a restart needs a new one.
    */
   private attachMixerOutput() {
+    const player = this.player!
     if (this.mixerOutput) {
       this.mixer.unpipe(this.mixerOutput)
       this.mixerOutput.destroy()
@@ -107,11 +133,55 @@ export class AudioEngine {
     this.mixerOutput.write(SILENCE_FRAME)
     this.mixer.pipe(this.mixerOutput)
     this.resource = createAudioResource<null>(this.mixerOutput, { inputType: StreamType.Raw })
-    this.player.play(this.resource)
+    player.play(this.resource)
   }
 
-  get audioPlayer() {
+  get audioPlayer(): AudioPlayer {
+    if (!this.player)
+      throw new Error('This engine outputs to the Local sink and has no voice player')
     return this.player
+  }
+
+  /** Whether nothing is being output: the voice player is idle, or the Local sink is stopped. */
+  get isIdle(): boolean {
+    if (this.sinkPump)
+      return !this.sinkPump.running
+    return this.player!.state.status === AudioPlayerStatus.Idle
+  }
+
+  /** Cuts every stream and shuts the Local sink down (used when the renderer reports the sink dead). No-op on a Discord engine. */
+  stopLocalSink(): void {
+    if (!this.sinkPump)
+      return
+    this.stopAllMusic()
+    this.sinkPump.stop()
+    this.clearSinkIdleTimer()
+  }
+
+  private clearSinkIdleTimer() {
+    if (this.sinkIdleTimer) {
+      clearTimeout(this.sinkIdleTimer)
+      this.sinkIdleTimer = undefined
+    }
+  }
+
+  /** Keeps the Local sink running while streams are active and winds it down `LOCAL_SINK_IDLE_MS` after the last one. */
+  private syncLocalSink() {
+    if (!this.sinkPump || this.destroyed)
+      return
+    if (this.musicStreams.size + this.effectStreams.size > 0) {
+      this.clearSinkIdleTimer()
+      this.sinkPump.start()
+      return
+    }
+    if (this.sinkIdleTimer || !this.sinkPump.running)
+      return
+    this.sinkIdleTimer = setTimeout(() => {
+      this.sinkIdleTimer = undefined
+      if (this.musicStreams.size + this.effectStreams.size === 0)
+        this.sinkPump?.stop()
+    }, LOCAL_SINK_IDLE_MS)
+    this.sinkIdleTimer.unref?.()
   }
 
   /**
@@ -129,17 +199,21 @@ export class AudioEngine {
       log.debug(`Mixer input for ${streamId ?? '(default)'} drained`)
       ended.input.destroy()
       this.musicStreams.delete(streamId)
+      this.syncLocalSink()
       onEnded?.()
     })
     this.musicStreams.set(streamId, active)
+    this.syncLocalSink()
   }
 
   playEffectFromStream(stream: Readable) {
     const effectStream = this.spawnInputFromStream(stream, DEFAULT_VOLUMES.effects, (ended) => {
       ended.input.destroy()
       this.effectStreams.delete(ended)
+      this.syncLocalSink()
     })
     this.effectStreams.add(effectStream)
+    this.syncLocalSink()
   }
 
   /** Ends the music stream for `streamId` (or the default stream when omitted). Other ids are untouched. */
@@ -207,8 +281,10 @@ export class AudioEngine {
     for (const effect of this.effectStreams)
       this.teardown(effect)
     this.effectStreams.clear()
+    this.clearSinkIdleTimer()
+    this.sinkPump?.stop()
     this.mixer.destroy()
-    this.player.stop(true)
+    this.player?.stop(true)
     this.mixerOutput?.destroy()
   }
 
@@ -233,6 +309,7 @@ export class AudioEngine {
     active.cancelRamp?.()
     this.teardown(active)
     this.musicStreams.delete(streamId)
+    this.syncLocalSink()
   }
 
   /**

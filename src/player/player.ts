@@ -1,6 +1,7 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Readable } from 'node:stream'
 import type { EffectInstanceInfo, PlayAmbienceOptions, PlayEffectOptions, PlayMusicOptions } from '../audio/guild-audio.manager'
+import type { LocalSink } from '../audio/local-sink-pump'
 import type { DiscordClient } from '../discord/discord-client'
 import type { SoundLibrary } from '../sound/sound-library'
 import type { SoundCategory } from '../sound/sound.types'
@@ -11,7 +12,7 @@ import { createPcmStream } from '../audio/decoders'
 import { createEffectPcmCache } from '../audio/decoders/effect-pcm-cache'
 import { GuildAudioManager } from '../audio/guild-audio.manager'
 import { createLogger } from '../logger'
-import { isLocalTarget, targetKind } from './output-target'
+import { isLocalTarget, LOCAL_TARGET_ID, targetKind } from './output-target'
 
 const log = createLogger('player')
 
@@ -22,7 +23,21 @@ export interface TrackMetadata {
   category: SoundCategory
 }
 
-export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
+/** Health events the renderer's Local sink reports over IPC (ADR-0004). */
+export type LocalSinkHealth
+  = | { type: 'started', sampleRate?: number }
+    | { type: 'suspended' }
+    | { type: 'resumed' }
+    | { type: 'underruns', count: number }
+    | { type: 'deviceLost', message?: string }
+    | { type: 'failed', message?: string }
+
+export interface PlayerOptions {
+  /** Where the Local Target's mix goes; without one the Local Target cannot play. */
+  localSink?: LocalSink
+}
+
+export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, options: PlayerOptions = {}) {
   const managers = new Map<string, GuildAudioManager>()
   const stateEvents = new EventEmitter()
   /** Shared across every guild — the same Sound Library Effect file decodes identically regardless of which guild triggers it (see ADR-0003). */
@@ -30,7 +45,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
 
   function getOrCreateManager(guildId: string): GuildAudioManager {
     if (!managers.has(guildId)) {
-      const manager = new GuildAudioManager(guildId)
+      const manager = new GuildAudioManager(guildId, isLocalTarget(guildId) ? options.localSink : undefined)
       manager.on('disconnected', () => {
         managers.delete(guildId)
         stateEvents.emit('stateChanged')
@@ -44,16 +59,49 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
   }
 
   /**
-   * The Local Target has no sink yet (it lands in a sibling issue of #511), so
-   * any playback call addressed to it is logged and dropped. The Target's
-   * manager is still created so `getState()` reports it once it has been used.
+   * The manager a playback call addressed to `targetId` runs on. The Local
+   * Target needs no voice connection: its manager is created on first use and
+   * is always "connected" as long as a sink exists. A Discord Target must
+   * already be joined.
    */
-  function refuseLocal(targetId: string, action: string): boolean {
-    if (!isLocalTarget(targetId))
-      return false
-    getOrCreateManager(targetId)
-    log.warn(`${action} addressed to the Local Target ignored: the local sink does not exist yet`)
-    return true
+  function requireManager(targetId: string, action: string): GuildAudioManager {
+    if (isLocalTarget(targetId)) {
+      if (!options.localSink) {
+        log.warn(`${action} refused for the Local Target: no local sink is available`)
+        throw new Error('Local output is not available.')
+      }
+      return getOrCreateManager(targetId)
+    }
+    const manager = managers.get(targetId)
+    if (!manager || !manager.connected) {
+      log.warn(`${action} refused for guild ${targetId}: not connected`)
+      throw new Error('Not connected to a voice channel. Join first.')
+    }
+    return manager
+  }
+
+  /** The renderer's Local sink reported its health; a dead sink stops local playback (it would otherwise mix into silence). */
+  function reportLocalSinkHealth(event: LocalSinkHealth): void {
+    switch (event.type) {
+      case 'started':
+        log.info(`Local sink started in the renderer${event.sampleRate ? ` (AudioContext ${event.sampleRate} Hz)` : ''}`)
+        break
+      case 'suspended':
+        log.warn('Local sink AudioContext suspended: local audio is silent until it resumes')
+        break
+      case 'resumed':
+        log.info('Local sink AudioContext resumed')
+        break
+      case 'underruns':
+        log.warn(`Local sink underran ${event.count} time${event.count === 1 ? '' : 's'} in the last report interval`)
+        break
+      case 'deviceLost':
+      case 'failed':
+        managers.get(LOCAL_TARGET_ID)?.handleSinkDead(`${event.type}${event.message ? `: ${event.message}` : ''}`)
+        if (!managers.has(LOCAL_TARGET_ID))
+          log.error(`Local sink ${event.type}${event.message ? `: ${event.message}` : ''} (nothing was playing)`)
+        break
+    }
   }
 
   async function connect(channel: VoiceBasedChannel): Promise<void> {
@@ -103,8 +151,11 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     metadata?: TrackMetadata,
     streamId?: string,
   ): void {
-    if (refuseLocal(guildId, 'startStream'))
+    if (isLocalTarget(guildId)) {
+      // Renderer-native sources bypass the mix under the Local Target (ADR-0004).
+      log.warn('startStream addressed to the Local Target ignored: renderer-native sources play locally')
       return
+    }
     const manager = managers.get(guildId)
     if (!manager || !manager.connected) {
       log.warn(`startStream refused for guild ${guildId}: not connected`)
@@ -115,8 +166,10 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
   }
 
   function startEffectStream(guildId: string, stream: Readable): void {
-    if (refuseLocal(guildId, 'startEffectStream'))
+    if (isLocalTarget(guildId)) {
+      log.warn('startEffectStream addressed to the Local Target ignored: renderer-native sources play locally')
       return
+    }
     const manager = managers.get(guildId)
     if (!manager || !manager.connected) {
       log.warn(`startEffectStream refused for guild ${guildId}: not connected`)
@@ -137,13 +190,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
 
   /** Plays a Sound Library Music track decoded straight into the mixer (see ADR-0003). */
   async function playMusic(guildId: string, soundId: string, options: PlayMusicOptions): Promise<void> {
-    if (refuseLocal(guildId, 'playMusic'))
-      return
-    const manager = managers.get(guildId)
-    if (!manager || !manager.connected) {
-      log.warn(`playMusic refused for guild ${guildId}: not connected`)
-      throw new Error('Not connected to a voice channel. Join first.')
-    }
+    const manager = requireManager(guildId, 'playMusic')
     const file = await sounds.getFile('music', soundId)
     log.info(`playMusic "${file.name}" (${file.filename}) in guild ${guildId}: volume ${options.volume}, loop ${options.loop ?? false}, fadeIn ${options.fadeInMs ?? 0} ms`)
     await manager.playMusic(
@@ -170,13 +217,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
 
   /** Plays a Sound Library Ambience sound decoded straight into the mixer (see ADR-0003). Several can be active at once per guild, keyed by soundId. */
   async function playAmbience(guildId: string, soundId: string, options: PlayAmbienceOptions): Promise<void> {
-    if (refuseLocal(guildId, 'playAmbience'))
-      return
-    const manager = managers.get(guildId)
-    if (!manager || !manager.connected) {
-      log.warn(`playAmbience refused for guild ${guildId}: not connected`)
-      throw new Error('Not connected to a voice channel. Join first.')
-    }
+    const manager = requireManager(guildId, 'playAmbience')
     const file = await sounds.getFile('ambience', soundId)
     log.info(`playAmbience "${file.name}" (${file.filename}) in guild ${guildId}: volume ${options.volume}, repeat ${options.repeatMin}-${options.repeatMax} s, fadeIn ${options.fadeInMs ?? 0} ms`)
     await manager.playAmbience(() => createPcmStream(file.path), soundId, options)
@@ -209,13 +250,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
    * whole point, and nothing but the path is needed here.
    */
   async function playEffect(guildId: string, soundId: string, options: PlayEffectOptions): Promise<EffectInstanceInfo | undefined> {
-    if (refuseLocal(guildId, 'playEffect'))
-      return undefined
-    const manager = managers.get(guildId)
-    if (!manager || !manager.connected) {
-      log.warn(`playEffect refused for guild ${guildId}: not connected`)
-      throw new Error('Not connected to a voice channel. Join first.')
-    }
+    const manager = requireManager(guildId, 'playEffect')
     const path = await sounds.getFilePath('effects', soundId)
     log.info(`playEffect ${soundId} in guild ${guildId}: volume ${options.volume}`)
     return manager.playEffect(() => effectPcmCache.get(path, () => createPcmStream(path)), soundId, options)
@@ -318,6 +353,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     playEffect,
     stopEffects,
     stopEffect,
+    reportLocalSinkHealth,
     getState,
     onStateChanged,
     destroyAll,
