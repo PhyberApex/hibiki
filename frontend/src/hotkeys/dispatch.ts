@@ -12,7 +12,7 @@ export interface HotkeyDeps {
   crossfadeToScene: (sceneId: string) => Promise<void>
   stopScene: () => void
   playEffect: (item: SceneItem) => Promise<void>
-  /** Shows the user a refusal. */
+  /** Shows the user a refusal (a warning toast, which the renderer also writes to the log at warn). */
   refuse: (text: string) => void
   logInfo: (message: string) => void
   logDebug: (message: string) => void
@@ -31,6 +31,12 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
   const target = deps.activeTargetId() ?? 'none'
   const log = (action: string, sceneId: string | null, outcome: HotkeyOutcome) =>
     deps.logInfo(`[hotkeys] ${accelerator} -> ${action}, Scene ${sceneId ?? 'none'}, Target ${target}: ${outcome}`)
+
+  const refuse = (action: string, sceneId: string): HotkeyOutcome => {
+    log(action, sceneId, 'refused')
+    deps.refuse(NOT_CONNECTED_TEXT)
+    return 'refused'
+  }
 
   try {
     const [scenes, stopHotkey] = await Promise.all([deps.listScenes(), deps.getStopHotkey()])
@@ -53,12 +59,8 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
         log('toggle Scene', scene.id, 'stopped')
         return 'stopped'
       }
-      if (!deps.canPlay()) {
-        log('play Scene', scene.id, 'refused')
-        console.warn(`[hotkeys] ${accelerator} refused: no voice connection on Target ${target}`)
-        deps.refuse(NOT_CONNECTED_TEXT)
-        return 'refused'
-      }
+      if (!deps.canPlay())
+        return refuse('play Scene', scene.id)
       if (playingId) {
         await deps.crossfadeToScene(scene.id)
         log('crossfade to Scene', scene.id, 'crossfaded')
@@ -75,12 +77,8 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
       deps.logDebug(`[hotkeys] ${accelerator} ignored: no Scene or Stop binding, and no Effect in the Playing Scene (${playingId ?? 'none'})`)
       return 'ignored'
     }
-    if (!deps.canPlay()) {
-      log('play Effect', playing.id, 'refused')
-      console.warn(`[hotkeys] ${accelerator} refused: no voice connection on Target ${target}`)
-      deps.refuse(NOT_CONNECTED_TEXT)
-      return 'refused'
-    }
+    if (!deps.canPlay())
+      return refuse('play Effect', playing.id)
     await deps.playEffect(effect)
     log(`play Effect ${effect.soundId}`, playing.id, 'effect')
     return 'effect'

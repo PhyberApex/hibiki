@@ -170,6 +170,10 @@ Sound Library playback for Discord decodes and mixes in the main process, feedin
 
 The Local Target (`LOCAL_TARGET_ID`) plays through the same backend mixer as Discord (ADR-0004). `AudioEngine({ localSink })` has no voice player; `LocalSinkPump` (`src/audio/local-sink-pump.ts`) paces the mixer output to real time (one 20 ms packet per tick, silence when empty) into a `LocalSink`, which `electron/main.js#createLocalSink` implements as `audio:localSinkStart`/`audio:localSinkChunk`/`audio:localSinkStop` sent to the renderer. The pump runs while any stream is active and stops 10 s after the last. Renderer: `frontend/src/audio/local-sink.ts` schedules packets on the Web Audio clock behind a ~100 ms jitter lead (`jitter-buffer.ts`) and reports health (`started`, `suspended`, `resumed`, `underruns` every 2 s, `deviceLost`, `failed`) via `player.reportLocalSinkHealth`; `deviceLost`/`failed` stop all playback on the Local Target. Output device selection is out of scope.
 
+### Global Hotkeys
+
+ADR-0005. The main process only registers and forwards: `electron/hotkeys.js` keeps `globalShortcut` in step with the Scenes and hotkey settings (diffing lives in `src/hotkeys/hotkey-registrar.ts`, Electron-free and unit-tested), re-syncing after any `scenes.*`/`registry.*` call and `config.setHotkeySettings`. Two channels sit outside the generic `api` handler because the registrar state lives in main: `hotkeys:getStatus` (registration failures) and `hotkey:fired { accelerator }` (main -> renderer). The renderer resolves a fired key in `frontend/src/hotkeys/dispatch.ts` and acts on the active Output Target through the scene playback store; one press is handled at a time.
+
 ### Logging
 
 Every bug report from a packaged build arrives with exactly one artifact: `<userData>/logs/hibiki.log` (Settings → Diagnostics → Open log folder). Code that does not log there is invisible in production, so logging is part of the feature, not an afterthought.

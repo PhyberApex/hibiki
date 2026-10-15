@@ -41,16 +41,12 @@ function createHotkeys({ globalShortcut, getApi, getWindow }) {
     return chain
   }
 
-  return { sync, releaseAll: () => registrar.releaseAll(), getStatus: () => registrar.getStatus() }
+  return { sync, releaseAll: registrar.releaseAll, getStatus: registrar.getStatus }
 }
 
-/** API calls after which the set of wanted accelerators may have changed. */
-const HOTKEY_AFFECTING_CALLS = new Set([
-  'scenes.save',
-  'scenes.remove',
-  'scenes.importScene',
-  'registry.installFromRegistry',
-  'config.setHotkeySettings',
-])
+/** API calls after which the set of wanted accelerators may have changed: anything that writes Scenes, or the hotkey settings. */
+function affectsHotkeys(domain, method) {
+  return domain === 'scenes' || domain === 'registry' || (domain === 'config' && method === 'setHotkeySettings')
+}
 
-module.exports = { createHotkeys, HOTKEY_AFFECTING_CALLS }
+module.exports = { createHotkeys, affectsHotkeys }

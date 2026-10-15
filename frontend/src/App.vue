@@ -60,7 +60,7 @@ function startPollingWhenDisconnected() {
 onMounted(() => {
   accessibility.load()
   // A Hotkey can play a Scene before the Scene view was ever opened, so the master volume loads app-wide, once the active Target is known.
-  player.loadActiveTarget().then(() => scenePlayback.loadMasterVolume())
+  player.loadActiveTarget().then(() => scenePlayback.loadMasterVolume()).catch(err => console.error('[app] Could not load the master volume:', err))
   stopHotkeyDispatch = startHotkeyDispatch()
   reportHotkeyRegistrationFailures()
   player.loadState().then(() => {

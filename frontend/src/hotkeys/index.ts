@@ -32,8 +32,11 @@ export function startHotkeyDispatch(): () => void {
   const playback = useScenePlaybackStore()
   const toast = useToastStore()
 
+  // One press at a time: a second press must see the first one's effect on the Playing Scene.
+  let chain: Promise<unknown> = Promise.resolve()
+
   return onHotkeyFired((accelerator) => {
-    void dispatchHotkey(accelerator, {
+    chain = chain.then(() => dispatchHotkey(accelerator, {
       listScenes,
       getStopHotkey: async () => (await fetchHotkeySettings()).stopHotkey,
       playingSceneId: () => player.playingSceneId,
@@ -45,8 +48,8 @@ export function startHotkeyDispatch(): () => void {
       playEffect: playback.playEffect,
       refuse: text => toast.show({ type: 'warning', text }),
       logInfo,
-      // eslint-disable-next-line no-console
-      logDebug: message => console.debug(message),
-    })
+      // Renderer debug output never reaches hibiki.log, and this is the line that explains "nothing happened".
+      logDebug: logInfo,
+    }))
   })
 }

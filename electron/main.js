@@ -2,7 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { PassThrough, Readable } = require('node:stream')
 const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
-const { createHotkeys, HOTKEY_AFFECTING_CALLS } = require('./hotkeys')
+const { createHotkeys, affectsHotkeys } = require('./hotkeys')
 const { createLogger, setupFileLogging } = require('./logger')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
@@ -155,7 +155,7 @@ function registerIpcHandlers(api) {
     }
     try {
       const result = await obj[method](...args)
-      if (hotkeys && HOTKEY_AFFECTING_CALLS.has(`${domain}.${method}`))
+      if (hotkeys && affectsHotkeys(domain, method))
         await hotkeys.sync()
       return result
     }
@@ -599,7 +599,6 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   hotkeys?.releaseAll()
-  globalShortcut.unregisterAll()
 })
 
 app.on('before-quit', (event) => {

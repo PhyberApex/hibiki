@@ -51,21 +51,20 @@ const REFUSED_REASON = 'another application already uses this key, or this platf
  */
 export function createHotkeyRegistrar(driver: ShortcutDriver, onFire: (accelerator: string) => void) {
   const registered = new Set<string>()
+  const lastOwners = new Map<string, string[]>()
   let failures: HotkeyFailure[] = []
   let enabled = false
 
-  function release(accelerator: string, owners: string) {
+  function release(accelerator: string, owners: string[]) {
     try {
       driver.unregister(accelerator)
-      log.info(`Unregistered ${accelerator} (${owners})`)
+      log.info(`Unregistered ${accelerator} (${owners.join(', ')})`)
     }
     catch (e) {
       log.warn(`Could not unregister ${accelerator}:`, e)
     }
     registered.delete(accelerator)
   }
-
-  const lastOwners = new Map<string, string>()
 
   function acquire(accelerator: string, owners: string[]): HotkeyFailure[] {
     const joined = owners.join(', ')
@@ -79,7 +78,7 @@ export function createHotkeyRegistrar(driver: ShortcutDriver, onFire: (accelerat
     }
     if (reason === null) {
       registered.add(accelerator)
-      lastOwners.set(accelerator, joined)
+      lastOwners.set(accelerator, owners)
       log.info(`Registered ${accelerator} (${joined})`)
       return []
     }
@@ -93,14 +92,14 @@ export function createHotkeyRegistrar(driver: ShortcutDriver, onFire: (accelerat
     const target = isEnabled ? wanted : new Map<string, string[]>()
     for (const accelerator of [...registered]) {
       if (!target.has(accelerator)) {
-        release(accelerator, lastOwners.get(accelerator) ?? '')
+        release(accelerator, lastOwners.get(accelerator) ?? [])
         lastOwners.delete(accelerator)
       }
     }
     const next: HotkeyFailure[] = []
     for (const [accelerator, owners] of target) {
       if (registered.has(accelerator)) {
-        lastOwners.set(accelerator, owners.join(', '))
+        lastOwners.set(accelerator, owners)
         continue
       }
       next.push(...acquire(accelerator, owners))
