@@ -96,14 +96,30 @@ export function updateSceneFadeLength(seconds: number): Promise<void> {
   return apiCall<void>('config', 'setSceneFadeLength', [seconds])
 }
 
-export function fetchMasterVolume(): Promise<number> {
+export type OutputTargetKind = 'discord' | 'local'
+
+/** The reserved Output Target id for the Local Target; any other id is a Discord guild id. */
+export const LOCAL_TARGET_ID = 'local'
+
+export function fetchActiveOutputTarget(): Promise<OutputTargetKind> {
   requireElectron()
-  return apiCall<number>('config', 'getMasterVolume', [])
+  return apiCall<OutputTargetKind>('config', 'getActiveOutputTarget', [])
 }
 
-export function updateMasterVolume(volume: number): Promise<void> {
+export function updateActiveOutputTarget(kind: OutputTargetKind): Promise<void> {
   requireElectron()
-  return apiCall<void>('config', 'setMasterVolume', [volume])
+  return apiCall<void>('config', 'setActiveOutputTarget', [kind])
+}
+
+/** Master volume is stored per Output Target: pass `LOCAL_TARGET_ID` for the Local Target, a guild id (or empty) for the Discord Target. */
+export function fetchMasterVolume(targetId: string): Promise<number> {
+  requireElectron()
+  return apiCall<number>('config', 'getMasterVolume', [targetId])
+}
+
+export function updateMasterVolume(targetId: string, volume: number): Promise<void> {
+  requireElectron()
+  return apiCall<void>('config', 'setMasterVolume', [targetId, volume])
 }
 
 export async function selectStorageFolder(): Promise<string | null> {

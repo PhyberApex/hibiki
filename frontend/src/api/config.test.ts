@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchAccessibilitySettings,
+  fetchActiveOutputTarget,
   fetchDiscordConfig,
   fetchMasterVolume,
   fetchSceneFadeLength,
@@ -13,6 +14,7 @@ import {
   selectFolder,
   selectStorageFolder,
   updateAccessibilitySettings,
+  updateActiveOutputTarget,
   updateDiscordToken,
   updateMasterVolume,
   updateSceneFadeLength,
@@ -193,23 +195,32 @@ describe('config API', () => {
 
   it('fetchMasterVolume uses apiCall', async () => {
     mockInvoke.mockResolvedValue(42)
-    const result = await fetchMasterVolume()
+    const result = await fetchMasterVolume('g1')
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'config',
       method: 'getMasterVolume',
-      args: [],
+      args: ['g1'],
     })
     expect(result).toBe(42)
   })
 
   it('updateMasterVolume uses apiCall', async () => {
     mockInvoke.mockResolvedValue(undefined)
-    await updateMasterVolume(42)
+    await updateMasterVolume('local', 42)
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'config',
       method: 'setMasterVolume',
-      args: [42],
+      args: ['local', 42],
     })
+  })
+
+  it('active output target wrappers use apiCall', async () => {
+    mockInvoke.mockResolvedValue('local')
+    expect(await fetchActiveOutputTarget()).toBe('local')
+    expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'getActiveOutputTarget', args: [] })
+    mockInvoke.mockResolvedValue(undefined)
+    await updateActiveOutputTarget('discord')
+    expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'setActiveOutputTarget', args: ['discord'] })
   })
 
   const visionConfig = {
