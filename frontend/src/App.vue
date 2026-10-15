@@ -53,6 +53,7 @@ function startPollingWhenDisconnected() {
 
 onMounted(() => {
   accessibility.load()
+  player.loadActiveTarget()
   player.loadState().then(() => {
     if (player.botStatus?.ready)
       player.loadDirectory()
@@ -103,6 +104,8 @@ const connectedChannelName = computed(() => {
 })
 
 const compactConnectionLabel = computed(() => {
+  if (player.isLocalActive)
+    return 'Local output'
   if (!player.botStatus?.ready)
     return 'Disconnected'
   if (connectedChannelName.value)
@@ -113,6 +116,8 @@ const compactConnectionLabel = computed(() => {
 })
 
 const compactConnectionTitle = computed(() => {
+  if (player.isLocalActive)
+    return 'Playing through this computer\'s speakers — switch the Output Target to Discord in Scenes to join a voice channel'
   if (!player.botStatus?.ready)
     return 'Discord bot not connected'
   if (connectedChannelName.value)
@@ -163,7 +168,7 @@ const showStorageWarnings = computed(() =>
         <span class="brand-title">Hibiki</span>
       </div>
 
-      <nav v-if="player.botStatus?.ready" class="sidebar-guild">
+      <nav v-if="player.botStatus?.ready && !player.isLocalActive" class="sidebar-guild">
         <div
           v-for="guild in player.directory"
           :key="guild.guildId"
@@ -227,7 +232,7 @@ const showStorageWarnings = computed(() =>
           <span
             v-if="tab.path === '/scenes' && player.scenePlaying"
             class="streaming-badge"
-            title="Scene is playing in voice"
+            title="Scene is playing"
           >LIVE</span>
           <span
             v-if="tab.path === '/browser' && player.browserStreamingCount > 0"
@@ -273,7 +278,7 @@ const showStorageWarnings = computed(() =>
             <span
               v-if="tab.path === '/scenes' && player.scenePlaying"
               class="streaming-badge"
-              title="Scene is playing in voice"
+              title="Scene is playing"
             >LIVE</span>
             <span
               v-if="tab.path === '/browser' && player.browserStreamingCount > 0"

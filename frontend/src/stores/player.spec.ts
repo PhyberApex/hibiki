@@ -181,17 +181,17 @@ describe('player store', () => {
     it('setPlayingScene sets both fields and scenePlaying becomes true', () => {
       const store = usePlayerStore()
 
-      store.setPlayingScene('s1', 'discord')
+      store.setPlayingScene('s1', 'g1')
       expect(store.playingSceneId).toBe('s1')
-      expect(store.playingSceneMode).toBe('discord')
+      expect(store.playingSceneMode).toBe('g1')
       expect(store.scenePlaying).toBe(true)
     })
 
-    it('clearPlayingScene only clears when the mode matches', () => {
+    it('clearPlayingScene only clears when the Target id matches', () => {
       const store = usePlayerStore()
       store.setPlayingScene('s1', 'local')
 
-      store.clearPlayingScene('discord')
+      store.clearPlayingScene('g1')
       expect(store.playingSceneId).toBe('s1')
       expect(store.playingSceneMode).toBe('local')
 
@@ -199,6 +199,31 @@ describe('player store', () => {
       expect(store.playingSceneId).toBeNull()
       expect(store.playingSceneMode).toBeNull()
       expect(store.scenePlaying).toBe(false)
+    })
+  })
+
+  describe('active Output Target', () => {
+    it('addresses playback to the Local Target id while Local is active, else the selected guild', () => {
+      const store = usePlayerStore()
+      store.guildId = 'g1'
+      expect(store.targetId).toBe('g1')
+      store.activeTarget = 'local'
+      expect(store.targetId).toBe('local')
+    })
+
+    it('canPlay is true for Local without a voice connection, and for Discord only when joined', () => {
+      const store = usePlayerStore()
+      store.guildId = 'g1'
+      expect(store.canPlay).toBe(false)
+      store.activeTarget = 'local'
+      expect(store.canPlay).toBe(true)
+    })
+
+    it('clearPlayingScene without a Target id clears whatever is playing', () => {
+      const store = usePlayerStore()
+      store.setPlayingScene('s1', 'local')
+      store.clearPlayingScene()
+      expect(store.playingSceneId).toBeNull()
     })
   })
 

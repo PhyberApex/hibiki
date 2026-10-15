@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { fetchSceneFadeLength, fetchVisionConfig } from '@/api/config'
+import { fetchSceneFadeLength, fetchVisionConfig, LOCAL_TARGET_ID } from '@/api/config'
 import { usePlayerStore } from '@/stores/player'
 import SceneView from './SceneView.vue'
 
@@ -76,6 +76,9 @@ vi.mock('@/api/config', () => ({
   fetchSceneFadeLength: vi.fn().mockResolvedValue(0.1),
   fetchMasterVolume: vi.fn().mockResolvedValue(80),
   updateMasterVolume: vi.fn().mockResolvedValue(undefined),
+  fetchActiveOutputTarget: vi.fn().mockResolvedValue('discord'),
+  updateActiveOutputTarget: vi.fn().mockResolvedValue(undefined),
+  LOCAL_TARGET_ID: 'local',
 }))
 
 vi.mock('@/api/vision', () => ({
@@ -129,12 +132,16 @@ function stubMediaElement() {
 async function mountScene() {
   await router.push('/scenes/s1')
   await router.isReady()
+  const pinia = createPinia()
   const wrapper = mount(SceneView, {
     global: {
-      plugins: [createPinia(), router],
+      plugins: [pinia, router],
       stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
     },
   })
+  await flushPromises()
+  // The Local Target needs no voice connection.
+  usePlayerStore(pinia).activeTarget = 'local'
   await flushPromises()
   return wrapper
 }
@@ -194,7 +201,7 @@ describe('sceneView pulses', () => {
 
   it('breathes on looping ambience while the scene plays and flashes the playback bar on transition', async () => {
     const wrapper = await mountScene()
-    await wrapper.find('.btn-play-local').trigger('click')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
     expect(wrapper.find('.sound-card-ambience').classes()).toContain('pulse')
     expect(wrapper.find('.sound-card-ambience').classes()).toContain('pulse-breathe')
@@ -354,7 +361,7 @@ describe('sceneView — compact layout now-playing summary', () => {
 
   it('counts playing ambience once the scene plays locally', async () => {
     const wrapper = await mountScene()
-    await wrapper.find('.btn-play-local').trigger('click')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
     expect(wrapper.find('.now-playing-line').text()).toContain('1 ambience')
   })
@@ -368,7 +375,7 @@ describe('sceneView — compact layout now-playing summary', () => {
       music: [{ soundId: 'm1', soundName: 'Tavern Theme', volume: 80, loop: false }],
     })
     const wrapper = await mountScene()
-    await wrapper.find('.btn-play-local').trigger('click')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
     expect(wrapper.find('.now-playing-line').text()).toContain('Tavern Theme')
     expect(wrapper.find('.now-playing-line').text()).toContain('1 ambience')
@@ -390,7 +397,7 @@ describe('sceneView — compact layout now-playing summary', () => {
       return Promise.resolve()
     })
     const wrapper = await mountScene()
-    await wrapper.find('.btn-play-local').trigger('click')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
 
     // The track already ended (onended cleared playingMusicId), but the scene
@@ -404,7 +411,7 @@ describe('sceneView — compact layout now-playing summary', () => {
 
   it('stops reporting playback once the scene is stopped', async () => {
     const wrapper = await mountScene()
-    await wrapper.find('.btn-play-local').trigger('click')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
     await wrapper.find('.btn-stop-scene').trigger('click')
     await flushPromises()
@@ -928,7 +935,7 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
   })
 
-  async function mountSceneWithPlayer() {
+  async function mountSceneWithPlayer(target: 'local' | 'discord' = 'discord') {
     await router.push('/scenes/s1')
     await router.isReady()
     const pinia = createPinia()
@@ -939,7 +946,10 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
       },
     })
     await flushPromises()
-    return { wrapper, player: usePlayerStore(pinia) }
+    const player = usePlayerStore(pinia)
+    player.activeTarget = target
+    await flushPromises()
+    return { wrapper, player }
   }
 
   it('does not start playback just from opening a Scene', async () => {
@@ -973,22 +983,22 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
   })
 
   it('keeps Music and Ambience playing when navigating back to the Scene list (local preview)', async () => {
-    const { wrapper, player } = await mountSceneWithPlayer()
-    await wrapper.find('.btn-play-local').trigger('click')
+    const { wrapper, player } = await mountSceneWithPlayer('local')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
     expect(player.playingSceneId).toBe('s1')
-    expect(player.playingSceneMode).toBe('local')
+    expect(player.playingSceneMode).toBe(LOCAL_TARGET_ID)
 
     await router.push('/scenes')
     await flushPromises()
 
     expect(player.playingSceneId).toBe('s1')
-    expect(player.playingSceneMode).toBe('local')
+    expect(player.playingSceneMode).toBe(LOCAL_TARGET_ID)
   })
 
   it('marks the playing Scene in the list and stops it from there', async () => {
-    const { wrapper, player } = await mountSceneWithPlayer()
-    await wrapper.find('.btn-play-local').trigger('click')
+    const { wrapper, player } = await mountSceneWithPlayer('local')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
 
     await router.push('/scenes')
@@ -1006,8 +1016,8 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
   })
 
   it('shows the playing state and does not restart when re-opening the playing Scene', async () => {
-    const { wrapper, player } = await mountSceneWithPlayer()
-    await wrapper.find('.btn-play-local').trigger('click')
+    const { wrapper, player } = await mountSceneWithPlayer('local')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
     const playCallsAfterStart = vi.mocked(mediaProto.play).mock.calls.length
 
@@ -1033,10 +1043,10 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
       effects: [],
     }))
 
-    const { wrapper, player } = await mountSceneWithPlayer()
-    await wrapper.find('.btn-play-local').trigger('click')
+    const { wrapper, player } = await mountSceneWithPlayer('local')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
-    expect(player.playingSceneMode).toBe('local')
+    expect(player.playingSceneMode).toBe(LOCAL_TARGET_ID)
 
     // Re-opening the playing Scene must leave its controls working as before.
     await router.push('/scenes')
@@ -1053,8 +1063,8 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
   })
 
   it('crossfades to a different Scene instead of cutting to silence when opening it', async () => {
-    const { wrapper, player } = await mountSceneWithPlayer()
-    await wrapper.find('.btn-play-local').trigger('click')
+    const { wrapper, player } = await mountSceneWithPlayer('local')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
     expect(player.playingSceneId).toBe('s1')
 
@@ -1065,7 +1075,7 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     // mode — this is a crossfade, not a stop-then-silence.
     expect(wrapper.find('.detail-title').text()).toBe('Tavern')
     expect(player.playingSceneId).toBe('s2')
-    expect(player.playingSceneMode).toBe('local')
+    expect(player.playingSceneMode).toBe(LOCAL_TARGET_ID)
     expect(wrapper.find('.btn-stop-scene').exists()).toBe(true)
 
     await wait(300)
@@ -1077,8 +1087,8 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
   })
 
   it('crossfades to a different Scene when opening it from the Scene list', async () => {
-    const { wrapper, player } = await mountSceneWithPlayer()
-    await wrapper.find('.btn-play-local').trigger('click')
+    const { wrapper, player } = await mountSceneWithPlayer('local')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
     expect(player.playingSceneId).toBe('s1')
 
@@ -1090,14 +1100,14 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     await flushPromises()
 
     expect(player.playingSceneId).toBe('s2')
-    expect(player.playingSceneMode).toBe('local')
+    expect(player.playingSceneMode).toBe(LOCAL_TARGET_ID)
   })
 
   it('stops the playing Scene when it is deleted', async () => {
     vi.stubGlobal('confirm', () => true)
     const { deleteScene } = await import('@/api/scenes')
-    const { wrapper, player } = await mountSceneWithPlayer()
-    await wrapper.find('.btn-play-local').trigger('click')
+    const { wrapper, player } = await mountSceneWithPlayer('local')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
     expect(player.playingSceneId).toBe('s1')
 
@@ -1129,7 +1139,7 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
     expect(player.playingSceneId).toBe('s1')
-    expect(player.playingSceneMode).toBe('discord')
+    expect(player.playingSceneMode).toBe('g1')
 
     await router.push('/scenes')
     await flushPromises()
@@ -1140,59 +1150,6 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     await flushPromises()
 
     expect(player.playingSceneId).toBeNull()
-  })
-
-  it('stops a Discord item toggled individually on voice loss without disturbing a concurrent local Playing Scene', async () => {
-    // mockImplementation (not mockResolvedValueOnce) because a prior test's
-    // wrapper is never unmounted and stays subscribed to the shared router —
-    // pushing a new route here can trigger its watcher too, consuming a
-    // once-queued mock value meant for this test's own mount.
-    const { listAmbience } = await import('@/api/sounds')
-    vi.mocked(listAmbience).mockImplementation(async () => [
-      { id: 'amb-1', name: 'Rain', filename: 'rain.mp3' },
-      { id: 'amb-2', name: 'Wind', filename: 'wind.mp3' },
-    ])
-    const { getScene } = await import('@/api/scenes')
-    vi.mocked(getScene).mockImplementation(async () => ({
-      id: 's1',
-      name: 'Storm',
-      ambience: [
-        { soundId: 'amb-1', soundName: 'Rain', volume: 80, enabled: true },
-        { soundId: 'amb-2', soundName: 'Wind', volume: 80, enabled: false },
-      ],
-      music: [],
-      effects: [],
-    }))
-
-    const { stopEffectStream } = await import('@/api/audio-stream')
-    const { wrapper, player } = await mountSceneWithPlayer()
-    player.playerState = [
-      { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
-    ]
-    player.guildId = 'g1'
-    await flushPromises()
-
-    // Local preview plays amb-1 (enabled by default).
-    await wrapper.find('.btn-play-local').trigger('click')
-    await flushPromises()
-    expect(player.playingSceneId).toBe('s1')
-    expect(player.playingSceneMode).toBe('local')
-
-    // The GM also joins voice and toggles amb-2 on individually — always the
-    // Discord path, independent of the local Playing Scene.
-    const checkboxes = wrapper.findAll('input[type="checkbox"]')
-    await checkboxes[1].setValue(true)
-    await flushPromises()
-
-    vi.mocked(stopEffectStream).mockClear()
-    player.playerState = []
-    await flushPromises()
-
-    // The individually-toggled Discord item stops (as today)...
-    expect(stopEffectStream).toHaveBeenCalledWith('g1', 'ambience-amb-2')
-    // ...but the local Playing Scene survives losing voice.
-    expect(player.playingSceneId).toBe('s1')
-    expect(player.playingSceneMode).toBe('local')
   })
 })
 
@@ -1226,7 +1183,7 @@ describe('sceneView — Scene Crossfade', () => {
     })
   }
 
-  async function mountAt(path: string) {
+  async function mountAt(path: string, target: 'local' | 'discord' = 'discord') {
     const testRouter = createTestRouter()
     await testRouter.push(path)
     await testRouter.isReady()
@@ -1238,7 +1195,10 @@ describe('sceneView — Scene Crossfade', () => {
       },
     })
     await flushPromises()
-    return { wrapper, player: usePlayerStore(pinia), router: testRouter }
+    const player = usePlayerStore(pinia)
+    player.activeTarget = target
+    await flushPromises()
+    return { wrapper, player, router: testRouter }
   }
 
   const sceneX = {
@@ -1296,8 +1256,8 @@ describe('sceneView — Scene Crossfade', () => {
       },
     }))
 
-    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
-    await wrapper.find('.btn-play-local').trigger('click')
+    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1', 'local')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
     expect(player.playingSceneId).toBe('x1')
     const instancesAfterX = audioInstances.length
@@ -1318,8 +1278,8 @@ describe('sceneView — Scene Crossfade', () => {
 
   it('performs an immediate cut with no lingering old-Scene sounds when the fade length is 0', async () => {
     vi.mocked(fetchSceneFadeLength).mockResolvedValueOnce(0)
-    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
-    await wrapper.find('.btn-play-local').trigger('click')
+    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1', 'local')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
 
     await testRouter.push('/scenes/z1')
@@ -1332,8 +1292,8 @@ describe('sceneView — Scene Crossfade', () => {
   })
 
   it('ends with only the newest Scene playing after switching twice during a fade', async () => {
-    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
-    await wrapper.find('.btn-play-local').trigger('click')
+    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1', 'local')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
 
     await testRouter.push('/scenes/y1')
@@ -1351,8 +1311,8 @@ describe('sceneView — Scene Crossfade', () => {
   })
 
   it('silences everything immediately when Stop is pressed during a fade', async () => {
-    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
-    await wrapper.find('.btn-play-local').trigger('click')
+    const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1', 'local')
+    await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
 
     await testRouter.push('/scenes/y1')
@@ -1586,55 +1546,6 @@ describe('sceneView — Scene Crossfade', () => {
       expect(stopAmbience).toHaveBeenCalledWith('g1', 'amb-1', { fadeOutMs: 100 })
     })
 
-    it('stops a backend-sourced instance of the same Ambience sound before starting it locally during a Scene Crossfade', async () => {
-      const { getScene } = await import('@/api/scenes')
-      const sceneV = {
-        id: 'v1',
-        name: 'Village',
-        ambience: [{ soundId: 'amb-1', soundName: 'Rain', volume: 50, enabled: true }],
-        music: [],
-        effects: [],
-      }
-      vi.mocked(getScene).mockImplementation(async (id: string) => {
-        if (id === 'x1')
-          return JSON.parse(JSON.stringify(sceneX))
-        if (id === 'v1')
-          return JSON.parse(JSON.stringify(sceneV))
-        return null
-      })
-
-      const { stopAmbience } = await import('@/api/player')
-      const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
-
-      // Join voice and flip amb-1's checkbox off then on — individually
-      // toggling while joined always routes through the backend,
-      // regardless of what's currently the (locally) Playing Scene.
-      player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
-      ]
-      player.guildId = 'g1'
-      await flushPromises()
-      await wrapper.find('input[type="checkbox"]').setValue(false)
-      await wrapper.find('input[type="checkbox"]').setValue(true)
-      await flushPromises()
-
-      // Mark x1 as the (locally) Playing Scene directly — isolates the
-      // crossfade this test cares about from a real Play Local click's own
-      // side effects (which aren't relevant here).
-      player.setPlayingScene('x1', 'local')
-      vi.mocked(stopAmbience).mockClear()
-
-      // Opening a different Scene that also wants amb-1 while a local
-      // Scene is playing triggers a local-mode Scene Crossfade.
-      await testRouter.push('/scenes/v1')
-      await flushPromises()
-
-      // The backend-sourced amb-1 must be stopped via the real IPC call
-      // before being started locally — not left orphaned, playing
-      // underneath the new local instance with no reachable UI handle.
-      expect(stopAmbience).toHaveBeenCalledWith('g1', 'amb-1', {})
-    })
-
     it('toggling an Ambience sound off stops it via the backend, not the chunked-IPC effect stream', async () => {
       const { stopEffectStream } = await import('@/api/audio-stream')
       const { stopAmbience } = await import('@/api/player')
@@ -1682,61 +1593,181 @@ describe('sceneView — Scene Crossfade', () => {
       // renderer path instead of being orphaned or silently dropped.
       expect(startEffectStream).toHaveBeenCalledWith('g1', 'ambience-amb-2')
     })
+  })
+})
 
-    it('stops a local preview of the same Ambience sound when a different Scene turns it on individually while joined', async () => {
-      const { getScene } = await import('@/api/scenes')
-      const sceneW = {
-        id: 'w1',
-        name: 'Other',
-        ambience: [{ soundId: 'amb-1', soundName: 'Rain', volume: 50, enabled: false }],
-        music: [],
-        effects: [],
-      }
-      vi.mocked(getScene).mockImplementation(async (id: string) => {
-        if (id === 'x1')
-          return JSON.parse(JSON.stringify(sceneX))
-        if (id === 'w1')
-          return JSON.parse(JSON.stringify(sceneW))
-        return null
-      })
+describe('sceneView — Output Target routing (#517)', () => {
+  beforeAll(stubMediaElement)
 
-      const created: { el: HTMLAudioElement, pause: ReturnType<typeof vi.fn> }[] = []
-      const OriginalAudio = globalThis.Audio
-      vi.stubGlobal('Audio', new Proxy(OriginalAudio, {
-        construct(target, args) {
-          const instance = Reflect.construct(target, args) as HTMLAudioElement
-          const pauseSpy = vi.fn()
-          Object.defineProperty(instance, 'pause', { configurable: true, value: pauseSpy })
-          created.push({ el: instance, pause: pauseSpy })
-          return instance
-        },
-      }))
+  beforeEach(async () => {
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockImplementation(async () => JSON.parse(JSON.stringify(scene)))
+    const { canDecode } = await import('@/api/sounds')
+    vi.mocked(canDecode).mockResolvedValue(true)
+    vi.clearAllMocks()
+  })
 
-      const { playAmbience } = await import('@/api/player')
-      const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
+  afterEach(async () => {
+    const { canDecode } = await import('@/api/sounds')
+    vi.mocked(canDecode).mockResolvedValue(false)
+  })
 
-      // x1's amb-1 starts playing locally (not joined, no Discord involved).
-      await wrapper.find('.btn-play-local').trigger('click')
-      await flushPromises()
-      const ambienceEntry = created.find(c => c.el.src.includes('ambience/amb-1'))
-      expect(ambienceEntry).toBeTruthy()
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
 
-      // Now join voice and open a different Scene that also has amb-1, but
-      // disabled — individually enabling it there must not leave the local
-      // preview's element orphaned, playing underneath the backend stream.
-      await testRouter.push('/scenes/w1')
-      await flushPromises()
-      player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
-      ]
-      player.guildId = 'g1'
-      await flushPromises()
-
-      await wrapper.find('input[type="checkbox"]').setValue(true)
-      await flushPromises()
-
-      expect(playAmbience).toHaveBeenCalledWith('g1', 'amb-1', expect.anything())
-      expect(ambienceEntry!.pause).toHaveBeenCalled()
+  async function mountTarget(target: 'local' | 'discord') {
+    await router.push('/scenes/s1')
+    await router.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(SceneView, {
+      global: { plugins: [pinia, router], stubs: { RegistryBrowser: true, ResolveSoundDialog: true } },
     })
+    await flushPromises()
+    const player = usePlayerStore(pinia)
+    player.activeTarget = target
+    await flushPromises()
+    return { wrapper, player }
+  }
+
+  const joined = [{ guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const }]
+
+  it('plays a Scene on the Local Target with no voice connection and a single Play button', async () => {
+    const { playAmbience } = await import('@/api/player')
+    const { wrapper, player } = await mountTarget('local')
+    expect(wrapper.findAll('.btn-play-scene')).toHaveLength(1)
+    expect(wrapper.find('.btn-play-local').exists()).toBe(false)
+
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+
+    expect(playAmbience).toHaveBeenCalledWith(LOCAL_TARGET_ID, 'amb-1', expect.anything())
+    expect(player.playingSceneMode).toBe(LOCAL_TARGET_ID)
+  })
+
+  it('disables Play on the Discord Target until a channel is joined', async () => {
+    const { wrapper, player } = await mountTarget('discord')
+    expect(wrapper.find('.btn-play-scene').attributes('disabled')).toBeDefined()
+    player.playerState = joined
+    player.guildId = 'g1'
+    await flushPromises()
+    expect(wrapper.find('.btn-play-scene').attributes('disabled')).toBeUndefined()
+  })
+
+  it('plays a renderer-fallback sound locally without capturing it into the mix', async () => {
+    const { canDecode } = await import('@/api/sounds')
+    vi.mocked(canDecode).mockResolvedValue(false)
+    const { startEffectStream, stopEffectStream } = await import('@/api/audio-stream')
+    const { captureFromAudioElement } = await import('@/audio/browser-audio-capture')
+    const { playAmbience } = await import('@/api/player')
+    const { wrapper } = await mountTarget('local')
+
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+    expect(playAmbience).not.toHaveBeenCalled()
+    expect(startEffectStream).not.toHaveBeenCalled()
+    expect(captureFromAudioElement).not.toHaveBeenCalled()
+
+    await wrapper.find('.btn-stop-scene').trigger('click')
+    await flushPromises()
+    expect(stopEffectStream).not.toHaveBeenCalled()
+  })
+
+  it('triggers an Effect on the Local Target through the backend mix', async () => {
+    const { playEffect } = await import('@/api/player')
+    const { wrapper } = await mountTarget('local')
+    await wrapper.find('.effect-trigger').trigger('click')
+    await flushPromises()
+    expect(playEffect).toHaveBeenCalledWith(LOCAL_TARGET_ID, 'fx-1', expect.anything())
+  })
+
+  it('hands a playing Scene over hard: stops on the old Target, restarts from the top on the new one', async () => {
+    const { playAmbience, stopAmbience, stopEffects } = await import('@/api/player')
+    const { updateActiveOutputTarget } = await import('@/api/config')
+    const { wrapper, player } = await mountTarget('local')
+    player.playerState = joined
+    player.guildId = 'g1'
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+    expect(player.playingSceneMode).toBe(LOCAL_TARGET_ID)
+
+    vi.mocked(playAmbience).mockClear()
+    const discordOption = wrapper.findAll('.target-option').find(b => b.text() === 'Discord')
+    await discordOption!.trigger('click')
+    await flushPromises()
+
+    expect(stopAmbience).toHaveBeenCalledWith(LOCAL_TARGET_ID, 'amb-1', {})
+    expect(stopEffects).toHaveBeenCalledWith(LOCAL_TARGET_ID)
+    expect(updateActiveOutputTarget).toHaveBeenCalledWith('discord')
+    expect(playAmbience).toHaveBeenCalledWith('g1', 'amb-1', expect.anything())
+    expect(player.playingSceneId).toBe('s1')
+    expect(player.playingSceneMode).toBe('g1')
+  })
+
+  it('restarts the handed-over Scene on Discord once a channel is joined', async () => {
+    const { playAmbience, stopAmbience } = await import('@/api/player')
+    const { wrapper, player } = await mountTarget('local')
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+
+    vi.mocked(playAmbience).mockClear()
+    await wrapper.findAll('.target-option').find(b => b.text() === 'Discord')!.trigger('click')
+    await flushPromises()
+    expect(stopAmbience).toHaveBeenCalledWith(LOCAL_TARGET_ID, 'amb-1', {})
+    expect(playAmbience).not.toHaveBeenCalled()
+    expect(player.playingSceneId).toBeNull()
+
+    player.playerState = joined
+    player.guildId = 'g1'
+    await flushPromises()
+
+    expect(playAmbience).toHaveBeenCalledWith('g1', 'amb-1', expect.anything())
+    expect(player.playingSceneId).toBe('s1')
+  })
+
+  it('shows and writes the active Target\'s master volume', async () => {
+    const { fetchMasterVolume, updateMasterVolume } = await import('@/api/config')
+    vi.mocked(fetchMasterVolume).mockImplementation(async (id: string) => (id === LOCAL_TARGET_ID ? 35 : 80))
+    const { wrapper } = await mountTarget('discord')
+    await wrapper.findAll('.target-option').find(b => b.text() === 'Local')!.trigger('click')
+    await flushPromises()
+    expect(fetchMasterVolume).toHaveBeenCalledWith(LOCAL_TARGET_ID)
+    const slider = wrapper.find('.volume-slider')
+    expect((slider.element as HTMLInputElement).value).toBe('35')
+
+    await slider.setValue(50)
+    await slider.trigger('change')
+    expect(updateMasterVolume).toHaveBeenCalledWith(LOCAL_TARGET_ID, 50)
+    vi.mocked(fetchMasterVolume).mockResolvedValue(80)
+  })
+
+  it('keeps a Local Playing Scene running when the voice connection drops', async () => {
+    const { wrapper, player } = await mountTarget('local')
+    player.playerState = joined
+    player.guildId = 'g1'
+    await flushPromises()
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+
+    player.playerState = []
+    await flushPromises()
+    expect(player.playingSceneId).toBe('s1')
+  })
+
+  it('shows which Target a Playing Scene is on in the Scene list', async () => {
+    const { listScenes } = await import('@/api/scenes')
+    vi.mocked(listScenes).mockResolvedValue([JSON.parse(JSON.stringify(scene))])
+    const { wrapper, player } = await mountTarget('local')
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+    await router.push('/scenes')
+    await flushPromises()
+    expect(wrapper.find('.playing-badge').attributes('aria-label')).toBe('Playing locally')
+
+    player.setPlayingScene('s1', 'g1')
+    await flushPromises()
+    expect(wrapper.find('.playing-badge').attributes('aria-label')).toBe('Playing on Discord')
   })
 })
