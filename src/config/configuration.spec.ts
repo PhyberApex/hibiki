@@ -1,3 +1,5 @@
+import { join } from 'node:path'
+
 import { configuration } from './configuration'
 
 describe('configuration', () => {
@@ -48,9 +50,9 @@ describe('configuration', () => {
     })
     expect(config.audio).toEqual({
       storageRoot: '/data/storage',
-      musicDir: '/data/storage/music',
-      effectsDir: '/data/storage/effects',
-      ambienceDir: '/data/storage/ambience',
+      musicDir: join('/data/storage', 'music'),
+      effectsDir: join('/data/storage', 'effects'),
+      ambienceDir: join('/data/storage', 'ambience'),
       webDistDir: 'dist-web',
     })
     expect(config.database).toEqual({
@@ -65,11 +67,11 @@ describe('configuration', () => {
 
     const config = configuration()
 
-    expect(config.audio.storageRoot).toBe('/app/user-data/storage')
-    expect(config.audio.musicDir).toBe('/app/user-data/storage/music')
-    expect(config.audio.effectsDir).toBe('/app/user-data/storage/effects')
-    expect(config.audio.ambienceDir).toBe('/app/user-data/storage/ambience')
-    expect(config.database.path).toBe('/app/user-data/data/hibiki.json')
+    expect(config.audio.storageRoot).toBe(join('/app/user-data', 'storage'))
+    expect(config.audio.musicDir).toBe(join('/app/user-data', 'storage', 'music'))
+    expect(config.audio.effectsDir).toBe(join('/app/user-data', 'storage', 'effects'))
+    expect(config.audio.ambienceDir).toBe(join('/app/user-data', 'storage', 'ambience'))
+    expect(config.database.path).toBe(join('/app/user-data', 'data', 'hibiki.json'))
   })
 
   it('prefers HIBIKI_STORAGE_PATH over HIBIKI_USER_DATA for audio dirs', () => {
@@ -80,9 +82,9 @@ describe('configuration', () => {
     const config = configuration()
 
     expect(config.audio.storageRoot).toBe('/custom/storage')
-    expect(config.audio.musicDir).toBe('/custom/storage/music')
-    expect(config.audio.effectsDir).toBe('/custom/storage/effects')
-    expect(config.audio.ambienceDir).toBe('/custom/storage/ambience')
-    expect(config.database.path).toBe('/app/user-data/data/hibiki.json')
+    expect(config.audio.musicDir).toBe(join('/custom/storage', 'music'))
+    expect(config.audio.effectsDir).toBe(join('/custom/storage', 'effects'))
+    expect(config.audio.ambienceDir).toBe(join('/custom/storage', 'ambience'))
+    expect(config.database.path).toBe(join('/app/user-data', 'data', 'hibiki.json'))
   })
 })
