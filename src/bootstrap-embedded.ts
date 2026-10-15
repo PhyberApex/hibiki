@@ -2,6 +2,7 @@ import type { VoiceBasedChannel } from 'discord.js'
 import type { AccessibilitySettings } from './config/accessibility-settings'
 import type { StorageWarning } from './json-file'
 import type { SecretCodec } from './persistence'
+import type { OutputTargetKind } from './player/output-target'
 import type { SoundCategory } from './sound/sound.types'
 import type { VibeMatches } from './vision/vibe-matching'
 import type { VisionSettingsState } from './vision/vision-settings'
@@ -88,8 +89,8 @@ export interface EmbeddedApi {
     setAccessibility: (settings: AccessibilitySettings) => Promise<void>
     getSceneFadeLength: () => Promise<number>
     setSceneFadeLength: (seconds: number) => Promise<void>
-    getActiveOutputTarget: () => Promise<'discord' | 'local'>
-    setActiveOutputTarget: (kind: 'discord' | 'local') => Promise<void>
+    getActiveOutputTarget: () => Promise<OutputTargetKind>
+    setActiveOutputTarget: (kind: OutputTargetKind) => Promise<void>
     getMasterVolume: (targetId: string) => Promise<number>
     setMasterVolume: (targetId: string, volume: number) => Promise<void>
     getVision: () => Promise<VisionSettingsState>
