@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.6.0](https://github.com/PhyberApex/hibiki/compare/v1.5.0...v1.6.0) (2026-10-15)
+
+
+### Features
+
+* **frontend:** app-level toast store and component ([#530](https://github.com/PhyberApex/hibiki/issues/530)) ([f590356](https://github.com/PhyberApex/hibiki/commit/f590356e526c0bd460ac4a5401b48f6459ba4e5a))
+* **hotkeys:** compact keycap recorder on Effect cards, shared chip style, unwrapped IPC errors ([#534](https://github.com/PhyberApex/hibiki/issues/534)) ([c61c8e2](https://github.com/PhyberApex/hibiki/commit/c61c8e2f55f1b5b5b309f86f055e59697d160184))
+* **hotkeys:** global shortcut lifecycle, IPC forwarding and Target-addressed dispatch ([#532](https://github.com/PhyberApex/hibiki/issues/532)) ([3d7792f](https://github.com/PhyberApex/hibiki/commit/3d7792f674cd70fbe68d4765daaeccc84cf1ef55))
+* **hotkeys:** hotkey recorder, key chips, Settings Hotkeys section and Diagnostics ([#533](https://github.com/PhyberApex/hibiki/issues/533)) ([bff1cc6](https://github.com/PhyberApex/hibiki/commit/bff1cc64da9032f0901d76cfb3f64766b6a55c81))
+* **logs:** log every action, state change and failure, plus voice encryption diagnostics ([#504](https://github.com/PhyberApex/hibiki/issues/504)) ([afb874e](https://github.com/PhyberApex/hibiki/commit/afb874e7d529533bc9740b001800b44bb9c6ccb4))
+* **logs:** make local preview and the hibiki:// protocol visible in the log ([#506](https://github.com/PhyberApex/hibiki/issues/506)) ([4918958](https://github.com/PhyberApex/hibiki/commit/49189580f35d96446d165bc610f0420fa5aabbbb))
+* **logs:** write a main-process log file and expose it in Settings ([#498](https://github.com/PhyberApex/hibiki/issues/498)) ([0f5e910](https://github.com/PhyberApex/hibiki/commit/0f5e910bb6e3b2ec0f4c54761efcd9d18de56dfa))
+* **onboarding:** Welcome offers local play as an equal path, Discord token optional ([#528](https://github.com/PhyberApex/hibiki/issues/528)) ([9d193ce](https://github.com/PhyberApex/hibiki/commit/9d193cef12946900b6211b70020f0a672653ae66))
+* **player:** Local Target sink streams the backend mix to the renderer ([#526](https://github.com/PhyberApex/hibiki/issues/526)) ([9031cdd](https://github.com/PhyberApex/hibiki/commit/9031cddd69fcf5bb6f31d5f9fcd9c0a2a6d90c49))
+* **player:** Output Target model with active Target and per-Target master volume ([#525](https://github.com/PhyberApex/hibiki/issues/525)) ([045874a](https://github.com/PhyberApex/hibiki/commit/045874a254ba04f48280acbf164e62b19fe01b01))
+* **scenes:** hotkey model with uniqueness rules, export stripping and Settings persistence ([#531](https://github.com/PhyberApex/hibiki/issues/531)) ([7799056](https://github.com/PhyberApex/hibiki/commit/7799056a0f5c1356ae84130960c059fcf26a8d25))
+* **scenes:** Scene view routes to the active Output Target ([#527](https://github.com/PhyberApex/hibiki/issues/527)) ([e762ac4](https://github.com/PhyberApex/hibiki/commit/e762ac49c5805c504a2d5169c164a432e801640c))
+* **scenes:** show per-Effect progress, timer and Stop control on Effect cards ([#512](https://github.com/PhyberApex/hibiki/issues/512)) ([14aa56d](https://github.com/PhyberApex/hibiki/commit/14aa56d7ae5379c5a9d82c4e89a3ffe566eb797c))
+
+
+### Bug Fixes
+
+* **audio:** keep the voice player alive on coarse Windows timers ([#502](https://github.com/PhyberApex/hibiki/issues/502)) ([b428d4f](https://github.com/PhyberApex/hibiki/commit/b428d4f28da3153082b5f0ddb13c21c7e5e84ee7))
+* **audio:** mix concurrent inputs per packet instead of in alternating solo bursts ([#505](https://github.com/PhyberApex/hibiki/issues/505)) ([5b38577](https://github.com/PhyberApex/hibiki/commit/5b3857724ae2b25f1515b62e5bf14409c0af750e))
+* handle Squirrel install/update/uninstall events before booting the app ([#500](https://github.com/PhyberApex/hibiki/issues/500)) ([74d0465](https://github.com/PhyberApex/hibiki/commit/74d0465502b69567cf8187d9be285c877808d479)), closes [#499](https://github.com/PhyberApex/hibiki/issues/499)
+* **test:** make the test suite pass on Windows ([#508](https://github.com/PhyberApex/hibiki/issues/508)) ([65075b4](https://github.com/PhyberApex/hibiki/commit/65075b41f41b778e263fad346687ee99d9ed2890))
+
 ## [1.5.0](https://github.com/PhyberApex/hibiki/compare/v1.4.0...v1.5.0) (2026-10-12)
 
 
