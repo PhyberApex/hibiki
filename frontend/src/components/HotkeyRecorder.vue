@@ -33,8 +33,8 @@ function disarm() {
 function onKeydown(event: KeyboardEvent) {
   if (!armed.value)
     return
-  if (event.key === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
-    // Let Tab keep moving focus; leaving the button cancels.
+  if (event.code === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+    // Let Tab and Shift+Tab keep moving focus; leaving the button cancels.
     return
   }
   event.preventDefault()

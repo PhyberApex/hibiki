@@ -336,6 +336,7 @@ async function saveHotkeySettings(next: HotkeySettings) {
     hotkeyFailures.value = (await fetchHotkeyStatus().catch(() => null))?.failures ?? hotkeyFailures.value
   }
   catch (e) {
+    console.warn('[settings] Hotkey settings rejected:', e)
     const text = e instanceof Error ? e.message : 'Couldn\'t save hotkey settings.'
     if (next.stopHotkey !== hotkeySettings.value.stopHotkey)
       stopHotkeyError.value = text

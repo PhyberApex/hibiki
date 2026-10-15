@@ -9,6 +9,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { fetchVisionConfig, LOCAL_TARGET_ID, openFileDialog, saveFileDialog } from '@/api/config'
 import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
 import { listAmbience, listEffects, listMusic } from '@/api/sounds'
+import { logInfo } from '@/audio/audio-element-diagnostics'
 import HotkeyRecorder from '@/components/HotkeyRecorder.vue'
 import RegistryBrowser from '@/components/RegistryBrowser.vue'
 import ResolveSoundDialog from '@/components/ResolveSoundDialog.vue'
@@ -93,11 +94,15 @@ const effectCards = computed(() => {
 // Hotkey bindings are validated when the Scene is saved (uniqueness, Stop Hotkey), so a rejection
 // surfaces here: revert the edit and show the message on the recorder that caused it.
 const hotkeyErrors = ref<Record<string, string>>({})
+watch(() => scene.value?.id, () => {
+  hotkeyErrors.value = {}
+})
 
 async function bindHotkey(errorKey: string, target: { hotkey?: string }, value: string | undefined) {
   if (!scene.value)
     return
   const previous = target.hotkey
+  logInfo(`[scenes] ${value ? `Binding hotkey ${value}` : 'Clearing hotkey'} on ${errorKey} in scene ${scene.value.id}`)
   if (value)
     target.hotkey = value
   else
@@ -112,6 +117,7 @@ async function bindHotkey(errorKey: string, target: { hotkey?: string }, value: 
       target.hotkey = previous
     else
       delete target.hotkey
+    console.warn(`[scenes] Hotkey ${value ?? '(cleared)'} rejected for ${errorKey} in scene ${scene.value.id}:`, e)
     hotkeyErrors.value = { ...hotkeyErrors.value, [errorKey]: e instanceof Error ? e.message : 'Couldn\'t bind that hotkey.' }
   }
 }
