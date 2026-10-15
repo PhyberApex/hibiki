@@ -126,4 +126,81 @@ describe('createSceneStore', () => {
     const entries = await readdir(dirname(scenesPath))
     expect(entries).not.toContain('scenes.json.tmp')
   })
+
+  describe('hotkeys', () => {
+    const fx = (soundId: string, hotkey?: string) => ({ soundId, soundName: soundId, hotkey })
+
+    it('stores normalised Scene and Effect Hotkeys', async () => {
+      const store = createSceneStore(config)
+      const saved = await store.save({ name: 'A', hotkey: 'shift+ctrl+1', effects: [fx('boom', 'f13')] })
+      expect(saved.hotkey).toBe('Ctrl+Shift+1')
+      expect(saved.effects[0].hotkey).toBe('F13')
+      expect((await store.get(saved.id))?.hotkey).toBe('Ctrl+Shift+1')
+    })
+
+    it('drops empty hotkeys and hotkeys on music/ambience items', async () => {
+      const store = createSceneStore(config)
+      const saved = await store.save({
+        name: 'A',
+        hotkey: '',
+        effects: [fx('boom', ' ')],
+        music: [{ soundId: 'm', hotkey: 'F1' }],
+        ambience: [{ soundId: 'a', hotkey: 'F2' }],
+      })
+      expect(saved).not.toHaveProperty('hotkey')
+      expect(saved.effects[0]).not.toHaveProperty('hotkey')
+      expect(saved.music[0]).not.toHaveProperty('hotkey')
+      expect(saved.ambience[0]).not.toHaveProperty('hotkey')
+    })
+
+    it('rejects an invalid accelerator', async () => {
+      const store = createSceneStore(config)
+      await expect(store.save({ name: 'A', hotkey: 'Ctrl+' })).rejects.toThrow('Invalid hotkey')
+    })
+
+    it('rejects the same key on two Scenes, naming the owner', async () => {
+      const store = createSceneStore(config)
+      await store.save({ name: 'Tavern', hotkey: 'Ctrl+1' })
+      await expect(store.save({ name: 'Cave', hotkey: 'ctrl+1' })).rejects.toThrow('already used by Scene "Tavern"')
+      expect(await store.list()).toHaveLength(1)
+    })
+
+    it('allows a Scene to keep its own Hotkey when re-saved', async () => {
+      const store = createSceneStore(config)
+      const a = await store.save({ name: 'Tavern', hotkey: 'Ctrl+1' })
+      await expect(store.save({ ...a, name: 'Tavern 2' })).resolves.toMatchObject({ hotkey: 'Ctrl+1' })
+    })
+
+    it('rejects the same key on two Effects of one Scene', async () => {
+      const store = createSceneStore(config)
+      await expect(store.save({ name: 'A', effects: [fx('boom', 'F1'), fx('bang', 'f1')] }))
+        .rejects
+        .toThrow('already used by Effect "boom" in Scene "A"')
+    })
+
+    it('allows the same Effect key in different Scenes', async () => {
+      const store = createSceneStore(config)
+      await store.save({ name: 'A', effects: [fx('boom', 'F1')] })
+      await expect(store.save({ name: 'B', effects: [fx('bang', 'F1')] })).resolves.toBeDefined()
+    })
+
+    it('rejects an Effect key held by a Scene Hotkey, in another Scene or its own', async () => {
+      const store = createSceneStore(config)
+      await store.save({ name: 'A', hotkey: 'F5' })
+      await expect(store.save({ name: 'B', effects: [fx('boom', 'F5')] })).rejects.toThrow('Scene "A"')
+      await expect(store.save({ name: 'C', hotkey: 'F6', effects: [fx('boom', 'F6')] })).rejects.toThrow('Scene "C"')
+    })
+
+    it('rejects a Scene key held by an Effect of another Scene', async () => {
+      const store = createSceneStore(config)
+      await store.save({ name: 'A', effects: [fx('boom', 'F5')] })
+      await expect(store.save({ name: 'B', hotkey: 'F5' })).rejects.toThrow('Effect "boom" in Scene "A"')
+    })
+
+    it('rejects Scene and Effect keys that equal the Stop Hotkey', async () => {
+      const store = createSceneStore(config, { getStopHotkey: async () => 'Ctrl+S' })
+      await expect(store.save({ name: 'A', hotkey: 'ctrl+s' })).rejects.toThrow('the Stop Hotkey')
+      await expect(store.save({ name: 'A', effects: [fx('boom', 'Ctrl+S')] })).rejects.toThrow('the Stop Hotkey')
+    })
+  })
 })

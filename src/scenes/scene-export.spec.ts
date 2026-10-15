@@ -58,4 +58,17 @@ describe('exportScene', () => {
     expect(data.scene.ambience).toHaveLength(1)
     expect(data.scene.ambience[0].bundled).toBe(false)
   })
+
+  it('omits every hotkey from the manifest', async () => {
+    const { createSceneStore } = await import('./scene-store')
+    const saved = await createSceneStore(config).save({
+      name: 'Hot',
+      hotkey: 'F1',
+      effects: [{ soundId: 'missing', soundName: 'Boom', hotkey: 'F2' }],
+    })
+    const targetZip = join(tempRoot, 'hot.zip')
+    await exportScene(config, saved.id, targetZip)
+    const raw = new AdmZip(targetZip).getEntry('hibiki-scene.json')!.getData().toString('utf-8')
+    expect(raw.toLowerCase()).not.toContain('hotkey')
+  })
 })

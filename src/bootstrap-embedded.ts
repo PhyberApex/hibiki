@@ -1,5 +1,6 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { AccessibilitySettings } from './config/accessibility-settings'
+import type { HotkeySettings } from './config/hotkey-settings'
 import type { StorageWarning } from './json-file'
 import type { SecretCodec } from './persistence'
 import type { OutputTargetKind } from './player/output-target'
@@ -12,6 +13,7 @@ import { dirname } from 'node:path'
 import { generateDependencyReport } from '@discordjs/voice'
 import { getConfig } from './config'
 import { normalizeAccessibilitySettings, parseAccessibilitySettings } from './config/accessibility-settings'
+import { createHotkeySettings } from './config/hotkey-settings'
 import { createOutputTargetSettings } from './config/output-target-settings'
 import { normalizeSceneFadeLength, parseSceneFadeLength } from './config/scene-fade-settings'
 import { createDiscordClient } from './discord/discord-client'
@@ -94,6 +96,8 @@ export interface EmbeddedApi {
     setActiveOutputTarget: (kind: OutputTargetKind) => Promise<void>
     getMasterVolume: (targetId: string) => Promise<number>
     setMasterVolume: (targetId: string, volume: number) => Promise<void>
+    getHotkeySettings: () => Promise<HotkeySettings>
+    setHotkeySettings: (settings: HotkeySettings) => Promise<void>
     getVision: () => Promise<VisionSettingsState>
     setVisionProvider: (provider: VisionProviderId) => Promise<VisionSettingsState>
     setVisionApiKey: (provider: VisionProviderId, apiKey: string) => Promise<VisionSettingsState>
@@ -115,7 +119,7 @@ export interface EmbeddedApi {
   scenes: {
     list: () => ReturnType<ReturnType<typeof createSceneStore>['list']>
     get: (id: string) => ReturnType<ReturnType<typeof createSceneStore>['get']>
-    save: (scene: { id?: string, name: string, ambience?: { soundId: string, soundName?: string, volume?: number, enabled?: boolean }[], music?: { soundId: string, soundName?: string, volume?: number, loop?: boolean }[], effects?: { soundId: string, soundName?: string }[] }) => ReturnType<ReturnType<typeof createSceneStore>['save']>
+    save: (scene: { id?: string, name: string, ambience?: { soundId: string, soundName?: string, volume?: number, enabled?: boolean }[], music?: { soundId: string, soundName?: string, volume?: number, loop?: boolean }[], effects?: { soundId: string, soundName?: string, hotkey?: string }[], hotkey?: string }) => ReturnType<ReturnType<typeof createSceneStore>['save']>
     remove: (id: string) => ReturnType<ReturnType<typeof createSceneStore>['remove']>
     exportScene: (id: string, targetPath: string) => Promise<void>
     importScene: (sourcePath: string) => Promise<import('./scenes/scene-store').Scene>
@@ -218,7 +222,8 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
   const outputTargets = createOutputTargetSettings(appConfig, async () => (await getDiscordStatus()).tokenConfigured)
 
   const sounds = createSoundLibrary(config)
-  const scenes = createSceneStore(config)
+  const hotkeySettings = createHotkeySettings(appConfig, () => createSceneStore(config).list())
+  const scenes = createSceneStore(config, { getStopHotkey: hotkeySettings.getStopHotkey })
   const registry = createSceneRegistry(config)
   const discord = createDiscordClient(config, appConfig)
   const player = createPlayer(discord, sounds, { localSink: options.localSink })
@@ -322,6 +327,8 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       setActiveOutputTarget: kind => outputTargets.setActive(kind),
       getMasterVolume: targetId => outputTargets.getMasterVolume(targetKind(targetId)),
       setMasterVolume: (targetId, volume) => outputTargets.setMasterVolume(targetKind(targetId), volume),
+      getHotkeySettings: () => hotkeySettings.get(),
+      setHotkeySettings: settings => hotkeySettings.set(settings),
       getVision: () => visionSettings.get(),
       setVisionProvider: provider => visionSettings.setProvider(provider),
       setVisionApiKey: (provider, apiKey) => visionSettings.setApiKey(provider, apiKey),

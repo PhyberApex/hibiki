@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSceneRegistry } from './scene-registry'
@@ -47,5 +47,31 @@ describe('createSceneRegistry', () => {
   it('installFromRegistry throws for unknown slug', async () => {
     const registry = createSceneRegistry(config)
     await expect(registry.installFromRegistry('nonexistent')).rejects.toThrow()
+  })
+
+  it('installFromRegistry drops any hotkey present in the entry', async () => {
+    const entry = {
+      name: 'Hot',
+      slug: 'hot',
+      description: '',
+      author: '',
+      version: '1.0.0',
+      tags: [],
+      category: 'environment',
+      audioBundled: false,
+      createdAt: '',
+      updatedAt: '',
+      hotkey: 'F1',
+      scene: {
+        music: [],
+        ambience: [],
+        effects: [{ soundName: 'Boom', hotkey: 'F2', source: { name: 'x' } }],
+      },
+    }
+    const index = { version: 1, updatedAt: '', scenes: [entry] }
+    writeFileSync(join(tempRoot, 'data', 'registry-cache.json'), JSON.stringify({ fetchedAt: new Date().toISOString(), data: index }))
+    const scene = await createSceneRegistry(config).installFromRegistry('hot')
+    expect(scene).not.toHaveProperty('hotkey')
+    expect(scene.effects[0]).not.toHaveProperty('hotkey')
   })
 })

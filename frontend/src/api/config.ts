@@ -96,6 +96,23 @@ export function updateSceneFadeLength(seconds: number): Promise<void> {
   return apiCall<void>('config', 'setSceneFadeLength', [seconds])
 }
 
+export interface HotkeySettings {
+  /** "Enable global hotkeys": false hands every key back to the OS without unbinding. */
+  enabled: boolean
+  stopHotkey?: string
+}
+
+export function fetchHotkeySettings(): Promise<HotkeySettings> {
+  requireElectron()
+  return apiCall<HotkeySettings>('config', 'getHotkeySettings', [])
+}
+
+/** Rejects with a message naming the current owner when the Stop Hotkey is already bound. */
+export function updateHotkeySettings(settings: HotkeySettings): Promise<void> {
+  requireElectron()
+  return apiCall<void>('config', 'setHotkeySettings', [settings])
+}
+
 export type OutputTargetKind = 'discord' | 'local'
 
 /** The reserved Output Target id for the Local Target; any other id is a Discord guild id. */
