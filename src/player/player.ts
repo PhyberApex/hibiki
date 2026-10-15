@@ -11,6 +11,7 @@ import { createPcmStream } from '../audio/decoders'
 import { createEffectPcmCache } from '../audio/decoders/effect-pcm-cache'
 import { GuildAudioManager } from '../audio/guild-audio.manager'
 import { createLogger } from '../logger'
+import { isLocalTarget, targetKind } from './output-target'
 
 const log = createLogger('player')
 
@@ -42,6 +43,19 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     return managers.get(guildId)!
   }
 
+  /**
+   * The Local Target has no sink yet (it lands in a sibling issue of #511), so
+   * any playback call addressed to it is logged and dropped. The Target's
+   * manager is still created so `getState()` reports it once it has been used.
+   */
+  function refuseLocal(targetId: string, action: string): boolean {
+    if (!isLocalTarget(targetId))
+      return false
+    getOrCreateManager(targetId)
+    log.warn(`${action} addressed to the Local Target ignored: the local sink does not exist yet`)
+    return true
+  }
+
   async function connect(channel: VoiceBasedChannel): Promise<void> {
     log.info(`Joining ${channel.name} in ${channel.guild.name}`)
     const manager = getOrCreateManager(channel.guild.id)
@@ -51,6 +65,10 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
   async function disconnect(guildId: string): Promise<void> {
     if (!guildId)
       return
+    if (isLocalTarget(guildId)) {
+      log.warn('disconnect addressed to the Local Target ignored: it has no voice connection')
+      return
+    }
     log.info(`Disconnecting from guild ${guildId}`)
     const manager = managers.get(guildId)
     if (manager) {
@@ -85,6 +103,8 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     metadata?: TrackMetadata,
     streamId?: string,
   ): void {
+    if (refuseLocal(guildId, 'startStream'))
+      return
     const manager = managers.get(guildId)
     if (!manager || !manager.connected) {
       log.warn(`startStream refused for guild ${guildId}: not connected`)
@@ -95,6 +115,8 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
   }
 
   function startEffectStream(guildId: string, stream: Readable): void {
+    if (refuseLocal(guildId, 'startEffectStream'))
+      return
     const manager = managers.get(guildId)
     if (!manager || !manager.connected) {
       log.warn(`startEffectStream refused for guild ${guildId}: not connected`)
@@ -115,6 +137,8 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
 
   /** Plays a Sound Library Music track decoded straight into the mixer (see ADR-0003). */
   async function playMusic(guildId: string, soundId: string, options: PlayMusicOptions): Promise<void> {
+    if (refuseLocal(guildId, 'playMusic'))
+      return
     const manager = managers.get(guildId)
     if (!manager || !manager.connected) {
       log.warn(`playMusic refused for guild ${guildId}: not connected`)
@@ -146,6 +170,8 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
 
   /** Plays a Sound Library Ambience sound decoded straight into the mixer (see ADR-0003). Several can be active at once per guild, keyed by soundId. */
   async function playAmbience(guildId: string, soundId: string, options: PlayAmbienceOptions): Promise<void> {
+    if (refuseLocal(guildId, 'playAmbience'))
+      return
     const manager = managers.get(guildId)
     if (!manager || !manager.connected) {
       log.warn(`playAmbience refused for guild ${guildId}: not connected`)
@@ -182,7 +208,9 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
    * otherwise pay that I/O even on a PCM cache hit, undercutting the cache's
    * whole point, and nothing but the path is needed here.
    */
-  async function playEffect(guildId: string, soundId: string, options: PlayEffectOptions): Promise<EffectInstanceInfo> {
+  async function playEffect(guildId: string, soundId: string, options: PlayEffectOptions): Promise<EffectInstanceInfo | undefined> {
+    if (refuseLocal(guildId, 'playEffect'))
+      return undefined
     const manager = managers.get(guildId)
     if (!manager || !manager.connected) {
       log.warn(`playEffect refused for guild ${guildId}: not connected`)
@@ -208,6 +236,8 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
   function getLiveState(): GuildPlaybackState[] {
     const timestamp = new Date().toISOString()
     return Array.from(managers.entries()).map(([guildId, manager]) => ({
+      targetId: guildId,
+      kind: targetKind(guildId),
       guildId,
       connectedChannelId: manager.channelId ?? undefined,
       connectedChannelName: manager.channelLabel,
@@ -231,6 +261,8 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
       const voice = discord.getBotVoiceStateForGuild(guild.guildId)
       if (voice.channelId) {
         discordFallbacks.push({
+          targetId: guild.guildId,
+          kind: 'discord',
           guildId: guild.guildId,
           connectedChannelId: voice.channelId,
           connectedChannelName: voice.channelName ?? undefined,

@@ -329,7 +329,7 @@ describe('sceneView — master volume persistence', () => {
     expect(updateMasterVolume).not.toHaveBeenCalled()
 
     await slider.trigger('change')
-    expect(updateMasterVolume).toHaveBeenCalledWith(55)
+    expect(updateMasterVolume).toHaveBeenCalledWith(expect.any(String), 55)
   })
 })
 

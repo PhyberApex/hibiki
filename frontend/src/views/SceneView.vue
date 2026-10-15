@@ -343,12 +343,12 @@ watch(globalVolume, () => updateAllVolumes())
 
 /** Loads the persisted master volume (`src/config/master-volume-settings.ts`) once at mount, instead of always starting back at the ref's default. */
 async function loadGlobalVolume() {
-  globalVolume.value = await fetchMasterVolume().catch(() => globalVolume.value)
+  globalVolume.value = await fetchMasterVolume(guildId.value).catch(() => globalVolume.value)
 }
 
 /** Persists the master volume slider's current position; fired on `change` (drag release), not on every `input` tick. */
 function saveGlobalVolume() {
-  updateMasterVolume(globalVolume.value).catch(() => {})
+  updateMasterVolume(guildId.value, globalVolume.value).catch(() => {})
 }
 
 // getState() reports active backend-decoded Ambience sounds per guild (see

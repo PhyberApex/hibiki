@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events'
 import { Readable } from 'node:stream'
 import * as voice from '@discordjs/voice'
 import { AudioEngine } from '../audio/audio-engine'
+import { LOCAL_TARGET_ID } from './output-target'
 import { createPlayer } from './player'
 
 jest.mock('@discordjs/voice', () => ({
@@ -103,6 +104,49 @@ describe('createPlayer', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     ;(voice.entersState as jest.Mock).mockResolvedValue(undefined)
+  })
+
+  describe('local Target', () => {
+    it('reports no Local entry until the Target is used, then one without a channel', async () => {
+      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn() })
+      const player = createPlayer(createFakeDiscordClient(), sounds)
+      expect(await player.getState()).toEqual([])
+
+      await player.playMusic(LOCAL_TARGET_ID, 'song', { volume: 50 })
+
+      const state = await player.getState()
+      expect(state).toHaveLength(1)
+      expect(state[0]).toMatchObject({ targetId: 'local', kind: 'local', isIdle: true })
+      expect(state[0].connectedChannelId).toBeUndefined()
+    })
+
+    it('makes playback calls a no-op that never touch the Sound Library', async () => {
+      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn() })
+      const player = createPlayer(createFakeDiscordClient(), sounds)
+
+      await player.playMusic(LOCAL_TARGET_ID, 'a', { volume: 50 })
+      await player.playAmbience(LOCAL_TARGET_ID, 'b', { volume: 50, repeatMin: 1, repeatMax: 2 })
+      await expect(player.playEffect(LOCAL_TARGET_ID, 'c', { volume: 50 })).resolves.toBeUndefined()
+      expect(() => player.startStream(LOCAL_TARGET_ID, new Readable({ read() {} }))).not.toThrow()
+
+      expect(sounds.getFile).not.toHaveBeenCalled()
+      expect(sounds.getFilePath).not.toHaveBeenCalled()
+    })
+
+    it('does not touch Discord on disconnect', async () => {
+      const discord = createFakeDiscordClient()
+      const player = createPlayer(discord, createFakeSoundLibrary())
+      await player.disconnect(LOCAL_TARGET_ID)
+      expect(discord.leaveVoiceChannel).not.toHaveBeenCalled()
+      expect(voice.getVoiceConnection).not.toHaveBeenCalled()
+    })
+
+    it('tags Discord entries with their guild id as the Target id', async () => {
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(createFakeConnection())
+      const player = createPlayer(createFakeDiscordClient(), createFakeSoundLibrary())
+      await player.connect(fakeChannel)
+      expect((await player.getState())[0]).toMatchObject({ targetId: 'guild-1', kind: 'discord', guildId: 'guild-1' })
+    })
   })
 
   describe('disconnect', () => {

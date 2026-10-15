@@ -183,7 +183,7 @@ Scenes are **not** played directly in a single action. The frontend (SceneView) 
 - Ambience: `playAmbience(guildId, soundId, options)`
 - Effects: `playEffect(guildId, soundId, options)`
 
-Each call's `options.volume` is the per-item volume already multiplied by the master volume slider (`computeVolume()` in `SceneView.vue`) — `player`/`AudioEngine` have no master-volume concept of their own, they only ever receive a final absolute 0–100 value. The master volume itself is persisted in `app-config.json` via the `config` IPC domain (`getMasterVolume`/`setMasterVolume`, `src/config/master-volume-settings.ts`) instead of resetting to a hardcoded default on every launch.
+Each call's `options.volume` is the per-item volume already multiplied by the master volume slider (`computeVolume()` in `SceneView.vue`) — `player`/`AudioEngine` have no master-volume concept of their own, they only ever receive a final absolute 0–100 value. The master volume itself is persisted per Output Target in `app-config.json` via the `config` IPC domain (`getMasterVolume(targetId)`/`setMasterVolume(targetId, value)`, `src/config/output-target-settings.ts`; the legacy single value migrates to the Discord Target), next to the active Target (`getActiveOutputTarget`/`setActiveOutputTarget`; default Local without a stored Discord token, else Discord). Player calls are addressed to a Target id — a guild id, or the reserved `LOCAL_TARGET_ID` (`src/player/output-target.ts`), whose playback calls are a logged no-op until the local sink exists (#511).
 
 The scene is a **template**, not a runtime object. Playback state lives in `GuildAudioManager`.
 

@@ -2,6 +2,7 @@ import type { VoiceBasedChannel } from 'discord.js'
 import type { AccessibilitySettings } from './config/accessibility-settings'
 import type { StorageWarning } from './json-file'
 import type { SecretCodec } from './persistence'
+import type { OutputTargetKind } from './player/output-target'
 import type { SoundCategory } from './sound/sound.types'
 import type { VibeMatches } from './vision/vibe-matching'
 import type { VisionSettingsState } from './vision/vision-settings'
@@ -11,12 +12,13 @@ import { dirname } from 'node:path'
 import { generateDependencyReport } from '@discordjs/voice'
 import { getConfig } from './config'
 import { normalizeAccessibilitySettings, parseAccessibilitySettings } from './config/accessibility-settings'
-import { normalizeMasterVolume, parseMasterVolume } from './config/master-volume-settings'
+import { createOutputTargetSettings } from './config/output-target-settings'
 import { normalizeSceneFadeLength, parseSceneFadeLength } from './config/scene-fade-settings'
 import { createDiscordClient } from './discord/discord-client'
 import { getStorageWarnings } from './json-file'
 import { createLogger } from './logger'
 import { createAppConfig } from './persistence'
+import { targetKind } from './player/output-target'
 import { createPlayer } from './player/player'
 import { exportScene } from './scenes/scene-export'
 import { importScene } from './scenes/scene-import'
@@ -71,7 +73,7 @@ export interface EmbeddedApi {
     playAmbience: (guildId: string, soundId: string, options: { volume: number, repeatMin: number, repeatMax: number, fadeInMs?: number }) => Promise<void>
     stopAmbience: (guildId: string, soundId: string, options?: { fadeOutMs?: number }) => void
     setAmbienceVolume: (guildId: string, soundId: string, volume: number, options?: { rampMs?: number }) => void
-    playEffect: (guildId: string, soundId: string, options: { volume: number }) => Promise<{ instanceId: string, soundId: string, startedAt: string, durationMs: number }>
+    playEffect: (guildId: string, soundId: string, options: { volume: number }) => Promise<{ instanceId: string, soundId: string, startedAt: string, durationMs: number } | undefined>
     stopEffects: (guildId: string) => void
     stopEffect: (guildId: string, instanceId: string) => void
     reconnect: () => Promise<void>
@@ -87,8 +89,10 @@ export interface EmbeddedApi {
     setAccessibility: (settings: AccessibilitySettings) => Promise<void>
     getSceneFadeLength: () => Promise<number>
     setSceneFadeLength: (seconds: number) => Promise<void>
-    getMasterVolume: () => Promise<number>
-    setMasterVolume: (volume: number) => Promise<void>
+    getActiveOutputTarget: () => Promise<OutputTargetKind>
+    setActiveOutputTarget: (kind: OutputTargetKind) => Promise<void>
+    getMasterVolume: (targetId: string) => Promise<number>
+    setMasterVolume: (targetId: string, volume: number) => Promise<void>
     getVision: () => Promise<VisionSettingsState>
     setVisionProvider: (provider: VisionProviderId) => Promise<VisionSettingsState>
     setVisionApiKey: (provider: VisionProviderId, apiKey: string) => Promise<VisionSettingsState>
@@ -205,6 +209,8 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
     return { tokenConfigured, encrypted: appConfig.secretsEncrypted }
   }
 
+  const outputTargets = createOutputTargetSettings(appConfig, async () => (await getDiscordStatus()).tokenConfigured)
+
   const sounds = createSoundLibrary(config)
   const scenes = createSceneStore(config)
   const registry = createSceneRegistry(config)
@@ -305,10 +311,10 @@ export async function getEmbeddedApp(codec?: SecretCodec): Promise<EmbeddedApp> 
       setSceneFadeLength: async (seconds) => {
         await appConfig.set('scene.fadeLength', JSON.stringify(normalizeSceneFadeLength(seconds)))
       },
-      getMasterVolume: async () => parseMasterVolume(await appConfig.get('player.masterVolume')),
-      setMasterVolume: async (volume) => {
-        await appConfig.set('player.masterVolume', JSON.stringify(normalizeMasterVolume(volume)))
-      },
+      getActiveOutputTarget: () => outputTargets.getActive(),
+      setActiveOutputTarget: kind => outputTargets.setActive(kind),
+      getMasterVolume: targetId => outputTargets.getMasterVolume(targetKind(targetId)),
+      setMasterVolume: (targetId, volume) => outputTargets.setMasterVolume(targetKind(targetId), volume),
       getVision: () => visionSettings.get(),
       setVisionProvider: provider => visionSettings.setProvider(provider),
       setVisionApiKey: (provider, apiKey) => visionSettings.setApiKey(provider, apiKey),
