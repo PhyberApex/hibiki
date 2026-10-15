@@ -94,5 +94,8 @@
     "vite-plugin-vue-devtools": "^8.0.5",
     "vitest": "^5.0.0",
     "vue-tsc": "^3.2.4"
+  },
+  "volta": {
+    "node": "24.22.0"
   }
 }
