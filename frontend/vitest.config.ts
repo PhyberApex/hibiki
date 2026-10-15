@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue({ template: { transformAssetUrls: false } })],
   define: {
     __APP_VERSION__: JSON.stringify('99.0.0-test'),
   },

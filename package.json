@@ -27,11 +27,11 @@
     "lint": "eslint . frontend/",
     "lint:fix": "eslint . frontend/ --fix",
     "test": "run-p test:backend test:frontend",
-    "test:backend": "node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js",
+    "test:backend": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.js",
     "test:frontend": "cd frontend && vitest run",
-    "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch --config jest.config.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch --config jest.config.js",
     "test:coverage": "run-p test:coverage:backend test:coverage:frontend",
-    "test:coverage:backend": "node --experimental-vm-modules node_modules/.bin/jest --coverage --config jest.config.js",
+    "test:coverage:backend": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage --config jest.config.js",
     "test:coverage:frontend": "cd frontend && vitest run --coverage",
     "test:e2e": "cd e2e && pnpm install --frozen-lockfile && pnpm test",
     "screenshots": "pnpm run build && cd e2e && pnpm install --frozen-lockfile && pnpm run screenshots",
@@ -94,5 +94,8 @@
     "vite-plugin-vue-devtools": "^8.0.5",
     "vitest": "^5.0.0",
     "vue-tsc": "^3.2.4"
+  },
+  "volta": {
+    "node": "24.22.0"
   }
 }
