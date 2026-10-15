@@ -1,6 +1,6 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Readable } from 'node:stream'
-import type { PlayAmbienceOptions, PlayEffectOptions, PlayMusicOptions } from '../audio/guild-audio.manager'
+import type { EffectInstanceInfo, PlayAmbienceOptions, PlayEffectOptions, PlayMusicOptions } from '../audio/guild-audio.manager'
 import type { DiscordClient } from '../discord/discord-client'
 import type { SoundLibrary } from '../sound/sound-library'
 import type { SoundCategory } from '../sound/sound.types'
@@ -36,6 +36,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
       })
       manager.on('trackChanged', () => stateEvents.emit('stateChanged'))
       manager.on('ambienceChanged', () => stateEvents.emit('stateChanged'))
+      manager.on('effectsChanged', () => stateEvents.emit('stateChanged'))
       managers.set(guildId, manager)
     }
     return managers.get(guildId)!
@@ -181,7 +182,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
    * otherwise pay that I/O even on a PCM cache hit, undercutting the cache's
    * whole point, and nothing but the path is needed here.
    */
-  async function playEffect(guildId: string, soundId: string, options: PlayEffectOptions): Promise<void> {
+  async function playEffect(guildId: string, soundId: string, options: PlayEffectOptions): Promise<EffectInstanceInfo> {
     const manager = managers.get(guildId)
     if (!manager || !manager.connected) {
       log.warn(`playEffect refused for guild ${guildId}: not connected`)
@@ -189,13 +190,19 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     }
     const path = await sounds.getFilePath('effects', soundId)
     log.info(`playEffect ${soundId} in guild ${guildId}: volume ${options.volume}`)
-    await manager.playEffect(() => effectPcmCache.get(path, () => createPcmStream(path)), options)
+    return manager.playEffect(() => effectPcmCache.get(path, () => createPcmStream(path)), soundId, options)
   }
 
   /** Ends every backend-decoded Effect instance for this guild (distinct from the chunked-IPC `audio:stopEffectStream` path). */
   function stopEffects(guildId: string): void {
     log.info(`stopEffects in guild ${guildId}`)
     managers.get(guildId)?.stopAllEffects()
+  }
+
+  /** Ends one backend-decoded Effect Instance by id (#509), leaving every other instance untouched; a no-op without a manager for this guild. */
+  function stopEffect(guildId: string, instanceId: string): void {
+    log.info(`stopEffect ${instanceId} in guild ${guildId}`)
+    managers.get(guildId)?.stopEffect(instanceId)
   }
 
   function getLiveState(): GuildPlaybackState[] {
@@ -209,6 +216,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
       source: 'live' as const,
       lastUpdated: timestamp,
       ambience: manager.activeAmbience,
+      effects: manager.activeEffects,
     }))
   }
 
@@ -277,6 +285,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary) {
     setAmbienceVolume,
     playEffect,
     stopEffects,
+    stopEffect,
     getState,
     onStateChanged,
     destroyAll,

@@ -458,6 +458,62 @@ describe('createPlayer', () => {
 
       expect(getEngineMock().stopMusic).toHaveBeenCalledWith(streamId)
     })
+
+    it('resolves with the new instance\'s id and a duration derived from the decoded PCM length (#509)', async () => {
+      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn().mockResolvedValue('/effects/fx1.mp3') })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      // 1920 bytes of 48 kHz stereo 16-bit PCM is exactly 10 ms.
+      createPcmStream.mockResolvedValue(fakePcmStream('x'.repeat(1920)))
+
+      const result = await player.playEffect('guild-1', 'fx1', { volume: 90 })
+
+      expect(result.soundId).toBe('fx1')
+      expect(result.durationMs).toBe(10)
+      expect(result.instanceId).toEqual(expect.any(String))
+    })
+
+    it('getState() lists active backend Effect Instances for the guild', async () => {
+      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn().mockResolvedValue('/effects/fx1.mp3') })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockResolvedValue(fakePcmStream())
+
+      const { instanceId, startedAt, durationMs } = await player.playEffect('guild-1', 'fx1', { volume: 90 })
+
+      const [state] = await player.getState()
+      expect(state.effects).toEqual([{ instanceId, soundId: 'fx1', startedAt, durationMs }])
+    })
+
+    it('stopEffect ends one instance by id via the manager, leaving the others untouched, and is a no-op without a manager', async () => {
+      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn().mockResolvedValue('/effects/fx1.mp3') })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockImplementation(() => Promise.resolve(fakePcmStream()))
+      const first = await player.playEffect('guild-1', 'fx1', { volume: 90 })
+      await player.playEffect('guild-1', 'fx1', { volume: 90 })
+
+      player.stopEffect('guild-1', first.instanceId)
+
+      expect(getEngineMock().stopMusic).toHaveBeenCalledWith(first.instanceId)
+      expect(getEngineMock().stopMusic).toHaveBeenCalledTimes(1)
+      expect(() => player.stopEffect('guild-nope', 'whatever')).not.toThrow()
+    })
+
+    it('notifies onStateChanged when an Effect instance starts or ends', async () => {
+      const sounds = createFakeSoundLibrary({ getFilePath: jest.fn().mockResolvedValue('/effects/fx1.mp3') })
+      const player = await connectedPlayer(sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockResolvedValue(fakePcmStream())
+      const stateChanged = jest.fn()
+      player.onStateChanged(stateChanged)
+
+      const { instanceId } = await player.playEffect('guild-1', 'fx1', { volume: 90 })
+      expect(stateChanged).toHaveBeenCalledTimes(1)
+
+      player.stopEffect('guild-1', instanceId)
+      expect(stateChanged).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('destroyAll', () => {
