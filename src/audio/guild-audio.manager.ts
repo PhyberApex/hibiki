@@ -83,6 +83,14 @@ export interface PlayEffectOptions {
   volume: number
 }
 
+/** What `playEffect` resolves with, and what `activeEffects` reports per Effect Instance (#509). */
+export interface EffectInstanceInfo {
+  instanceId: string
+  soundId: string
+  startedAt: string
+  durationMs: number
+}
+
 /**
  * One Ambience sound's bookkeeping, keyed by soundId in `ambienceEntries` —
  * several can be active at once per guild. Only ever holds a sound that has
@@ -151,6 +159,17 @@ export class GuildAudioManager extends EventEmitter {
    */
   private readonly effectStreamIds = new Set<string>()
   private effectStreamSeq = 0
+  /**
+   * Bookkeeping for `activeEffects`/`getState()` reporting (#509), keyed the
+   * same way as `effectStreamIds` but only holding an entry once the
+   * instance has actually started making sound — not while its slot is
+   * merely reserved pending a decode still in flight (`effectStreamIds`
+   * alone covers that window, for cap ordering). `effectStreamIds` stays
+   * the source of truth for "is this id still live at all" (cap
+   * enforcement, `stopEffect`'s no-op check); this is strictly a subset of
+   * it.
+   */
+  private readonly effectInstances = new Map<string, Omit<EffectInstanceInfo, 'instanceId'>>()
   /** Matches the renderer's own Effect cap (`EFFECT_INSTANCE_CAP` in SceneView.vue, #408). */
   private static readonly EFFECT_INSTANCE_CAP = 8
   /**
@@ -652,12 +671,16 @@ export class GuildAudioManager extends EventEmitter {
    * simultaneous instances per guild, at which point starting one more
    * stops the oldest (overlap parity with the renderer's own Effect cap,
    * #408). Rejects, leaving every other instance untouched, if
-   * `streamFactory` fails.
+   * `streamFactory` fails. Resolves with the new instance's id and
+   * duration (#509) — `streamFactory` reports the duration alongside the
+   * stream since the Effect PCM cache always decodes the whole file first
+   * (see `effect-pcm-cache.ts`).
    */
   async playEffect(
-    streamFactory: () => Readable | Promise<Readable>,
+    streamFactory: () => { stream: Readable, durationMs: number } | Promise<{ stream: Readable, durationMs: number }>,
+    soundId: string,
     options: PlayEffectOptions,
-  ): Promise<void> {
+  ): Promise<EffectInstanceInfo> {
     // Reserve the slot (and evict the oldest, if at cap) before decoding —
     // not after — so eviction order matches trigger order rather than
     // decode-completion order. Otherwise a slow cache-miss decode started
@@ -669,8 +692,9 @@ export class GuildAudioManager extends EventEmitter {
     this.effectStreamIds.add(streamId)
 
     let stream: Readable
+    let durationMs: number
     try {
-      stream = await streamFactory()
+      ({ stream, durationMs } = await streamFactory())
     }
     catch (err) {
       this.effectStreamIds.delete(streamId)
@@ -686,33 +710,66 @@ export class GuildAudioManager extends EventEmitter {
       // here ever touches the engine for a slot that was reserved but
       // never decoded.
       stream.destroy?.()
-      return
+      return { instanceId: streamId, soundId, startedAt: new Date().toISOString(), durationMs }
     }
 
-    log.info(`Effect starting as ${streamId}: volume ${options.volume} (${this.effectStreamIds.size} active); ${this.encryptionSummary}`)
+    const startedAt = new Date().toISOString()
+    log.info(`Effect "${soundId}" starting as ${streamId}: volume ${options.volume}, duration ${durationMs} ms (${this.effectStreamIds.size} active); ${this.encryptionSummary}`)
+    this.effectInstances.set(streamId, { soundId, startedAt, durationMs })
     this.engine.playMusicFromStream(stream, streamId, options.volume, () => {
       log.debug(`Effect ${streamId} played out`)
       this.effectStreamIds.delete(streamId)
+      this.effectInstances.delete(streamId)
+      this.emit('effectsChanged')
     })
+    this.emit('effectsChanged')
+    return { instanceId: streamId, soundId, startedAt, durationMs }
+  }
+
+  /** Ends one backend-decoded Effect Instance by id, leaving every other instance (of this or any other sound) untouched. A missing/already-ended id is a no-op, logged at debug. */
+  stopEffect(instanceId: string): void {
+    if (!this.effectStreamIds.has(instanceId)) {
+      log.debug(`stopEffect ${instanceId}: not active (guild ${this.guildId})`)
+      return
+    }
+    log.info(`Stopping effect instance ${instanceId} (guild ${this.guildId})`)
+    this.effectStreamIds.delete(instanceId)
+    this.effectInstances.delete(instanceId)
+    this.engine.stopMusic(instanceId)
+    this.emit('effectsChanged')
   }
 
   /** Ends every backend-decoded Effect instance for this guild (Scene stop, leave, disconnect). */
   stopAllEffects(): void {
+    const hadActive = this.effectInstances.size > 0
     for (const streamId of this.effectStreamIds)
       this.engine.stopMusic(streamId)
     this.effectStreamIds.clear()
+    this.effectInstances.clear()
+    if (hadActive)
+      this.emit('effectsChanged')
+  }
+
+  /** Active backend-decoded Effect Instances for this guild (#509), for `getState()` reporting. */
+  get activeEffects(): EffectInstanceInfo[] {
+    return [...this.effectInstances.entries()].map(([instanceId, entry]) => ({ instanceId, ...entry }))
   }
 
   /** FIFO-evicts the oldest backend-decoded Effect instance(s) until there's room for one more, under `EFFECT_INSTANCE_CAP`. */
   private enforceEffectInstanceCap(): void {
+    let evictedActive = false
     while (this.effectStreamIds.size >= GuildAudioManager.EFFECT_INSTANCE_CAP) {
       const oldestStreamId: string | undefined = this.effectStreamIds.values().next().value
       if (oldestStreamId === undefined)
         break
       log.info(`Effect cap of ${GuildAudioManager.EFFECT_INSTANCE_CAP} reached; stopping oldest ${oldestStreamId}`)
       this.effectStreamIds.delete(oldestStreamId)
+      if (this.effectInstances.delete(oldestStreamId))
+        evictedActive = true
       this.engine.stopMusic(oldestStreamId)
     }
+    if (evictedActive)
+      this.emit('effectsChanged')
   }
 
   get isIdle() {

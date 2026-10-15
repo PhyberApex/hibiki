@@ -49,6 +49,7 @@ vi.mock('@/api/player', async (importOriginal) => {
     setAmbienceVolume: vi.fn().mockResolvedValue(undefined),
     playEffect: vi.fn().mockResolvedValue(undefined),
     stopEffects: vi.fn().mockResolvedValue(undefined),
+    stopEffect: vi.fn().mockResolvedValue(undefined),
   }
 })
 
@@ -767,6 +768,131 @@ describe('sceneView — backend-decoded Effects (ADR-0003)', () => {
     await flushPromises()
 
     expect(stopBackendEffects).toHaveBeenCalledWith('g1')
+  })
+})
+
+describe('sceneView — Effect Instance indicator (#509)', () => {
+  let audioInstances: HTMLAudioElement[] = []
+  const originalDuration = Object.getOwnPropertyDescriptor(mediaProto, 'duration')
+
+  beforeAll(() => {
+    stubMediaElement()
+    // Local preview and the Discord-fallback path both read a known
+    // duration off the `<audio>` element once it's loaded/playing (jsdom
+    // itself never reports one) — fixed at 2s for every element here.
+    Object.defineProperty(mediaProto, 'duration', { configurable: true, get: () => 2 })
+  })
+
+  beforeEach(async () => {
+    // A preceding describe block overrides `canDecode` to resolve true for
+    // Effects (the backend-decoded path) and never resets it — default back
+    // to the renderer fallback here so the Discord-fallback test actually
+    // exercises that path rather than leaking the prior describe's mock.
+    const { canDecode } = await import('@/api/sounds')
+    vi.mocked(canDecode).mockResolvedValue(false)
+    audioInstances = []
+    const OriginalAudio = globalThis.Audio
+    vi.stubGlobal('Audio', new Proxy(OriginalAudio, {
+      construct(target, args) {
+        const instance = Reflect.construct(target, args) as HTMLAudioElement
+        Object.defineProperty(instance, 'pause', { configurable: true, value: vi.fn() })
+        audioInstances.push(instance)
+        return instance
+      },
+    }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+    if (originalDuration)
+      Object.defineProperty(mediaProto, 'duration', originalDuration)
+  })
+
+  it('shows a progress fill and m:ss / m:ss timer for a local-preview instance, and Stop clears it immediately', async () => {
+    const wrapper = await mountScene()
+    audioInstances.length = 0 // discard the two music-channel elements created on mount
+
+    await wrapper.find('.effect-trigger').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.effect-progress-fill').exists()).toBe(true)
+    expect(wrapper.find('.effect-timer').text()).toBe('0:00 / 0:02')
+    expect(wrapper.find('.effect-count-badge').exists()).toBe(false)
+
+    await wrapper.find('.effect-stop').trigger('click')
+    await flushPromises()
+
+    expect(audioInstances[0].pause).toHaveBeenCalled()
+    expect(wrapper.find('.effect-timer').exists()).toBe(false)
+    expect(wrapper.find('.effect-stop').exists()).toBe(false)
+  })
+
+  it('shows a ×N badge once the same Effect has more than one active instance, decrementing as instances end', async () => {
+    const wrapper = await mountScene()
+    audioInstances.length = 0
+    const trigger = wrapper.find('.effect-trigger')
+
+    await trigger.trigger('click')
+    await flushPromises()
+    await trigger.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.effect-count-badge').text()).toBe('×2')
+
+    audioInstances[0].dispatchEvent(new Event('ended'))
+    await flushPromises()
+
+    expect(wrapper.find('.effect-count-badge').exists()).toBe(false)
+    expect(wrapper.find('.effect-timer').exists()).toBe(true)
+  })
+
+  it('shows the indicator on the Discord-fallback path too', async () => {
+    const { wrapper } = await mountSceneJoined()
+
+    await wrapper.find('.effect-trigger').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.effect-timer').text()).toBe('0:00 / 0:02')
+  })
+
+  it('the Stop control is a real button with an aria-label naming the sound', async () => {
+    const wrapper = await mountScene()
+
+    await wrapper.find('.effect-trigger').trigger('click')
+    await flushPromises()
+
+    const stopButton = wrapper.find('.effect-stop')
+    expect(stopButton.element.tagName).toBe('BUTTON')
+    expect(stopButton.attributes('aria-label')).toBe('Stop Thunder')
+  })
+
+  it('reflects a backend-decoded instance synced from playerState, and Stop calls the per-instance backend API', async () => {
+    const { stopEffect: stopBackendEffect } = await import('@/api/player')
+    const { wrapper, player } = await mountSceneJoined()
+
+    player.playerState = [{
+      guildId: 'g1',
+      connectedChannelId: 'c1',
+      isIdle: false,
+      track: null,
+      source: 'live',
+      effects: [{ instanceId: 'backend-effect:1', soundId: 'fx-1', startedAt: new Date().toISOString(), durationMs: 2000 }],
+    }]
+    await flushPromises()
+
+    expect(wrapper.find('.effect-timer').text()).toBe('0:00 / 0:02')
+
+    await wrapper.find('.effect-stop').trigger('click')
+    await flushPromises()
+
+    expect(stopBackendEffect).toHaveBeenCalledWith('g1', 'backend-effect:1')
+    expect(wrapper.find('.effect-timer').exists()).toBe(false)
   })
 })
 

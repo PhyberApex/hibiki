@@ -10,6 +10,7 @@ vi.mock('@/api/player', () => ({
   leaveGuild: vi.fn().mockResolvedValue(undefined),
   reconnectBot: vi.fn().mockResolvedValue(undefined),
   onPlayerStateChanged: vi.fn().mockReturnValue(() => {}),
+  stopEffect: vi.fn().mockResolvedValue(undefined),
 }))
 
 describe('player store', () => {
@@ -20,6 +21,7 @@ describe('player store', () => {
   let leaveGuild: ReturnType<typeof vi.fn>
   let reconnectBot: ReturnType<typeof vi.fn>
   let onPlayerStateChanged: ReturnType<typeof vi.fn>
+  let stopEffect: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     setActivePinia(createPinia())
@@ -31,8 +33,10 @@ describe('player store', () => {
     leaveGuild = vi.mocked(api.leaveGuild)
     reconnectBot = vi.mocked(api.reconnectBot)
     onPlayerStateChanged = vi.mocked(api.onPlayerStateChanged)
+    stopEffect = vi.mocked(api.stopEffect)
     vi.clearAllMocks()
     onPlayerStateChanged.mockReturnValue(() => {})
+    stopEffect.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -406,6 +410,210 @@ describe('player store', () => {
       await store.loadDirectory()
 
       expect(store.channelId).toBe('')
+    })
+  })
+
+  describe('effect instances (#509)', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('registers a renderer-tracked instance and reports it via effectStatus', () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(0)
+      const store = usePlayerStore()
+
+      const id = store.registerRendererEffectInstance('fx1', vi.fn())
+
+      expect(store.effectStatus('fx1')).toEqual({ count: 1, elapsedMs: 0, totalMs: 0 })
+      expect(store.effectStatus('fx2')).toBeNull()
+      expect(id).toMatch(/^effect-/)
+    })
+
+    it('tracks elapsed time against a renderer instance\'s duration once set', () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(0)
+      const store = usePlayerStore()
+      const id = store.registerRendererEffectInstance('fx1', vi.fn())
+      store.setEffectInstanceDuration(id, 2000)
+
+      // The ticking interval runs every 200 ms, so advancing by a multiple
+      // of it lands effectTick exactly on a tick boundary.
+      vi.advanceTimersByTime(600)
+
+      expect(store.effectStatus('fx1')).toEqual({ count: 1, elapsedMs: 600, totalMs: 2000 })
+    })
+
+    it('tracks the longest-remaining of several instances of the same sound, and counts them', () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(0)
+      const store = usePlayerStore()
+      const first = store.registerRendererEffectInstance('fx1', vi.fn())
+      store.setEffectInstanceDuration(first, 1000) // finishes at t=1000
+
+      vi.advanceTimersByTime(100)
+      const second = store.registerRendererEffectInstance('fx1', vi.fn())
+      store.setEffectInstanceDuration(second, 3000) // finishes at t=3100, later than first
+
+      vi.advanceTimersByTime(500) // now t=600: first remaining 400, second remaining 2500
+
+      const status = store.effectStatus('fx1')!
+      expect(status.count).toBe(2)
+      // The second instance (finishing later) drives the fill/timer.
+      expect(status.totalMs).toBe(3000)
+      expect(status.elapsedMs).toBe(500) // 600 - 100
+    })
+
+    it('removeRendererEffectInstance tears the instance down via its stop callback and clears it', () => {
+      const store = usePlayerStore()
+      const stop = vi.fn()
+      const id = store.registerRendererEffectInstance('fx1', stop)
+
+      store.removeRendererEffectInstance(id)
+
+      expect(stop).toHaveBeenCalledTimes(1)
+      expect(store.effectStatus('fx1')).toBeNull()
+    })
+
+    it('removeRendererEffectInstance is a no-op for an unknown id', () => {
+      const store = usePlayerStore()
+      expect(() => store.removeRendererEffectInstance('nope')).not.toThrow()
+    })
+
+    it('evicts the oldest renderer-tracked instance once the renderer-side cap of 8 is reached', () => {
+      const store = usePlayerStore()
+      const stops = Array.from({ length: 9 }, () => vi.fn())
+      const ids = stops.map(stop => store.registerRendererEffectInstance('fx1', stop))
+
+      expect(stops[0]).toHaveBeenCalledTimes(1)
+      for (let i = 1; i < 9; i++)
+        expect(stops[i]).not.toHaveBeenCalled()
+      expect(store.effectStatus('fx1')!.count).toBe(8)
+      expect(ids).toHaveLength(9)
+    })
+
+    it('removeAllRendererEffectInstances clears every renderer-tracked instance regardless of sound', () => {
+      const store = usePlayerStore()
+      const stopA = vi.fn()
+      const stopB = vi.fn()
+      store.registerRendererEffectInstance('fx1', stopA)
+      store.registerRendererEffectInstance('fx2', stopB)
+
+      store.removeAllRendererEffectInstances()
+
+      expect(stopA).toHaveBeenCalledTimes(1)
+      expect(stopB).toHaveBeenCalledTimes(1)
+      expect(store.effectStatus('fx1')).toBeNull()
+      expect(store.effectStatus('fx2')).toBeNull()
+    })
+
+    it('syncs backend-reported Effect Instances from playerState for the selected guild', async () => {
+      const state = [{
+        guildId: 'g1',
+        isIdle: false,
+        track: null,
+        source: 'live' as const,
+        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date(1000).toISOString(), durationMs: 2000 }],
+      }]
+      fetchPlayerState.mockResolvedValue(state)
+      fetchBotStatus.mockResolvedValue({ ready: true })
+      const store = usePlayerStore()
+      store.guildId = 'g1'
+
+      await store.loadState()
+
+      expect(store.effectStatus('fx1')).toEqual({ count: 1, elapsedMs: expect.any(Number), totalMs: 2000 })
+    })
+
+    it('drops a backend-reported instance once it no longer appears in playerState (played out, evicted, or stopped)', async () => {
+      const withEffect = [{
+        guildId: 'g1',
+        isIdle: false,
+        track: null,
+        source: 'live' as const,
+        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date().toISOString(), durationMs: 2000 }],
+      }]
+      fetchPlayerState.mockResolvedValue(withEffect)
+      fetchBotStatus.mockResolvedValue({ ready: true })
+      const store = usePlayerStore()
+      store.guildId = 'g1'
+      await store.loadState()
+      expect(store.effectStatus('fx1')).not.toBeNull()
+
+      fetchPlayerState.mockResolvedValue([{ guildId: 'g1', isIdle: true, track: null, source: 'live' as const, effects: [] }])
+      await store.loadState()
+
+      expect(store.effectStatus('fx1')).toBeNull()
+    })
+
+    it('never syncs backend instances from a guild other than the selected one', async () => {
+      const state = [{
+        guildId: 'g2',
+        isIdle: false,
+        track: null,
+        source: 'live' as const,
+        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date().toISOString(), durationMs: 2000 }],
+      }]
+      fetchPlayerState.mockResolvedValue(state)
+      fetchBotStatus.mockResolvedValue({ ready: true })
+      const store = usePlayerStore()
+      store.guildId = 'g1'
+
+      await store.loadState()
+
+      expect(store.effectStatus('fx1')).toBeNull()
+    })
+
+    it('stopEffectSound stops every instance of a sound across both origins, leaving other sounds untouched', async () => {
+      const state = [{
+        guildId: 'g1',
+        isIdle: false,
+        track: null,
+        source: 'live' as const,
+        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date().toISOString(), durationMs: 2000 }],
+      }]
+      fetchPlayerState.mockResolvedValue(state)
+      fetchBotStatus.mockResolvedValue({ ready: true })
+      const store = usePlayerStore()
+      store.guildId = 'g1'
+      await store.loadState()
+      const rendererStop = vi.fn()
+      store.registerRendererEffectInstance('fx1', rendererStop)
+      const otherStop = vi.fn()
+      store.registerRendererEffectInstance('fx2', otherStop)
+
+      await store.stopEffectSound('fx1')
+
+      expect(rendererStop).toHaveBeenCalledTimes(1)
+      expect(otherStop).not.toHaveBeenCalled()
+      expect(stopEffect).toHaveBeenCalledWith('g1', 'backend-effect:1')
+      expect(store.effectStatus('fx1')).toBeNull()
+      expect(store.effectStatus('fx2')).not.toBeNull()
+    })
+
+    it('stopEffectSound drops the backend-origin entry immediately, without waiting for the IPC call to resolve', async () => {
+      let resolveStop!: () => void
+      stopEffect.mockImplementation(() => new Promise<void>((resolve) => {
+        resolveStop = resolve
+      }))
+      const state = [{
+        guildId: 'g1',
+        isIdle: false,
+        track: null,
+        source: 'live' as const,
+        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date().toISOString(), durationMs: 2000 }],
+      }]
+      fetchPlayerState.mockResolvedValue(state)
+      fetchBotStatus.mockResolvedValue({ ready: true })
+      const store = usePlayerStore()
+      store.guildId = 'g1'
+      await store.loadState()
+
+      const stopPromise = store.stopEffectSound('fx1')
+
+      expect(store.effectStatus('fx1')).toBeNull()
+      resolveStop()
+      await stopPromise
     })
   })
 })

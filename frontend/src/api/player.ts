@@ -7,6 +7,14 @@ export interface PlayerTrackInfo {
   category: string
 }
 
+/** One active backend-decoded Effect Instance (#509), as reported by `getState()`. */
+export interface EffectInstanceInfo {
+  instanceId: string
+  soundId: string
+  startedAt: string
+  durationMs: number
+}
+
 export interface PlayerStateItem {
   guildId: string
   connectedChannelId?: string
@@ -17,6 +25,8 @@ export interface PlayerStateItem {
   lastUpdated?: string
   /** soundIds of backend-decoded Ambience sounds currently active; only present when live. */
   ambience?: string[]
+  /** Active backend-decoded Effect Instances; only present when live. */
+  effects?: EffectInstanceInfo[]
 }
 
 export interface GuildDirectoryEntry {
@@ -121,16 +131,22 @@ export interface PlayEffectOptions {
   volume: number
 }
 
-/** Plays a Sound Library Effect decoded straight into the mixer (see ADR-0003). Every trigger is its own instance; the same Effect can layer. */
-export function playEffect(guildId: string, soundId: string, options: PlayEffectOptions): Promise<void> {
+/** Plays a Sound Library Effect decoded straight into the mixer (see ADR-0003). Every trigger is its own instance; the same Effect can layer. Resolves with the new instance's id and duration (#509). */
+export function playEffect(guildId: string, soundId: string, options: PlayEffectOptions): Promise<EffectInstanceInfo> {
   requireElectron()
-  return apiCall<void>('player', 'playEffect', [guildId, soundId, options])
+  return apiCall<EffectInstanceInfo>('player', 'playEffect', [guildId, soundId, options])
 }
 
 /** Ends every backend-decoded Effect instance for this guild (distinct from the chunked-IPC `audio-stream` API's `stopEffectStream`). */
 export function stopEffects(guildId: string): Promise<void> {
   requireElectron()
   return apiCall<void>('player', 'stopEffects', [guildId])
+}
+
+/** Ends one backend-decoded Effect Instance by id, leaving every other instance untouched (#509) — a no-op if already ended. */
+export function stopEffect(guildId: string, instanceId: string): Promise<void> {
+  requireElectron()
+  return apiCall<void>('player', 'stopEffect', [guildId, instanceId])
 }
 
 export function reconnectBot(): Promise<void> {

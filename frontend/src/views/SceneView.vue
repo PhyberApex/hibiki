@@ -163,6 +163,30 @@ function formatInterval(seconds: number): string {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
+/** `m:ss` for an elapsed/total timer label (whole seconds, per #509's acceptance criteria). */
+function formatEffectSeconds(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000)
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+/** `m:ss / m:ss` (elapsed / total) for the sound's longest-remaining active instance, or '' while none are active. */
+function effectTimerLabel(soundId: string): string {
+  const status = player.effectStatus(soundId)
+  if (!status)
+    return ''
+  return `${formatEffectSeconds(status.elapsedMs)} / ${formatEffectSeconds(status.totalMs)}`
+}
+
+/** 0-100 fill percentage for the sound's longest-remaining active instance, or 0 while none are active or its duration isn't known yet. */
+function effectProgressPercent(soundId: string): number {
+  const status = player.effectStatus(soundId)
+  if (!status || status.totalMs <= 0)
+    return 0
+  return Math.min(100, (status.elapsedMs / status.totalMs) * 100)
+}
+
 function updateRepeat(item: SceneItem, field: 'repeatMin' | 'repeatMax', value: number) {
   item[field] = value
   if (field === 'repeatMin' && (item.repeatMax ?? 0) < value)
@@ -180,70 +204,36 @@ const sceneId = computed(() => {
 const guildId = computed(() => player.guildId)
 const isJoined = computed(() => player.isJoined)
 
-interface EffectInstance {
-  el: HTMLAudioElement
-  streamId?: string
-}
-
 // Matches DEFAULT_SCENE_FADE_LENGTH_SECONDS (src/config/scene-fade-settings.ts)
 // — used only if fetching the configured fade length fails outright.
 const DEFAULT_CROSSFADE_FALLBACK_SECONDS = 3
 
-const EFFECT_INSTANCE_CAP = 8
-let effectInstanceSeq = 0
-const effectInstances = new Map<string, EffectInstance>()
+// Effect Instance bookkeeping (#509) lives in the player store now — a
+// single reactive view merging backend-reported instances with the
+// renderer-tracked ones registered here (the Discord-fallback and
+// local-preview paths; the backend has no visibility into either). See
+// "Effect Instance" in CONTEXT.md.
 
-function createEffectInstanceId(): string {
-  effectInstanceSeq += 1
-  return `effect-${effectInstanceSeq}`
-}
-
-/** Trigger setup shared by playEffect and playEffectLocal: allocate an id,
- * evict the oldest instance if we're at the cap, create the element and
- * register it before any playback/streaming calls begin. */
-function registerEffectInstance(remote: boolean): { id: string, el: HTMLAudioElement } {
-  const id = createEffectInstanceId()
-  enforceEffectInstanceCap()
-  const el = createAudioEl()
-  effectInstances.set(id, remote ? { el, streamId: id } : { el })
-  return { id, el }
-}
-
-function cleanupEffectInstance(id: string) {
-  const instance = effectInstances.get(id)
-  if (!instance)
-    return
-  effectInstances.delete(id)
-  instance.el.onended = null
-  instance.el.onerror = null
-  instance.el.pause()
-  instance.el.removeAttribute('src')
-  instance.el.load()
+/** Tears down a renderer-tracked Effect Instance's `<audio>` element, capture session (if any) and chunked-IPC stream (if remote) — passed to the store as the instance's `stop` callback, called exactly once whether triggered by natural end, cap eviction, or an explicit Stop. */
+function teardownEffectAudioEl(id: string, el: HTMLAudioElement, remote: boolean) {
+  el.onended = null
+  el.onerror = null
+  el.pause()
+  el.removeAttribute('src')
+  el.load()
   const sess = captureSessions.get(id)
   if (sess) {
     sess.stop()
     captureSessions.delete(id)
   }
-  releaseAudioElementContext(instance.el)
-  if (instance.streamId && guildId.value)
-    stopEffectStream(guildId.value, instance.streamId).catch(() => {})
+  releaseAudioElementContext(el)
+  if (remote && guildId.value)
+    stopEffectStream(guildId.value, id).catch(() => {})
 }
 
-function enforceEffectInstanceCap() {
-  // effectInstances is a Map, so key iteration order is insertion order —
-  // the first key is always the oldest surviving instance (FIFO eviction).
-  while (effectInstances.size >= EFFECT_INSTANCE_CAP) {
-    const oldestId = effectInstances.keys().next().value
-    if (oldestId === undefined)
-      break
-    cleanupEffectInstance(oldestId)
-  }
-}
-
-/** Stops every Effect instance for the current guild, regardless of path: renderer-tracked (local preview + chunked-IPC fallback) instances here, and any backend-decoded ones (ADR-0003, which keeps its own cap independently of `EFFECT_INSTANCE_CAP` above) via the backend. */
+/** Stops every Effect instance for the current guild, regardless of path: renderer-tracked (local preview + chunked-IPC fallback) instances via the store, and any backend-decoded ones (ADR-0003, which keeps its own cap independently of the renderer-side cap) via the backend. */
 function stopAllEffectInstances() {
-  for (const id of [...effectInstances.keys()])
-    cleanupEffectInstance(id)
+  player.removeAllRendererEffectInstances()
   if (guildId.value)
     stopBackendEffects(guildId.value).catch(() => {})
 }
@@ -804,16 +794,20 @@ function stopMusicPlayback() {
 
 function playEffectLocal(item: SceneItem) {
   effectFlash.trigger(item.soundId)
-  const { id, el } = registerEffectInstance(false)
+  const el = createAudioEl()
+  const id = player.registerRendererEffectInstance(item.soundId, () => teardownEffectAudioEl(id, el, false))
   logInfo(`[scene] playEffectLocal ${item.soundId} as ${id}`)
-  el.onended = () => cleanupEffectInstance(id)
-  el.onerror = () => cleanupEffectInstance(id)
+  el.onended = () => player.removeRendererEffectInstance(id)
+  el.onerror = () => player.removeRendererEffectInstance(id)
   el.src = soundStreamUrl('effects', item.soundId)
   el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
   el.load()
-  el.play().catch((e) => {
+  el.play().then(() => {
+    if (Number.isFinite(el.duration))
+      player.setEffectInstanceDuration(id, el.duration * 1000)
+  }).catch((e) => {
     console.error('[scene] playEffectLocal failed:', e)
-    cleanupEffectInstance(id)
+    player.removeRendererEffectInstance(id)
   })
 }
 
@@ -821,7 +815,10 @@ function playEffectLocal(item: SceneItem) {
 // the mixer in the main process, so there's no audio element/chunked IPC
 // here. Every trigger is its own instance (never replacing another), with
 // its own cap of 8 kept independently by the backend — overlap parity with
-// the renderer's own Effect cap (#408), just enforced on the other side.
+// the renderer's own Effect cap (#408), just enforced on the other side. The
+// started instance itself is reported to the store via `getState()`'s
+// `effects` field and the resulting `stateChanged` push (#509), not by
+// registering it here from the resolved call.
 async function playEffectBackend(item: SceneItem): Promise<void> {
   if (!guildId.value)
     return
@@ -849,24 +846,25 @@ async function playEffect(item: SceneItem) {
     return
   }
 
-  const { id, el } = registerEffectInstance(true)
-  const streamId = id
+  const el = createAudioEl()
+  const id = player.registerRendererEffectInstance(item.soundId, () => teardownEffectAudioEl(id, el, true))
   try {
-    await startEffectStream(guildId.value, streamId)
+    await startEffectStream(guildId.value, id)
     el.src = soundStreamUrl('effects', item.soundId)
     el.volume = (item.volume ?? 80) / 100 * (globalVolume.value / 100)
     el.load()
     await waitForPlayable(el, `effect ${item.soundId} (Discord fallback)`)
-    const onChunk = (chunk: ArrayBuffer) => sendEffectChunk(guildId.value!, chunk, streamId)
-    const sess = await captureFromAudioElement(el, onChunk)
-    captureSessions.set(id, sess)
-    el.onended = () => cleanupEffectInstance(id)
-    el.onerror = () => cleanupEffectInstance(id)
+    if (Number.isFinite(el.duration))
+      player.setEffectInstanceDuration(id, el.duration * 1000)
+    const onChunk = (chunk: ArrayBuffer) => sendEffectChunk(guildId.value!, chunk, id)
+    captureSessions.set(id, await captureFromAudioElement(el, onChunk))
+    el.onended = () => player.removeRendererEffectInstance(id)
+    el.onerror = () => player.removeRendererEffectInstance(id)
     await el.play()
   }
   catch (e) {
     console.error('[scene] playEffect failed:', e)
-    cleanupEffectInstance(id)
+    player.removeRendererEffectInstance(id)
   }
 }
 
@@ -1854,10 +1852,31 @@ watch(sceneId, (newId) => {
                 :title="isSoundMissing('effects', item.soundId) ? 'Sound missing' : `Play ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
                 @click="isJoined ? playEffect(item) : playEffectLocal(item)"
               >
-                <span class="effect-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
+                <span
+                  v-if="player.effectStatus(item.soundId)"
+                  class="effect-progress-fill"
+                  :style="{ width: `${effectProgressPercent(item.soundId)}%` }"
+                />
+                <span class="effect-trigger-content">
+                  <span class="effect-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
+                  <span v-if="player.effectStatus(item.soundId)" class="effect-timer">{{ effectTimerLabel(item.soundId) }}</span>
+                </span>
                 <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing-badge">
                   missing
                 </span>
+                <span v-if="(player.effectStatus(item.soundId)?.count ?? 0) > 1" class="effect-count-badge">
+                  ×{{ player.effectStatus(item.soundId)!.count }}
+                </span>
+              </button>
+              <button
+                v-if="player.effectStatus(item.soundId)"
+                type="button"
+                class="btn-icon effect-stop"
+                title="Stop"
+                :aria-label="`Stop ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
+                @click="player.stopEffectSound(item.soundId)"
+              >
+                ■
               </button>
               <button
                 type="button"
@@ -2519,6 +2538,7 @@ watch(sceneId, (newId) => {
 }
 
 .effect-trigger {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -2531,6 +2551,7 @@ watch(sceneId, (newId) => {
   font-weight: 500;
   cursor: pointer;
   text-align: left;
+  overflow: hidden;
   transition: background 0.15s;
 }
 
@@ -2547,10 +2568,57 @@ watch(sceneId, (newId) => {
   cursor: not-allowed;
 }
 
+/* Sweeps across the trigger button as the longest-remaining instance
+   plays out — a plain width percentage, no transition: a mid-playback Stop
+   or eviction must make this disappear instantly, not animate out. */
+.effect-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 0;
+  background: var(--color-effects-muted);
+}
+
+.effect-trigger-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
 .effect-name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.effect-timer {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.effect-count-badge {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-effects);
+}
+
+.effect-stop {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.7rem;
+  background: var(--color-bg-elevated);
+  color: var(--color-effects);
 }
 
 .effect-remove {
