@@ -1,5 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useToastStore } from '@/stores/toast'
 import SoundListManage from './SoundListManage.vue'
 
 vi.mock('@/api/sounds', () => ({
@@ -13,7 +15,15 @@ vi.mock('@/api/sounds', () => ({
   soundStreamUrl: (type: string, id: string) => `hibiki://sound/${type}/${id}`,
 }))
 
+function lastToast(type: string) {
+  return useToastStore().toasts.findLast(t => t.type === type)?.text
+}
+
 describe('soundListManage', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
   it('renders Add button', () => {
     const wrapper = mount(SoundListManage, {
       props: { type: 'effects' },
@@ -97,7 +107,7 @@ describe('soundListManage', () => {
     await input.trigger('change')
     await flushPromises()
 
-    expect(wrapper.find('.toast-success').text()).toBe('Added to music.')
+    expect(lastToast('success')).toBe('Added to music.')
   })
 
   it('bulk upload shows count in toast', async () => {
@@ -123,7 +133,7 @@ describe('soundListManage', () => {
     await input.trigger('change')
     await flushPromises()
 
-    expect(wrapper.find('.toast-success').text()).toBe('Added 2 files to music.')
+    expect(lastToast('success')).toBe('Added 2 files to music.')
   })
 
   it('bulk upload partial failure shows mixed toast', async () => {
@@ -146,7 +156,7 @@ describe('soundListManage', () => {
     await input.trigger('change')
     await flushPromises()
 
-    expect(wrapper.find('.toast-success').text()).toBe('Added 1 file, but 1 couldn\'t be uploaded. Check that all files are audio.')
+    expect(lastToast('success')).toBe('Added 1 file, but 1 couldn\'t be uploaded. Check that all files are audio.')
   })
 
   it('delete flow shows confirm and deletes', async () => {
@@ -171,7 +181,7 @@ describe('soundListManage', () => {
     await flushPromises()
 
     expect(deleteSound).toHaveBeenCalledWith('music', 's1')
-    expect(wrapper.find('.toast-success').text()).toBe('Removed from library.')
+    expect(lastToast('success')).toBe('Removed from library.')
   })
 
   it('delete cancel hides confirm buttons', async () => {
@@ -211,7 +221,7 @@ describe('soundListManage', () => {
     await wrapper.find('.btn-confirm-delete').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.toast-error').text()).toBe('Delete failed')
+    expect(lastToast('error')).toBe('Delete failed')
   })
 
   it('sort by date reorders items', async () => {
@@ -319,12 +329,12 @@ describe('soundListManage', () => {
     await input.trigger('change')
     await flushPromises()
 
-    expect(wrapper.find('.toast-success').exists()).toBe(true)
+    expect(lastToast('success')).toBeDefined()
 
     vi.advanceTimersByTime(4000)
     await flushPromises()
 
-    expect(wrapper.find('.toast-success').exists()).toBe(false)
+    expect(useToastStore().toasts).toHaveLength(0)
     vi.useRealTimers()
   })
 
@@ -397,7 +407,7 @@ describe('soundListManage', () => {
       await wrapper.find('input.tags-input').setValue('x')
       await wrapper.find('input.tags-input').trigger('keydown.enter')
       await flushPromises()
-      expect(wrapper.find('.toast-error').text()).toContain('disk full')
+      expect(lastToast('error')).toContain('disk full')
     })
   })
 })
