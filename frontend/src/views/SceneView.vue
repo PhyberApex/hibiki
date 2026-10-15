@@ -955,6 +955,7 @@ watch(sceneId, (newId) => {
               class="effect-card"
               :class="{
                 'effect-card-missing': isSoundMissing('effects', item.soundId),
+                'effect-card-playing': Boolean(status),
                 'pulse pulse-flash': effectFlash.has(item.soundId),
               }"
             >
@@ -972,7 +973,6 @@ watch(sceneId, (newId) => {
                 />
                 <span class="effect-trigger-content">
                   <span class="effect-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
-                  <kbd v-if="item.hotkey" class="hotkey-chip" :title="`Effect Hotkey: ${item.hotkey}`" data-testid="effect-hotkey-chip">{{ item.hotkey }}</kbd>
                   <span v-if="status" class="effect-timer">{{ effectTimerLabel(status) }}</span>
                 </span>
                 <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing-badge">
@@ -1003,6 +1003,8 @@ watch(sceneId, (newId) => {
               </button>
               <HotkeyRecorder
                 class="effect-hotkey-recorder"
+                compact
+                data-testid="effect-hotkey-recorder"
                 :model-value="item.hotkey"
                 :label="`Effect Hotkey for ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
                 :error="hotkeyErrors[`effect:${item.soundId}`]"
@@ -1057,22 +1059,6 @@ watch(sceneId, (newId) => {
 </template>
 
 <style scoped>
-.hotkey-chip {
-  flex: none;
-  padding: 0.05rem 0.4rem;
-  border: 1px solid rgba(251, 191, 36, 0.4);
-  border-radius: 0.3rem;
-  background: rgba(251, 191, 36, 0.08);
-  color: #fbbf24;
-  font-family: inherit;
-  font-size: 0.7rem;
-  font-weight: 600;
-}
-
-.effect-hotkey-recorder {
-  padding: 0.25rem 0.5rem;
-}
-
 .scene-view {
   display: flex;
   flex-direction: column;
@@ -1765,31 +1751,43 @@ watch(sceneId, (newId) => {
   color: var(--color-effects);
 }
 
-.effect-stop {
-  position: absolute;
-  top: 0.35rem;
-  left: 0.25rem;
-  width: 1.5rem;
-  height: 1.5rem;
-  font-size: 0.7rem;
-  background: var(--color-bg-elevated);
-  color: var(--color-effects);
+.effect-card-playing .effect-trigger {
+  padding-right: 3.75rem;
 }
 
+.effect-stop,
 .effect-remove {
   position: absolute;
   top: 0.35rem;
   right: 0.25rem;
+  z-index: 2;
   width: 1.5rem;
   height: 1.5rem;
+}
+
+.effect-stop {
+  font-size: 0.7rem;
+  background: var(--color-bg);
+  color: var(--color-effects);
+}
+
+.effect-remove {
   font-size: 1rem;
   background: transparent;
   opacity: 0;
   transition: opacity 0.15s;
 }
 
+.effect-card-playing .effect-remove {
+  right: 2rem;
+}
+
 .effect-card:hover .effect-remove {
   opacity: 1;
+}
+
+.effect-hotkey-recorder {
+  padding: 0 0.75rem 0.45rem;
 }
 
 .effect-card-missing {
