@@ -244,8 +244,9 @@ export const usePlayerStore = defineStore('player', () => {
     try {
       activeTarget.value = await fetchActiveOutputTarget()
     }
-    catch {
-      // Outside Electron (tests, Vite dev): keep the default.
+    catch (err) {
+      // Outside Electron (tests, Vite dev) this is expected; keep the default.
+      console.warn('[player] could not read the active Output Target, keeping the default:', err)
     }
   }
 
