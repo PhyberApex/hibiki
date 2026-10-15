@@ -150,7 +150,7 @@ test.describe('Hibiki Electron E2E', () => {
       const panel = page.locator('section.panel')
       await panel.locator('input[type=file]').setInputFiles(wavPath)
       await expect(panel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
-      await expect(panel.getByText('Added to music.')).toBeVisible({ timeout: 5000 })
+      await expect(page.locator('.toast-region').getByText('Added to music.')).toBeVisible({ timeout: 5000 })
 
       const music = await invokeApi<Array<{ id: string, name: string }>>(
         page,
@@ -176,7 +176,7 @@ test.describe('Hibiki Electron E2E', () => {
       const panel = page.locator('section.panel')
       await panel.locator('input[type=file]').setInputFiles(wavPath)
       await expect(panel.locator('li').filter({ hasText: timestamp })).toBeVisible({ timeout: 15_000 })
-      await expect(panel.getByText('Added to effects.')).toBeVisible({ timeout: 5000 })
+      await expect(page.locator('.toast-region').getByText('Added to effects.')).toBeVisible({ timeout: 5000 })
 
       const effects = await invokeApi<Array<{ id: string, name: string }>>(
         page,
@@ -207,7 +207,7 @@ test.describe('Hibiki Electron E2E', () => {
       // Click the × delete button, then confirm with "Delete"
       await listItem.locator('.btn-delete').click()
       await listItem.locator('.btn-confirm-delete').click()
-      await expect(panel.getByText('Removed from library.')).toBeVisible({ timeout: 5000 })
+      await expect(page.locator('.toast-region').getByText('Removed from library.')).toBeVisible({ timeout: 5000 })
 
       const music = await invokeApi<Array<{ id: string, name: string }>>(
         page,
@@ -238,7 +238,7 @@ test.describe('Hibiki Electron E2E', () => {
       // Click the × delete button, then confirm with "Delete"
       await listItem.locator('.btn-delete').click()
       await listItem.locator('.btn-confirm-delete').click()
-      await expect(panel.getByText('Removed from library.')).toBeVisible({ timeout: 5000 })
+      await expect(page.locator('.toast-region').getByText('Removed from library.')).toBeVisible({ timeout: 5000 })
 
       const effects = await invokeApi<Array<{ id: string, name: string }>>(
         page,
