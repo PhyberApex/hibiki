@@ -3,7 +3,19 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue({
+      template: {
+        transformAssetUrls: {
+          // Keep absolute public-dir URLs such as <img src="/logo.svg"> as plain strings under
+          // test. The production build (vite.config.ts) still imports them; here Vitest would
+          // turn the bare "/logo.svg" id into "file:///logo.svg", which has no drive letter and
+          // is rejected on Windows.
+          includeAbsolute: false,
+        },
+      },
+    }),
+  ],
   define: {
     __APP_VERSION__: JSON.stringify('99.0.0-test'),
   },
