@@ -111,6 +111,8 @@ async function bindHotkey(errorKey: string, target: { hotkey?: string }, value: 
   hotkeyErrors.value = rest
   try {
     await saveScene(scene.value)
+    // The Scene list shows the Scene Hotkey chip, so refresh it from the store.
+    await loadScenes()
   }
   catch (e) {
     if (previous)
