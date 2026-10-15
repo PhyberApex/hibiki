@@ -5,12 +5,15 @@ import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { fetchStorageWarnings } from '@/api/config'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
+import { useScenePlaybackStore } from '@/stores/scene-playback'
 
 declare const __APP_VERSION__: string
 const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
 
 const route = useRoute()
 const player = usePlayerStore()
+// Instantiated app-wide so Scene playback (and its watchers) outlives any view.
+useScenePlaybackStore()
 const accessibility = useAccessibilityStore()
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
