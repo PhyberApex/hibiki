@@ -94,3 +94,7 @@ The `.actrc` file in the repo root configures `act` to use the correct Docker im
 - `.env.e2e` – optional; set `E2E_GUILD_ID`, `E2E_VOICE_CHANNEL_ID` for voice channel tests
 - `.env` in repo root – required for Discord; `DISCORD_TOKEN`
 - `.secrets` – used by `act` for local CI runs; copy from `.secrets.example`
+
+## Local Target test (no secrets)
+
+`tests/local-target.e2e.spec.ts` seeds a throwaway profile (`HIBIKI_USER_DATA_DIR`) and plays Music, Ambience and an Effect through the Local Target with no Discord token. Run it on its own with `pnpm exec playwright test tests/local-target.e2e.spec.ts` (under `xvfb-run` on a headless Linux box); CI runs it in the `e2e-local` job.
