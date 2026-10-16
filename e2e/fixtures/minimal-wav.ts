@@ -12,14 +12,14 @@ export function createMinimalWavPath(filename: string): string {
   return path
 }
 
-export function writeMinimalWav(path: string): void {
+export function writeMinimalWav(path: string, durationSec?: number): void {
   // RIFF header + fmt chunk + data chunk with a few silent samples
   const sampleRate = 44100
   const numChannels = 1
   const bitsPerSample = 16
   const blockAlign = numChannels * (bitsPerSample / 8)
   const byteRate = sampleRate * blockAlign
-  const dataSize = 4096
+  const dataSize = durationSec ? Math.round(durationSec * byteRate / blockAlign) * blockAlign : 4096
   const chunkSize = 36 + dataSize
 
   const buffer = Buffer.alloc(44 + dataSize)
