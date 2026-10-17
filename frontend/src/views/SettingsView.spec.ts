@@ -2,9 +2,11 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  fetchLocalOutputDevice,
   fetchSceneFadeLength,
   fetchVisionConfig,
   updateHotkeySettings,
+  updateLocalOutputDevice,
   updateSceneFadeLength,
   updateVisionApiKey,
   updateVisionEnabled,
@@ -56,6 +58,8 @@ vi.mock('@/api/config', () => ({
   updateVisionEnabled: vi.fn(),
   fetchHotkeySettings: vi.fn().mockResolvedValue({ enabled: true, stopHotkey: 'F24' }),
   updateHotkeySettings: vi.fn().mockResolvedValue(undefined),
+  fetchLocalOutputDevice: vi.fn().mockResolvedValue(null),
+  updateLocalOutputDevice: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/api/hotkeys', () => ({
@@ -351,5 +355,65 @@ describe('settingsView', () => {
       expect(updateVisionOpenAiModel).toHaveBeenCalledWith('')
       expect(wrapper.find<HTMLInputElement>('#vision-model').element.value).toBe('gpt-6-astra')
     })
+  })
+})
+
+describe('settingsView Local playback', () => {
+  type Handler = () => void
+  let handlers: Handler[]
+
+  function stubDevices(devices: Array<{ deviceId: string, label: string, kind?: string }>) {
+    handlers = []
+    const enumerateDevices = vi.fn(async () => devices.map(d => ({ kind: 'audiooutput', ...d })))
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        enumerateDevices,
+        addEventListener: (_: string, h: Handler) => handlers.push(h),
+        removeEventListener: vi.fn(),
+      },
+    })
+    return enumerateDevices
+  }
+
+  function options(wrapper: ReturnType<typeof mountSettings>) {
+    return wrapper.findAll('#output-device option').map(o => o.text())
+  }
+
+  it('lists System default first, then device labels, numbering empty ones', async () => {
+    stubDevices([{ deviceId: 'a', label: 'USB Speaker' }, { deviceId: 'b', label: '' }, { deviceId: 'default', label: 'Default' }])
+    const wrapper = mountSettings()
+    await flushPromises()
+    expect(options(wrapper)).toEqual(['System default', 'USB Speaker', 'Output device 2'])
+    expect(wrapper.text()).toContain('Browser tab always plays through the system default')
+  })
+
+  it('keeps an absent stored device selected as "(not connected)"', async () => {
+    stubDevices([{ deviceId: 'a', label: 'Built-in Output' }])
+    vi.mocked(fetchLocalOutputDevice).mockResolvedValueOnce({ deviceId: 'gone', label: 'USB Speaker' })
+    const wrapper = mountSettings()
+    await flushPromises()
+    expect(options(wrapper)).toEqual(['System default', 'Built-in Output', 'USB Speaker (not connected)'])
+    expect((wrapper.find('#output-device').element as HTMLSelectElement).value).toBe('gone')
+  })
+
+  it('saves the selection with its label, and clears it for System default', async () => {
+    stubDevices([{ deviceId: 'a', label: 'USB Speaker' }])
+    const wrapper = mountSettings()
+    await flushPromises()
+    await wrapper.find('#output-device').setValue('a')
+    expect(updateLocalOutputDevice).toHaveBeenLastCalledWith({ deviceId: 'a', label: 'USB Speaker' })
+    await wrapper.find('#output-device').setValue('')
+    expect(updateLocalOutputDevice).toHaveBeenLastCalledWith(null)
+  })
+
+  it('re-lists devices on devicechange', async () => {
+    const enumerate = stubDevices([{ deviceId: 'a', label: 'USB Speaker' }])
+    const wrapper = mountSettings()
+    await flushPromises()
+    enumerate.mockResolvedValue([{ kind: 'audiooutput', deviceId: 'a', label: 'USB Speaker' }, { kind: 'audiooutput', deviceId: 'c', label: 'HDMI' }] as never)
+    handlers.forEach(h => h())
+    await flushPromises()
+    expect(options(wrapper)).toEqual(['System default', 'USB Speaker', 'HDMI'])
   })
 })

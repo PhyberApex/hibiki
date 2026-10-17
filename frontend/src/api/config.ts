@@ -128,6 +128,22 @@ export function updateActiveOutputTarget(kind: OutputTargetKind): Promise<void> 
   return apiCall<void>('config', 'setActiveOutputTarget', [kind])
 }
 
+/** The Local Target's Output Device; `null` is "System default". The label is kept so an absent device can still be named. */
+export interface LocalOutputDevice {
+  deviceId: string
+  label: string
+}
+
+export function fetchLocalOutputDevice(): Promise<LocalOutputDevice | null> {
+  requireElectron()
+  return apiCall<LocalOutputDevice | null>('config', 'getLocalOutputDevice', [])
+}
+
+export function updateLocalOutputDevice(device: LocalOutputDevice | null): Promise<void> {
+  requireElectron()
+  return apiCall<void>('config', 'setLocalOutputDevice', [device])
+}
+
 /** Master volume is stored per Output Target: pass `LOCAL_TARGET_ID` for the Local Target, a guild id (or empty) for the Discord Target. */
 export function fetchMasterVolume(targetId: string): Promise<number> {
   requireElectron()

@@ -1,6 +1,6 @@
 import type { LocalSinkHealth, SinkAudioContextLike } from './local-sink'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LocalSink } from './local-sink'
+import { LocalSink, sinkDeathToast } from './local-sink'
 
 function packet(sample: number, frames = 960): Uint8Array {
   const bytes = new Uint8Array(frames * 4)
@@ -198,5 +198,36 @@ describe('localSink', () => {
     ctx.state = 'closed'
     ctx.onstatechange?.()
     expect(events.map(e => e.type)).toEqual(['started'])
+  })
+
+  it('opens the context with the resolved sink id', () => {
+    const fake = fakeContext()
+    const createContext = vi.fn((_sinkId: string) => fake.ctx)
+    const sink = new LocalSink({ createContext, getSinkId: () => 'usb-speaker', report: () => {} })
+    sink.handleChunk(packet(1))
+    expect(createContext).toHaveBeenCalledWith('usb-speaker')
+  })
+
+  it('opens on the system default when no sink id is resolved', () => {
+    const { sink, createContext } = setup()
+    sink.handleChunk(packet(1))
+    expect(createContext).toHaveBeenCalledWith('')
+  })
+
+  it('switches a running context with setSinkId, and ignores a closed sink', () => {
+    const { sink, ctx } = setup()
+    const setSinkId = vi.fn(async () => {})
+    ;(ctx as { setSinkId?: unknown }).setSinkId = setSinkId
+    sink.setSinkId('x')
+    expect(setSinkId).not.toHaveBeenCalled()
+    sink.handleChunk(packet(1))
+    sink.setSinkId('x')
+    expect(setSinkId).toHaveBeenCalledWith('x')
+  })
+
+  it('names the reason and Settings in the sink death toast', () => {
+    expect(sinkDeathToast({ type: 'deviceLost', message: 'device unplugged' }))
+      .toBe('Local playback stopped: device unplugged. Pick an Output Device in Settings.')
+    expect(sinkDeathToast({ type: 'failed' })).toContain('failed')
   })
 })
