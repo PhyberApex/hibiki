@@ -51,7 +51,7 @@ function isSceneArray(data: unknown): data is Scene[] {
 const log = createLogger('scenes')
 
 export interface SceneStoreOptions {
-  /** Current Stop Hotkey, so Scene and Effect Hotkeys can be checked against it. */
+  /** Current Action Hotkeys, so Scene and Effect Hotkeys can be checked against them. */
   getActionHotkeys?: () => Promise<ActionHotkeys>
 }
 
