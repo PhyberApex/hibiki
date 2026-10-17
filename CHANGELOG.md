@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.0](https://github.com/PhyberApex/hibiki/compare/v1.6.0...v1.7.0) (2026-10-17)
+
+
+### Features
+
+* **hotkeys:** add Action Hotkeys for Stop all Effects, master volume and previous/next Scene ([#553](https://github.com/PhyberApex/hibiki/issues/553)) ([3778d87](https://github.com/PhyberApex/hibiki/commit/3778d87b9a968e2c7c46bca0ca146b0b83269901))
+* **local:** pick an Output Device for the Local Target ([#549](https://github.com/PhyberApex/hibiki/issues/549)) ([4a4584e](https://github.com/PhyberApex/hibiki/commit/4a4584e56b6d5de24f0a5be7d25ff408c6b3ec23))
+
 ## [1.6.0](https://github.com/PhyberApex/hibiki/compare/v1.5.0...v1.6.0) (2026-10-15)
 
 
