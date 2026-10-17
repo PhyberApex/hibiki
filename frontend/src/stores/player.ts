@@ -170,6 +170,11 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
+  /** How many Effect Instances (backend and renderer) are active right now. */
+  function activeEffectCount(): number {
+    return effectInstances.value.size
+  }
+
   /** Active-instance summary for one sound: how many are layered, and the elapsed/total for whichever instance will finish last (the one the card's fill/timer tracks) — or null while none of this sound are active. Reads `effectTick`, so it re-evaluates on the renderer's own clock between `stateChanged` edges rather than needing another backend round-trip. */
   function effectStatus(soundId: string): EffectSoundStatus | null {
     const tick = effectTick.value
@@ -445,6 +450,7 @@ export const usePlayerStore = defineStore('player', () => {
     setEffectInstanceDuration,
     removeRendererEffectInstance,
     removeAllRendererEffectInstances,
+    activeEffectCount,
     effectStatus,
     stopEffectSound,
   }

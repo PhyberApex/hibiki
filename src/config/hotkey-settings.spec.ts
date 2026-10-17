@@ -27,7 +27,7 @@ describe('hotkey settings', () => {
     const { settings } = setup()
     await settings.set({ enabled: false, stopHotkey: 'shift+ctrl+s' })
     expect(await settings.get()).toEqual({ enabled: false, stopHotkey: 'Ctrl+Shift+S' })
-    expect(await settings.getStopHotkey()).toBe('Ctrl+Shift+S')
+    expect(await settings.getActionHotkeys()).toEqual({ stopHotkey: 'Ctrl+Shift+S' })
   })
 
   it('clears the Stop Hotkey when omitted', async () => {
@@ -50,5 +50,38 @@ describe('hotkey settings', () => {
 
   it('rejects non-boolean enabled', async () => {
     await expect(setup().settings.set({} as never)).rejects.toThrow('enabled')
+  })
+
+  it('persists every Action Hotkey, normalised', async () => {
+    const { settings } = setup()
+    await settings.set({
+      enabled: true,
+      stopHotkey: 'F1',
+      stopEffectsHotkey: 'f2',
+      previousSceneHotkey: 'f3',
+      nextSceneHotkey: 'f4',
+      volumeDownHotkey: 'f5',
+      volumeUpHotkey: 'f6',
+    })
+    expect(await settings.getActionHotkeys()).toEqual({
+      stopHotkey: 'F1',
+      stopEffectsHotkey: 'F2',
+      previousSceneHotkey: 'F3',
+      nextSceneHotkey: 'F4',
+      volumeDownHotkey: 'F5',
+      volumeUpHotkey: 'F6',
+    })
+  })
+
+  it('rejects an Action Hotkey already held by another Action Hotkey, naming it', async () => {
+    const { settings, data } = setup()
+    await expect(settings.set({ enabled: true, stopHotkey: 'F1', volumeUpHotkey: 'f1' })).rejects.toThrow('the Volume Up Hotkey')
+    expect(data.has('hotkeys')).toBe(false)
+  })
+
+  it('rejects an Action Hotkey held by a Scene or Effect', async () => {
+    const { settings } = setup([scene({ hotkey: 'F1', effects: [{ soundId: 'x', soundName: 'Boom', hotkey: 'F2' }] })])
+    await expect(settings.set({ enabled: true, nextSceneHotkey: 'F1' })).rejects.toThrow('Scene "Tavern"')
+    await expect(settings.set({ enabled: true, volumeDownHotkey: 'F2' })).rejects.toThrow('Effect "Boom"')
   })
 })

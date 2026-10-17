@@ -108,7 +108,17 @@ async function changeOutputDevice(event: Event) {
 const hotkeySettings = ref<HotkeySettings>({ enabled: true })
 const hotkeyFailures = ref<HotkeyFailure[]>([])
 const savingHotkeys = ref(false)
-const stopHotkeyError = ref<string | null>(null)
+/** Action Hotkey rows, in display order; `field` is the key in the stored hotkey settings. */
+const actionHotkeyRows = [
+  { field: 'stopHotkey', label: 'Stop Scene' },
+  { field: 'stopEffectsHotkey', label: 'Stop all Effects' },
+  { field: 'previousSceneHotkey', label: 'Previous Scene' },
+  { field: 'nextSceneHotkey', label: 'Next Scene' },
+  { field: 'volumeDownHotkey', label: 'Volume Down' },
+  { field: 'volumeUpHotkey', label: 'Volume Up' },
+] as const
+type ActionHotkeyField = typeof actionHotkeyRows[number]['field']
+const actionHotkeyErrors = ref<Partial<Record<ActionHotkeyField, string>>>({})
 const hotkeyMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
 const isOpenAiCompatible = computed(() => visionConfig.value?.provider === 'openai-compatible')
@@ -369,7 +379,7 @@ async function toggleVision(event: Event) {
 
 async function saveHotkeySettings(next: HotkeySettings) {
   savingHotkeys.value = true
-  stopHotkeyError.value = null
+  actionHotkeyErrors.value = {}
   hotkeyMessage.value = null
   try {
     await updateHotkeySettings(next)
@@ -379,8 +389,9 @@ async function saveHotkeySettings(next: HotkeySettings) {
   catch (e) {
     console.warn('[settings] Hotkey settings rejected:', e)
     const text = e instanceof Error ? e.message : 'Couldn\'t save hotkey settings.'
-    if (next.stopHotkey !== hotkeySettings.value.stopHotkey)
-      stopHotkeyError.value = text
+    const changed = actionHotkeyRows.find(row => next[row.field] !== hotkeySettings.value[row.field])
+    if (changed)
+      actionHotkeyErrors.value = { [changed.field]: text }
     else
       hotkeyMessage.value = { type: 'error', text }
   }
@@ -393,9 +404,9 @@ function toggleHotkeys(event: Event) {
   return saveHotkeySettings({ ...hotkeySettings.value, enabled: (event.target as HTMLInputElement).checked })
 }
 
-function setStopHotkey(value: string | undefined) {
-  const { stopHotkey: _previous, ...rest } = hotkeySettings.value
-  return saveHotkeySettings(value ? { ...rest, stopHotkey: value } : rest)
+function setActionHotkey(field: ActionHotkeyField, value: string | undefined) {
+  const { [field]: _previous, ...rest } = hotkeySettings.value
+  return saveHotkeySettings(value ? { ...rest, [field]: value } : rest)
 }
 
 onMounted(() => {
@@ -585,7 +596,7 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
         </h2>
       </div>
       <p class="section-desc">
-        Global hotkeys work while Hibiki is in the background, for example from a Stream Deck. Scene Hotkeys are always live; Effect Hotkeys are live for the Playing Scene only, so Scenes can reuse the same keys. Bind them in the Scene editor.
+        Global hotkeys work while Hibiki is in the background, for example from a Stream Deck. Scene Hotkeys are always live; Effect Hotkeys are live for the Playing Scene only, so Scenes can reuse the same keys. Bind them in the Scene editor. The rows below bind fixed actions: stopping the Scene or its Effects, moving to the previous or next Scene, and stepping the master volume by 5.
       </p>
       <div class="toggle-list">
         <div class="toggle-row">
@@ -603,13 +614,13 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
           </div>
         </div>
       </div>
-      <div class="field">
-        <span class="field-label">Stop Hotkey</span>
+      <div v-for="row in actionHotkeyRows" :key="row.field" class="field">
+        <span class="field-label">{{ row.label }}</span>
         <HotkeyRecorder
-          :model-value="hotkeySettings.stopHotkey"
-          label="Stop Hotkey"
-          :error="stopHotkeyError"
-          @update:model-value="setStopHotkey"
+          :model-value="hotkeySettings[row.field]"
+          :label="`${row.label} Hotkey`"
+          :error="actionHotkeyErrors[row.field] ?? null"
+          @update:model-value="setActionHotkey(row.field, $event)"
         />
       </div>
       <p

@@ -198,9 +198,15 @@ describe('createSceneStore', () => {
     })
 
     it('rejects Scene and Effect keys that equal the Stop Hotkey', async () => {
-      const store = createSceneStore(config, { getStopHotkey: async () => 'Ctrl+S' })
+      const store = createSceneStore(config, { getActionHotkeys: async () => ({ stopHotkey: 'Ctrl+S' }) })
       await expect(store.save({ name: 'A', hotkey: 'ctrl+s' })).rejects.toThrow('the Stop Hotkey')
       await expect(store.save({ name: 'A', effects: [fx('boom', 'Ctrl+S')] })).rejects.toThrow('the Stop Hotkey')
+    })
+
+    it('rejects Scene and Effect keys that equal any other Action Hotkey', async () => {
+      const store = createSceneStore(config, { getActionHotkeys: async () => ({ volumeUpHotkey: 'F9', nextSceneHotkey: 'F10' }) })
+      await expect(store.save({ name: 'A', hotkey: 'F9' })).rejects.toThrow('the Volume Up Hotkey')
+      await expect(store.save({ name: 'A', effects: [fx('boom', 'F10')] })).rejects.toThrow('the Next Scene Hotkey')
     })
   })
 })

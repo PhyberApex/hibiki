@@ -228,7 +228,7 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
 
   const sounds = createSoundLibrary(config)
   const hotkeySettings = createHotkeySettings(appConfig, () => createSceneStore(config).list())
-  const scenes = createSceneStore(config, { getStopHotkey: hotkeySettings.getStopHotkey })
+  const scenes = createSceneStore(config, { getActionHotkeys: hotkeySettings.getActionHotkeys })
   const registry = createSceneRegistry(config)
   const discord = createDiscordClient(config, appConfig)
   const player = createPlayer(discord, sounds, { localSink: options.localSink })

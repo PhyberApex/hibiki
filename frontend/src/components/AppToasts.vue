@@ -70,6 +70,12 @@ const toastStore = useToastStore()
   color: var(--color-error);
 }
 
+.toast-info {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
 .toast-warning {
   background: var(--color-bg-elevated);
   border-color: #fbbf24;

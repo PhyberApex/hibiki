@@ -82,12 +82,30 @@ function rejection(key: string, owner: string): Error {
   return new Error(`Hotkey ${key} is already used by ${owner}`)
 }
 
-/** Rejects a Scene whose Hotkeys clash with each other, with another Scene's, or with the Stop Hotkey. */
-export function assertSceneHotkeysAvailable(candidate: Scene, others: Scene[], stopHotkey: string | undefined): void {
+/** The Action Hotkeys (CONTEXT.md): each is bound to one fixed app action and stored in the hotkey settings. */
+export const ACTION_HOTKEYS = [
+  { field: 'stopHotkey', owner: 'the Stop Hotkey' },
+  { field: 'stopEffectsHotkey', owner: 'the Stop all Effects Hotkey' },
+  { field: 'previousSceneHotkey', owner: 'the Previous Scene Hotkey' },
+  { field: 'nextSceneHotkey', owner: 'the Next Scene Hotkey' },
+  { field: 'volumeDownHotkey', owner: 'the Volume Down Hotkey' },
+  { field: 'volumeUpHotkey', owner: 'the Volume Up Hotkey' },
+] as const
+
+export type ActionHotkeyField = typeof ACTION_HOTKEYS[number]['field']
+export type ActionHotkeys = Partial<Record<ActionHotkeyField, string>>
+
+function actionHotkeyOwner(key: string, actionHotkeys: ActionHotkeys, except?: ActionHotkeyField): string | undefined {
+  return ACTION_HOTKEYS.find(a => a.field !== except && actionHotkeys[a.field] === key)?.owner
+}
+
+/** Rejects a Scene whose Hotkeys clash with each other, with another Scene's, or with an Action Hotkey. */
+export function assertSceneHotkeysAvailable(candidate: Scene, others: Scene[], actionHotkeys: ActionHotkeys = {}): void {
   const sceneKey = candidate.hotkey
   if (sceneKey) {
-    if (stopHotkey === sceneKey)
-      throw rejection(sceneKey, 'the Stop Hotkey')
+    const action = actionHotkeyOwner(sceneKey, actionHotkeys)
+    if (action)
+      throw rejection(sceneKey, action)
     for (const other of others) {
       if (other.hotkey === sceneKey)
         throw rejection(sceneKey, `Scene "${other.name}"`)
@@ -108,16 +126,20 @@ export function assertSceneHotkeysAvailable(candidate: Scene, others: Scene[], s
     seen.set(key, item)
     if (key === sceneKey)
       throw rejection(key, `Scene "${candidate.name}"`)
-    if (key === stopHotkey)
-      throw rejection(key, 'the Stop Hotkey')
+    const action = actionHotkeyOwner(key, actionHotkeys)
+    if (action)
+      throw rejection(key, action)
     const owner = others.find(o => o.hotkey === key)
     if (owner)
       throw rejection(key, `Scene "${owner.name}"`)
   }
 }
 
-/** Rejects a Stop Hotkey already held by any Scene or Effect. */
-export function assertStopHotkeyAvailable(key: string, scenes: Scene[]): void {
+/** Rejects an Action Hotkey already held by any Scene, any Effect or another Action Hotkey. */
+export function assertActionHotkeyAvailable(field: ActionHotkeyField, key: string, scenes: Scene[], actionHotkeys: ActionHotkeys): void {
+  const action = actionHotkeyOwner(key, actionHotkeys, field)
+  if (action)
+    throw rejection(key, action)
   for (const scene of scenes) {
     if (scene.hotkey === key)
       throw rejection(key, `Scene "${scene.name}"`)
