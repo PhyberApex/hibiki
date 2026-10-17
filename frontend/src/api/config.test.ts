@@ -4,6 +4,7 @@ import {
   fetchActiveOutputTarget,
   fetchDiscordConfig,
   fetchHotkeySettings,
+  fetchLocalOutputDevice,
   fetchMasterVolume,
   fetchSceneFadeLength,
   fetchStoragePath,
@@ -18,6 +19,7 @@ import {
   updateActiveOutputTarget,
   updateDiscordToken,
   updateHotkeySettings,
+  updateLocalOutputDevice,
   updateMasterVolume,
   updateSceneFadeLength,
   updateStoragePath,
@@ -310,5 +312,13 @@ describe('config API', () => {
     expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'getHotkeySettings', args: [] })
     await updateHotkeySettings({ enabled: false, stopHotkey: 'F12' })
     expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'setHotkeySettings', args: [{ enabled: false, stopHotkey: 'F12' }] })
+  })
+
+  it('reads and writes through the config domain', async () => {
+    mockInvoke.mockResolvedValueOnce(null)
+    expect(await fetchLocalOutputDevice()).toBeNull()
+    expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'getLocalOutputDevice', args: [] })
+    await updateLocalOutputDevice({ deviceId: 'a', label: 'A' })
+    expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'setLocalOutputDevice', args: [{ deviceId: 'a', label: 'A' }] })
   })
 })

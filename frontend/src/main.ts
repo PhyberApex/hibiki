@@ -3,8 +3,10 @@ import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import App from './App.vue'
 import { installLocalSink } from './audio/local-sink'
+import { installOutputDevice } from './audio/output-device'
 
 import router from './router'
+import { useToastStore } from './stores/toast'
 import './assets/main.css'
 
 const app = createApp(App)
@@ -26,5 +28,8 @@ installLocalSink()
 
 app.use(createPinia())
 app.use(router)
+
+// The Local Target's Output Device: resolved against connected devices, with one warning per absence.
+installOutputDevice(label => useToastStore().show({ type: 'warning', text: `${label} not found, playing through the system default` }))
 
 app.mount('#app')

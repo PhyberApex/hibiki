@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { DiscordConfig, HotkeySettings, VisionConfig, VisionProviderId } from '@/api/config'
+import type { DiscordConfig, HotkeySettings, LocalOutputDevice, VisionConfig, VisionProviderId } from '@/api/config'
 import type { HotkeyFailure } from '@/api/hotkeys'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   fetchDiscordConfig,
   fetchHotkeySettings,
+  fetchLocalOutputDevice,
   fetchSceneFadeLength,
   fetchStoragePath,
   fetchVisionConfig,
@@ -14,6 +15,7 @@ import {
   selectStorageFolder,
   updateDiscordToken,
   updateHotkeySettings,
+  updateLocalOutputDevice,
   updateSceneFadeLength,
   updateStoragePath,
   updateVisionApiKey,
@@ -24,6 +26,7 @@ import {
 } from '@/api/config'
 import { fetchHotkeyStatus } from '@/api/hotkeys'
 import { fetchLogPath, openLogFolder } from '@/api/logs'
+import { listOutputDevices, outputDeviceRouter } from '@/audio/output-device'
 import HotkeyRecorder from '@/components/HotkeyRecorder.vue'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
@@ -63,6 +66,44 @@ const savingVisionProvider = ref(false)
 const savingVisionAdvanced = ref(false)
 const savingVisionToggle = ref(false)
 const visionMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+
+const outputDevices = ref<{ deviceId: string, label: string }[]>([])
+const outputDeviceChoice = ref<LocalOutputDevice | null>(null)
+const outputDeviceMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+
+/** The stored device stays selected (and listed as absent) while it is unplugged. */
+const absentOutputDevice = computed(() => {
+  const choice = outputDeviceChoice.value
+  return choice && !outputDevices.value.some(d => d.deviceId === choice.deviceId) ? choice : null
+})
+
+async function refreshOutputDevices() {
+  try {
+    outputDevices.value = listOutputDevices(await navigator.mediaDevices.enumerateDevices())
+  }
+  catch (e) {
+    console.warn('[settings] Couldn\'t list output devices:', e)
+  }
+}
+
+async function changeOutputDevice(event: Event) {
+  const deviceId = (event.target as HTMLSelectElement).value
+  const next = deviceId === ''
+    ? null
+    : (deviceId === outputDeviceChoice.value?.deviceId
+        ? outputDeviceChoice.value
+        : { deviceId, label: outputDevices.value.find(d => d.deviceId === deviceId)?.label ?? '' })
+  outputDeviceMessage.value = null
+  try {
+    await updateLocalOutputDevice(next)
+    outputDeviceChoice.value = next
+    outputDeviceRouter.setChoice(next)
+  }
+  catch (e) {
+    console.warn('[settings] Output Device rejected:', e)
+    outputDeviceMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t save the Output Device.' }
+  }
+}
 
 const hotkeySettings = ref<HotkeySettings>({ enabled: true })
 const hotkeyFailures = ref<HotkeyFailure[]>([])
@@ -357,7 +398,15 @@ function setStopHotkey(value: string | undefined) {
   return saveHotkeySettings(value ? { ...rest, stopHotkey: value } : rest)
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  void fetchLocalOutputDevice().then((choice) => {
+    outputDeviceChoice.value = choice
+  }).catch(() => {})
+  void refreshOutputDevices()
+  navigator.mediaDevices?.addEventListener?.('devicechange', refreshOutputDevices)
+})
+onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', refreshOutputDevices))
 </script>
 
 <template>
@@ -485,6 +534,45 @@ onMounted(load)
         :class="[storageMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
       >
         {{ storageMessage.text }}
+      </p>
+    </section>
+
+    <hr class="divider">
+
+    <section class="section" data-testid="local-playback-section">
+      <div class="section-header">
+        <h2 class="section-title">
+          Local playback
+        </h2>
+      </div>
+      <p class="section-desc">
+        Pick which speakers the Local Target plays through, for example a table speaker while your headset carries Discord. Changes apply immediately. The Browser tab always plays through the system default.
+      </p>
+      <div class="field">
+        <label for="output-device" class="field-label">Output device</label>
+        <select
+          id="output-device"
+          class="input field-input"
+          :value="outputDeviceChoice?.deviceId ?? ''"
+          @change="changeOutputDevice"
+        >
+          <option value="">
+            System default
+          </option>
+          <option v-for="device in outputDevices" :key="device.deviceId" :value="device.deviceId">
+            {{ device.label }}
+          </option>
+          <option v-if="absentOutputDevice" :value="absentOutputDevice.deviceId">
+            {{ absentOutputDevice.label || absentOutputDevice.deviceId }} (not connected)
+          </option>
+        </select>
+      </div>
+      <p
+        v-if="outputDeviceMessage"
+        class="status-message settings-message"
+        :class="[outputDeviceMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
+        {{ outputDeviceMessage.text }}
       </p>
     </section>
 

@@ -32,6 +32,7 @@ import {
   releaseAudioElementContext,
 } from '@/audio/browser-audio-capture'
 import { CrossfadeRamp } from '@/audio/crossfade-ramp'
+import { bindAudioElement } from '@/audio/output-device'
 import { useFlashSet } from '@/composables/useFlashSet'
 import { usePlayerStore } from '@/stores/player'
 
@@ -77,6 +78,7 @@ interface MusicChannel {
 function createAudioEl(): HTMLAudioElement {
   const el = new Audio()
   el.crossOrigin = 'anonymous'
+  bindAudioElement(el)
   return watchAudioElement(el)
 }
 

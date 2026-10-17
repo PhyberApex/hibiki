@@ -1,6 +1,7 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { AccessibilitySettings } from './config/accessibility-settings'
 import type { HotkeySettings } from './config/hotkey-settings'
+import type { LocalOutputDevice } from './config/local-output-device-settings'
 import type { StorageWarning } from './json-file'
 import type { SecretCodec } from './persistence'
 import type { OutputTargetKind } from './player/output-target'
@@ -14,6 +15,7 @@ import { generateDependencyReport } from '@discordjs/voice'
 import { getConfig } from './config'
 import { normalizeAccessibilitySettings, parseAccessibilitySettings } from './config/accessibility-settings'
 import { createHotkeySettings } from './config/hotkey-settings'
+import { createLocalOutputDeviceSettings } from './config/local-output-device-settings'
 import { createOutputTargetSettings } from './config/output-target-settings'
 import { normalizeSceneFadeLength, parseSceneFadeLength } from './config/scene-fade-settings'
 import { createDiscordClient } from './discord/discord-client'
@@ -94,6 +96,8 @@ export interface EmbeddedApi {
     setSceneFadeLength: (seconds: number) => Promise<void>
     getActiveOutputTarget: () => Promise<OutputTargetKind>
     setActiveOutputTarget: (kind: OutputTargetKind) => Promise<void>
+    getLocalOutputDevice: () => Promise<LocalOutputDevice | null>
+    setLocalOutputDevice: (device: LocalOutputDevice | null) => Promise<void>
     getMasterVolume: (targetId: string) => Promise<number>
     setMasterVolume: (targetId: string, volume: number) => Promise<void>
     getHotkeySettings: () => Promise<HotkeySettings>
@@ -219,6 +223,7 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
     return { tokenConfigured, encrypted: appConfig.secretsEncrypted }
   }
 
+  const localOutputDevice = createLocalOutputDeviceSettings(appConfig)
   const outputTargets = createOutputTargetSettings(appConfig, async () => (await getDiscordStatus()).tokenConfigured)
 
   const sounds = createSoundLibrary(config)
@@ -325,6 +330,8 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       },
       getActiveOutputTarget: () => outputTargets.getActive(),
       setActiveOutputTarget: kind => outputTargets.setActive(kind),
+      getLocalOutputDevice: () => localOutputDevice.get(),
+      setLocalOutputDevice: device => localOutputDevice.set(device),
       getMasterVolume: targetId => outputTargets.getMasterVolume(targetKind(targetId)),
       setMasterVolume: (targetId, volume) => outputTargets.setMasterVolume(targetKind(targetId), volume),
       getHotkeySettings: () => hotkeySettings.get(),

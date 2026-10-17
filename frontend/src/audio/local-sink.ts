@@ -1,5 +1,8 @@
 import { reportLocalSinkHealth } from '../api/player'
+import { useToastStore } from '../stores/toast'
+import { logInfo } from './audio-element-diagnostics'
 import { JitterBuffer, SAMPLE_RATE } from './jitter-buffer'
+import { outputDeviceRouter } from './output-device'
 
 /**
  * The renderer end of the Local Target (ADR-0004): plays the 48 kHz stereo
@@ -33,10 +36,15 @@ export interface SinkAudioContextLike {
   createBufferSource: () => SinkBufferSourceLike
   resume: () => Promise<void>
   close: () => Promise<void>
+  /** Chromium's `AudioContext.setSinkId`; `''` is the system default. */
+  setSinkId?: (sinkId: string) => Promise<void>
 }
 
 export interface LocalSinkDeps {
-  createContext: () => SinkAudioContextLike
+  /** `sinkId` is the resolved Output Device (`''` = system default). */
+  createContext: (sinkId: string) => SinkAudioContextLike
+  /** The Output Device to open with; the sink never reads config itself. */
+  getSinkId?: () => string
   report: (event: LocalSinkHealth) => void
   /** How often accumulated underruns are reported. */
   underrunReportMs?: number
@@ -106,6 +114,20 @@ export class LocalSink {
     source.start(result.startAt)
   }
 
+  /** The Output Device changed (or its device appeared/vanished): moves a running context over without stopping playback. */
+  setSinkId(sinkId: string): void {
+    const ctx = this.ctx
+    if (!ctx?.setSinkId)
+      return
+    ctx.setSinkId(sinkId).then(
+      () => logInfo(`[local-sink] switched to ${sinkId === '' ? 'the system default' : sinkId}`),
+      (err) => {
+        if (ctx === this.ctx)
+          console.warn(`[local-sink] could not switch output device: ${describe(err)}`)
+      },
+    )
+  }
+
   /** `audio:localSinkStop`: let what is queued play out, then release the context. */
   stop(): void {
     if (!this.ctx)
@@ -127,8 +149,9 @@ export class LocalSink {
 
   private open(): SinkAudioContextLike | undefined {
     let ctx: SinkAudioContextLike
+    const sinkId = this.deps.getSinkId?.() ?? ''
     try {
-      ctx = this.deps.createContext()
+      ctx = this.deps.createContext(sinkId)
     }
     catch (err) {
       this.failed = true
@@ -142,6 +165,7 @@ export class LocalSink {
     ctx.onstatechange = () => this.onStateChange(ctx)
     ctx.onerror = ev => this.onError(ev)
     this.reportTimer = setInterval(() => this.flushUnderruns(), this.deps.underrunReportMs ?? DEFAULT_UNDERRUN_REPORT_MS)
+    logInfo(`[local-sink] opened on ${sinkId ? `device ${sinkId}` : 'the system default'}`)
     this.deps.report({ type: 'started', sampleRate: ctx.sampleRate })
     if (ctx.state === 'suspended') {
       this.deps.report({ type: 'suspended' })
@@ -251,22 +275,31 @@ function describe(err: unknown): string {
   return String(err ?? 'unknown')
 }
 
+/** The error toast for a sink that died: the backend stops playback, the GM needs to know why. */
+export function sinkDeathToast(event: { type: 'deviceLost' | 'failed', message?: string }): string {
+  return `Local playback stopped: ${event.message || event.type}. Pick an Output Device in Settings.`
+}
+
 /** Wires a `LocalSink` to the `audio:localSink*` IPC channels and reports health through the player API. Returns an unsubscribe. */
 export function installLocalSink(): () => void {
   const hibiki = window.hibiki
   if (!hibiki?.on || !hibiki.invoke)
     return () => {}
   const sink = new LocalSink({
-    createContext: () => new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' }) as unknown as SinkAudioContextLike,
+    getSinkId: () => outputDeviceRouter.sinkId,
+    createContext: sinkId => new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive', ...(sinkId ? { sinkId } : {}) }) as unknown as SinkAudioContextLike,
     report: (event) => {
-      if (event.type === 'failed' || event.type === 'deviceLost')
-        console.error(`[local-sink] ${event.type}${'message' in event && event.message ? `: ${event.message}` : ''}`)
+      if (event.type === 'failed' || event.type === 'deviceLost') {
+        console.error(`[local-sink] ${event.type}${event.message ? `: ${event.message}` : ''}`)
+        useToastStore().show({ type: 'error', text: sinkDeathToast(event) })
+      }
       reportLocalSinkHealth(event).catch((err) => {
         console.warn('[local-sink] could not report sink health:', err)
       })
     },
   })
   const offs = [
+    outputDeviceRouter.subscribe(sinkId => sink.setSinkId(sinkId)),
     hibiki.on('audio:localSinkStart', () => sink.start()),
     hibiki.on('audio:localSinkChunk', chunk => sink.handleChunk(chunk as ArrayBuffer | ArrayBufferView)),
     hibiki.on('audio:localSinkStop', () => sink.stop()),
