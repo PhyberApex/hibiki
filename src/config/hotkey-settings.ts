@@ -1,14 +1,14 @@
+import type { ActionHotkeys } from '../scenes/hotkeys'
 import type { Scene } from '../scenes/scene-store'
 import { createLogger } from '../logger'
-import { assertStopHotkeyAvailable, normalizeOptionalAccelerator } from '../scenes/hotkeys'
+import { ACTION_HOTKEYS, assertActionHotkeyAvailable, normalizeOptionalAccelerator } from '../scenes/hotkeys'
 
 const log = createLogger('config')
 
 const HOTKEYS_KEY = 'hotkeys'
 
-export interface HotkeySettings {
+export interface HotkeySettings extends ActionHotkeys {
   enabled: boolean
-  stopHotkey?: string
 }
 
 export interface HotkeySettingsStore {
@@ -24,9 +24,11 @@ function parse(raw: string | null | undefined): HotkeySettings {
   try {
     const data = JSON.parse(raw) as Partial<HotkeySettings> | null
     const settings: HotkeySettings = { enabled: typeof data?.enabled === 'boolean' ? data.enabled : DEFAULTS.enabled }
-    const stopHotkey = normalizeOptionalAccelerator(data?.stopHotkey)
-    if (stopHotkey)
-      settings.stopHotkey = stopHotkey
+    for (const { field } of ACTION_HOTKEYS) {
+      const accelerator = normalizeOptionalAccelerator(data?.[field])
+      if (accelerator)
+        settings[field] = accelerator
+    }
     return settings
   }
   catch (e) {
@@ -40,28 +42,36 @@ export function createHotkeySettings(store: HotkeySettingsStore, listScenes: () 
     return parse(await store.get(HOTKEYS_KEY))
   }
 
-  async function getStopHotkey(): Promise<string | undefined> {
-    return (await get()).stopHotkey
+  async function getActionHotkeys(): Promise<ActionHotkeys> {
+    const { enabled: _enabled, ...actionHotkeys } = await get()
+    return actionHotkeys
   }
 
   async function set(input: HotkeySettings): Promise<void> {
     if (typeof input?.enabled !== 'boolean')
       throw new TypeError('Hotkey settings need an "enabled" boolean')
     const next: HotkeySettings = { enabled: input.enabled }
-    const stopHotkey = normalizeOptionalAccelerator(input.stopHotkey)
-    if (stopHotkey) {
+    const scenes = await listScenes()
+    for (const { field } of ACTION_HOTKEYS) {
+      const accelerator = normalizeOptionalAccelerator(input[field])
+      if (accelerator)
+        next[field] = accelerator
+    }
+    for (const { field, owner } of ACTION_HOTKEYS) {
+      const accelerator = next[field]
+      if (!accelerator)
+        continue
       try {
-        assertStopHotkeyAvailable(stopHotkey, await listScenes())
+        assertActionHotkeyAvailable(field, accelerator, scenes, next)
       }
       catch (e) {
-        log.info(`Rejected Stop Hotkey: ${(e as Error).message}`)
+        log.info(`Rejected ${owner.replace(/^the /, '')}: ${(e as Error).message}`)
         throw e
       }
-      next.stopHotkey = stopHotkey
     }
     await store.set(HOTKEYS_KEY, JSON.stringify(next))
-    log.info(`Hotkey settings: global hotkeys ${next.enabled ? 'enabled' : 'disabled'}, Stop Hotkey ${next.stopHotkey ?? 'unset'}`)
+    log.info(`Hotkey settings: global hotkeys ${next.enabled ? 'enabled' : 'disabled'}, ${ACTION_HOTKEYS.map(a => `${a.owner.replace(/^the /, '')} ${next[a.field] ?? 'unset'}`).join(', ')}`)
   }
 
-  return { get, getStopHotkey, set }
+  return { get, getActionHotkeys, set }
 }

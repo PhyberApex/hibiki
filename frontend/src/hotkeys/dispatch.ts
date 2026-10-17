@@ -1,9 +1,10 @@
+import type { HotkeySettings } from '@/api/config'
 import type { Scene, SceneItem } from '@/api/scenes'
 
 /** Everything the dispatcher needs from the app, injected so it can be tested without stores or IPC. */
 export interface HotkeyDeps {
   listScenes: () => Promise<Scene[]>
-  getStopHotkey: () => Promise<string | undefined>
+  getActionHotkeys: () => Promise<Omit<HotkeySettings, 'enabled'>>
   playingSceneId: () => string | null
   activeTargetId: () => string | null
   /** True when the active Target can play right now (always for Local, joined channel for Discord). */
@@ -11,6 +12,11 @@ export interface HotkeyDeps {
   playScene: (scene: Scene) => Promise<void>
   crossfadeToScene: (sceneId: string) => Promise<void>
   stopScene: () => void
+  activeEffectCount: () => number
+  stopAllEffects: () => void
+  /** Moves the active Target's master volume and persists it; resolves to the new volume, or null at the bound. */
+  stepMasterVolume: (delta: number) => Promise<number | null>
+  showVolume: (percent: number) => void
   playEffect: (item: SceneItem) => Promise<void>
   /** Shows the user a refusal (a warning toast, which the renderer also writes to the log at warn). */
   refuse: (text: string) => void
@@ -18,12 +24,15 @@ export interface HotkeyDeps {
   logDebug: (message: string) => void
 }
 
-export type HotkeyOutcome = 'played' | 'crossfaded' | 'stopped' | 'effect' | 'ignored' | 'refused' | 'failed'
+export type HotkeyOutcome = 'played' | 'crossfaded' | 'stopped' | 'volume' | 'effect' | 'ignored' | 'refused' | 'failed'
+
+/** Master volume change per Volume Up / Volume Down press. */
+export const VOLUME_STEP = 5
 
 const NOT_CONNECTED_TEXT = 'Hotkey ignored: Discord is the active output but no voice channel is joined. Join a channel or switch to Local.'
 
 /**
- * Resolves a fired accelerator against the current Scenes (ADR-0005): the Stop Hotkey stops the Playing Scene,
+ * Resolves a fired accelerator against the current Scenes (ADR-0005): an Action Hotkey runs its fixed action (stop the Playing Scene or all Effects, step the master volume, move to the previous or next Scene),
  * a Scene Hotkey toggles its Scene, an Effect Hotkey triggers only within the Playing Scene. Always acts on the
  * active Output Target; never joins a channel or falls back to Local.
  */
@@ -39,10 +48,10 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
   }
 
   try {
-    const [scenes, stopHotkey] = await Promise.all([deps.listScenes(), deps.getStopHotkey()])
+    const [scenes, actionHotkeys] = await Promise.all([deps.listScenes(), deps.getActionHotkeys()])
     const playingId = deps.playingSceneId()
 
-    if (stopHotkey === accelerator) {
+    if (actionHotkeys.stopHotkey === accelerator) {
       if (!playingId) {
         log('stop', null, 'ignored')
         return 'ignored'
@@ -50,6 +59,56 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
       deps.stopScene()
       log('stop', playingId, 'stopped')
       return 'stopped'
+    }
+
+    if (actionHotkeys.stopEffectsHotkey === accelerator) {
+      if (deps.activeEffectCount() === 0) {
+        deps.logDebug(`[hotkeys] ${accelerator} -> stop all Effects, Target ${target}: ignored, no Effect is playing`)
+        return 'ignored'
+      }
+      deps.stopAllEffects()
+      log('stop all Effects', playingId, 'stopped')
+      return 'stopped'
+    }
+
+    const volumeStep = actionHotkeys.volumeUpHotkey === accelerator
+      ? VOLUME_STEP
+      : actionHotkeys.volumeDownHotkey === accelerator ? -VOLUME_STEP : 0
+    if (volumeStep) {
+      const action = volumeStep > 0 ? 'volume up' : 'volume down'
+      const volume = await deps.stepMasterVolume(volumeStep)
+      if (volume === null) {
+        deps.logDebug(`[hotkeys] ${accelerator} -> ${action}, Target ${target}: ignored, master volume already at the limit`)
+        return 'ignored'
+      }
+      deps.showVolume(volume)
+      log(`${action} to ${volume}%`, playingId, 'volume')
+      return 'volume'
+    }
+
+    const direction = actionHotkeys.nextSceneHotkey === accelerator
+      ? 1
+      : actionHotkeys.previousSceneHotkey === accelerator ? -1 : 0
+    if (direction) {
+      const action = direction > 0 ? 'next Scene' : 'previous Scene'
+      const currentIndex = playingId ? scenes.findIndex(s => s.id === playingId) : -1
+      const destination = currentIndex === -1
+        ? (direction > 0 ? scenes[0] : scenes[scenes.length - 1])
+        : scenes[currentIndex + direction]
+      if (!destination) {
+        deps.logDebug(`[hotkeys] ${accelerator} -> ${action}, Scene ${playingId ?? 'none'}, Target ${target}: ignored, ${currentIndex === -1 ? 'no Scenes' : 'no Scene beyond the end of the list'}`)
+        return 'ignored'
+      }
+      if (!deps.canPlay())
+        return refuse(action, destination.id)
+      if (currentIndex === -1) {
+        await deps.playScene(destination)
+        log(action, destination.id, 'played')
+        return 'played'
+      }
+      await deps.crossfadeToScene(destination.id)
+      log(action, destination.id, 'crossfaded')
+      return 'crossfaded'
     }
 
     const scene = scenes.find(s => s.hotkey === accelerator)

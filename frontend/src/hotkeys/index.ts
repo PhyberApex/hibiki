@@ -38,13 +38,20 @@ export function startHotkeyDispatch(): () => void {
   return onHotkeyFired((accelerator) => {
     chain = chain.then(() => dispatchHotkey(accelerator, {
       listScenes,
-      getStopHotkey: async () => (await fetchHotkeySettings()).stopHotkey,
+      getActionHotkeys: async () => {
+        const { enabled: _enabled, ...actionHotkeys } = await fetchHotkeySettings()
+        return actionHotkeys
+      },
       playingSceneId: () => player.playingSceneId,
       activeTargetId: () => player.targetId,
       canPlay: () => player.canPlay,
       playScene: playback.playScene,
       crossfadeToScene: playback.crossfadeToScene,
       stopScene: playback.stopScene,
+      activeEffectCount: player.activeEffectCount,
+      stopAllEffects: playback.stopAllEffectInstances,
+      stepMasterVolume: playback.stepMasterVolume,
+      showVolume: percent => toast.show({ type: 'info', key: 'master-volume', text: `Master volume ${percent}%` }),
       playEffect: playback.playEffect,
       refuse: text => toast.show({ type: 'warning', text }),
       logInfo,

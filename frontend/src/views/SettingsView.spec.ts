@@ -134,6 +134,18 @@ describe('settingsView', () => {
       expect(wrapper.find('[data-testid="hotkey-recorder-error"]').text()).toContain('Tavern')
     })
 
+    it('offers six Action Hotkey rows in order and binds the Volume Up row', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      const labels = wrapper.findAll('[data-testid="hotkeys-section"] .field-label').map(l => l.text())
+      expect(labels).toEqual(['Stop Scene', 'Stop all Effects', 'Previous Scene', 'Next Scene', 'Volume Down', 'Volume Up'])
+      const buttons = wrapper.findAll('[data-testid="hotkeys-section"] [data-testid="hotkey-recorder-button"]')
+      await buttons[5].trigger('click')
+      await buttons[5].trigger('keydown', { code: 'F14' })
+      await flushPromises()
+      expect(updateHotkeySettings).toHaveBeenCalledWith({ enabled: true, stopHotkey: 'F24', volumeUpHotkey: 'F14' })
+    })
+
     it('lists refused hotkeys with the reason under Diagnostics', async () => {
       const wrapper = mountSettings()
       await flushPromises()

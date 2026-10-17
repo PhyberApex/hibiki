@@ -66,4 +66,18 @@ describe('toast store', () => {
     expect(warn).toHaveBeenCalledTimes(1)
     expect(error).toHaveBeenCalledTimes(1)
   })
+
+  it('replaces a toast with the same key in place and restarts its timer', () => {
+    const store = useToastStore()
+    const first = store.show({ type: 'info', text: 'Master volume 65%', key: 'vol' })
+    store.show({ type: 'success', text: 'other' })
+    vi.advanceTimersByTime(3000)
+    const second = store.show({ type: 'info', text: 'Master volume 70%', key: 'vol' })
+    expect(second).toBe(first)
+    expect(store.toasts.map(t => t.text)).toEqual(['Master volume 70%', 'other'])
+    vi.advanceTimersByTime(3999)
+    expect(store.toasts.map(t => t.text)).toContain('Master volume 70%')
+    vi.advanceTimersByTime(1)
+    expect(store.toasts.map(t => t.text)).not.toContain('Master volume 70%')
+  })
 })

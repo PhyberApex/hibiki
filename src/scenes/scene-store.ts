@@ -1,4 +1,5 @@
 import type { Config } from '../config'
+import type { ActionHotkeys } from './hotkeys'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { createJsonFileStore } from '../json-file'
@@ -51,7 +52,7 @@ const log = createLogger('scenes')
 
 export interface SceneStoreOptions {
   /** Current Stop Hotkey, so Scene and Effect Hotkeys can be checked against it. */
-  getStopHotkey?: () => Promise<string | undefined>
+  getActionHotkeys?: () => Promise<ActionHotkeys>
 }
 
 function withoutHotkey(items: SceneItem[]): SceneItem[] {
@@ -88,7 +89,7 @@ export function createSceneStore(config: Config, options: SceneStoreOptions = {}
       effects?: SceneItem[]
       hotkey?: string
     }): Promise<Scene> {
-      const stopHotkey = await options.getStopHotkey?.()
+      const actionHotkeys = await options.getActionHotkeys?.()
       return store.update((scenes) => {
         const now = new Date().toISOString()
         const existing = scene.id ? scenes.find(s => s.id === scene.id) : null
@@ -108,7 +109,7 @@ export function createSceneStore(config: Config, options: SceneStoreOptions = {}
           saved.hotkey = hotkey
 
         try {
-          assertSceneHotkeysAvailable(saved, scenes.filter(s => s.id !== saved.id), stopHotkey)
+          assertSceneHotkeysAvailable(saved, scenes.filter(s => s.id !== saved.id), actionHotkeys)
         }
         catch (e) {
           log.info(`Rejected hotkey binding on scene "${saved.name}" (${saved.id}): ${(e as Error).message}`)

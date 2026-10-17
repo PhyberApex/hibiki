@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fetchMasterVolume, updateMasterVolume } from '@/api/config'
 import { playAmbience, playEffect, playMusic, stopAmbience, stopEffects, stopMusic } from '@/api/player'
 import { usePlayerStore } from '@/stores/player'
 import { useScenePlaybackStore } from './scene-playback'
@@ -99,5 +100,16 @@ describe('scene playback store', () => {
 
     await store.playEffect(scene.effects[0])
     expect(playEffect).toHaveBeenCalledWith('local', 'fx-1', expect.objectContaining({ volume: 80 }))
+  })
+
+  it('steps the master volume from the stored value, clamped, and persists it', async () => {
+    const store = useScenePlaybackStore()
+    vi.mocked(fetchMasterVolume).mockResolvedValueOnce(65)
+    expect(await store.stepMasterVolume(5)).toBe(70)
+    expect(updateMasterVolume).toHaveBeenLastCalledWith('local', 70)
+    vi.mocked(fetchMasterVolume).mockResolvedValueOnce(100)
+    expect(await store.stepMasterVolume(5)).toBeNull()
+    vi.mocked(fetchMasterVolume).mockResolvedValueOnce(2)
+    expect(await store.stepMasterVolume(-5)).toBe(0)
   })
 })

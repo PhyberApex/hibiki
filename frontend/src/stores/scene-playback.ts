@@ -221,6 +221,21 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     updateMasterVolume(targetId.value, masterVolume.value).catch(() => {})
   }
 
+  /**
+   * Moves the active Target's master volume by `delta`, clamped to 0-100, and persists it. Re-reads the stored
+   * value first so a press from outside the Scene view cannot step from a stale ref. Resolves to the new volume,
+   * or null when already at the bound (nothing changed).
+   */
+  async function stepMasterVolume(delta: number): Promise<number | null> {
+    await loadGlobalVolume()
+    const next = Math.min(100, Math.max(0, masterVolume.value + delta))
+    if (next === masterVolume.value)
+      return null
+    masterVolume.value = next
+    await updateMasterVolume(targetId.value, next)
+    return next
+  }
+
   // getState() reports active backend-decoded Ambience sounds per guild (see
   // ADR-0003), so the pulse/toggle state here stays correct even when it
   // wasn't this component's own playAmbience() call that started it —
@@ -898,6 +913,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     sceneTransitionFlash,
     loadMasterVolume: loadGlobalVolume,
     saveMasterVolume: saveGlobalVolume,
+    stepMasterVolume,
     computeVolume,
     updateAmbienceVolume,
     updateMusicVolume,

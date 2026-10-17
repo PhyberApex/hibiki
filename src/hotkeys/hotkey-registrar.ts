@@ -1,6 +1,7 @@
 import type { HotkeySettings } from '../config/hotkey-settings'
 import type { Scene } from '../scenes/scene-store'
 import { createLogger } from '../logger'
+import { ACTION_HOTKEYS } from '../scenes/hotkeys'
 
 const log = createLogger('hotkeys')
 
@@ -21,7 +22,8 @@ export function computeAccelerators(scenes: Scene[], settings: HotkeySettings): 
     for (const effect of scene.effects)
       add(effect.hotkey, `Effect "${effect.soundName ?? effect.soundId}" in Scene "${scene.name}"`)
   }
-  add(settings.stopHotkey, 'Stop Hotkey')
+  for (const { field, owner } of ACTION_HOTKEYS)
+    add(settings[field], owner.replace(/^the /, ''))
   return wanted
 }
 

@@ -13,13 +13,24 @@ const tavern = scene('tavern', 'F15', [{ soundId: 'cheer', hotkey: 'F14' }])
 function makeDeps(overrides: Partial<HotkeyDeps> = {}): HotkeyDeps {
   return {
     listScenes: vi.fn().mockResolvedValue([storm, tavern]),
-    getStopHotkey: vi.fn().mockResolvedValue('F16'),
+    getActionHotkeys: vi.fn().mockResolvedValue({
+      stopHotkey: 'F16',
+      stopEffectsHotkey: 'F17',
+      previousSceneHotkey: 'F18',
+      nextSceneHotkey: 'F19',
+      volumeDownHotkey: 'F20',
+      volumeUpHotkey: 'F21',
+    }),
     playingSceneId: () => null,
     activeTargetId: () => 'local',
     canPlay: () => true,
     playScene: vi.fn().mockResolvedValue(undefined),
     crossfadeToScene: vi.fn().mockResolvedValue(undefined),
     stopScene: vi.fn(),
+    activeEffectCount: () => 2,
+    stopAllEffects: vi.fn(),
+    stepMasterVolume: vi.fn().mockResolvedValue(65),
+    showVolume: vi.fn(),
     playEffect: vi.fn().mockResolvedValue(undefined),
     refuse: vi.fn(),
     logInfo: vi.fn(),
@@ -78,7 +89,7 @@ describe('hotkey dispatcher', () => {
   })
 
   it('ignores an unknown accelerator', async () => {
-    expect(await dispatchHotkey('F20', makeDeps())).toBe('ignored')
+    expect(await dispatchHotkey('F30', makeDeps())).toBe('ignored')
   })
 
   it('refuses with a toast when the Discord Target has no voice connection', async () => {
@@ -110,5 +121,79 @@ describe('hotkey dispatcher', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const deps = makeDeps({ listScenes: vi.fn().mockRejectedValue(new Error('boom')) })
     expect(await dispatchHotkey('F13', deps)).toBe('failed')
+  })
+
+  describe('action Hotkeys', () => {
+    it('stop all Effects ends instances whether or not a Scene plays', async () => {
+      const deps = makeDeps()
+      expect(await dispatchHotkey('F17', deps)).toBe('stopped')
+      expect(deps.stopAllEffects).toHaveBeenCalled()
+    })
+
+    it('stop all Effects is a debug-logged no-op without instances', async () => {
+      const deps = makeDeps({ activeEffectCount: () => 0 })
+      expect(await dispatchHotkey('F17', deps)).toBe('ignored')
+      expect(deps.stopAllEffects).not.toHaveBeenCalled()
+      expect(deps.logDebug).toHaveBeenCalled()
+    })
+
+    it('volume Up / Down step by 5 and show the new volume', async () => {
+      const deps = makeDeps()
+      expect(await dispatchHotkey('F21', deps)).toBe('volume')
+      expect(deps.stepMasterVolume).toHaveBeenCalledWith(5)
+      expect(deps.showVolume).toHaveBeenCalledWith(65)
+      await dispatchHotkey('F20', deps)
+      expect(deps.stepMasterVolume).toHaveBeenLastCalledWith(-5)
+    })
+
+    it('volume at the bound is a silent no-op', async () => {
+      const deps = makeDeps({ stepMasterVolume: vi.fn().mockResolvedValue(null) })
+      expect(await dispatchHotkey('F21', deps)).toBe('ignored')
+      expect(deps.showVolume).not.toHaveBeenCalled()
+      expect(deps.logDebug).toHaveBeenCalled()
+    })
+
+    it('volume applies even when canPlay is false', async () => {
+      const deps = makeDeps({ canPlay: () => false })
+      expect(await dispatchHotkey('F21', deps)).toBe('volume')
+      expect(deps.refuse).not.toHaveBeenCalled()
+    })
+
+    it('next crossfades from the Playing Scene to the following Scene', async () => {
+      const deps = makeDeps({ playingSceneId: () => 'storm' })
+      expect(await dispatchHotkey('F19', deps)).toBe('crossfaded')
+      expect(deps.crossfadeToScene).toHaveBeenCalledWith('tavern')
+    })
+
+    it('previous crossfades backwards', async () => {
+      const deps = makeDeps({ playingSceneId: () => 'tavern' })
+      expect(await dispatchHotkey('F18', deps)).toBe('crossfaded')
+      expect(deps.crossfadeToScene).toHaveBeenCalledWith('storm')
+    })
+
+    it('does not wrap at either end', async () => {
+      const last = makeDeps({ playingSceneId: () => 'tavern' })
+      expect(await dispatchHotkey('F19', last)).toBe('ignored')
+      const first = makeDeps({ playingSceneId: () => 'storm' })
+      expect(await dispatchHotkey('F18', first)).toBe('ignored')
+      expect(last.crossfadeToScene).not.toHaveBeenCalled()
+      expect(first.crossfadeToScene).not.toHaveBeenCalled()
+    })
+
+    it('with no Playing Scene, Next starts the first and Previous the last', async () => {
+      const next = makeDeps()
+      expect(await dispatchHotkey('F19', next)).toBe('played')
+      expect(next.playScene).toHaveBeenCalledWith(storm)
+      const previous = makeDeps()
+      expect(await dispatchHotkey('F18', previous)).toBe('played')
+      expect(previous.playScene).toHaveBeenCalledWith(tavern)
+    })
+
+    it('is refused under Discord without a channel', async () => {
+      const deps = makeDeps({ canPlay: () => false })
+      expect(await dispatchHotkey('F19', deps)).toBe('refused')
+      expect(deps.refuse).toHaveBeenCalled()
+      expect(deps.playScene).not.toHaveBeenCalled()
+    })
   })
 })
