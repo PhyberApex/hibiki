@@ -1,18 +1,22 @@
-/** Jest config: rootDir is src. */
+/** Jest config: specs live next to the code in src/ (backend) and electron/ (main process). */
 const path = require('path');
 
 const packageRoot = __dirname;
-const srcDir = path.join(packageRoot, 'src');
 
 module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
-  rootDir: srcDir,
+  rootDir: packageRoot,
+  roots: ['<rootDir>/src', '<rootDir>/electron'],
   testRegex: '.*\\.spec\\.ts$',
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },
   collectCoverageFrom: [
-    '**/*.(t|j)s',
+    'src/**/*.(t|j)s',
+    'electron/**/*.js',
+    // Electron wiring only: covered by the e2e suite, not loadable outside Electron.
+    '!electron/main.js',
+    '!electron/preload.js',
     '!**/*.spec.(t|j)s',
     '!**/__mocks__/**',
   ],

@@ -27,7 +27,12 @@ function formatArg(arg) {
  * file passes `MAX_LOG_BYTES`.
  */
 function setupFileLogging(logsDir, header) {
-  fs.mkdirSync(logsDir, { recursive: true })
+  try {
+    fs.mkdirSync(logsDir, { recursive: true })
+  }
+  catch {
+    // Unwritable location: the console mirror still runs, the appends below just fail quietly.
+  }
   const logFile = path.join(logsDir, LOG_FILE_NAME)
   const rotatedFile = path.join(logsDir, ROTATED_FILE_NAME)
 

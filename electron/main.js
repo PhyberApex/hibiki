@@ -1,8 +1,9 @@
 const fs = require('node:fs')
 const path = require('node:path')
-const { PassThrough, Readable } = require('node:stream')
+const { Readable } = require('node:stream')
 const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
-const { createHotkeys, affectsHotkeys } = require('./hotkeys')
+const { createHotkeys } = require('./hotkeys')
+const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createLogger, setupFileLogging } = require('./logger')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
@@ -35,7 +36,6 @@ process.on('uncaughtException', (err) => {
   dialog.showErrorBox('Hibiki ran into an unexpected error', `${err?.stack || err}\n\nDetails were written to the log file (Settings → Diagnostics).`)
 })
 
-const ipcLog = createLogger('ipc')
 const windowLog = createLogger('window')
 const browserLog = createLogger('browser')
 const protocolLog = createLogger('protocol')
@@ -104,143 +104,9 @@ function createWindow(loadUrl) {
   return win
 }
 
-/** audioStreams: Map<guildId, Map<streamId|undefined, PassThrough>> - multiple music streams per guild, mixed by backend */
-const audioStreams = new Map()
-/** effectStreams: Map<guildId, Map<streamId, PassThrough>> - multiple streams per guild, mixed by backend */
-const effectStreams = new Map()
-
-function getOrCreateAudioStreams(guildId) {
-  if (!audioStreams.has(guildId))
-    audioStreams.set(guildId, new Map())
-  return audioStreams.get(guildId)
-}
-
-function getOrCreateEffectStreams(guildId) {
-  if (!effectStreams.has(guildId))
-    effectStreams.set(guildId, new Map())
-  return effectStreams.get(guildId)
-}
-
-/**
- * The Local Target's sink (ADR-0004): the backend mix goes to the renderer as
- * `audio:localSinkStart` / `audio:localSinkChunk` / `audio:localSinkStop`, the
- * main -> renderer mirror of the `audio:*` chunk pattern. The renderer reports
- * health back through the `player.reportLocalSinkHealth` API call.
- */
-function createLocalSink() {
-  const send = (channel, ...args) => {
-    if (!mainWindow || mainWindow.isDestroyed())
-      throw new Error('No renderer to play local audio in')
-    mainWindow.webContents.send(channel, ...args)
-  }
-  return {
-    start: () => {
-      ipcLog.info('audio:localSinkStart')
-      send('audio:localSinkStart')
-    },
-    // Copy: a Buffer from the mixer may be a slice of a larger pooled ArrayBuffer, which IPC would clone whole.
-    write: packet => send('audio:localSinkChunk', Uint8Array.from(packet)),
-    stop: () => {
-      ipcLog.info('audio:localSinkStop')
-      if (mainWindow && !mainWindow.isDestroyed())
-        mainWindow.webContents.send('audio:localSinkStop')
-    },
-  }
-}
-
 function registerIpcHandlers(api) {
-  ipcMain.handle('api', async (_, { domain, method, args }) => {
-    const obj = api[domain]
-    if (!obj || typeof obj[method] !== 'function') {
-      ipcLog.error(`Unknown API: ${domain}.${method}`)
-      throw new Error(`Unknown API: ${domain}.${method}`)
-    }
-    try {
-      const result = await obj[method](...args)
-      if (hotkeys && affectsHotkeys(domain, method))
-        await hotkeys.sync()
-      return result
-    }
-    catch (err) {
-      ipcLog.error(`${domain}.${method} failed:`, err)
-      throw err
-    }
-  })
-
-  ipcMain.handle('audio:startStream', async (_, { guildId, metadata, streamId }) => {
-    const streams = getOrCreateAudioStreams(guildId)
-    if (streams.has(streamId)) {
-      streams.get(streamId).end()
-      streams.delete(streamId)
-    }
-    const stream = new PassThrough()
-    streams.set(streamId, stream)
-    ipcLog.info(`audio:startStream ${streamId} for guild ${guildId}`)
-    api.player.startStream(guildId, stream, metadata, streamId)
-  })
-
-  ipcMain.on('audio:chunk', (_, { guildId, streamId, chunk }) => {
-    const streams = audioStreams.get(guildId)
-    if (!streams)
-      return
-    const stream = streams.get(streamId)
-    if (stream && chunk && chunk.byteLength > 0)
-      stream.push(Buffer.from(chunk))
-  })
-
-  ipcMain.handle('audio:stopStream', async (_, { guildId, streamId }) => {
-    const streams = audioStreams.get(guildId)
-    if (streams) {
-      const stream = streams.get(streamId)
-      if (stream) {
-        streams.delete(streamId)
-        stream.end()
-      }
-    }
-    ipcLog.info(`audio:stopStream ${streamId} for guild ${guildId}`)
-    api.player.stopStream(guildId, streamId)
-  })
-
-  ipcMain.handle('audio:startEffectStream', async (_, { guildId, streamId }) => {
-    const id = streamId || `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-    const streams = getOrCreateEffectStreams(guildId)
-    if (streams.has(id)) {
-      streams.get(id).end()
-      streams.delete(id)
-    }
-    const stream = new PassThrough()
-    streams.set(id, stream)
-    ipcLog.info(`audio:startEffectStream ${id} for guild ${guildId}`)
-    api.player.startEffectStream(guildId, stream)
-    return id
-  })
-
-  ipcMain.on('audio:effectChunk', (_, { guildId, streamId, chunk }) => {
-    const streams = effectStreams.get(guildId)
-    if (!streams)
-      return
-    const stream = streamId ? streams.get(streamId) : streams.values().next().value
-    if (stream && chunk && chunk.byteLength > 0)
-      stream.push(Buffer.from(chunk))
-  })
-
-  ipcMain.handle('audio:stopEffectStream', async (_, { guildId, streamId }) => {
-    const streams = effectStreams.get(guildId)
-    if (!streams)
-      return
-    ipcLog.info(`audio:stopEffectStream ${streamId ?? '(all)'} for guild ${guildId}`)
-    if (streamId) {
-      const stream = streams.get(streamId)
-      if (stream) {
-        streams.delete(streamId)
-        stream.end()
-      }
-    }
-    else {
-      streams.forEach(s => s.end())
-      streams.clear()
-    }
-  })
+  registerApiHandler(ipcMain, api, () => hotkeys)
+  registerAudioStreamHandlers(ipcMain, api.player)
 }
 
 const browserViews = new Map()
@@ -476,7 +342,7 @@ app.whenReady().then(async () => {
   let handle
   let api
   try {
-    const embedded = await getEmbeddedApp(createSecretCodec(), { localSink: createLocalSink() })
+    const embedded = await getEmbeddedApp(createSecretCodec(), { localSink: createLocalSink(() => mainWindow) })
     handle = embedded
     api = embedded.api
   }

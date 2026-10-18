@@ -15,6 +15,7 @@ flag_management:
     - name: backend
       paths:
         - src/
+        - electron/
     - name: frontend
       paths:
         - frontend/src/
