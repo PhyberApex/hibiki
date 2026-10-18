@@ -143,7 +143,7 @@ Audio chunks are captured in the renderer via Web Audio API + AudioWorklet (`fro
 
 - **Backend:** `player.startStream(guildId, stream, metadata?, streamId?)` feeds a long-lived Music slot in `AudioEngine` (the Scene Music fallback); `player.startEffectStream(guildId, stream)` spawns a new layered mixer input per call (the Browser tab, and the Scene Ambience/Effects fallback — an Ambience fallback stream is keyed `ambience-<soundId>`). Both accept a Node.js `Readable`.
 - **Frontend → Main** (`frontend/src/api/audio-stream.ts`): `audio:startStream`/chunked `audio:chunk`/`audio:stopStream` for the Music lane; `audio:startEffectStream`/chunked `audio:effectChunk`/`audio:stopEffectStream` for the effect lane.
-- **Main process** (`electron/main.js`): Creates `PassThrough` streams per `streamId`, writes chunks, pipes to the backend.
+- **Main process** (`electron/ipc-streams.js#registerAudioStreamHandlers`, wired from `electron/main.js`): Creates `PassThrough` streams per `streamId`, writes chunks, pipes to the backend; chunks for an unknown stream are dropped with one `warn` per stream.
 
 ### Vision to Vibe
 
@@ -168,7 +168,7 @@ Sound Library playback for Discord decodes and mixes in the main process, feedin
 
 ### Local Target Sink
 
-The Local Target (`LOCAL_TARGET_ID`) plays through the same backend mixer as Discord (ADR-0004). `AudioEngine({ localSink })` has no voice player; `LocalSinkPump` (`src/audio/local-sink-pump.ts`) paces the mixer output to real time (one 20 ms packet per tick, silence when empty) into a `LocalSink`, which `electron/main.js#createLocalSink` implements as `audio:localSinkStart`/`audio:localSinkChunk`/`audio:localSinkStop` sent to the renderer. The pump runs while any stream is active and stops 10 s after the last. Renderer: `frontend/src/audio/local-sink.ts` schedules packets on the Web Audio clock behind a ~100 ms jitter lead (`jitter-buffer.ts`) and reports health (`started`, `suspended`, `resumed`, `underruns` every 2 s, `deviceLost`, `failed`) via `player.reportLocalSinkHealth`; `deviceLost`/`failed` stop all playback on the Local Target. The Output Device (CONTEXT.md) is stored via `config.getLocalOutputDevice`/`setLocalOutputDevice` (`src/config/local-output-device-settings.ts`; System default = absence). The renderer resolves it against connected devices in `frontend/src/audio/output-device.ts` (no `getUserMedia`), switches the running `AudioContext` and bound `<audio>` elements with `setSinkId`, warns once per absence and falls back to the system default.
+The Local Target (`LOCAL_TARGET_ID`) plays through the same backend mixer as Discord (ADR-0004). `AudioEngine({ localSink })` has no voice player; `LocalSinkPump` (`src/audio/local-sink-pump.ts`) paces the mixer output to real time (one 20 ms packet per tick, silence when empty) into a `LocalSink`, which `electron/ipc-streams.js#createLocalSink` implements as `audio:localSinkStart`/`audio:localSinkChunk`/`audio:localSinkStop` sent to the renderer. The pump runs while any stream is active and stops 10 s after the last. Renderer: `frontend/src/audio/local-sink.ts` schedules packets on the Web Audio clock behind a ~100 ms jitter lead (`jitter-buffer.ts`) and reports health (`started`, `suspended`, `resumed`, `underruns` every 2 s, `deviceLost`, `failed`) via `player.reportLocalSinkHealth`; `deviceLost`/`failed` stop all playback on the Local Target. The Output Device (CONTEXT.md) is stored via `config.getLocalOutputDevice`/`setLocalOutputDevice` (`src/config/local-output-device-settings.ts`; System default = absence). The renderer resolves it against connected devices in `frontend/src/audio/output-device.ts` (no `getUserMedia`), switches the running `AudioContext` and bound `<audio>` elements with `setSinkId`, warns once per absence and falls back to the system default.
 
 ### Global Hotkeys
 
@@ -227,7 +227,7 @@ New or changed behaviour must leave a trace in `hibiki.log` (see "Logging" above
 ### Backend (Jest)
 
 - Config: `jest.config.js`
-- Test files: `src/**/*.spec.ts`
+- Test files: `src/**/*.spec.ts`, plus `electron/**/*.spec.ts` for the main-process modules (`main.js`/`preload.js` stay e2e-only)
 - Run: `pnpm test:backend`
 - Watch: `pnpm test:watch`
 
