@@ -5,6 +5,7 @@ import type { LocalOutputDevice } from './config/local-output-device-settings'
 import type { StorageWarning } from './json-file'
 import type { SecretCodec } from './persistence'
 import type { OutputTargetKind } from './player/output-target'
+import type { MusicMode } from './scenes/scene-store'
 import type { SoundCategory } from './sound/sound.types'
 import type { VibeMatches } from './vision/vibe-matching'
 import type { VisionSettingsState } from './vision/vision-settings'
@@ -123,7 +124,7 @@ export interface EmbeddedApi {
   scenes: {
     list: () => ReturnType<ReturnType<typeof createSceneStore>['list']>
     get: (id: string) => ReturnType<ReturnType<typeof createSceneStore>['get']>
-    save: (scene: { id?: string, name: string, ambience?: { soundId: string, soundName?: string, volume?: number, enabled?: boolean }[], music?: { soundId: string, soundName?: string, volume?: number, loop?: boolean }[], effects?: { soundId: string, soundName?: string, hotkey?: string }[], hotkey?: string }) => ReturnType<ReturnType<typeof createSceneStore>['save']>
+    save: (scene: { id?: string, name: string, ambience?: { soundId: string, soundName?: string, volume?: number, enabled?: boolean }[], music?: { soundId: string, soundName?: string, volume?: number, loop?: boolean }[], effects?: { soundId: string, soundName?: string, hotkey?: string }[], musicMode?: MusicMode, hotkey?: string }) => ReturnType<ReturnType<typeof createSceneStore>['save']>
     remove: (id: string) => ReturnType<ReturnType<typeof createSceneStore>['remove']>
     exportScene: (id: string, targetPath: string) => Promise<void>
     importScene: (sourcePath: string) => Promise<import('./scenes/scene-store').Scene>

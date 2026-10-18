@@ -87,6 +87,8 @@ function createWindow(loadUrl) {
       rendererLog[details.level === 'error' ? 'error' : 'warn'](`${details.message} (${details.sourceId}:${details.lineNumber})`)
     else if (details.level === 'info' && details.message.startsWith('['))
       rendererLog.info(details.message)
+    else if (details.level === 'debug' && details.message.startsWith('['))
+      rendererLog.debug(details.message)
   })
   win.webContents.on('render-process-gone', (_, details) => {
     windowLog.error(`Renderer process gone: ${details.reason} (exit code ${details.exitCode})`)

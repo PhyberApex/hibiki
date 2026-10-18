@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { writeJsonFileAtomic } from '../json-file'
 import { createLogger } from '../logger'
-import { createSceneStore } from './scene-store'
+import { createSceneStore, normalizeMusicMode } from './scene-store'
 
 const log = createLogger('scene-registry')
 
@@ -42,6 +42,7 @@ async function writeCache(cachePath: string, data: CachedIndex): Promise<void> {
 function registryEntryToScene(entry: RegistryEntry): Omit<Scene, 'id' | 'createdAt' | 'updatedAt'> {
   return {
     name: entry.name,
+    musicMode: normalizeMusicMode(entry.scene.musicMode),
     music: entry.scene.music.map(t => ({
       soundId: t.soundName,
       soundName: t.soundName,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { OutputTargetKind, VisionProviderId } from '@/api/config'
-import type { Scene, SceneItem } from '@/api/scenes'
+import type { MusicMode, Scene, SceneItem } from '@/api/scenes'
 import type { SoundFile } from '@/api/sounds'
 import type { EffectSoundStatus } from '@/stores/player'
 import { storeToRefs } from 'pinia'
@@ -10,6 +10,7 @@ import { fetchVisionConfig, LOCAL_TARGET_ID, openFileDialog, saveFileDialog } fr
 import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
 import { listAmbience, listEffects, listMusic } from '@/api/sounds'
 import { logInfo } from '@/audio/audio-element-diagnostics'
+import { normalizeMusicMode } from '@/audio/music-mode'
 import HotkeyRecorder from '@/components/HotkeyRecorder.vue'
 import RegistryBrowser from '@/components/RegistryBrowser.vue'
 import ResolveSoundDialog from '@/components/ResolveSoundDialog.vue'
@@ -26,7 +27,7 @@ const player = usePlayerStore()
 const playback = useScenePlaybackStore()
 const { masterVolume: globalVolume, playingMusicId, playingAmbienceIds, musicSounds } = storeToRefs(playback)
 const { effectFlash, sceneTransitionFlash } = playback
-const { playScene: playSceneFor, stopScene, stopAmbience, playMusic, playEffect, stopMusicPlayback, stopAllEffectInstances, updateAmbienceVolume, updateMusicVolume } = playback
+const { playScene: playSceneFor, stopScene, stopAmbience, playMusicTrack, playEffect, stopMusicPlayback, stopAllEffectInstances, updateAmbienceVolume, updateMusicVolume } = playback
 
 const scenes = ref<Scene[]>([])
 const scene = ref<Scene | null>(null)
@@ -51,6 +52,22 @@ const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | nu
 watch(scene, (s) => {
   playback.openScene = s
 }, { immediate: true, flush: 'sync' })
+
+const MUSIC_MODE_OPTIONS: { value: MusicMode, label: string, title: string }[] = [
+  { value: 'single', label: 'Single', title: 'Play one track; its Loop toggle repeats it' },
+  { value: 'sequential', label: 'Sequential', title: 'Play the tracks in order, starting over after the last' },
+  { value: 'shuffle', label: 'Shuffle', title: 'Play every track once in random order, then reshuffle' },
+]
+
+const musicMode = computed(() => normalizeMusicMode(scene.value?.musicMode))
+
+function setMusicMode(mode: MusicMode) {
+  if (!scene.value || musicMode.value === mode)
+    return
+  logInfo(`[scenes] Music Mode ${musicMode.value} -> ${mode} in scene ${scene.value.id}`)
+  scene.value.musicMode = mode
+  saveScene(scene.value).catch(e => console.warn(`[scenes] Saving Music Mode ${mode} for scene ${scene.value?.id} failed:`, e))
+}
 
 const INTERVAL_OPTIONS = [0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600]
 
@@ -836,6 +853,20 @@ watch(sceneId, (newId) => {
             <h2 class="section-title">
               Music
             </h2>
+            <div class="music-mode-toggle" role="group" aria-label="Music Mode">
+              <button
+                v-for="option in MUSIC_MODE_OPTIONS"
+                :key="option.value"
+                type="button"
+                class="btn btn-ghost music-mode-option"
+                :class="{ 'music-mode-option-active': musicMode === option.value }"
+                :aria-pressed="musicMode === option.value"
+                :title="option.title"
+                @click="setMusicMode(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
             <select
               class="add-select"
               @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = musicSounds.find(x => x.id === id); if (s) addToScene('music', s); (e.target as HTMLSelectElement).value = '' } }"
@@ -884,7 +915,7 @@ watch(sceneId, (newId) => {
                     :disabled="!canPlay || isSoundMissing('music', item.soundId)"
                     title="Play"
                     :aria-label="`Play ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
-                    @click="playMusic(item)"
+                    @click="playMusicTrack(item)"
                   >
                     ▶
                   </button>
@@ -897,7 +928,7 @@ watch(sceneId, (newId) => {
                     @input="updateMusicVolume(item)"
                     @change="saveScene(scene)"
                   >
-                  <label class="toggle" title="Loop">
+                  <label v-if="musicMode === 'single'" class="toggle" title="Loop">
                     <input v-model="item.loop" type="checkbox" @change="saveScene(scene)">
                   </label>
                   <button
@@ -1461,6 +1492,26 @@ watch(sceneId, (newId) => {
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
+}
+
+.music-mode-toggle {
+  display: inline-flex;
+  margin-left: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.music-mode-option {
+  border: none;
+  border-radius: 0;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.music-mode-option-active {
+  background: var(--color-accent-muted);
+  color: var(--color-text);
 }
 
 .section-title {

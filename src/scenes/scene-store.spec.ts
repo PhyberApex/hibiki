@@ -209,4 +209,23 @@ describe('createSceneStore', () => {
       await expect(store.save({ name: 'A', effects: [fx('boom', 'F10')] })).rejects.toThrow('the Next Scene Hotkey')
     })
   })
+
+  it('keeps a Music Mode, omits single and normalises an invalid value to single', async () => {
+    const store = createSceneStore(config)
+    const shuffled = await store.save({ name: 'Shuffled', musicMode: 'shuffle' })
+    expect(shuffled.musicMode).toBe('shuffle')
+    expect((await store.get(shuffled.id))!.musicMode).toBe('shuffle')
+
+    const single = await store.save({ id: shuffled.id, name: 'Shuffled', musicMode: 'single' })
+    expect(single).not.toHaveProperty('musicMode')
+
+    const invalid = await store.save({ name: 'Bogus', musicMode: 'repeat-one' as never })
+    expect(invalid).not.toHaveProperty('musicMode')
+  })
+
+  it('leaves each Music item\'s loop untouched whatever the Music Mode', async () => {
+    const store = createSceneStore(config)
+    const saved = await store.save({ name: 'Seq', musicMode: 'sequential', music: [{ soundId: 'a', loop: true }] })
+    expect(saved.music[0]!.loop).toBe(true)
+  })
 })

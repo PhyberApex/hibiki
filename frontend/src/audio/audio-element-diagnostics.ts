@@ -15,6 +15,12 @@ export function logInfo(message: string): void {
   console.info(message)
 }
 
+/** Tagged debug line for the renderer; captured into hibiki.log like `logInfo`, at debug level. */
+export function logDebug(message: string): void {
+  // eslint-disable-next-line no-console
+  console.debug(message)
+}
+
 function describe(el: HTMLAudioElement): string {
   return `${el.src || '(no src)'} readyState=${el.readyState} networkState=${el.networkState}`
 }

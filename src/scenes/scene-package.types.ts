@@ -1,3 +1,5 @@
+import type { MusicMode } from './scene-store'
+
 export interface SoundSource {
   name: string
   url?: string
@@ -28,6 +30,8 @@ export interface SceneManifest {
   license?: string
   homepage?: string
   scene: {
+    /** Absent (older archives) or invalid reads as `single`. */
+    musicMode?: MusicMode
     music: ScenePackageItem[]
     ambience: ScenePackageItem[]
     effects: ScenePackageItem[]
@@ -55,6 +59,8 @@ export interface RegistryEntry {
   createdAt: string
   updatedAt: string
   scene: {
+    /** Absent or invalid reads as `single`. */
+    musicMode?: MusicMode
     music: RegistryTrack[]
     ambience: RegistryTrack[]
     effects: RegistryTrack[]

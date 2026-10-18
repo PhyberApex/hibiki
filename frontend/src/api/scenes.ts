@@ -19,12 +19,17 @@ export interface SceneItem {
   hotkey?: string
 }
 
+/** How a Scene moves through its Music list (CONTEXT.md "Music Mode"); absent means `single`. */
+export type MusicMode = 'single' | 'sequential' | 'shuffle'
+
 export interface Scene {
   id: string
   name: string
   ambience: SceneItem[]
   music: SceneItem[]
   effects: SceneItem[]
+  /** Music Mode; absent means `single`. */
+  musicMode?: MusicMode
   /** Scene Hotkey (Electron accelerator). */
   hotkey?: string
   createdAt: string
@@ -52,6 +57,7 @@ export function saveScene(scene: {
   ambience?: SceneItem[]
   music?: SceneItem[]
   effects?: SceneItem[]
+  musicMode?: MusicMode
   hotkey?: string
 }): Promise<Scene> {
   requireElectron()

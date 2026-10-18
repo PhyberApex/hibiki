@@ -6,7 +6,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import AdmZip from 'adm-zip'
 import { createLogger } from '../logger'
-import { createSceneStore } from './scene-store'
+import { createSceneStore, normalizeMusicMode } from './scene-store'
 
 const log = createLogger('scene-import')
 
@@ -95,6 +95,7 @@ export async function importScene(config: Config, sourceZipPath: string): Promis
     ambience: manifest.scene.ambience.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
     music: manifest.scene.music.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
     effects: manifest.scene.effects.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
+    musicMode: normalizeMusicMode(manifest.scene.musicMode),
   }
   const saved = await scenes.save(scene)
   log.info(`Imported "${saved.name}" (${saved.id})`)

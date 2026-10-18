@@ -71,4 +71,18 @@ describe('exportScene', () => {
     const raw = new AdmZip(targetZip).getEntry('hibiki-scene.json')!.getData().toString('utf-8')
     expect(raw.toLowerCase()).not.toContain('hotkey')
   })
+
+  it('writes the Music Mode into the manifest, single when the Scene has none', async () => {
+    const { createSceneStore } = await import('./scene-store')
+    const store = createSceneStore(config)
+    const seq = await store.save({ name: 'Seq', musicMode: 'sequential' })
+    const plain = await store.save({ name: 'Plain' })
+    const read = async (id: string) => {
+      const targetZip = join(tempRoot, `${id}.zip`)
+      await exportScene(config, id, targetZip)
+      return JSON.parse(new AdmZip(targetZip).getEntry('hibiki-scene.json')!.getData().toString('utf-8'))
+    }
+    expect((await read(seq.id)).scene.musicMode).toBe('sequential')
+    expect((await read(plain.id)).scene.musicMode).toBe('single')
+  })
 })
