@@ -11,11 +11,12 @@ import {
 import { createMinimalWavPath } from '../fixtures/minimal-wav.js'
 import { e2eEnv, isE2eConfigured, isSidecarConfigured } from '../setup.js'
 import {
+  captureAudioFrom,
   createSidecarClient,
   destroySidecarClient,
+  voiceChannelOf,
+  waitForHibikiUserId,
 } from '../sidecar-helper.js'
-
-type VoiceChannel = import('discord.js').VoiceChannel
 
 const { guildId, voiceChannelId } = e2eEnv
 
@@ -39,40 +40,36 @@ const test = base.extend<ElectronTestFixtures>({
 
 test.describe('Hibiki Electron E2E', () => {
   let sidecar: Client | null = null
-  let hibikiUserId: string | null = null
 
+  // A configured sidecar that cannot connect is a failure, not a downgrade:
+  // silently skipping the Discord-side checks is how a green run hides a bot
+  // that never joined or never sent audio.
   test.beforeAll(async () => {
     if (!isSidecarConfigured())
       return
-    try {
-      sidecar = await createSidecarClient()
-    }
-    catch (err) {
-      console.warn('Sidecar client failed to connect, voice verification tests will be limited:', (err as Error).message)
-    }
+    sidecar = await createSidecarClient()
   })
 
   test.afterAll(() => {
     destroySidecarClient(sidecar)
   })
 
-  async function ensureHibikiUserId(page: Page): Promise<void> {
-    if (hibikiUserId)
-      return
+  interface VoiceVerifier {
+    hibikiUserId: string
+    expectInVoice: (channelId: string | null) => Promise<void>
+  }
+
+  /** Discord-side view of Hibiki through the sidecar; null when no sidecar is configured. */
+  async function voiceVerifier(page: Page): Promise<VoiceVerifier | null> {
     if (!sidecar)
-      return
-    try {
-      const status = await invokeApi<{ ready: boolean, userId?: string }>(
-        page,
-        'player',
-        'getBotStatus',
-        [],
-      )
-      if (status.ready && status.userId)
-        hibikiUserId = status.userId
-    }
-    catch {
-      // API unreachable
+      return null
+    const hibikiUserId = await waitForHibikiUserId(page)
+    const client = sidecar
+    return {
+      hibikiUserId,
+      expectInVoice: async (channelId) => {
+        await expect.poll(() => voiceChannelOf(client, guildId, hibikiUserId), { timeout: 10_000 }).toBe(channelId)
+      },
     }
   }
 
@@ -90,53 +87,92 @@ test.describe('Hibiki Electron E2E', () => {
     await expect(page.locator('section.panel')).toBeVisible()
   })
 
+  /** The sidebar entry for the configured E2E voice channel, once the guild directory has loaded. */
+  async function configuredChannelItem(page: Page) {
+    await page.locator('.channel-item').first().waitFor({ timeout: 30_000 })
+    const directory = await invokeApi<{ guildId: string, channels: { id: string, name: string }[] }[]>(page, 'player', 'getGuildDirectory')
+    const channel = directory.find(g => g.guildId === guildId)?.channels.find(c => c.id === voiceChannelId)
+    if (!channel)
+      throw new Error(`Voice channel ${voiceChannelId} not found in guild ${guildId} directory`)
+    return page.locator('.channel-item', { hasText: channel.name }).first()
+  }
+
   test('join voice channel', async ({ page }) => {
     if (!isE2eConfigured())
       test.skip()
 
-    await ensureHibikiUserId(page)
+    const verifier = await voiceVerifier(page)
     await page.goto('hibiki://app/scenes')
     await expect(page.getByRole('link', { name: 'Scenes' })).toBeVisible()
 
-    // Wait for bot to connect and guild directory to load
-    const firstGuildChannel = page.locator('.channel-item').first()
-    await firstGuildChannel.waitFor({ timeout: 30_000 })
-
-    // Select guild/channel from sidebar
-    await firstGuildChannel.click()
+    await (await configuredChannelItem(page)).click()
     await expect(page.locator('.btn-disconnect')).toBeVisible({ timeout: 15_000 })
 
-    if (sidecar && hibikiUserId && voiceChannelId) {
-      const guild = await sidecar!.guilds.fetch(guildId)
-      const channel = (await guild.channels.fetch(voiceChannelId)) as VoiceChannel
-      expect(channel.members.has(hibikiUserId)).toBe(true)
-    }
+    await verifier?.expectInVoice(voiceChannelId)
   })
 
   test('leave voice channel', async ({ page }) => {
     if (!isE2eConfigured())
       test.skip()
 
-    await ensureHibikiUserId(page)
+    const verifier = await voiceVerifier(page)
     await page.goto('hibiki://app/scenes')
 
-    // Wait for bot to connect and guild directory to load
-    const firstGuildChannel = page.locator('.channel-item').first()
-    await firstGuildChannel.waitFor({ timeout: 30_000 })
-
-    // Join a channel first
-    await firstGuildChannel.click()
+    await (await configuredChannelItem(page)).click()
     await expect(page.locator('.btn-disconnect')).toBeVisible({ timeout: 15_000 })
+    await verifier?.expectInVoice(voiceChannelId)
 
-    // Now leave
     await page.locator('.btn-disconnect').click()
     await expect(page.locator('.btn-disconnect')).not.toBeVisible({ timeout: 5000 })
 
-    if (sidecar && hibikiUserId && voiceChannelId) {
-      await page.waitForTimeout(1500)
-      const guild = await sidecar!.guilds.fetch(guildId)
-      const channel = (await guild.channels.fetch(voiceChannelId)) as VoiceChannel
-      expect(channel.members.has(hibikiUserId)).toBe(false)
+    await verifier?.expectInVoice(null)
+  })
+
+  test('music played to Discord reaches another member of the voice channel', async ({ page }) => {
+    if (!isE2eConfigured() || !isSidecarConfigured())
+      test.skip()
+
+    const verifier = (await voiceVerifier(page))!
+    const timestamp = String(Date.now())
+    const unique = `e2e-discord-playback-${timestamp}`
+    const wavPath = createMinimalWavPath(`${unique}.wav`, 20)
+    let soundId: string | undefined
+    let capture: Awaited<ReturnType<typeof captureAudioFrom>> | undefined
+    try {
+      await page.goto('hibiki://app/media')
+      await page.locator('.category-tab', { hasText: 'Music' }).click()
+      await page.locator('section.panel input[type=file]').setInputFiles(wavPath)
+      await expect(page.locator('.toast-region').getByText('Added to music.')).toBeVisible({ timeout: 15_000 })
+      const music = await invokeApi<Array<{ id: string }>>(page, 'sounds', 'listMusic')
+      soundId = music.find(s => s.id.toLowerCase().includes(unique.toLowerCase()))?.id
+      expect(soundId).toBeTruthy()
+
+      await page.locator('.channel-item').first().waitFor({ timeout: 30_000 })
+      await invokeApi(page, 'player', 'join', [{ guildId, channelId: voiceChannelId }])
+      await verifier.expectInVoice(voiceChannelId)
+
+      capture = await captureAudioFrom(sidecar!, guildId, voiceChannelId, verifier.hibikiUserId)
+      await invokeApi(page, 'player', 'playMusic', [guildId, soundId, { volume: 100, loop: true }])
+
+      await expect.poll(async () => {
+        const states = await invokeApi<Array<{ targetId: string, track: { id: string } | null }>>(page, 'player', 'getState')
+        return states.find(s => s.targetId === guildId)?.track?.id
+      }).toBe(soundId)
+
+      await expect(capture.speaking).resolves.toBeUndefined()
+      // Roughly 50 packets per second; a handful is enough to show audio flows, not just a speaking flag.
+      await expect.poll(() => capture!.packetCount(), { timeout: 15_000 }).toBeGreaterThanOrEqual(25)
+
+      await invokeApi(page, 'player', 'stop', [guildId])
+      await invokeApi(page, 'player', 'leave', [{ guildId }])
+      await verifier.expectInVoice(null)
+    }
+    finally {
+      capture?.stop()
+      if (soundId)
+        await invokeApi(page, 'sounds', 'deleteSound', ['music', soundId]).catch(() => undefined)
+      if (existsSync(wavPath))
+        unlinkSync(wavPath)
     }
   })
 

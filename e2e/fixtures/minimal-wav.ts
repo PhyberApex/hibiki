@@ -6,9 +6,9 @@ import { join } from 'node:path'
  * Creates a minimal valid WAV file (PCM, mono, 44.1kHz, 16-bit, ~0.1s silence)
  * and returns the path. Caller can use it for upload tests and delete after.
  */
-export function createMinimalWavPath(filename: string): string {
+export function createMinimalWavPath(filename: string, durationSec?: number): string {
   const path = join(tmpdir(), filename)
-  writeMinimalWav(path)
+  writeMinimalWav(path, durationSec)
   return path
 }
 

@@ -91,9 +91,18 @@ The `.actrc` file in the repo root configures `act` to use the correct Docker im
 
 ## Environment
 
-- `.env.e2e` – optional; set `E2E_GUILD_ID`, `E2E_VOICE_CHANNEL_ID` for voice channel tests
+- `.env.e2e` – optional; set `E2E_GUILD_ID`, `E2E_VOICE_CHANNEL_ID` for voice channel tests, `E2E_SIDECAR_TOKEN` for the sidecar bot
 - `.env` in repo root – required for Discord; `DISCORD_TOKEN`
 - `.secrets` – used by `act` for local CI runs; copy from `.secrets.example`
+
+## Sidecar bot (Discord-side verification)
+
+`E2E_SIDECAR_TOKEN` is the token of a **second** bot that is in the same test server with permission to connect to the voice channel. It never plays anything; it observes Hibiki from the outside:
+
+- **join / leave** – asserts Hibiki's voice state (through `sidecar-helper.ts#voiceChannelOf`) is the configured channel after joining and empty after leaving. Without the sidecar, these tests only check Hibiki's own UI.
+- **music played to Discord reaches another member** – uploads a WAV, joins the configured channel, starts Music, then the sidecar joins the same channel (muted, not deafened) and counts the Opus packets Hibiki sends. The test fails unless Discord reports Hibiki as speaking **and** packets arrive. It is skipped when the sidecar is not configured.
+
+If the sidecar token is set but the sidecar cannot log in, or Hibiki never reaches `ready`, the run fails rather than silently skipping the Discord-side checks.
 
 ## Local Target test (no secrets)
 
