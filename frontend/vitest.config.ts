@@ -25,7 +25,9 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html', 'lcov'],
+      // lcov paths are written relative to the repo root (frontend/src/...) so Codecov's
+      // `frontend` flag matches them and they cannot be confused with the backend's src/.
+      reporter: ['text', 'json', 'html', ['lcov', { projectRoot: fileURLToPath(new URL('..', import.meta.url)) }]],
       include: ['src/**/*.{ts,vue}'],
       exclude: ['src/**/*.spec.ts', 'src/**/*.test.ts', 'src/main.ts', 'src/**/icons/**'],
     },

@@ -2,11 +2,11 @@ coverage:
   status:
     project:
       default:
-        target: 60%
+        target: 75%
         threshold: 1%
     patch:
       default:
-        target: 60%
+        target: 80%
 
 flag_management:
   default_rules:
@@ -14,10 +14,10 @@ flag_management:
   individual_flags:
     - name: backend
       paths:
-        - app/src/
+        - src/
     - name: frontend
       paths:
-        - app/frontend/src/
+        - frontend/src/
 
 comment:
   layout: 'reach,diff,flags,tree'
