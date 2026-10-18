@@ -68,7 +68,9 @@ function registerAudioStreamHandlers(ipcMain, player) {
   /** Map<guildId, Map<streamId, PassThrough>> - multiple streams per guild, mixed by backend */
   const effectStreams = new Map()
   // Chunks still in flight after a stop are expected; warn once per unknown stream, not once per chunk.
+  // Effect stream ids are random, so the set is bounded rather than left to grow for the whole session.
   const warnedUnknown = new Set()
+  const MAX_WARNED_UNKNOWN = 256
 
   const streamsFor = (registry, guildId) => {
     if (!registry.has(guildId))
@@ -76,20 +78,29 @@ function registerAudioStreamHandlers(ipcMain, player) {
     return registry.get(guildId)
   }
 
-  const replace = (streams, streamId) => {
-    if (streams.has(streamId)) {
-      streams.get(streamId).end()
+  const end = (streams, streamId) => {
+    const stream = streams.get(streamId)
+    if (stream) {
       streams.delete(streamId)
+      stream.end()
     }
+  }
+
+  const replace = (streams, streamId) => {
+    end(streams, streamId)
     const stream = new PassThrough()
     streams.set(streamId, stream)
     return stream
   }
 
+  const unknownKey = (lane, guildId, streamId) => `${lane}:${guildId}:${streamId}`
+
   const write = (lane, stream, guildId, streamId, chunk) => {
     if (!stream) {
-      const key = `${lane}:${guildId}:${streamId}`
+      const key = unknownKey(lane, guildId, streamId)
       if (!warnedUnknown.has(key)) {
+        if (warnedUnknown.size >= MAX_WARNED_UNKNOWN)
+          warnedUnknown.clear()
         warnedUnknown.add(key)
         ipcLog.warn(`${lane} for unknown stream ${streamId} in guild ${guildId}; dropping`)
       }
@@ -101,7 +112,7 @@ function registerAudioStreamHandlers(ipcMain, player) {
 
   ipcMain.handle('audio:startStream', async (_, { guildId, metadata, streamId }) => {
     const stream = replace(streamsFor(audioStreams, guildId), streamId)
-    warnedUnknown.delete(`audio:chunk:${guildId}:${streamId}`)
+    warnedUnknown.delete(unknownKey('audio:chunk', guildId, streamId))
     ipcLog.info(`audio:startStream ${streamId} for guild ${guildId}`)
     player.startStream(guildId, stream, metadata, streamId)
   })
@@ -112,13 +123,8 @@ function registerAudioStreamHandlers(ipcMain, player) {
 
   ipcMain.handle('audio:stopStream', async (_, { guildId, streamId }) => {
     const streams = audioStreams.get(guildId)
-    if (streams) {
-      const stream = streams.get(streamId)
-      if (stream) {
-        streams.delete(streamId)
-        stream.end()
-      }
-    }
+    if (streams)
+      end(streams, streamId)
     ipcLog.info(`audio:stopStream ${streamId} for guild ${guildId}`)
     player.stopStream(guildId, streamId)
   })
@@ -126,7 +132,7 @@ function registerAudioStreamHandlers(ipcMain, player) {
   ipcMain.handle('audio:startEffectStream', async (_, { guildId, streamId }) => {
     const id = streamId || `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const stream = replace(streamsFor(effectStreams, guildId), id)
-    warnedUnknown.delete(`audio:effectChunk:${guildId}:${id}`)
+    warnedUnknown.delete(unknownKey('audio:effectChunk', guildId, id))
     ipcLog.info(`audio:startEffectStream ${id} for guild ${guildId}`)
     player.startEffectStream(guildId, stream)
     return id
@@ -144,11 +150,7 @@ function registerAudioStreamHandlers(ipcMain, player) {
       return
     ipcLog.info(`audio:stopEffectStream ${streamId ?? '(all)'} for guild ${guildId}`)
     if (streamId) {
-      const stream = streams.get(streamId)
-      if (stream) {
-        streams.delete(streamId)
-        stream.end()
-      }
+      end(streams, streamId)
     }
     else {
       streams.forEach(s => s.end())

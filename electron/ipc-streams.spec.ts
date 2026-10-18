@@ -106,6 +106,17 @@ describe('registerAudioStreamHandlers: Music lane', () => {
     expect(spies.warn).toHaveBeenCalledTimes(2)
   })
 
+  it('forgets old unknown streams once 256 have warned, so the set stays bounded', () => {
+    const ipc = fakeIpcMain()
+    registerAudioStreamHandlers(ipc, fakePlayer())
+
+    for (let i = 0; i < 257; i++)
+      ipc.send('audio:chunk', { guildId: 'g1', streamId: `s${i}`, chunk: new Uint8Array([1]) })
+    ipc.send('audio:chunk', { guildId: 'g1', streamId: 's0', chunk: new Uint8Array([1]) })
+
+    expect(spies.warn).toHaveBeenCalledTimes(258)
+  })
+
   it('still tells the player to stop when the stream is not known', async () => {
     const ipc = fakeIpcMain()
     const player = fakePlayer()

@@ -30,8 +30,9 @@ function setupFileLogging(logsDir, header) {
   try {
     fs.mkdirSync(logsDir, { recursive: true })
   }
-  catch {
+  catch (err) {
     // Unwritable location: the console mirror still runs, the appends below just fail quietly.
+    console.warn(`Could not create the log folder ${logsDir}; logging to the console only:`, err)
   }
   const logFile = path.join(logsDir, LOG_FILE_NAME)
   const rotatedFile = path.join(logsDir, ROTATED_FILE_NAME)

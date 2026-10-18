@@ -102,6 +102,7 @@ describe('setupFileLogging', () => {
     const silenced = { ...console }
 
     expect(() => setupFileLogging(logsDir, 'start')).not.toThrow()
+    expect(silenced.warn).toHaveBeenCalledWith(expect.stringContaining('Could not create the log folder'), expect.objectContaining({ code: 'ENOTDIR' }))
     expect(() => console.error('still reaches the console')).not.toThrow()
     expect(silenced.error).toHaveBeenCalledWith('still reaches the console')
   })
