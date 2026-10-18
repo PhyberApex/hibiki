@@ -70,6 +70,8 @@ export interface AudioCapture {
   speaking: Promise<void>
   /** Number of Opus packets received from the user so far. */
   packetCount: () => number
+  /** Whether Discord currently reports the user as speaking (a packet within the last 100 ms). */
+  isSpeaking: () => boolean
   /** Leaves the voice channel and stops counting. */
   stop: () => void
 }
@@ -124,6 +126,7 @@ export async function captureAudioFrom(
   return {
     speaking,
     packetCount: () => packets,
+    isSpeaking: () => receiver.speaking.users.has(userId),
     stop: () => {
       opus.destroy()
       connection.destroy()
