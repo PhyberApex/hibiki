@@ -24,8 +24,18 @@ jobs:
       - name: Test
         run: pnpm run test:coverage
 
-      - name: Upload coverage to Codecov
+      - name: Upload backend coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/lcov.info, ./frontend/coverage/lcov.info
+          files: ./coverage/lcov.info
+          flags: backend
+          disable_search: true
+
+      - name: Upload frontend coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./frontend/coverage/lcov.info
+          flags: frontend
+          disable_search: true
