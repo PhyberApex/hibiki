@@ -237,7 +237,7 @@ test.describe('Hibiki Electron E2E', () => {
       if (!capture.isSpeaking() && Date.now() - quietSince >= quietMs)
         return
     }
-    throw new Error(`Hibiki was still speaking ${timeoutMs} ms later (${capture.packetCount()} packets received so far)`)
+    throw new Error(`Hibiki was still speaking ${timeoutMs} ms later (${capture.packetCount()} packets received so far, ${capture.silenceFrameCount()} of them Opus silence frames)`)
   }
 
   /** The Output Target the renderer's Playing Scene is on (`playingSceneMode` in the player store). */
@@ -265,6 +265,7 @@ test.describe('Hibiki Electron E2E', () => {
       const effectId = await uploadWav(page, 'effects', `${unique}-effect.wav`, EFFECT_SECONDS)
       uploaded.push(['effects', effectId])
 
+      await page.goto('hibiki://app/scenes')
       await page.locator('.channel-item').first().waitFor({ timeout: 30_000 })
       await invokeApi(page, 'player', 'join', [{ guildId, channelId: voiceChannelId }])
       await verifier.expectInVoice(voiceChannelId)
@@ -387,6 +388,7 @@ test.describe('Hibiki Electron E2E', () => {
     let capture: AudioCapture | undefined
     try {
       musicId = await uploadWav(page, 'music', `e2e-discord-silence-${Date.now()}.wav`, 20)
+      await page.goto('hibiki://app/scenes')
       await page.locator('.channel-item').first().waitFor({ timeout: 30_000 })
       await invokeApi(page, 'player', 'join', [{ guildId, channelId: voiceChannelId }])
       await verifier.expectInVoice(voiceChannelId)

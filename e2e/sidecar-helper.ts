@@ -65,6 +65,9 @@ export async function voiceChannelOf(sidecar: Client, guildId: string, userId: s
   return member.voice.channelId ?? guild.voiceStates.cache.get(userId)?.channelId ?? null
 }
 
+/** The Opus frame `@discordjs/voice` sends in place of audio when its resource yields nothing. */
+const SILENCE_FRAME = Buffer.from([0xF8, 0xFF, 0xFE])
+
 export interface AudioCapture {
   /** Resolves once Discord reports the user as speaking. */
   speaking: Promise<void>
@@ -72,6 +75,8 @@ export interface AudioCapture {
   packetCount: () => number
   /** Whether Discord currently reports the user as speaking (a packet within the last 100 ms). */
   isSpeaking: () => boolean
+  /** How many of those packets were the 3-byte Opus silence frame the voice player sends when it has nothing to play. */
+  silenceFrameCount: () => number
   /** Leaves the voice channel and stops counting. */
   stop: () => void
 }
@@ -115,9 +120,12 @@ export async function captureAudioFrom(
   })
 
   let packets = 0
+  let silenceFrames = 0
   const opus = receiver.subscribe(userId, { end: { behavior: EndBehaviorType.Manual } })
-  opus.on('data', () => {
+  opus.on('data', (packet: Buffer) => {
     packets += 1
+    if (packet.equals(SILENCE_FRAME))
+      silenceFrames += 1
   })
   opus.on('error', (err) => {
     console.warn('[sidecar] opus receive stream error:', err.message)
@@ -127,6 +135,7 @@ export async function captureAudioFrom(
     speaking,
     packetCount: () => packets,
     isSpeaking: () => receiver.speaking.users.has(userId),
+    silenceFrameCount: () => silenceFrames,
     stop: () => {
       opus.destroy()
       connection.destroy()
