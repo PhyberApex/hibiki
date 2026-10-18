@@ -633,8 +633,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       if (intent !== musicIntent)
         return
       const item = scene.music[next.index] ?? scene.music.find(m => m.soundId === next!.soundId)
-      if (!item)
+      if (!item) {
+        console.warn(`[scene] Music Mode ${mode}: track ${next.soundId} is no longer in Scene ${scene.id}, Music stops`)
         return
+      }
       musicCursor = { sceneId: scene.id, current: next.soundId, index: next.index, bag: next.bag }
       musicSceneId.value = scene.id
       if (await start(trackForMode(item, mode)))
@@ -674,8 +676,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
 
   async function advanceMusic(outgoing: string) {
     const cursor = musicCursor
-    if (!cursor || cursor.current !== outgoing)
+    if (!cursor || cursor.current !== outgoing) {
+      logDebug(`[scene] Music ${outgoing} played out with no Music Mode cursor for it, no advance`)
       return
+    }
     const intent = musicIntent
     const scene = await liveScene(cursor.sceneId).catch((e) => {
       console.warn(`[scene] Music Mode: could not load Scene ${cursor.sceneId} to advance after ${outgoing}:`, e)

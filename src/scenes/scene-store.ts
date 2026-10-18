@@ -26,7 +26,7 @@ export interface SceneItem {
 /** How a Scene moves through its Music list (CONTEXT.md "Music Mode"); absent means `single`. */
 export type MusicMode = 'single' | 'sequential' | 'shuffle'
 
-export const MUSIC_MODES: readonly MusicMode[] = ['single', 'sequential', 'shuffle']
+const MUSIC_MODES: readonly MusicMode[] = ['single', 'sequential', 'shuffle']
 
 /** Any stored, imported or Registry-supplied value that is not a known Music Mode reads as `single`. */
 export function normalizeMusicMode(raw: unknown): MusicMode {
