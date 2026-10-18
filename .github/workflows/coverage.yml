@@ -30,6 +30,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
           flags: backend
+          disable_search: true
 
       - name: Upload frontend coverage to Codecov
         uses: codecov/codecov-action@v7
@@ -37,3 +38,4 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./frontend/coverage/lcov.info
           flags: frontend
+          disable_search: true
