@@ -1,7 +1,10 @@
+import type { Scene } from '@/api/scenes'
+import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchMasterVolume, updateMasterVolume } from '@/api/config'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fetchMasterVolume, fetchSceneFadeLength, updateMasterVolume } from '@/api/config'
 import { playAmbience, playEffect, playMusic, stopAmbience, stopEffects, stopMusic } from '@/api/player'
+import { canDecode } from '@/api/sounds'
 import { usePlayerStore } from '@/stores/player'
 import { useScenePlaybackStore } from './scene-playback'
 
@@ -111,5 +114,302 @@ describe('scene playback store', () => {
     expect(await store.stepMasterVolume(5)).toBeNull()
     vi.mocked(fetchMasterVolume).mockResolvedValueOnce(2)
     expect(await store.stepMasterVolume(-5)).toBe(0)
+  })
+})
+
+describe('scene playback store: Music Mode', () => {
+  const track = (id: string) => ({ soundId: id, soundName: id, volume: 100, loop: true })
+  const musicScene = (mode: Scene['musicMode'], ids = ['m1', 'm2', 'm3'], id = 'sm'): Scene => ({
+    id,
+    name: `Scene ${id}`,
+    ambience: [],
+    music: ids.map(track),
+    effects: [],
+    musicMode: mode,
+    createdAt: '',
+    updatedAt: '',
+  })
+
+  const mediaProto = HTMLMediaElement.prototype
+  const originalMedia = { load: mediaProto.load, play: mediaProto.play, pause: mediaProto.pause }
+  let playingEls: HTMLMediaElement[]
+
+  function setup(scene: Scene) {
+    const store = useScenePlaybackStore()
+    store.masterVolume = 100
+    store.musicSounds = ['m1', 'm2', 'm3', 'm4', 'x1', 'x2'].map(id => ({ id, name: id, filename: `${id}.mp3` })) as never
+    store.openScene = scene
+    return store
+  }
+
+  // The backend's state push for the Local Target, as `player:stateChanged` would deliver it.
+  async function backendTrack(id: string | null) {
+    usePlayerStore().playerState = [{
+      targetId: 'local',
+      kind: 'local',
+      guildId: 'local',
+      isIdle: id === null,
+      track: id ? { id, name: id, filename: `${id}.mp3`, category: 'music' } : null,
+      source: 'live',
+    }] as never
+    await flushPromises()
+  }
+
+  async function playsOut(id: string) {
+    await backendTrack(id)
+    await backendTrack(null)
+  }
+
+  const startedTracks = () => vi.mocked(playMusic).mock.calls.map(c => c[1])
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    usePlayerStore().activeTarget = 'local'
+    vi.mocked(canDecode).mockResolvedValue(true)
+    vi.mocked(fetchSceneFadeLength).mockResolvedValue(2)
+    playingEls = []
+    Object.defineProperty(mediaProto, 'load', {
+      configurable: true,
+      value(this: HTMLMediaElement) {
+        queueMicrotask(() => this.dispatchEvent(new Event('canplaythrough')))
+      },
+    })
+    Object.defineProperty(mediaProto, 'play', {
+      configurable: true,
+      value(this: HTMLMediaElement) {
+        playingEls.push(this)
+        return Promise.resolve()
+      },
+    })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: vi.fn() })
+  })
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(originalMedia))
+      Object.defineProperty(mediaProto, key, { configurable: true, value })
+    vi.mocked(canDecode).mockResolvedValue(true)
+    vi.mocked(fetchSceneFadeLength).mockResolvedValue(0)
+    vi.mocked(playMusic).mockResolvedValue(undefined)
+  })
+
+  it('plays a Scene without a Music Mode exactly as before: first track, Loop honoured, no advance', async () => {
+    const scene = musicScene(undefined)
+    const store = setup(scene)
+    await store.playScene(scene)
+    expect(playMusic).toHaveBeenCalledWith('local', 'm1', expect.objectContaining({ loop: true, fadeInMs: 0 }))
+
+    await playsOut('m1')
+    expect(startedTracks()).toEqual(['m1'])
+  })
+
+  it('sequential: a played-out track starts the next with the Scene fade-in, wrapping last to first, Loop ignored', async () => {
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+    await store.playScene(scene)
+    expect(playMusic).toHaveBeenLastCalledWith('local', 'm1', expect.objectContaining({ loop: false }))
+
+    await playsOut('m1')
+    expect(playMusic).toHaveBeenLastCalledWith('local', 'm2', expect.objectContaining({ loop: false, fadeInMs: 2000 }))
+    await playsOut('m2')
+    await playsOut('m3')
+    expect(startedTracks()).toEqual(['m1', 'm2', 'm3', 'm1'])
+    expect(store.playingMusicId).toBe('m1')
+    expect(store.musicSceneId).toBe('sm')
+    expect(scene.music[0]!.loop).toBe(true)
+  })
+
+  it('hard-cuts the advance when the fade length is 0', async () => {
+    vi.mocked(fetchSceneFadeLength).mockResolvedValue(0)
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+    await store.playScene(scene)
+    await playsOut('m1')
+    expect(playMusic).toHaveBeenLastCalledWith('local', 'm2', expect.objectContaining({ fadeInMs: 0 }))
+  })
+
+  it('shuffle: plays every track once per pass, and a one-track Scene repeats it', async () => {
+    const scene = musicScene('shuffle')
+    const store = setup(scene)
+    await store.playScene(scene)
+    for (let i = 0; i < 5; i++)
+      await playsOut(startedTracks().at(-1)!)
+    const played = startedTracks()
+    expect(played.slice(0, 3).sort()).toEqual(['m1', 'm2', 'm3'])
+    expect(played.slice(3, 6).sort()).toEqual(['m1', 'm2', 'm3'])
+    expect(played[3]).not.toBe(played[2])
+
+    vi.mocked(playMusic).mockClear()
+    const solo = musicScene('shuffle', ['m4'], 'solo')
+    store.openScene = solo
+    await store.playScene(solo)
+    await playsOut('m4')
+    expect(startedTracks()).toEqual(['m4', 'm4'])
+  })
+
+  it('never advances after a Stop, the Music card Stop or a Target switch', async () => {
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+
+    await store.playScene(scene)
+    await backendTrack('m1')
+    store.stopScene()
+    await backendTrack(null)
+
+    await store.playScene(scene)
+    await backendTrack('m1')
+    store.stopMusicPlayback()
+    await backendTrack(null)
+
+    await store.playScene(scene)
+    await backendTrack('m1')
+    await store.switchTarget('discord')
+    await backendTrack(null)
+
+    expect(startedTracks()).toEqual(['m1', 'm1', 'm1'])
+  })
+
+  it('a Stop landing while an advance is still in flight wins: nothing starts afterwards', async () => {
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+    await store.playScene(scene)
+    let releaseFade!: (seconds: number) => void
+    vi.mocked(fetchSceneFadeLength).mockReturnValueOnce(new Promise((resolve) => {
+      releaseFade = resolve
+    }))
+    await playsOut('m1')
+    store.stopScene()
+    releaseFade(2)
+    await flushPromises()
+    expect(startedTracks()).toEqual(['m1'])
+    expect(store.playingMusicId).toBeNull()
+  })
+
+  it('a Scene Crossfade away never advances the outgoing Scene', async () => {
+    const scene = musicScene('sequential')
+    const other = musicScene('sequential', ['x1', 'x2'], 'other')
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValue(other)
+    const store = setup(scene)
+    await store.playScene(scene)
+    await backendTrack('m1')
+
+    await store.crossfadeToScene('other')
+    await flushPromises()
+    await backendTrack('x1')
+    expect(startedTracks()).toEqual(['m1', 'x1'])
+    expect(store.musicSceneId).toBe('other')
+
+    await backendTrack(null)
+    expect(startedTracks()).toEqual(['m1', 'x1', 'x2'])
+  })
+
+  it('a jump crossfades to the clicked track and the sequence continues from it', async () => {
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+    await store.playScene(scene)
+    await backendTrack('m1')
+
+    await store.playMusicTrack(scene.music[2]!)
+    expect(playMusic).toHaveBeenLastCalledWith('local', 'm3', expect.objectContaining({ fadeInMs: 2000 }))
+    await backendTrack('m3')
+    await backendTrack(null)
+    expect(startedTracks()).toEqual(['m1', 'm3', 'm1'])
+  })
+
+  it('a track Play with nothing of the Scene playing is a plain start, not a jump', async () => {
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+    await store.playMusicTrack(scene.music[1]!)
+    expect(playMusic).toHaveBeenLastCalledWith('local', 'm2', expect.objectContaining({ fadeInMs: 0, loop: false }))
+    await playsOut('m2')
+    expect(startedTracks()).toEqual(['m2', 'm3'])
+  })
+
+  it('reads the live Music list at advance time; an emptied list ends Music after the current track', async () => {
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+    await store.playScene(scene)
+    scene.music.splice(1, 1)
+    await playsOut('m1')
+    expect(startedTracks()).toEqual(['m1', 'm3'])
+
+    scene.music.splice(0)
+    await playsOut('m3')
+    expect(startedTracks()).toEqual(['m1', 'm3'])
+    expect(store.playingMusicId).toBeNull()
+    expect(store.musicSceneId).toBeNull()
+  })
+
+  it('follows the source Scene from the store when it is not the open Scene', async () => {
+    const scene = musicScene('sequential')
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValue({ ...scene, music: [track('m1'), track('m4')] })
+    const store = setup(scene)
+    await store.playScene(scene)
+    store.openScene = null
+    await playsOut('m1')
+    expect(getScene).toHaveBeenCalledWith('sm')
+    expect(startedTracks()).toEqual(['m1', 'm4'])
+  })
+
+  it('skips a track that cannot start with a warning, and goes silent with a warning when none can', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+    await store.playScene(scene)
+    vi.mocked(playMusic).mockImplementation(async (_t, id) => {
+      if (id === 'm2')
+        throw new Error('decode failed')
+    })
+    await playsOut('m1')
+    expect(startedTracks()).toEqual(['m1', 'm2', 'm3'])
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('skipping track m2'))
+
+    vi.mocked(playMusic).mockRejectedValue(new Error('decode failed'))
+    await playsOut('m3')
+    expect(startedTracks()).toEqual(['m1', 'm2', 'm3', 'm1', 'm2', 'm3'])
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Music goes silent'))
+    expect(store.playingMusicId).toBeNull()
+    vi.restoreAllMocks()
+  })
+
+  it('advances across the backend and the renderer fallback in both directions', async () => {
+    vi.mocked(canDecode).mockImplementation(async (_c, id) => id !== 'm2')
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+    await store.playScene(scene)
+    await playsOut('m1')
+    expect(store.playingMusicId).toBe('m2')
+    const m2El = playingEls.at(-1)!
+    expect(m2El.src).toContain('m2')
+    expect(m2El.loop).toBe(false)
+
+    m2El.onended?.(new Event('ended'))
+    await flushPromises()
+    expect(startedTracks()).toEqual(['m1', 'm3'])
+    expect(store.playingMusicId).toBe('m3')
+  })
+
+  it('a renderer end event from a stopped or replaced track never advances', async () => {
+    vi.mocked(canDecode).mockResolvedValue(false)
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+    await store.playScene(scene)
+    const m1El = playingEls.at(-1)!
+    const staleEnded = m1El.onended!
+
+    await store.playMusicTrack(scene.music[2]!)
+    await flushPromises()
+    staleEnded.call(m1El, new Event('ended'))
+    await flushPromises()
+    expect(playingEls.map(el => el.src.split('/').at(-1))).toEqual(['m1', 'm3'])
+
+    store.stopScene()
+    staleEnded.call(m1El, new Event('ended'))
+    await flushPromises()
+    expect(playingEls).toHaveLength(2)
+    expect(store.playingMusicId).toBeNull()
   })
 })

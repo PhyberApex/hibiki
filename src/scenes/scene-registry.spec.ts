@@ -74,4 +74,29 @@ describe('createSceneRegistry', () => {
     expect(scene).not.toHaveProperty('hotkey')
     expect(scene.effects[0]).not.toHaveProperty('hotkey')
   })
+
+  it('installFromRegistry keeps the entry\'s Music Mode and normalises an invalid one', async () => {
+    const base = {
+      description: '',
+      author: '',
+      version: '1.0.0',
+      tags: [],
+      category: 'environment',
+      audioBundled: false,
+      createdAt: '',
+      updatedAt: '',
+    }
+    const index = {
+      version: 1,
+      updatedAt: '',
+      scenes: [
+        { ...base, name: 'Seq', slug: 'seq', scene: { musicMode: 'sequential', music: [], ambience: [], effects: [] } },
+        { ...base, name: 'Odd', slug: 'odd', scene: { musicMode: 'nope', music: [], ambience: [], effects: [] } },
+      ],
+    }
+    writeFileSync(join(tempRoot, 'data', 'registry-cache.json'), JSON.stringify({ fetchedAt: new Date().toISOString(), data: index }))
+    const registry = createSceneRegistry(config)
+    expect((await registry.installFromRegistry('seq')).musicMode).toBe('sequential')
+    expect(await registry.installFromRegistry('odd')).not.toHaveProperty('musicMode')
+  })
 })

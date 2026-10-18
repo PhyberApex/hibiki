@@ -23,12 +23,24 @@ export interface SceneItem {
   hotkey?: string
 }
 
+/** How a Scene moves through its Music list (CONTEXT.md "Music Mode"); absent means `single`. */
+export type MusicMode = 'single' | 'sequential' | 'shuffle'
+
+const MUSIC_MODES: readonly MusicMode[] = ['single', 'sequential', 'shuffle']
+
+/** Any stored, imported or Registry-supplied value that is not a known Music Mode reads as `single`. */
+export function normalizeMusicMode(raw: unknown): MusicMode {
+  return MUSIC_MODES.includes(raw as MusicMode) ? raw as MusicMode : 'single'
+}
+
 export interface Scene {
   id: string
   name: string
   ambience: SceneItem[]
   music: SceneItem[]
   effects: SceneItem[]
+  /** Music Mode; omitted when `single`. Part of the Scene: exported and installed with it. */
+  musicMode?: MusicMode
   /** Scene Hotkey (Electron accelerator). Personal to this machine: never exported. */
   hotkey?: string
   createdAt: string
@@ -87,6 +99,7 @@ export function createSceneStore(config: Config, options: SceneStoreOptions = {}
       ambience?: SceneItem[]
       music?: SceneItem[]
       effects?: SceneItem[]
+      musicMode?: MusicMode
       hotkey?: string
     }): Promise<Scene> {
       const actionHotkeys = await options.getActionHotkeys?.()
@@ -103,6 +116,15 @@ export function createSceneStore(config: Config, options: SceneStoreOptions = {}
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
         }
+
+        const musicMode = normalizeMusicMode(scene.musicMode)
+        if (musicMode !== 'single')
+          saved.musicMode = musicMode
+        if (scene.musicMode !== undefined && scene.musicMode !== musicMode)
+          log.warn(`Scene "${saved.name}" (${saved.id}): unknown Music Mode ${JSON.stringify(scene.musicMode)}, using single`)
+        const previousMode = normalizeMusicMode(existing?.musicMode)
+        if (existing && previousMode !== musicMode)
+          log.info(`Scene "${saved.name}" (${saved.id}) Music Mode ${previousMode} -> ${musicMode}`)
 
         const hotkey = normalizeOptionalAccelerator(scene.hotkey)
         if (hotkey)
@@ -125,7 +147,7 @@ export function createSceneStore(config: Config, options: SceneStoreOptions = {}
         const next = existing
           ? scenes.map(s => (s.id === saved.id ? saved : s))
           : [...scenes, saved]
-        log.info(`${existing ? 'Updated' : 'Created'} scene "${saved.name}" (${saved.id}): ${saved.music.length} music, ${saved.ambience.length} ambience, ${saved.effects.length} effects`)
+        log.info(`${existing ? 'Updated' : 'Created'} scene "${saved.name}" (${saved.id}): ${saved.music.length} music, ${saved.ambience.length} ambience, ${saved.effects.length} effects, Music Mode ${musicMode}`)
         return { next, result: saved }
       })
     },

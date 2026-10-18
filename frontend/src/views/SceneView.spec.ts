@@ -1823,3 +1823,46 @@ describe('sceneView hotkeys', () => {
     expect(wrapper.find('[data-testid="scene-hotkey-chip"]').text()).toBe('F15')
   })
 })
+
+describe('sceneView — Music Mode control', () => {
+  beforeAll(stubMediaElement)
+
+  beforeEach(async () => {
+    const { getScene, saveScene } = await import('@/api/scenes')
+    vi.mocked(saveScene).mockClear()
+    vi.mocked(getScene).mockResolvedValue({
+      ...JSON.parse(JSON.stringify(scene)),
+      music: [{ soundId: 'm1', soundName: 'Tavern Theme', volume: 80, loop: true }],
+    })
+  })
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
+
+  const modeButton = (wrapper: Awaited<ReturnType<typeof mountScene>>, label: string) =>
+    wrapper.findAll('.music-mode-option').find(b => b.text() === label)!
+
+  it('starts on Single with the Loop toggle shown for a Scene without a Music Mode', async () => {
+    const wrapper = await mountScene()
+    expect(modeButton(wrapper, 'Single').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('.scene-section-music .toggle input').exists()).toBe(true)
+  })
+
+  it('saves the chosen mode, hides the Loop toggle outside Single and restores it with its old value', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    const wrapper = await mountScene()
+
+    await modeButton(wrapper, 'Shuffle').trigger('click')
+    expect(saveScene).toHaveBeenLastCalledWith(expect.objectContaining({ musicMode: 'shuffle' }))
+    expect(modeButton(wrapper, 'Shuffle').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('.scene-section-music .toggle input').exists()).toBe(false)
+
+    await modeButton(wrapper, 'Single').trigger('click')
+    const loop = wrapper.find('.scene-section-music .toggle input')
+    expect(loop.exists()).toBe(true)
+    expect((loop.element as HTMLInputElement).checked).toBe(true)
+  })
+})

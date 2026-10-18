@@ -181,6 +181,7 @@ The registry ships eight reference scenes under [`registry/scenes/PhyberApex/`](
 | `audioBundled` | `false` | Yes | Must be `false` |
 | `createdAt` | string | Yes | ISO 8601 timestamp |
 | `updatedAt` | string | Yes | ISO 8601 timestamp |
+| `scene.musicMode` | string | No | `single` (default), `sequential` or `shuffle`: how the Music list advances |
 | `scene.music` | array | Yes | Music track definitions |
 | `scene.ambience` | array | Yes | Ambience track definitions |
 | `scene.effects` | array | Yes | Effect definitions |
@@ -194,7 +195,7 @@ Each track in `scene.music`, `scene.ambience`, or `scene.effects`:
 | `soundName` | string | Yes | Display name of the track |
 | `volume` | number | No | 0-100, default 80 |
 | `enabled` | boolean | No | For ambience: whether it starts active |
-| `loop` | boolean | No | For music: whether it loops |
+| `loop` | boolean | No | For music: whether it loops (only in the `single` Music Mode) |
 | `source` | object | Yes | Where to find the audio |
 | `source.name` | string | Yes | Name/title of the original audio |
 | `source.url` | string | No | Link to the audio source |

@@ -65,6 +65,10 @@
       "additionalProperties": false,
       "description": "The scene definition with track references",
       "properties": {
+        "musicMode": {
+          "enum": ["single", "sequential", "shuffle"],
+          "description": "How the Music list advances: one track (default), list order with wrap, or a shuffle bag"
+        },
         "music": {
           "type": "array",
           "items": { "$ref": "#/$defs/track" },

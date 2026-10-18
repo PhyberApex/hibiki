@@ -1,7 +1,8 @@
 import type { OutputTargetKind } from '@/api/config'
-import type { Scene, SceneItem } from '@/api/scenes'
+import type { MusicMode, Scene, SceneItem } from '@/api/scenes'
 import type { SoundFile } from '@/api/sounds'
 import type { CaptureSession } from '@/audio/browser-audio-capture'
+import type { SelectedTrack } from '@/audio/music-mode'
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef, watch } from 'vue'
 import {
@@ -25,13 +26,14 @@ import {
 } from '@/api/player'
 import { getScene } from '@/api/scenes'
 import { canDecode, soundStreamUrl } from '@/api/sounds'
-import { logInfo, waitForPlayable, watchAudioElement } from '@/audio/audio-element-diagnostics'
+import { logDebug, logInfo, waitForPlayable, watchAudioElement } from '@/audio/audio-element-diagnostics'
 import { selectBackendPlaybackPath } from '@/audio/backend-playback-path'
 import {
   captureFromAudioElement,
   releaseAudioElementContext,
 } from '@/audio/browser-audio-capture'
 import { CrossfadeRamp } from '@/audio/crossfade-ramp'
+import { normalizeMusicMode, selectFirstTrack, selectNextTrack, shuffleBagWithout } from '@/audio/music-mode'
 import { bindAudioElement } from '@/audio/output-device'
 import { useFlashSet } from '@/composables/useFlashSet'
 import { usePlayerStore } from '@/stores/player'
@@ -68,11 +70,28 @@ function createDecodeCache(category: 'music' | 'ambience' | 'effects'): (soundId
 // backend decodes the file straight into the mixer and owns its own
 // crossfade, so this channel slot exists only to track which soundId/mode is
 // "primary" for Stop/volume-slider bookkeeping.
+// `token` identifies the start that put `soundId` there, so an end event can
+// tell "this track played out" from "a track this channel used to hold"
+// (Music Mode advance, ADR-0006). `backendTarget` is the Target a 'backend'
+// track was confirmed started on; until then its end cannot be detected.
 interface MusicChannel {
   el: HTMLAudioElement
   streamId: string
   soundId: string | null
   source: 'renderer' | 'backend' | null
+  token: number
+  backendTarget: string | null
+}
+
+// Where a Scene's Music Mode stands (CONTEXT.md, ADR-0006): the Scene the
+// current track was started from, that track, its list index when picked, and
+// the shuffle bag left for this pass.
+interface MusicCursor {
+  sceneId: string
+  current: string
+  index: number
+  bag: string[]
+  pass?: string[]
 }
 
 function createAudioEl(): HTMLAudioElement {
@@ -133,11 +152,21 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   const pendingBackendAmbienceCalls = new Set<string>()
 
   const musicChannels: MusicChannel[] = [
-    { el: createAudioEl(), streamId: 'music-a', soundId: null, source: null },
-    { el: createAudioEl(), streamId: 'music-b', soundId: null, source: null },
+    { el: createAudioEl(), streamId: 'music-a', soundId: null, source: null, token: 0, backendTarget: null },
+    { el: createAudioEl(), streamId: 'music-b', soundId: null, source: null, token: 0, backendTarget: null },
   ]
   let primaryMusicChannel = musicChannels[0]
   const crossfadeRamp = new CrossfadeRamp()
+
+  // Music Mode (ADR-0006). `musicSceneId` is the Scene the current Music track
+  // was started from; the advance follows that Scene, Playing Scene or not.
+  const musicSceneId = ref<string | null>(null)
+  let musicCursor: MusicCursor | null = null
+  let musicStartSeq = 0
+  // Bumped whenever the GM takes over Music (Play, Stop, a Scene Crossfade, a
+  // jump, a Target switch): an advance or skip chain started before then must
+  // not start anything afterwards.
+  let musicIntent = 0
 
   function getAmbienceAudio(soundId: string): HTMLAudioElement {
     let el = ambienceAudioEls.get(soundId)
@@ -464,15 +493,23 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       return
     if (channel.source && channel.source !== 'backend')
       stopMusicChannel(channel, channel.source)
+    const target = targetId.value
+    const token = ++musicStartSeq
     channel.soundId = item.soundId
     channel.source = 'backend'
+    channel.token = token
+    channel.backendTarget = null
     if (channel === primaryMusicChannel)
       playingMusicId.value = item.soundId
-    await playBackendMusic(targetId.value, item.soundId, {
+    await playBackendMusic(target, item.soundId, {
       volume: computeVolume(item.volume ?? 80) * 100,
       loop: item.loop ?? false,
       fadeInMs,
     })
+    // The backend has made this its current track before answering, so from
+    // here on its disappearance from the state push means it played out.
+    if (channel.token === token)
+      channel.backendTarget = target
   }
 
   async function playMusic(item: SceneItem, channel: MusicChannel = primaryMusicChannel, initialVolume?: number, fadeInMs?: number) {
@@ -502,8 +539,11 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       const target = targetId.value
       if (channel.source)
         stopMusicChannel(channel, channel.source)
+      const token = ++musicStartSeq
       channel.soundId = item.soundId
       channel.source = 'renderer'
+      channel.token = token
+      channel.backendTarget = null
       if (channel === primaryMusicChannel)
         playingMusicId.value = item.soundId
       logInfo(`[scene] playMusic ${item.soundId} via renderer fallback (${streamed ? 'streamed to Discord' : 'local'}) on channel ${channel.streamId}`)
@@ -526,7 +566,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         const sess = await captureFromAudioElement(el, onChunk)
         captureSessions.set(channel.streamId, sess)
       }
-      el.onended = () => clearMusicChannel(channel)
+      el.onended = () => onMusicPlayedOut(channel, token)
       el.onerror = () => clearMusicChannel(channel)
       await el.play()
     }
@@ -536,7 +576,18 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     }
   }
 
+  // Ends the Music Mode for whatever is playing: a Stop, a new start or a
+  // Target switch, never a played-out track, so nothing advances afterwards.
+  function releaseMusicMode(reason: string) {
+    musicIntent++
+    if (musicCursor)
+      logDebug(`[scene] Music ${reason}: track ${musicCursor.current} of Scene ${musicCursor.sceneId} ends without an advance`)
+    musicCursor = null
+    musicSceneId.value = null
+  }
+
   function stopMusic() {
+    releaseMusicMode('stopped')
     for (const channel of musicChannels) {
       if (channel.source)
         stopMusicChannel(channel, channel.source)
@@ -546,8 +597,163 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // The inline per-track Stop button in the Music section: stops whichever
   // track the primary channel is actually playing.
   function stopMusicPlayback() {
+    releaseMusicMode('stopped')
     if (primaryMusicChannel.source)
       stopMusicChannel(primaryMusicChannel, primaryMusicChannel.source)
+  }
+
+  async function sceneFadeMs(): Promise<number> {
+    return (await fetchSceneFadeLength().catch(() => DEFAULT_CROSSFADE_FALLBACK_SECONDS)) * 1000
+  }
+
+  // Outside single, the per-track Loop toggle is ignored (its stored value stays).
+  function trackForMode(item: SceneItem, mode: MusicMode): SceneItem {
+    return mode === 'single' ? item : { ...item, loop: false }
+  }
+
+  // A plain start on the primary channel (Play, a track's Play with nothing of
+  // its Scene playing); resolves whether the track actually started.
+  async function startMusicDirect(item: SceneItem): Promise<boolean> {
+    await playMusic(item)
+    return primaryMusicChannel.soundId === item.soundId
+  }
+
+  /**
+   * Starts `pick` from `scene`'s Music via `start`, and in sequential/shuffle
+   * skips any track that cannot start to the next one the mode picks, giving
+   * up silently after a full pass. Abandons the chain once `intent` is stale.
+   */
+  async function startMusicFrom(
+    scene: Scene,
+    mode: MusicMode,
+    pick: SelectedTrack,
+    start: (item: SceneItem) => Promise<boolean>,
+    intent: number,
+  ): Promise<void> {
+    let next: typeof pick | null = pick
+    for (let attempts = 0; next && attempts < Math.max(1, scene.music.length); attempts++) {
+      if (intent !== musicIntent)
+        return
+      const item = scene.music[next.index] ?? scene.music.find(m => m.soundId === next!.soundId)
+      if (!item) {
+        console.warn(`[scene] Music Mode ${mode}: track ${next.soundId} is no longer in Scene ${scene.id}, Music stops`)
+        return
+      }
+      musicCursor = { sceneId: scene.id, current: next.soundId, index: next.index, bag: next.bag, pass: next.pass }
+      musicSceneId.value = scene.id
+      if (await start(trackForMode(item, mode)))
+        return
+      if (intent !== musicIntent || mode === 'single')
+        return
+      console.warn(`[scene] Music Mode ${mode}: skipping track ${next.soundId} of Scene ${scene.id}, it could not start`)
+      next = selectNextTrack({ mode, list: scene.music.map(m => m.soundId), current: next.soundId, currentIndex: next.index, bag: next.bag, pass: next.pass })
+    }
+    if (intent !== musicIntent || mode === 'single')
+      return
+    console.warn(`[scene] Music Mode ${mode}: no track of Scene ${scene.id} could start, Music goes silent`)
+    musicCursor = null
+    musicSceneId.value = null
+  }
+
+  // The Scene a Music Mode advance reads: the open Scene's live copy (edits
+  // land there before they are saved), else the stored one.
+  async function liveScene(sceneId: string): Promise<Scene | null> {
+    if (openScene.value?.id === sceneId)
+      return openScene.value
+    return getScene(sceneId)
+  }
+
+  // The current Music track played out (not stopped, not replaced): in
+  // sequential/shuffle, start the next track from the source Scene's live list,
+  // fading in over the Scene fade length.
+  function onMusicPlayedOut(channel: MusicChannel, token: number) {
+    if (channel !== primaryMusicChannel || channel.token !== token || channel.soundId === null) {
+      logDebug(`[scene] Music end on ${channel.streamId} suppressed: that track was already stopped or replaced`)
+      return
+    }
+    const outgoing = channel.soundId
+    clearMusicChannel(channel)
+    advanceMusic(outgoing).catch(e => console.error('[scene] Music Mode advance failed:', e))
+  }
+
+  async function advanceMusic(outgoing: string) {
+    const cursor = musicCursor
+    if (!cursor || cursor.current !== outgoing) {
+      logDebug(`[scene] Music ${outgoing} played out with no Music Mode cursor for it, no advance`)
+      return
+    }
+    const intent = musicIntent
+    const scene = await liveScene(cursor.sceneId).catch((e) => {
+      console.warn(`[scene] Music Mode: could not load Scene ${cursor.sceneId} to advance after ${outgoing}:`, e)
+      return null
+    })
+    if (intent !== musicIntent || !scene)
+      return
+    const mode = normalizeMusicMode(scene.musicMode)
+    if (mode === 'single')
+      return
+    const next = selectNextTrack({ mode, list: scene.music.map(m => m.soundId), current: cursor.current, currentIndex: cursor.index, bag: cursor.bag, pass: cursor.pass })
+    if (!next) {
+      logInfo(`[scene] Music Mode ${mode}: Scene ${scene.id} has no Music left after ${outgoing}, Music ends`)
+      musicCursor = null
+      musicSceneId.value = null
+      return
+    }
+    const fadeMs = await sceneFadeMs()
+    if (intent !== musicIntent)
+      return
+    logInfo(`[scene] Music Mode ${mode} advance in Scene ${scene.id}: ${outgoing} -> ${next.soundId}, fade-in ${fadeMs} ms`)
+    await startMusicFrom(scene, mode, next, item => crossfadeMusic(item, fadeMs), intent)
+  }
+
+  // Backend-decoded tracks report their end only through the state push: the
+  // confirmed-started primary track vanishing from it (on the Target it was
+  // started on) means it played out. A Stop clears the channel first, so it
+  // never reaches here as an end.
+  // A missing or non-live entry (a failed state fetch) says nothing about the
+  // track, so it is never read as an end.
+  watch(() => {
+    const state = player.activeTargetState
+    return state?.source === 'live' ? (state.track?.id ?? null) : undefined
+  }, (trackId) => {
+    const channel = primaryMusicChannel
+    if (trackId === undefined || channel.source !== 'backend' || channel.soundId === null || channel.backendTarget === null)
+      return
+    if (channel.backendTarget !== targetId.value || trackId === channel.soundId)
+      return
+    onMusicPlayedOut(channel, channel.token)
+  })
+
+  /**
+   * A Music track's Play button in the open Scene. While that Scene's Music is
+   * playing in sequential/shuffle this is a jump: a crossfade to the track,
+   * after which the mode continues from it. Otherwise a plain start, exactly
+   * as before Music Modes.
+   */
+  async function playMusicTrack(item: SceneItem) {
+    const scene = openScene.value
+    const index = scene ? scene.music.findIndex(m => m.soundId === item.soundId) : -1
+    if (!scene || index < 0) {
+      releaseMusicMode('replaced')
+      await playMusic(item)
+      return
+    }
+    const mode = normalizeMusicMode(scene.musicMode)
+    const isJump = mode !== 'single' && musicSceneId.value === scene.id && primaryMusicChannel.soundId !== null
+    const outgoing = primaryMusicChannel.soundId
+    releaseMusicMode(isJump ? 'jumped' : 'replaced')
+    const intent = musicIntent
+    const list = scene.music.map(m => m.soundId)
+    const pick: SelectedTrack = { soundId: item.soundId, index, bag: mode === 'shuffle' ? shuffleBagWithout(list, item.soundId) : [], pass: list }
+    if (!isJump) {
+      await startMusicFrom(scene, mode, pick, startMusicDirect, intent)
+      return
+    }
+    const fadeMs = await sceneFadeMs()
+    if (intent !== musicIntent)
+      return
+    logInfo(`[scene] Music Mode ${mode} jump in Scene ${scene.id}: ${outgoing} -> ${item.soundId}, fade ${fadeMs} ms`)
+    await startMusicFrom(scene, mode, pick, track => crossfadeMusic(track, fadeMs), intent)
   }
 
   // Backend-decoded path (see ADR-0003): the file is decoded straight into
@@ -626,9 +832,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     try {
       for (const item of target.ambience.filter(a => a.enabled))
         await playAmbience(item)
-      const firstMusic = target.music[0]
-      if (firstMusic)
-        await playMusic(firstMusic)
+      const mode = normalizeMusicMode(target.musicMode)
+      const first = selectFirstTrack(mode, target.music.map(m => m.soundId))
+      if (first)
+        await startMusicFrom(target, mode, first, startMusicDirect, musicIntent)
     }
     catch (e) {
       console.error('[scene] playScene failed:', e)
@@ -781,17 +988,19 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // was still finishing an earlier fade-out) starts the incoming track at
   // volume 0 and ramps up. `primaryMusicChannel` flips to the incoming channel
   // right away, so it never points at a channel that's mid fade-out.
-  function crossfadeMusic(target: Scene, durationMs: number) {
+  // Also the switch a Music Mode advance or jump makes within one Scene
+  // (ADR-0006). Resolves whether `targetTrack` started (false with none).
+  function crossfadeMusic(targetTrack: SceneItem | null, durationMs: number): Promise<boolean> {
     const outgoingChannel = primaryMusicChannel
     const outgoingHadTrack = outgoingChannel.soundId != null
     const outgoingWasBackend = outgoingChannel.source === 'backend'
-    const targetTrack = target.music[0]
     const incomingChannel = targetTrack ? (musicChannels.find(c => c !== outgoingChannel) ?? musicChannels[1]) : null
+    let started: Promise<boolean> = Promise.resolve(false)
 
     if (incomingChannel) {
       primaryMusicChannel = incomingChannel
       // The backend path (ADR-0003) drives its own fade-in via fadeInMs.
-      playMusic(targetTrack!, incomingChannel, 0, durationMs).then(() => {
+      started = playMusic(targetTrack!, incomingChannel, 0, durationMs).then(() => {
         // playMusic swallows its own failures internally (console.error +
         // clearMusicChannel) rather than rejecting, so this always runs — a
         // failed start shows up as `incomingChannel` having been cleared back
@@ -805,7 +1014,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
             primaryMusicChannel = outgoingChannel
             playingMusicId.value = outgoingChannel.soundId
           }
-          return
+          return false
         }
         if (incomingChannel.source === 'backend') {
           // The backend already faded the previous backend track out (and
@@ -833,6 +1042,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
           if (outgoingHadTrack && outgoingWasBackend)
             stopMusicChannel(outgoingChannel, 'backend', durationMs)
         }
+        return true
       })
     }
     else {
@@ -868,6 +1078,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     // it once the new track is confirmed to have started.
     if (outgoingHadTrack && outgoingWasBackend && !incomingChannel)
       stopMusicChannel(outgoingChannel, 'backend', durationMs)
+    return started
   }
 
   // Entry point for Scene Crossfade (see CONTEXT.md): called instead of a hard
@@ -886,12 +1097,19 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     }
     if (!target)
       return
-    const fadeSeconds = await fetchSceneFadeLength().catch(() => DEFAULT_CROSSFADE_FALLBACK_SECONDS)
-    const durationMs = fadeSeconds * 1000
+    const durationMs = await sceneFadeMs()
     player.setPlayingScene(target.id, targetId.value)
     sceneTransitionFlash.trigger(SCENE_START_FLASH)
     crossfadeAmbience(target, durationMs)
-    crossfadeMusic(target, durationMs)
+    releaseMusicMode('crossfaded away')
+    const mode = normalizeMusicMode(target.musicMode)
+    const first = selectFirstTrack(mode, target.music.map(m => m.soundId))
+    if (!first) {
+      crossfadeMusic(null, durationMs)
+      return
+    }
+    startMusicFrom(target, mode, first, item => crossfadeMusic(item, durationMs), musicIntent)
+      .catch(e => console.error('[scene] crossfadeToScene: Music start failed:', e))
   }
 
   // Only react to the selected guild's own connection dropping — not to the GM
@@ -908,6 +1126,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     musicSounds,
     masterVolume,
     playingMusicId,
+    musicSceneId,
     playingAmbienceIds,
     effectFlash,
     sceneTransitionFlash,
@@ -921,6 +1140,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     stopAmbience,
     playAmbience,
     playMusic,
+    playMusicTrack,
     stopMusicPlayback,
     playEffect,
     playScene,

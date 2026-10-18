@@ -7,7 +7,7 @@ import { basename } from 'node:path'
 import AdmZip from 'adm-zip'
 import { createLogger } from '../logger'
 import { createSoundLibrary } from '../sound/sound-library'
-import { createSceneStore } from './scene-store'
+import { createSceneStore, normalizeMusicMode } from './scene-store'
 
 const log = createLogger('scene-export')
 
@@ -76,7 +76,7 @@ export async function exportScene(
   if (!scene)
     throw new Error(`Scene '${sceneId}' not found`)
 
-  log.info(`Exporting "${scene.name}" (${sceneId})`)
+  log.info(`Exporting "${scene.name}" (${sceneId}), Music Mode ${normalizeMusicMode(scene.musicMode)}`)
   const zip = new AdmZip()
 
   const soundRefs = dedupe(collectSoundIds(scene), x => `${x.category}:${x.soundId}`)
@@ -104,6 +104,7 @@ export async function exportScene(
     tags: [],
     category: 'environment',
     scene: {
+      musicMode: normalizeMusicMode(scene.musicMode),
       music: scene.music.map(item => toPackageItem(item, 'music', bundledPaths)),
       ambience: scene.ambience.map(item => toPackageItem(item, 'ambience', bundledPaths)),
       effects: scene.effects.map(item => toPackageItem(item, 'effects', bundledPaths)),

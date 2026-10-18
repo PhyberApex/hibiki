@@ -110,4 +110,21 @@ describe('importScene', () => {
     expect(scene).not.toHaveProperty('hotkey')
     expect(scene.effects[0]).not.toHaveProperty('hotkey')
   })
+
+  it('keeps the archive\'s Music Mode; an absent or invalid one reads as single', async () => {
+    const shuffled = await importScene(config, createManifestZip(makeManifest({
+      displayName: 'Mode Shuffle',
+      scene: { musicMode: 'shuffle', music: [], ambience: [], effects: [] },
+    })))
+    expect(shuffled.musicMode).toBe('shuffle')
+
+    const old = await importScene(config, createManifestZip(makeManifest({ displayName: 'Mode Old' })))
+    expect(old).not.toHaveProperty('musicMode')
+
+    const invalid = await importScene(config, createManifestZip(makeManifest({
+      displayName: 'Mode Invalid',
+      scene: { musicMode: 'loop-forever', music: [], ambience: [], effects: [] },
+    })))
+    expect(invalid).not.toHaveProperty('musicMode')
+  })
 })

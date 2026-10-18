@@ -115,6 +115,9 @@ function validateEntry(filePath, schema) {
       }
       data.scene[category].forEach((track, i) => validateTrack(track, relative, category, i))
     }
+    if (data.scene.musicMode !== undefined && !['single', 'sequential', 'shuffle'].includes(data.scene.musicMode)) {
+      errors.push(`${relative}: scene.musicMode must be one of single, sequential, shuffle`)
+    }
     const totalTracks = (data.scene.music?.length ?? 0) + (data.scene.ambience?.length ?? 0) + (data.scene.effects?.length ?? 0)
     if (totalTracks === 0) {
       errors.push(`${relative}: Scene must have at least one track across music, ambience, or effects`)
