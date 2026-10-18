@@ -19,6 +19,8 @@ export interface SelectedTrack {
   soundId: string
   index: number
   bag: string[]
+  /** Shuffle: every track belonging to this pass, so a track added mid-pass can join the bag. */
+  pass?: string[]
 }
 
 export interface NextTrackInput {
@@ -31,6 +33,8 @@ export interface NextTrackInput {
   currentIndex: number
   /** Shuffle: tracks not yet played this pass. */
   bag: readonly string[]
+  /** Shuffle: every track of this pass; live tracks outside it were added mid-pass and join the bag. */
+  pass?: readonly string[]
   random?: () => number
 }
 
@@ -40,6 +44,13 @@ function shuffled(ids: readonly string[], random: () => number): string[] {
     const j = Math.floor(random() * (i + 1))
     ;[out[i], out[j]] = [out[j]!, out[i]!]
   }
+  return out
+}
+
+function insertAtRandom(into: string[], ids: readonly string[], random: () => number): string[] {
+  const out = [...into]
+  for (const id of ids)
+    out.splice(Math.floor(random() * (out.length + 1)), 0, id)
   return out
 }
 
@@ -54,8 +65,9 @@ export function selectFirstTrack(mode: MusicMode, list: readonly string[], rando
     return null
   if (mode !== 'shuffle')
     return { soundId: list[0]!, index: 0, bag: [] }
-  const [first, ...bag] = shuffled([...new Set(list)], random)
-  return { soundId: first!, index: list.indexOf(first!), bag }
+  const pass = shuffled([...new Set(list)], random)
+  const [first, ...bag] = pass
+  return { soundId: first!, index: list.indexOf(first!), bag, pass }
 }
 
 /** The track to advance to once `current` has played out, or null when nothing should follow (single mode, empty list). */
@@ -73,10 +85,12 @@ export function selectNextTrack(input: NextTrackInput): SelectedTrack | null {
   }
 
   const live = new Set(list)
-  const remaining = bag.filter(id => live.has(id) && id !== current)
+  const passIds = new Set(input.pass ?? list)
+  const added = [...live].filter(id => !passIds.has(id) && id !== current)
+  const remaining = insertAtRandom(bag.filter(id => live.has(id) && id !== current), added, random)
   if (remaining.length > 0) {
     const [next, ...rest] = remaining
-    return { soundId: next!, index: list.indexOf(next!), bag: rest }
+    return { soundId: next!, index: list.indexOf(next!), bag: rest, pass: [...passIds, ...added] }
   }
   // New pass: reshuffle, never opening with the track that just played.
   const pass = shuffled([...live], random)
@@ -85,5 +99,5 @@ export function selectNextTrack(input: NextTrackInput): SelectedTrack | null {
     ;[pass[0], pass[swap]] = [pass[swap]!, pass[0]!]
   }
   const [next, ...rest] = pass
-  return { soundId: next!, index: list.indexOf(next!), bag: rest }
+  return { soundId: next!, index: list.indexOf(next!), bag: rest, pass: [...pass] }
 }

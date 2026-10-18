@@ -76,12 +76,12 @@ describe('selectNextTrack', () => {
   describe('shuffle', () => {
     it('takes the next track from the bag', () => {
       expect(selectNextTrack({ mode: 'shuffle', list: ['a', 'b', 'c'], current: 'a', currentIndex: 0, bag: ['c', 'b'] }))
-        .toEqual({ soundId: 'c', index: 2, bag: ['b'] })
+        .toMatchObject({ soundId: 'c', index: 2, bag: ['b'] })
     })
 
     it('skips bag entries that left the live list', () => {
       expect(selectNextTrack({ mode: 'shuffle', list: ['a', 'b'], current: 'a', currentIndex: 0, bag: ['c', 'b'] }))
-        .toEqual({ soundId: 'b', index: 1, bag: [] })
+        .toMatchObject({ soundId: 'b', index: 1, bag: [] })
     })
 
     it('plays every track once per pass across many passes, never repeating at the seam', () => {
@@ -102,12 +102,17 @@ describe('selectNextTrack', () => {
       // random 0 makes the Fisher-Yates shuffle rotate ['a','b'] to ['b','a'];
       // 0.99 makes it the identity, putting the just-played 'a' first, which must be swapped away.
       const next = selectNextTrack({ mode: 'shuffle', list: ['a', 'b'], current: 'a', currentIndex: 0, bag: [], random: seq(0.99, 0.99) })
-      expect(next).toEqual({ soundId: 'b', index: 1, bag: ['a'] })
+      expect(next).toMatchObject({ soundId: 'b', index: 1, bag: ['a'] })
+    })
+
+    it('lets a track added mid-pass join the current pass', () => {
+      const next = selectNextTrack({ mode: 'shuffle', list: ['a', 'b', 'c', 'n'], current: 'a', currentIndex: 0, bag: ['c'], pass: ['a', 'b', 'c'], random: () => 0 })
+      expect(next).toEqual({ soundId: 'n', index: 3, bag: ['c'], pass: ['a', 'b', 'c', 'n'] })
     })
 
     it('repeats a one-track list', () => {
       expect(selectNextTrack({ mode: 'shuffle', list: ['a'], current: 'a', currentIndex: 0, bag: [] }))
-        .toEqual({ soundId: 'a', index: 0, bag: [] })
+        .toMatchObject({ soundId: 'a', index: 0, bag: [] })
     })
   })
 })

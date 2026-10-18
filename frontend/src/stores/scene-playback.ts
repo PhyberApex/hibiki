@@ -2,6 +2,7 @@ import type { OutputTargetKind } from '@/api/config'
 import type { MusicMode, Scene, SceneItem } from '@/api/scenes'
 import type { SoundFile } from '@/api/sounds'
 import type { CaptureSession } from '@/audio/browser-audio-capture'
+import type { SelectedTrack } from '@/audio/music-mode'
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef, watch } from 'vue'
 import {
@@ -90,6 +91,7 @@ interface MusicCursor {
   current: string
   index: number
   bag: string[]
+  pass?: string[]
 }
 
 function createAudioEl(): HTMLAudioElement {
@@ -624,7 +626,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   async function startMusicFrom(
     scene: Scene,
     mode: MusicMode,
-    pick: { soundId: string, index: number, bag: string[] },
+    pick: SelectedTrack,
     start: (item: SceneItem) => Promise<boolean>,
     intent: number,
   ): Promise<void> {
@@ -637,14 +639,14 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         console.warn(`[scene] Music Mode ${mode}: track ${next.soundId} is no longer in Scene ${scene.id}, Music stops`)
         return
       }
-      musicCursor = { sceneId: scene.id, current: next.soundId, index: next.index, bag: next.bag }
+      musicCursor = { sceneId: scene.id, current: next.soundId, index: next.index, bag: next.bag, pass: next.pass }
       musicSceneId.value = scene.id
       if (await start(trackForMode(item, mode)))
         return
       if (intent !== musicIntent || mode === 'single')
         return
       console.warn(`[scene] Music Mode ${mode}: skipping track ${next.soundId} of Scene ${scene.id}, it could not start`)
-      next = selectNextTrack({ mode, list: scene.music.map(m => m.soundId), current: next.soundId, currentIndex: next.index, bag: next.bag })
+      next = selectNextTrack({ mode, list: scene.music.map(m => m.soundId), current: next.soundId, currentIndex: next.index, bag: next.bag, pass: next.pass })
     }
     if (intent !== musicIntent || mode === 'single')
       return
@@ -690,7 +692,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     const mode = normalizeMusicMode(scene.musicMode)
     if (mode === 'single')
       return
-    const next = selectNextTrack({ mode, list: scene.music.map(m => m.soundId), current: cursor.current, currentIndex: cursor.index, bag: cursor.bag })
+    const next = selectNextTrack({ mode, list: scene.music.map(m => m.soundId), current: cursor.current, currentIndex: cursor.index, bag: cursor.bag, pass: cursor.pass })
     if (!next) {
       logInfo(`[scene] Music Mode ${mode}: Scene ${scene.id} has no Music left after ${outgoing}, Music ends`)
       musicCursor = null
@@ -742,7 +744,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     releaseMusicMode(isJump ? 'jumped' : 'replaced')
     const intent = musicIntent
     const list = scene.music.map(m => m.soundId)
-    const pick = { soundId: item.soundId, index, bag: mode === 'shuffle' ? shuffleBagWithout(list, item.soundId) : [] }
+    const pick: SelectedTrack = { soundId: item.soundId, index, bag: mode === 'shuffle' ? shuffleBagWithout(list, item.soundId) : [], pass: list }
     if (!isJump) {
       await startMusicFrom(scene, mode, pick, startMusicDirect, intent)
       return
