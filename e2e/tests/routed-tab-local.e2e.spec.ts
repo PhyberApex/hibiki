@@ -13,12 +13,14 @@ import { closeElectronApp, getMainWindow, launchElectronApp } from '../electron-
  * Needs no Discord token.
  */
 
-const PAGE = `<!doctype html><title>Routed Tab fixture</title><body><h1>tone</h1><script>
+// The page keeps a live audio graph so the tab capture has a source, at gain 0:
+// the assertions read hibiki.log, nothing needs to be audible on the test machine.
+const PAGE = `<!doctype html><title>Routed Tab fixture</title><body><h1>silent tone</h1><script>
   const ctx = new AudioContext()
   const osc = ctx.createOscillator()
   osc.frequency.value = 440
   const gain = ctx.createGain()
-  gain.gain.value = 0.2
+  gain.gain.value = 0
   osc.connect(gain)
   gain.connect(ctx.destination)
   osc.start()
