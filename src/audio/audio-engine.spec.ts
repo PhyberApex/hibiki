@@ -199,6 +199,49 @@ describe('audioEngine', () => {
     })
   })
 
+  describe('keyed effect streams', () => {
+    it('opens a keyed effect stream at the given volume and sets it live afterwards', () => {
+      engine.playEffectFromStream(createFakeStream(), 'browser-1', 40)
+      expect(createdInputs[0].params.volume).toBe(40)
+
+      engine.setEffectStreamVolume('browser-1', 65)
+      expect(createdInputs[0].params).toEqual({ volume: 65 })
+
+      engine.setEffectStreamVolume('browser-1', 150)
+      expect(createdInputs[0].params).toEqual({ volume: 100 })
+    })
+
+    it('falls back to the effects default volume without an explicit one', () => {
+      engine.playEffectFromStream(createFakeStream())
+      expect(createdInputs[0].params.volume).toBe(90)
+    })
+
+    it('ignores a volume change for an unknown or drained effect stream', async () => {
+      const stream = createFakeStream()
+      engine.playEffectFromStream(stream, 'browser-1', 40)
+      engine.setEffectStreamVolume('nope', 10)
+      expect(createdInputs[0].params).toEqual({ volume: 40 })
+
+      await endStream(stream)
+      await new Promise(resolve => setTimeout(resolve, 50))
+      engine.setEffectStreamVolume('browser-1', 10)
+      expect(createdInputs[0].params).toEqual({ volume: 40 })
+    })
+
+    it('a restart under the same id takes the id over, so the old stream draining does not drop the new one', async () => {
+      const first = createFakeStream()
+      engine.playEffectFromStream(first, 'browser-1', 40)
+      engine.playEffectFromStream(createFakeStream(), 'browser-1', 50)
+
+      await endStream(first)
+      await new Promise(resolve => setTimeout(resolve, 50))
+      engine.setEffectStreamVolume('browser-1', 70)
+
+      expect(createdInputs[0].params).toEqual({ volume: 40 })
+      expect(createdInputs[1].params).toEqual({ volume: 70 })
+    })
+  })
+
   describe('playMusicFromStream with stream ids', () => {
     it('mixes two different-id music streams at the same time', () => {
       const streamA = createFakeStream()
@@ -373,6 +416,18 @@ describe('audioEngine', () => {
 
       expect(createdInputs[0].destroy).toHaveBeenCalledTimes(1)
       expect(createdInputs[1].destroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('stopAllMusic leaves effect streams playing', () => {
+      const music = createFakeStream()
+      const effect = createFakeStream()
+      engine.playMusicFromStream(music, 'a')
+      engine.playEffectFromStream(effect, 'browser-1')
+
+      engine.stopAllMusic()
+
+      expect(createdInputs[0].destroy).toHaveBeenCalledTimes(1)
+      expect(createdInputs[1].destroy).not.toHaveBeenCalled()
     })
 
     it('destroy() cleans up every music stream and every effect stream', () => {

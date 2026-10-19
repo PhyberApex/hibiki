@@ -60,7 +60,8 @@ function registerApiHandler(ipcMain, api, getHotkeys) {
  * per guild, piped into the backend player. The Music lane (`audio:startStream` /
  * `audio:chunk` / `audio:stopStream`) feeds `player.startStream`; the effect lane
  * (`audio:startEffectStream` / `audio:effectChunk` / `audio:stopEffectStream`)
- * feeds `player.startEffectStream`, one layered mixer input per stream.
+ * feeds `player.startEffectStream`, one layered mixer input per stream, with
+ * `audio:setEffectStreamVolume` adjusting a keyed stream live (a Routed Tab).
  */
 function registerAudioStreamHandlers(ipcMain, player) {
   /** Map<guildId, Map<streamId|undefined, PassThrough>> - multiple music streams per guild, mixed by backend */
@@ -129,13 +130,18 @@ function registerAudioStreamHandlers(ipcMain, player) {
     player.stopStream(guildId, streamId)
   })
 
-  ipcMain.handle('audio:startEffectStream', async (_, { guildId, streamId }) => {
+  ipcMain.handle('audio:startEffectStream', async (_, { guildId, streamId, volume }) => {
     const id = streamId || `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const stream = replace(streamsFor(effectStreams, guildId), id)
     warnedUnknown.delete(unknownKey('audio:effectChunk', guildId, id))
-    ipcLog.info(`audio:startEffectStream ${id} for guild ${guildId}`)
-    player.startEffectStream(guildId, stream)
+    ipcLog.info(`audio:startEffectStream ${id} for guild ${guildId}${volume !== undefined ? ` at volume ${volume}` : ''}`)
+    player.startEffectStream(guildId, stream, id, volume)
     return id
+  })
+
+  ipcMain.handle('audio:setEffectStreamVolume', async (_, { guildId, streamId, volume }) => {
+    ipcLog.debug(`audio:setEffectStreamVolume ${streamId} = ${volume} for guild ${guildId}`)
+    player.setEffectStreamVolume(guildId, streamId, volume)
   })
 
   ipcMain.on('audio:effectChunk', (_, { guildId, streamId, chunk }) => {

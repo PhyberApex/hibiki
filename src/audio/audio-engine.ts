@@ -62,7 +62,9 @@ export class AudioEngine {
   private destroyed = false
   /** Music streams by id; a start without an id keys to the `undefined` slot. */
   private readonly musicStreams = new Map<string | undefined, ActiveStream>()
-  private readonly effectStreams = new Set<ActiveStream>()
+  /** Effect streams by id; a start without an id gets a generated one, reachable by nothing but its own drain. */
+  private readonly effectStreams = new Map<string, ActiveStream>()
+  private anonymousEffectSeq = 0
 
   constructor(options: AudioEngineOptions = {}) {
     // `highWaterMark` fixes each mixer tick to one packet from every input
@@ -206,14 +208,32 @@ export class AudioEngine {
     this.syncLocalSink()
   }
 
-  playEffectFromStream(stream: Readable) {
-    const effectStream = this.spawnInputFromStream(stream, DEFAULT_VOLUMES.effects, (ended) => {
+  /**
+   * Starts `stream` as a layered effect input. With a `streamId` the input
+   * can be found again by `setEffectStreamVolume` (a Routed Tab, ADR-0007);
+   * a second start under the same id leaves the first draining and takes
+   * the id over. The stream ends when its source does.
+   */
+  playEffectFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.effects) {
+    const id = streamId ?? `effect-${++this.anonymousEffectSeq}`
+    log.debug(`Effect mixer input opened for ${id} at volume ${CLAMP(initialVolume)}`)
+    const effectStream = this.spawnInputFromStream(stream, CLAMP(initialVolume), (ended) => {
       ended.input.destroy()
-      this.effectStreams.delete(ended)
+      if (this.effectStreams.get(id) === ended)
+        this.effectStreams.delete(id)
       this.syncLocalSink()
     })
-    this.effectStreams.add(effectStream)
+    this.effectStreams.set(id, effectStream)
     this.syncLocalSink()
+  }
+
+  /** Sets a keyed effect stream's volume live (the mixer input applies `params.volume` immediately). No-op for an unknown id. */
+  setEffectStreamVolume(streamId: string, volume: number): void {
+    const active = this.effectStreams.get(streamId)
+    if (!active)
+      return
+    active.volume = CLAMP(volume)
+    active.input.params = { volume: active.volume }
   }
 
   /** Ends the music stream for `streamId` (or the default stream when omitted). Other ids are untouched. */
@@ -278,7 +298,7 @@ export class AudioEngine {
     this.destroyed = true
     this.stopAllMusic()
     // Clean up all effect streams
-    for (const effect of this.effectStreams)
+    for (const effect of this.effectStreams.values())
       this.teardown(effect)
     this.effectStreams.clear()
     this.clearSinkIdleTimer()

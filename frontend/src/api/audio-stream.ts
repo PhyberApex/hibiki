@@ -51,9 +51,18 @@ export function stopEffectStream(guildId: string, streamId?: string): Promise<vo
   return window.hibiki.invoke('audio:stopEffectStream', { guildId, streamId }) as Promise<void>
 }
 
-export function startEffectStream(guildId: string, streamId?: string): Promise<string> {
+/** Starts an effect-lane stream; `volume` is the absolute initial 0–100 level (the backend's effects default when omitted). */
+export function startEffectStream(guildId: string, streamId?: string, volume?: number): Promise<string> {
   requireElectron()
   if (!window.hibiki?.invoke)
     throw new Error('Electron API not available')
-  return window.hibiki.invoke('audio:startEffectStream', { guildId, streamId }) as Promise<string>
+  return window.hibiki.invoke('audio:startEffectStream', { guildId, streamId, volume }) as Promise<string>
+}
+
+/** Sets a keyed effect-lane stream's absolute 0–100 volume live (a Routed Tab under a Discord Target). */
+export function setEffectStreamVolume(guildId: string, streamId: string, volume: number): Promise<void> {
+  requireElectron()
+  if (!window.hibiki?.invoke)
+    throw new Error('Electron API not available')
+  return window.hibiki.invoke('audio:setEffectStreamVolume', { guildId, streamId, volume }) as Promise<void>
 }
