@@ -3,5 +3,12 @@
   "extends": [
     "config:recommended",
     "security:minimumReleaseAgeNpm"
+  ],
+  "platformAutomerge": false,
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    }
   ]
 }
