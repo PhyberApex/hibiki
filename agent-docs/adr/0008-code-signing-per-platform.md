@@ -12,7 +12,7 @@ Hibiki is maintained by one person in Germany, MIT-licensed, public, and release
 
 ### macOS options
 
-The only route to a Gatekeeper-clean app is the **Apple Developer Program** (about $99/year, renewed yearly). It gives a Developer ID Application certificate. Forge's `packagerConfig.osxSign` (`@electron/osx-sign`, hardened runtime plus entitlements for the microphone and audio capture usage already in `extendInfo`) signs the `.app`. `packagerConfig.osxNotarize` (`@electron/notarize`, App Store Connect API key or Apple ID with an app-specific password) notarizes it. CI would import the certificate into a temporary keychain on the `macos-latest` runner from a base64 `.p12` secret. The DMG maker then wraps an already signed and notarized app, and the DMG itself should be signed and stapled too. The ZIP maker needs nothing extra because it zips the app after the ticket has been stapled to it. A Homebrew cask, if one is ever published, could then drop any `xattr`/`quarantine` workaround.
+The only route to a Gatekeeper-clean app is the **Apple Developer Program** (about $99/year, renewed yearly). It gives a Developer ID Application certificate. Forge's `packagerConfig.osxSign` (`@electron/osx-sign`, hardened runtime plus a new entitlements plist granting `com.apple.security.device.audio-input`; the usage descriptions already in `extendInfo` are Info.plist strings, not entitlements) signs the `.app`. `packagerConfig.osxNotarize` (`@electron/notarize`, App Store Connect API key or Apple ID with an app-specific password) notarizes it. CI would import the certificate into a temporary keychain on the `macos-latest` runner from a base64 `.p12` secret. The DMG maker then wraps an already signed and notarized app, and the DMG itself should be signed and stapled too. The ZIP maker needs nothing extra because it zips the app after the ticket has been stapled to it. A Homebrew cask, if one is ever published, could then drop any `xattr`/`quarantine` workaround.
 
 ### Windows options
 
@@ -47,7 +47,7 @@ Azure Artifact Signing, EV certificates and staying unsigned are ruled out for t
 
   The `SIGNPATH_API_TOKEN` lives in GitHub Actions secrets. The organization and project IDs and the signing policy slug are plain workflow values. The macOS and Linux matrix legs stay as they are.
 
-**Plan B: Certum Open Source Code Signing.** Only taken if SignPath declines the application. Signing runs on the maintainer's workstation through Forge's `windowsSign` hook (`@electron/windows-sign`) with the SimplySign client logged in, not unattended in CI. The release flow gains a manual "download the Windows assets, sign, re-upload" step after `build-release`.
+**Plan B: Certum Open Source Code Signing.** Only taken if SignPath declines the application. Signing runs on the maintainer's workstation through Forge's `windowsSign` option (`@electron/windows-sign`, set in `packagerConfig` for `hibiki.exe` and in the Squirrel maker config so `Setup.exe` and Squirrel's `Update.exe` are signed too) with the SimplySign client logged in, not unattended in CI. The release flow gains a manual "download the Windows assets, sign, re-upload" step after `build-release`.
 
 ### Secrets
 
@@ -65,7 +65,7 @@ Signing credentials (the SignPath API token, or the Certum credentials, and late
 
 Follow-up issues are filed only for Plan A, the route actually taken:
 
-1. README (and release page) **Code signing policy** and **privacy statement** section. It must exist before the SignPath application.
+1. README (and release page) **Code signing policy** and **privacy statement** section, plus a Windows note that SmartScreen may still warn on early signed releases. It must exist before the SignPath application.
 2. The **SignPath Foundation application** and the SignPath project setup: artifact configurations for the packaged directory and for `Setup.exe`, the signing policy with manual approval, and team MFA. This is maintainer-only work.
 3. The **two-stage signing in `build.yml`**'s Windows job, as described above, once the SignPath project exists.
 
@@ -78,3 +78,16 @@ If SignPath declines, those issues are replaced by Plan B issues. macOS gets no 
 - SignPath reserves the right to require that signed packages contain only signed binaries in the future. If that happens, the unsigned upstream `.node` and Electron/Squirrel binaries would need upstream-signed builds or would push Hibiki to Plan B.
 - `hibiki.exe` is Electron's prebuilt binary with Hibiki's resources and metadata stamped in, and `Setup.exe` is Squirrel's stub around Hibiki's package. SignPath's rule that a team signs only artifacts built from its own source is applied by its reviewers to such Electron apps at their discretion. That is one more reason Plan B is kept ready.
 - macOS keeps the quarantine workaround until the revisit trigger fires.
+
+## Sources
+
+- [SignPath Foundation terms](https://signpath.org/terms.html)
+- [SignPath GitHub Actions integration](https://docs.signpath.io/trusted-build-systems/github)
+- [Two-stage SignPath flow worked example (PuriPuly-heart #225)](https://github.com/kapitalismho/PuriPuly-heart/issues/225)
+- [Azure Artifact Signing quickstart](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart)
+- [Individual onboarding paused](https://learn.microsoft.com/en-nz/answers/questions/5810735/cant-create-a-new-trusted-signing-individual-ident)
+- [SmartScreen after the 2026 CA rotation](https://learn.microsoft.com/en-us/answers/questions/5954185/artifact-signing-users-see-smartscreen-on-each-rel)
+- [EV certificates no longer grant instant reputation](https://www.todesktop.com/blog/posts/windows-apps-psa-ev-certs-do-not-grant-immediate-reputation-anymore)
+- [Electron code signing](https://www.electronjs.org/docs/latest/tutorial/code-signing)
+- [Forge Windows code signing](https://www.electronforge.io/guides/code-signing/code-signing-windows)
+- [Certum Open Source Code Signing](https://shop.certum.eu/open-source-code-signing-on-simplysign.html)
