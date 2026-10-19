@@ -165,7 +165,12 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
     manager.playMusicFromStream(stream, metadata, streamId)
   }
 
-  function startEffectStream(guildId: string, stream: Readable): void {
+  /**
+   * Starts a raw chunked-IPC effect stream. With a `streamId` the stream
+   * stays addressable for `setEffectStreamVolume` (a Routed Tab); without
+   * one it is fire-and-forget. `volume` is the absolute initial level.
+   */
+  function startEffectStream(guildId: string, stream: Readable, streamId?: string, volume?: number): void {
     if (isLocalTarget(guildId)) {
       log.warn('startEffectStream addressed to the Local Target ignored: renderer-native sources play locally')
       return
@@ -175,8 +180,23 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
       log.warn(`startEffectStream refused for guild ${guildId}: not connected`)
       throw new Error('Not connected to a voice channel. Join first.')
     }
-    log.info(`Renderer effect stream started in guild ${guildId}`)
-    manager.playEffectFromStream(stream)
+    log.info(`Renderer effect stream ${streamId ?? '(anonymous)'} started in guild ${guildId}${volume !== undefined ? ` at volume ${volume}` : ''}`)
+    manager.playEffectFromStream(stream, streamId, volume)
+  }
+
+  /** Sets a keyed chunked-IPC effect stream's volume live. A logged no-op on the Local Target (the renderer plays those itself) or for a guild without a manager. */
+  function setEffectStreamVolume(guildId: string, streamId: string, volume: number): void {
+    if (isLocalTarget(guildId)) {
+      log.debug(`setEffectStreamVolume ${streamId} addressed to the Local Target ignored: renderer-native sources play locally`)
+      return
+    }
+    const manager = managers.get(guildId)
+    if (!manager) {
+      log.debug(`setEffectStreamVolume ${streamId} ignored: no manager for guild ${guildId}`)
+      return
+    }
+    log.debug(`Renderer effect stream ${streamId} volume ${volume} in guild ${guildId}`)
+    manager.setEffectStreamVolume(streamId, volume)
   }
 
   /** Stops a raw chunked-IPC music stream (Browser tab / renderer fallback) — not the backend-decoded track; see `stopMusic` below for that. */
@@ -343,6 +363,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
     stop,
     startStream,
     startEffectStream,
+    setEffectStreamVolume,
     stopStream,
     playMusic,
     stopMusic,

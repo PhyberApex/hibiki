@@ -216,6 +216,14 @@ function registerBrowserViewHandlers() {
     return view.webContents.getMediaSourceId(mainWindow.webContents)
   })
 
+  ipcMain.handle('browserView:setAudioMuted', async (_, { id, muted }) => {
+    const view = browserViews.get(id)
+    if (!view)
+      throw new Error(`Tab ${id} not found`)
+    view.webContents.setAudioMuted(muted)
+    browserLog.debug(`Tab ${id} ${muted ? 'muted' : 'unmuted'}`)
+  })
+
   ipcMain.handle('browserView:show', async (_, { id }) => {
     const view = browserViews.get(id)
     if (view && mainWindow) {

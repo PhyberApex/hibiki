@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import type { Bookmark } from '@/api/config'
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
-import { sendEffectChunk, startEffectStream, stopEffectStream } from '@/api/audio-stream'
 import {
   browserViewGoBack,
   browserViewGoForward,
   browserViewReload,
   createBrowserView,
   destroyBrowserView,
-  getBrowserViewMediaSourceId,
   hideBrowserView,
   loadBrowserViewURL,
   onBrowserViewEvent,
@@ -16,8 +14,8 @@ import {
   showBrowserView,
 } from '@/api/browser-view'
 import { listBookmarks, saveBookmarks } from '@/api/config'
-import { captureFromMediaStream } from '@/audio/browser-audio-capture'
 import { usePlayerStore } from '@/stores/player'
+import { useRoutedTabsStore } from '@/stores/routed-tabs'
 
 interface BrowserTab {
   id: number
@@ -25,18 +23,17 @@ interface BrowserTab {
   title: string
   favicon: string | null
   mediaPlaying: boolean
-  streaming: boolean
 }
 
 const DEFAULT_BROWSER_URL = 'https://phyberapex.github.io/hibiki/'
 
 const player = usePlayerStore()
+const routedTabs = useRoutedTabsStore()
 const tabs = ref<BrowserTab[]>([])
 const activeTabId = ref<number | null>(null)
 const defaultTabId = ref<number | null>(null)
 const urlInput = ref('')
 const containerEl = ref<HTMLElement | null>(null)
-const captureSessions = new Map<number, { stop: () => void }>()
 const cleanups: (() => void)[] = []
 const bookmarks = ref<Bookmark[]>([])
 const editingBookmarkUrl = ref<string | null>(null)
@@ -48,6 +45,23 @@ const activeTab = computed(() => tabs.value.find(t => t.id === activeTabId.value
 const isCurrentPageBookmarked = computed(() =>
   activeTab.value ? bookmarks.value.some(b => b.url === activeTab.value!.url) : false,
 )
+const activeTabRouted = computed(() => activeTabId.value != null && routedTabs.isRouted(activeTabId.value))
+const activeTabVolume = computed(() => (activeTabId.value != null ? routedTabs.tabVolume(activeTabId.value) : 100))
+const routeLabel = computed(() => (player.isLocalActive ? 'Mix locally' : 'Stream'))
+const routeTitle = computed(() => {
+  if (!player.canPlay)
+    return 'Join a voice channel first'
+  if (player.isLocalActive)
+    return activeTabRouted.value ? 'Play this tab raw again' : 'Mix this tab into the local output at Tab Volume × master'
+  return activeTabRouted.value ? 'Stop streaming audio' : 'Stream audio to Discord'
+})
+const routedIndicatorTitle = computed(() => (player.isLocalActive ? 'Mixed locally' : 'Streaming to Discord'))
+
+function onTabVolumeInput(event: Event) {
+  if (activeTabId.value == null)
+    return
+  routedTabs.setTabVolume(activeTabId.value, Number((event.target as HTMLInputElement).value))
+}
 
 async function loadBookmarks() {
   try {
@@ -151,7 +165,6 @@ async function openTab(url?: string) {
       title: 'Loading…',
       favicon: null,
       mediaPlaying: false,
-      streaming: false,
     })
     activeTabId.value = id
     urlInput.value = target
@@ -167,7 +180,7 @@ async function openTab(url?: string) {
 async function closeTab(id: number) {
   if (id === defaultTabId.value)
     return
-  await stopStreaming(id)
+  await routedTabs.forgetTab(id)
   await destroyBrowserView(id).catch(() => {})
   tabs.value = tabs.value.filter(t => t.id !== id)
   if (activeTabId.value === id) {
@@ -212,71 +225,6 @@ async function goForward() {
 async function reload() {
   if (activeTabId.value != null)
     await browserViewReload(activeTabId.value)
-}
-
-async function toggleStreaming(tabId: number) {
-  const tab = tabs.value.find(t => t.id === tabId)
-  if (!tab)
-    return
-  if (tab.streaming) {
-    await stopStreaming(tabId)
-  }
-  else {
-    await startStreaming(tabId)
-  }
-}
-
-async function startStreaming(tabId: number) {
-  const tab = tabs.value.find(t => t.id === tabId)
-  if (!tab || !player.guildId || !player.isJoined)
-    return
-
-  try {
-    const mediaSourceId = await getBrowserViewMediaSourceId(tabId)
-    const streamId = `browser-${tabId}`
-    await startEffectStream(player.guildId, streamId)
-
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        mandatory: {
-          chromeMediaSource: 'tab',
-          chromeMediaSourceId: mediaSourceId,
-        },
-      } as any,
-      video: false,
-    })
-
-    const captureGuildId = player.guildId
-    const session = await captureFromMediaStream(stream, (pcm) => {
-      sendEffectChunk(captureGuildId!, pcm, streamId)
-    })
-
-    captureSessions.set(tabId, {
-      stop: () => {
-        session.stop()
-        stopEffectStream(captureGuildId!, streamId).catch(() => {})
-      },
-    })
-
-    tab.streaming = true
-    player.browserStreamingCount++
-  }
-  catch (e) {
-    console.error('[browser] Failed to start streaming:', e)
-  }
-}
-
-async function stopStreaming(tabId: number) {
-  const sess = captureSessions.get(tabId)
-  if (sess) {
-    sess.stop()
-    captureSessions.delete(tabId)
-  }
-  const tab = tabs.value.find(t => t.id === tabId)
-  if (tab && tab.streaming) {
-    tab.streaming = false
-    player.browserStreamingCount = Math.max(0, player.browserStreamingCount - 1)
-  }
 }
 
 async function updateViewBounds() {
@@ -356,7 +304,7 @@ onBeforeUnmount(async () => {
     resizeObserver = null
   }
   for (const tab of tabs.value) {
-    await stopStreaming(tab.id)
+    await routedTabs.forgetTab(tab.id)
     await destroyBrowserView(tab.id).catch(() => {})
   }
 })
@@ -390,9 +338,9 @@ watch(activeTabId, async (newId, oldId) => {
           <img v-if="tab.favicon" :src="tab.favicon" class="browser-tab-favicon" alt="">
           <span class="browser-tab-title">{{ tab.title || 'New tab' }}</span>
           <span
-            v-if="tab.streaming"
+            v-if="routedTabs.isRouted(tab.id)"
             class="browser-tab-streaming"
-            title="Streaming to Discord"
+            :title="routedIndicatorTitle"
           >●</span>
           <button
             v-if="tab.id !== defaultTabId"
@@ -439,15 +387,28 @@ watch(activeTabId, async (newId, oldId) => {
       >
         {{ isCurrentPageBookmarked ? '★' : '☆' }}
       </button>
+      <label class="tab-volume" :title="`Tab Volume ${activeTabVolume}%`">
+        <span class="tab-volume-icon" aria-hidden="true">🎚</span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          class="tab-volume-slider"
+          aria-label="Tab Volume"
+          :value="activeTabVolume"
+          @input="onTabVolumeInput"
+        >
+        <span class="tab-volume-value">{{ activeTabVolume }}</span>
+      </label>
       <button
         type="button"
         class="toolbar-btn toolbar-btn-stream"
-        :class="{ 'toolbar-btn-stream-active': activeTab?.streaming }"
-        :disabled="!player.isJoined"
-        :title="player.isJoined ? (activeTab?.streaming ? 'Stop streaming audio' : 'Stream audio to Discord') : 'Join a voice channel first'"
-        @click="activeTabId != null && toggleStreaming(activeTabId)"
+        :class="{ 'toolbar-btn-stream-active': activeTabRouted }"
+        :disabled="!player.canPlay"
+        :title="routeTitle"
+        @click="activeTabId != null && routedTabs.toggleRouting(activeTabId)"
       >
-        {{ activeTab?.streaming ? '🔊 Stop' : '🔈 Stream' }}
+        {{ activeTabRouted ? '🔊 Stop' : `🔈 ${routeLabel}` }}
       </button>
     </div>
 
@@ -722,6 +683,30 @@ watch(activeTabId, async (newId, oldId) => {
   border-color: var(--color-accent);
   background: var(--color-accent-muted);
   box-shadow: var(--shadow-accent-sm);
+}
+
+.tab-volume {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.tab-volume-icon {
+  font-size: 0.9rem;
+}
+
+.tab-volume-slider {
+  width: 90px;
+  accent-color: var(--color-accent);
+}
+
+.tab-volume-value {
+  width: 2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .toolbar-btn-bookmark {

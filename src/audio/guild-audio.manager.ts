@@ -677,8 +677,13 @@ export class GuildAudioManager extends EventEmitter {
       this.engine.stopMusic(streamId)
   }
 
-  playEffectFromStream(stream: Readable) {
-    this.engine.playEffectFromStream(stream)
+  playEffectFromStream(stream: Readable, streamId?: string, initialVolume?: number) {
+    this.engine.playEffectFromStream(stream, streamId, initialVolume)
+  }
+
+  /** Live volume for a keyed renderer effect stream (a Routed Tab); a no-op once it has drained. */
+  setEffectStreamVolume(streamId: string, volume: number) {
+    this.engine.setEffectStreamVolume(streamId, volume)
   }
 
   /**

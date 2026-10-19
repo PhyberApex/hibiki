@@ -30,6 +30,7 @@ jest.mock('../audio/audio-engine', () => ({
     stopLocalSink: jest.fn(),
     playMusicFromStream: jest.fn(),
     playEffectFromStream: jest.fn(),
+    setEffectStreamVolume: jest.fn(),
     stopMusic: jest.fn(),
     stopAllMusic: jest.fn(),
     setStreamVolume: jest.fn(),
@@ -44,6 +45,8 @@ jest.mock('../audio/decoders', () => ({
 /** The mocked AudioEngine instance the most recently constructed manager is using. */
 function getEngineMock(): {
   playMusicFromStream: jest.Mock
+  playEffectFromStream: jest.Mock
+  setEffectStreamVolume: jest.Mock
   stopMusic: jest.Mock
   stopAllMusic: jest.Mock
   setStreamVolume: jest.Mock
@@ -142,6 +145,10 @@ describe('createPlayer', () => {
       expect(sounds.getFilePath).toHaveBeenCalledWith('effects', 'c')
       expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(3)
       expect(() => player.startStream(LOCAL_TARGET_ID, new Readable({ read() {} }))).not.toThrow()
+      expect(() => player.startEffectStream(LOCAL_TARGET_ID, new Readable({ read() {} }), 'browser-1', 50)).not.toThrow()
+      expect(() => player.setEffectStreamVolume(LOCAL_TARGET_ID, 'browser-1', 50)).not.toThrow()
+      expect(getEngineMock().playEffectFromStream).not.toHaveBeenCalled()
+      expect(getEngineMock().setEffectStreamVolume).not.toHaveBeenCalled()
     })
 
     it('refuses Local playback when no sink exists', async () => {
@@ -258,6 +265,22 @@ describe('createPlayer', () => {
 
       expect(getEngineMock().stopMusic).toHaveBeenCalledWith('a')
       expect(getEngineMock().stopAllMusic).not.toHaveBeenCalled()
+    })
+
+    it('startEffectStream forwards the stream id and initial volume, and setEffectStreamVolume reaches that engine', async () => {
+      const player = await connectedPlayer()
+      const stream = new EventEmitter() as unknown as import('node:stream').Readable
+
+      player.startEffectStream('guild-1', stream, 'browser-3', 45)
+      player.setEffectStreamVolume('guild-1', 'browser-3', 20)
+
+      expect(getEngineMock().playEffectFromStream).toHaveBeenCalledWith(stream, 'browser-3', 45)
+      expect(getEngineMock().setEffectStreamVolume).toHaveBeenCalledWith('browser-3', 20)
+    })
+
+    it('setEffectStreamVolume is a no-op for a guild without a manager', () => {
+      const player = createPlayer(createFakeDiscordClient(), createFakeSoundLibrary())
+      expect(() => player.setEffectStreamVolume('guild-9', 'browser-3', 20)).not.toThrow()
     })
 
     it('stop (the guild-level Stop action) ends every music stream, not just one id', async () => {

@@ -45,6 +45,12 @@ export function getBrowserViewMediaSourceId(id: number): Promise<string> {
   return window.hibiki!.invoke('browserView:getMediaSourceId', { id }) as Promise<string>
 }
 
+/** Mutes or unmutes the tab's own (native) audio output; its tab capture keeps carrying audio either way (ADR-0007). */
+export function setBrowserViewAudioMuted(id: number, muted: boolean): Promise<void> {
+  requireElectron()
+  return window.hibiki!.invoke('browserView:setAudioMuted', { id, muted }) as Promise<void>
+}
+
 export function showBrowserView(id: number): Promise<void> {
   requireElectron()
   return window.hibiki!.invoke('browserView:show', { id }) as Promise<void>
