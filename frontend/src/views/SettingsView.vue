@@ -26,6 +26,7 @@ import {
 } from '@/api/config'
 import { fetchHotkeyStatus } from '@/api/hotkeys'
 import { fetchLogPath, openLogFolder } from '@/api/logs'
+import { fetchUpdateCheckSettings, updateUpdateCheckEnabled } from '@/api/updates'
 import { listOutputDevices, outputDeviceRouter } from '@/audio/output-device'
 import HotkeyRecorder from '@/components/HotkeyRecorder.vue'
 import { useAccessibilityStore } from '@/stores/accessibility'
@@ -44,6 +45,10 @@ const savingStorage = ref(false)
 const storageMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
 const accessibilityMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+
+const updateCheckEnabled = ref(true)
+const savingUpdateCheck = ref(false)
+const updateCheckMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
 const sceneFadeLength = ref(3)
 const savingFadeLength = ref(false)
@@ -404,6 +409,24 @@ function toggleHotkeys(event: Event) {
   return saveHotkeySettings({ ...hotkeySettings.value, enabled: (event.target as HTMLInputElement).checked })
 }
 
+async function toggleUpdateCheck(event: Event) {
+  const input = event.target as HTMLInputElement
+  const enabled = input.checked
+  savingUpdateCheck.value = true
+  updateCheckMessage.value = null
+  try {
+    await updateUpdateCheckEnabled(enabled)
+    updateCheckEnabled.value = enabled
+  }
+  catch (e) {
+    input.checked = updateCheckEnabled.value
+    updateCheckMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not save the update check setting.' }
+  }
+  finally {
+    savingUpdateCheck.value = false
+  }
+}
+
 function setActionHotkey(field: ActionHotkeyField, value: string | undefined) {
   const { [field]: _previous, ...rest } = hotkeySettings.value
   return saveHotkeySettings(value ? { ...rest, [field]: value } : rest)
@@ -415,6 +438,9 @@ onMounted(() => {
     outputDeviceChoice.value = choice
   }).catch(() => {})
   void refreshOutputDevices()
+  void fetchUpdateCheckSettings().then(({ enabled }) => {
+    updateCheckEnabled.value = enabled
+  }).catch(e => console.error('[settings] Could not load the update check setting:', e))
   navigator.mediaDevices?.addEventListener?.('devicechange', refreshOutputDevices)
 })
 onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', refreshOutputDevices))
@@ -629,6 +655,42 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
         :class="[hotkeyMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
       >
         {{ hotkeyMessage.text }}
+      </p>
+    </section>
+
+    <hr class="divider">
+
+    <section class="section" data-testid="updates-section">
+      <div class="section-header">
+        <h2 class="section-title">
+          Updates
+        </h2>
+      </div>
+      <p class="section-desc">
+        Hibiki never downloads or installs anything. It only tells you when a new version is out, so you can update the way you installed it.
+      </p>
+      <div class="toggle-list">
+        <div class="toggle-row">
+          <input
+            id="update-check-enabled"
+            type="checkbox"
+            class="toggle-input"
+            :checked="updateCheckEnabled"
+            :disabled="savingUpdateCheck"
+            @change="toggleUpdateCheck"
+          >
+          <div class="toggle-text">
+            <label for="update-check-enabled" class="toggle-title">Check for updates on launch</label>
+            <span class="toggle-desc">Asks GitHub once per launch whether a newer release exists. Turn off to make no request at all.</span>
+          </div>
+        </div>
+      </div>
+      <p
+        v-if="updateCheckMessage"
+        class="status-message settings-message"
+        :class="[updateCheckMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
+        {{ updateCheckMessage.text }}
       </p>
     </section>
 

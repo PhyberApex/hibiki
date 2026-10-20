@@ -350,7 +350,7 @@ app.whenReady().then(async () => {
   let handle
   let api
   try {
-    const embedded = await getEmbeddedApp(createSecretCodec(), { localSink: createLocalSink(() => mainWindow) })
+    const embedded = await getEmbeddedApp(createSecretCodec(), { localSink: createLocalSink(() => mainWindow), appVersion: app.getVersion() })
     handle = embedded
     api = embedded.api
   }
