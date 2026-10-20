@@ -83,10 +83,10 @@ export const useToastStore = defineStore('toast', () => {
     toasts.value.push({ id, type, text, key, link })
     if (onDismiss)
       dismissHandlers.set(id, onDismiss)
-    // Oldest toast makes room once more than the visible cap are queued.
-    while (toasts.value.length > MAX_VISIBLE_TOASTS)
-      dismiss(toasts.value[0].id)
     startTimer(id, durationMs)
+    // Oldest timed toast makes room once more than the visible cap are queued; a sticky one only goes when all are sticky.
+    while (toasts.value.length > MAX_VISIBLE_TOASTS)
+      dismiss((toasts.value.find(t => timers.has(t.id)) ?? toasts.value[0]).id)
     return id
   }
 

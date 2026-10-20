@@ -1,8 +1,15 @@
 <script setup lang="ts">
+import type { ToastLink } from '@/stores/toast'
 import { openExternal } from '@/api/electron'
+import { logInfo } from '@/audio/audio-element-diagnostics'
 import { useToastStore } from '@/stores/toast'
 
 const toastStore = useToastStore()
+
+function openLink(link: ToastLink) {
+  logInfo(`[toast] Opening ${link.url}`)
+  openExternal(link.url)
+}
 </script>
 
 <template>
@@ -18,7 +25,7 @@ const toastStore = useToastStore()
         v-if="toast.link"
         type="button"
         class="toast-link"
-        @click="openExternal(toast.link.url)"
+        @click="openLink(toast.link)"
       >
         {{ toast.link.label }}
       </button>
