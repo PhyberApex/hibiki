@@ -15,6 +15,8 @@ import { writeMinimalWav } from '../fixtures/minimal-wav.js'
  * OpenAI-compatible server in this process. Needs no Discord token or network.
  */
 
+const LOCAL = 'local'
+const DISCORD = 'discord'
 const SCENE_ID = '5f0c2a9e-7d4b-4e1a-8c3f-2b6d9e0a1c47'
 const SCENE_NAME = 'Rainy Tavern'
 // The library names a file by humanizing its id: `tavern-theme.wav` lists as "Tavern Theme".
@@ -126,7 +128,7 @@ function logText(): string {
   }
 }
 
-// The Vision tests build on each other's settings, so a retry reruns the file from a fresh profile.
+// Each test builds on the settings the previous one left behind; serial mode makes a retry rerun all of them (a retry is a new worker, so beforeAll seeds a fresh profile).
 test.describe.configure({ mode: 'serial' })
 
 test.beforeAll(async () => {
@@ -150,14 +152,14 @@ test('the master volume of each Output Target and the active Target survive a re
   await expect(targetButton('Local')).toHaveAttribute('aria-pressed', 'true')
 
   await setRange(volume, 35)
-  await expect.poll(() => invokeApi<number>(page, 'config', 'getMasterVolume', ['local'])).toBe(35)
+  await expect.poll(() => invokeApi<number>(page, 'config', 'getMasterVolume', [LOCAL])).toBe(35)
 
   await targetButton('Discord').click()
   await expect(targetButton('Discord')).toHaveAttribute('aria-pressed', 'true')
-  await expect.poll(() => invokeApi(page, 'config', 'getActiveOutputTarget')).toBe('discord')
+  await expect.poll(() => invokeApi(page, 'config', 'getActiveOutputTarget')).toBe(DISCORD)
   await setRange(volume, 70)
-  await expect.poll(() => invokeApi<number>(page, 'config', 'getMasterVolume', ['discord'])).toBe(70)
-  expect(await invokeApi<number>(page, 'config', 'getMasterVolume', ['local'])).toBe(35)
+  await expect.poll(() => invokeApi<number>(page, 'config', 'getMasterVolume', [DISCORD])).toBe(70)
+  expect(await invokeApi<number>(page, 'config', 'getMasterVolume', [LOCAL])).toBe(35)
 
   // Discord stays active across a restart, with its own level.
   await restart()
@@ -168,13 +170,13 @@ test('the master volume of each Output Target and the active Target survive a re
   // Back on Local, the slider shows the Local level, which also survives a restart.
   await targetButton('Local').click()
   await expect(page.getByLabel('Global volume')).toHaveValue('35')
-  await expect.poll(() => invokeApi(page, 'config', 'getActiveOutputTarget')).toBe('local')
+  await expect.poll(() => invokeApi(page, 'config', 'getActiveOutputTarget')).toBe(LOCAL)
 
   await restart()
   await openScene()
   await expect(targetButton('Local')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByLabel('Global volume')).toHaveValue('35')
-  expect(await invokeApi<number>(page, 'config', 'getMasterVolume', ['discord'])).toBe(70)
+  expect(await invokeApi<number>(page, 'config', 'getMasterVolume', [DISCORD])).toBe(70)
 })
 
 test('Vision to Vibe analyses an image through a keyless OpenAI-compatible server and matches Sound Tags', async () => {
@@ -192,7 +194,7 @@ test('Vision to Vibe analyses an image through a keyless OpenAI-compatible serve
   await expect(page.getByText('Base URL saved.')).toBeVisible()
   // A non-default Base URL configures the provider without a key, which unlocks the toggle.
   await page.getByLabel('Enable Vision to Vibe').check()
-  await expect(page.getByText('Vision to Vibe is on.', { exact: false })).toBeVisible()
+  await expect(page.getByText('Vision to Vibe is on.')).toBeVisible()
   await expect.poll(() => invokeApi(page, 'config', 'getVision')).toMatchObject({
     provider: 'openai-compatible',
     enabled: true,
