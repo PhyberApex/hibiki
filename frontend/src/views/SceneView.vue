@@ -528,6 +528,7 @@ watch(sceneId, (newId) => {
           type="text"
           class="input create-scene-input"
           placeholder="Scene name"
+          aria-label="Scene name"
           @keydown.enter="submitCreateScene"
           @keydown.escape="cancelCreateScene"
         >
@@ -745,6 +746,7 @@ watch(sceneId, (newId) => {
             </h2>
             <select
               class="add-select"
+              aria-label="Add ambience"
               @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = ambienceSounds.find(x => x.id === id); if (s) addToScene('ambience', s); (e.target as HTMLSelectElement).value = '' } }"
             >
               <option value="">
@@ -780,6 +782,7 @@ watch(sceneId, (newId) => {
                     min="0"
                     max="100"
                     class="volume-slider"
+                    :aria-label="`Volume for ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
                     @input="updateAmbienceVolume(item)"
                     @change="saveScene(scene)"
                   >
@@ -787,6 +790,7 @@ watch(sceneId, (newId) => {
                     <input
                       v-model="item.enabled"
                       type="checkbox"
+                      :aria-label="`Enable ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
                       :disabled="isSoundMissing('ambience', item.soundId)"
                       @change="toggleAmbience(item)"
                     >
@@ -815,6 +819,7 @@ watch(sceneId, (newId) => {
                 <span class="repeat-label">Repeat every</span>
                 <select
                   class="repeat-select"
+                  :aria-label="`Shortest repeat interval for ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
                   :value="item.repeatMin ?? 0"
                   @change="updateRepeat(item, 'repeatMin', Number(($event.target as HTMLSelectElement).value))"
                 >
@@ -829,6 +834,7 @@ watch(sceneId, (newId) => {
                 <span class="repeat-label">to</span>
                 <select
                   class="repeat-select"
+                  :aria-label="`Longest repeat interval for ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
                   :value="item.repeatMax ?? 0"
                   @change="updateRepeat(item, 'repeatMax', Number(($event.target as HTMLSelectElement).value))"
                 >
@@ -869,6 +875,7 @@ watch(sceneId, (newId) => {
             </div>
             <select
               class="add-select"
+              aria-label="Add music"
               @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = musicSounds.find(x => x.id === id); if (s) addToScene('music', s); (e.target as HTMLSelectElement).value = '' } }"
             >
               <option value="">
@@ -925,11 +932,12 @@ watch(sceneId, (newId) => {
                     min="0"
                     max="100"
                     class="volume-slider"
+                    :aria-label="`Volume for ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
                     @input="updateMusicVolume(item)"
                     @change="saveScene(scene)"
                   >
                   <label v-if="musicMode === 'single'" class="toggle" title="Loop">
-                    <input v-model="item.loop" type="checkbox" @change="saveScene(scene)">
+                    <input v-model="item.loop" type="checkbox" :aria-label="`Loop ${item.soundName ?? resolveSoundName('music', item.soundId)}`" @change="saveScene(scene)">
                   </label>
                   <button
                     type="button"
@@ -965,6 +973,7 @@ watch(sceneId, (newId) => {
             </h2>
             <select
               class="add-select"
+              aria-label="Add effect"
               @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = effectsSounds.find(x => x.id === id); if (s) addToScene('effects', s); (e.target as HTMLSelectElement).value = '' } }"
             >
               <option value="">

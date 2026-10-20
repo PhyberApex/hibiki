@@ -131,5 +131,5 @@ jobs:
       - name: Install Playwright browsers (for Electron)
         run: pnpm --dir e2e exec playwright install chromium --with-deps
 
-      - name: Run Local Target E2E test (no Discord secrets)
-        run: xvfb-run --auto-servernum pnpm --dir e2e exec playwright test tests/local-target.e2e.spec.ts
+      - name: Run Local Target E2E tests (no Discord secrets)
+        run: xvfb-run --auto-servernum pnpm --dir e2e exec playwright test tests/local-target.e2e.spec.ts tests/scene-ui.e2e.spec.ts
