@@ -16,6 +16,7 @@ import { dirname } from 'node:path'
 import { generateDependencyReport } from '@discordjs/voice'
 import { getConfig } from './config'
 import { normalizeAccessibilitySettings, parseAccessibilitySettings } from './config/accessibility-settings'
+import { createDiscordTokenSettings, isDiscordTokenConfigured } from './config/discord-token-settings'
 import { createHotkeySettings } from './config/hotkey-settings'
 import { createLocalOutputDeviceSettings } from './config/local-output-device-settings'
 import { createOutputTargetSettings } from './config/output-target-settings'
@@ -91,6 +92,7 @@ export interface EmbeddedApi {
   config: {
     getDiscord: () => Promise<{ tokenConfigured: boolean, encrypted: boolean }>
     setDiscordToken: (token: string) => Promise<{ tokenConfigured: boolean, encrypted: boolean }>
+    clearDiscordToken: () => Promise<{ tokenConfigured: boolean, encrypted: boolean }>
     getStoragePath: () => Promise<{ path: string | null }>
     setStoragePath: (path: string) => Promise<void>
     getBookmarks: () => Promise<{ name: string, url: string, favicon?: string }[]>
@@ -231,13 +233,8 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
   const appConfig = createAppConfig(config, codec)
   log.info(`Secrets at rest are ${appConfig.secretsEncrypted ? 'encrypted' : 'NOT encrypted (no OS keychain backend available)'}`)
 
-  async function getDiscordStatus(): Promise<{ tokenConfigured: boolean, encrypted: boolean }> {
-    const tokenConfigured = Boolean(config.discord.token) || Boolean(await appConfig.get('discord.token'))
-    return { tokenConfigured, encrypted: appConfig.secretsEncrypted }
-  }
-
   const localOutputDevice = createLocalOutputDeviceSettings(appConfig)
-  const outputTargets = createOutputTargetSettings(appConfig, async () => (await getDiscordStatus()).tokenConfigured)
+  const outputTargets = createOutputTargetSettings(appConfig, () => isDiscordTokenConfigured(appConfig, config.discord.token))
 
   const sounds = createSoundLibrary(config)
   const hotkeySettings = createHotkeySettings(appConfig, () => createSceneStore(config).list())
@@ -245,6 +242,14 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
   const registry = createSceneRegistry(config)
   const discord = createDiscordClient(config, appConfig)
   const player = createPlayer(discord, sounds, { localSink: options.localSink })
+  const discordToken = createDiscordTokenSettings({
+    store: appConfig,
+    envToken: config.discord.token,
+    encrypted: appConfig.secretsEncrypted,
+    outputTargets,
+    discord,
+    player,
+  })
 
   const visionSettings = createVisionSettings(config, appConfig)
   const updateCheck = createUpdateCheck({ store: appConfig, currentVersion: options.appVersion ?? getVersion(), fetch })
@@ -307,12 +312,9 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       reconnect: () => discord.reconnect(),
     },
     config: {
-      getDiscord: () => getDiscordStatus(),
-      setDiscordToken: async (token) => {
-        if (typeof token === 'string' && token.trim())
-          await appConfig.set('discord.token', token.trim())
-        return getDiscordStatus()
-      },
+      getDiscord: () => discordToken.getStatus(),
+      setDiscordToken: token => discordToken.setToken(token),
+      clearDiscordToken: () => discordToken.clearToken(),
       getStoragePath: async () => {
         const p = await appConfig.get('storage.path')
         return { path: p && p.trim() ? p.trim() : null }

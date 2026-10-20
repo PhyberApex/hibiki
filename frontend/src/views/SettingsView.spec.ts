@@ -2,6 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  clearDiscordToken,
+  fetchDiscordConfig,
   fetchLocalOutputDevice,
   fetchSceneFadeLength,
   fetchVisionConfig,
@@ -16,6 +18,7 @@ import {
 } from '@/api/config'
 import { fetchUpdateCheckSettings, updateUpdateCheckEnabled } from '@/api/updates'
 import { useAccessibilityStore } from '@/stores/accessibility'
+import { usePlayerStore } from '@/stores/player'
 import SettingsView from './SettingsView.vue'
 
 const UNCONFIGURED_VISION = {
@@ -44,6 +47,8 @@ vi.mock('@/api/config', () => ({
   }),
   selectStorageFolder: vi.fn(),
   updateDiscordToken: vi.fn().mockResolvedValue({ tokenConfigured: true }),
+  clearDiscordToken: vi.fn().mockResolvedValue({ tokenConfigured: false, encrypted: true }),
+  LOCAL_TARGET_ID: 'local',
   updateStoragePath: vi.fn().mockResolvedValue(undefined),
   fetchAccessibilitySettings: vi.fn().mockResolvedValue({ luminancePulses: true, reduceMotion: null }),
   updateAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
@@ -107,6 +112,52 @@ describe('settingsView', () => {
     expect(wrapper.find('h2').text()).toBe('Discord bot (optional)')
     expect(wrapper.text()).toContain('only needed to play into Discord')
     expect(wrapper.text()).toContain('No token — optional')
+  })
+
+  describe('discord token Remove', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('is only offered while a token is configured', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="discord-token-remove"]').exists()).toBe(false)
+
+      vi.mocked(fetchDiscordConfig).mockResolvedValueOnce({ tokenConfigured: true, encrypted: true })
+      const withToken = mountSettings()
+      await flushPromises()
+      expect(withToken.find('[data-testid="discord-token-remove"]').exists()).toBe(true)
+    })
+
+    it('does nothing when the confirmation is declined', async () => {
+      vi.stubGlobal('confirm', vi.fn().mockReturnValue(false))
+      vi.mocked(fetchDiscordConfig).mockResolvedValueOnce({ tokenConfigured: true, encrypted: true })
+      const wrapper = mountSettings()
+      await flushPromises()
+      await wrapper.find('[data-testid="discord-token-remove"]').trigger('click')
+      await flushPromises()
+      expect(confirm).toHaveBeenCalledTimes(1)
+      expect(clearDiscordToken).not.toHaveBeenCalled()
+    })
+
+    it('clears the token once confirmed and shows it is gone', async () => {
+      vi.stubGlobal('confirm', vi.fn().mockReturnValue(true))
+      vi.mocked(fetchDiscordConfig).mockResolvedValueOnce({ tokenConfigured: true, encrypted: true })
+      const pinia = createPinia()
+      const wrapper = mount(SettingsView, { global: { plugins: [pinia] } })
+      await flushPromises()
+      const player = usePlayerStore(pinia)
+      player.activeTarget = 'local'
+      await wrapper.find('[data-testid="discord-token-remove"]').trigger('click')
+      await flushPromises()
+      expect(confirm).toHaveBeenCalledTimes(1)
+      expect(clearDiscordToken).toHaveBeenCalledTimes(1)
+      expect(player.activeTarget).toBe('local')
+      expect(wrapper.text()).toContain('Token removed.')
+      expect(wrapper.text()).toContain('No token — optional')
+      expect(wrapper.find('[data-testid="discord-token-remove"]').exists()).toBe(false)
+    })
   })
 
   it('renders Storage location section', async () => {

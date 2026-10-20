@@ -120,7 +120,7 @@ Stored in `scenes.json`. Import/export bundles scenes with their sound files as 
 ### Storage
 
 Data lives in platform user data directory (e.g., `~/Library/Application Support/hibiki` on macOS):
-- `app-config.json` — Discord token (when set in UI), bookmarks, storage path override, master volume, global hotkey settings (`hotkeys`: enabled + the six Action Hotkeys), Vision to Vibe key + toggle, launch update check (`updates`: enabled + dismissed version)
+- `app-config.json` — Discord token (when set in UI; Settings → Remove deletes the key via `config.clearDiscordToken`, which also leaves voice, logs the bot out and falls back to the Local Target — `src/config/discord-token-settings.ts`), bookmarks, storage path override, master volume, global hotkey settings (`hotkeys`: enabled + the six Action Hotkeys), Vision to Vibe key + toggle, launch update check (`updates`: enabled + dismissed version)
 - `scenes.json` — Scene definitions (optional `musicMode` — `sequential`/`shuffle`, absent = `single` — carried in exports and Registry bundles; optional `hotkey` on Scenes and Effect items: machine-local, validated unique in `scene-store.ts`, stripped from `.hibiki.zip` exports and dropped on import/registry install)
 - `sound-tags.json` — Sound Tags keyed by `<category>/<soundId>` (see `CONTEXT.md` glossary)
 - `music/`, `effects/`, `ambience/` — Sound files (copied on upload, keyed by UUID)

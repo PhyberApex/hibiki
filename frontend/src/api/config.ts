@@ -66,6 +66,12 @@ export function updateDiscordToken(token: string): Promise<DiscordConfig> {
   return apiCall('config', 'setDiscordToken', [token])
 }
 
+/** Removes the stored token: the bot goes offline, voice ends and Local becomes active if Discord was. */
+export function clearDiscordToken(): Promise<DiscordConfig> {
+  requireElectron()
+  return apiCall('config', 'clearDiscordToken', [])
+}
+
 export function fetchStoragePath(): Promise<StorageConfig> {
   requireElectron()
   return apiCall<StorageConfig>('config', 'getStoragePath', [])

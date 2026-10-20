@@ -227,6 +227,28 @@ describe('player store', () => {
     })
   })
 
+  describe('discordTokenRemoved', () => {
+    it('falls back to Local, forgets the guild selection and reloads the bot status', async () => {
+      const store = usePlayerStore()
+      fetchGuildDirectory.mockResolvedValue([{ guildId: 'g1', guildName: 'G', iconUrl: null, channels: [{ id: 'c1', name: 'General' }] }])
+      store.botStatus = { ready: true, userTag: 'Bot#0' }
+      await vi.waitFor(() => expect(store.directory).toHaveLength(1))
+      store.activeTarget = 'discord'
+      store.guildId = 'g1'
+      store.channelId = 'c1'
+      fetchBotStatus.mockResolvedValue({ ready: false })
+      fetchPlayerState.mockResolvedValue([])
+
+      await store.discordTokenRemoved()
+
+      expect(store.activeTarget).toBe('local')
+      expect(store.directory).toEqual([])
+      expect(store.guildId).toBe('')
+      expect(store.channelId).toBe('')
+      expect(store.botStatus).toEqual({ ready: false })
+    })
+  })
+
   describe('selectChannel', () => {
     it('joins channel and loads state', async () => {
       const dir = [{ guildId: 'g1', guildName: 'Guild', iconUrl: null, channels: [{ id: 'ch1', name: 'General' }] }]

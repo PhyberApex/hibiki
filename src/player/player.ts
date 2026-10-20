@@ -357,9 +357,26 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
     }))
   }
 
+  /** Leaves voice in every Discord guild (the Discord token was removed); the Local Target keeps playing. */
+  async function disconnectAllVoice(): Promise<void> {
+    const guildIds = [...managers.keys()].filter(id => !isLocalTarget(id))
+    log.info(`Leaving voice in ${guildIds.length} guild(s)`)
+    for (const guildId of guildIds) {
+      try {
+        await disconnect(guildId)
+      }
+      catch (err) {
+        log.error(`Failed to leave voice in guild ${guildId}:`, err)
+      }
+    }
+    if (guildIds.length)
+      stateEvents.emit('stateChanged')
+  }
+
   return {
     connect,
     disconnect,
+    disconnectAllVoice,
     stop,
     startStream,
     startEffectStream,
