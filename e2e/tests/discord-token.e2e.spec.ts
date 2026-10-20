@@ -92,4 +92,9 @@ test('setting the token again reconnects the bot and the guild list reappears', 
     const directory = await invokeApi<{ guildId: string }[]>(page, 'player', 'getGuildDirectory')
     expect(directory.map(g => g.guildId)).toContain(e2eEnv.guildId)
   }
+
+  // The sidebar lists guilds only under the Discord Target; the renderer reads the active Target on load.
+  await invokeApi(page, 'config', 'setActiveOutputTarget', ['discord'])
+  await page.reload()
+  await expect(page.locator('.channel-item').first()).toBeVisible({ timeout: 30_000 })
 })

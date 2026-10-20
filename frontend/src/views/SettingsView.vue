@@ -205,7 +205,7 @@ async function removeToken() {
     if (!player.isLocalActive)
       useScenePlaybackStore().stopScene()
     discordConfig.value = await clearDiscordToken()
-    await player.discordTokenRemoved()
+    await player.resetAfterDiscordTokenRemoved()
     logInfo('[settings] Discord token removed')
     message.value = { type: 'success', text: 'Token removed. The bot is offline; playback now uses this computer.' }
   }
@@ -540,7 +540,7 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
             {{ saving ? 'Saving…' : 'Save' }}
           </button>
           <button
-            v-if="discordConfig?.tokenConfigured"
+            v-if="discordConfig?.tokenConfigured && !discordConfig.fromEnvironment"
             type="button"
             class="btn btn-ghost"
             data-testid="discord-token-remove"
@@ -550,6 +550,9 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
             {{ removing ? 'Removing…' : 'Remove' }}
           </button>
         </div>
+        <p v-if="discordConfig?.fromEnvironment" class="field-hint">
+          The token comes from the DISCORD_TOKEN environment variable; unset it to remove the token.
+        </p>
         <p v-if="discordConfig && !discordConfig.encrypted" class="field-hint field-hint-warning">
           Not encrypted on this system — stored as plain text.
         </p>

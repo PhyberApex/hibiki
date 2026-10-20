@@ -128,6 +128,12 @@ describe('settingsView', () => {
       const withToken = mountSettings()
       await flushPromises()
       expect(withToken.find('[data-testid="discord-token-remove"]').exists()).toBe(true)
+
+      vi.mocked(fetchDiscordConfig).mockResolvedValueOnce({ tokenConfigured: true, encrypted: true, fromEnvironment: true })
+      const fromEnv = mountSettings()
+      await flushPromises()
+      expect(fromEnv.find('[data-testid="discord-token-remove"]').exists()).toBe(false)
+      expect(fromEnv.text()).toContain('DISCORD_TOKEN environment variable')
     })
 
     it('does nothing when the confirmation is declined', async () => {

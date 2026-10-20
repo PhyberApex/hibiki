@@ -387,7 +387,7 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   /** The backend removed the Discord token, left voice and made Local active (if Discord was); mirror that here. */
-  async function discordTokenRemoved() {
+  async function resetAfterDiscordTokenRemoved() {
     activeTarget.value = 'local'
     directory.value = []
     guildId.value = ''
@@ -446,7 +446,7 @@ export const usePlayerStore = defineStore('player', () => {
     selectChannel,
     doLeave,
     doReconnect,
-    discordTokenRemoved,
+    resetAfterDiscordTokenRemoved,
     reconnecting,
     connectedGuildId,
     playingSceneId,

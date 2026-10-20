@@ -14,6 +14,8 @@ export interface DiscordTokenStore {
 export interface DiscordStatus {
   tokenConfigured: boolean
   encrypted: boolean
+  /** The token comes from `DISCORD_TOKEN`, which the app cannot remove. */
+  fromEnvironment: boolean
 }
 
 export interface DiscordTokenSettingsDeps {
@@ -25,7 +27,7 @@ export interface DiscordTokenSettingsDeps {
     getActive: () => Promise<OutputTargetKind>
     setActive: (kind: OutputTargetKind) => Promise<void>
   }
-  discord: { destroy: () => Promise<void> }
+  discord: { logout: () => Promise<void> }
   player: { disconnectAllVoice: () => Promise<void> }
 }
 
@@ -38,7 +40,7 @@ export function createDiscordTokenSettings(deps: DiscordTokenSettingsDeps) {
   const { store, envToken, encrypted, outputTargets, discord, player } = deps
 
   async function getStatus(): Promise<DiscordStatus> {
-    return { tokenConfigured: await isDiscordTokenConfigured(store, envToken), encrypted }
+    return { tokenConfigured: await isDiscordTokenConfigured(store, envToken), encrypted, fromEnvironment: Boolean(envToken) }
   }
 
   /** Stores a token; an empty or blank one is ignored, so a blank field never removes a token (that is `clearToken`). */
@@ -53,9 +55,14 @@ export function createDiscordTokenSettings(deps: DiscordTokenSettingsDeps) {
   /**
    * Removes the stored token: ends every voice connection, disconnects the
    * bot, deletes the key and makes Local the active Target if Discord was.
-   * The Discord Target's master volume stays for the next token.
+   * The Discord Target's master volume stays for the next token. Refused
+   * while `DISCORD_TOKEN` is set: the bot would keep using it.
    */
   async function clearToken(): Promise<DiscordStatus> {
+    if (envToken) {
+      log.warn('Refused to remove the Discord token: it comes from DISCORD_TOKEN in the environment')
+      throw new Error('The Discord token comes from the DISCORD_TOKEN environment variable. Unset it and restart Hibiki to remove it.')
+    }
     log.info('Removing the Discord token')
     const wasActive = await outputTargets.getActive()
     try {
@@ -65,7 +72,7 @@ export function createDiscordTokenSettings(deps: DiscordTokenSettingsDeps) {
       log.error('Failed to end voice connections while removing the Discord token:', err)
     }
     try {
-      await discord.destroy()
+      await discord.logout()
     }
     catch (err) {
       log.error('Failed to disconnect the bot while removing the Discord token:', err)
@@ -73,8 +80,6 @@ export function createDiscordTokenSettings(deps: DiscordTokenSettingsDeps) {
     await store.delete(TOKEN_KEY)
     if (wasActive === 'discord')
       await outputTargets.setActive('local')
-    if (envToken)
-      log.warn('Stored Discord token removed, but DISCORD_TOKEN is still set in the environment; the bot will use it on the next connect')
     log.info(`Discord token removed${wasActive === 'discord' ? '; Local is now the active Output Target' : ''}`)
     return getStatus()
   }

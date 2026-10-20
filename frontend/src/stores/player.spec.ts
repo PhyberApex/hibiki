@@ -227,7 +227,7 @@ describe('player store', () => {
     })
   })
 
-  describe('discordTokenRemoved', () => {
+  describe('resetAfterDiscordTokenRemoved', () => {
     it('falls back to Local, forgets the guild selection and reloads the bot status', async () => {
       const store = usePlayerStore()
       fetchGuildDirectory.mockResolvedValue([{ guildId: 'g1', guildName: 'G', iconUrl: null, channels: [{ id: 'c1', name: 'General' }] }])
@@ -239,7 +239,7 @@ describe('player store', () => {
       fetchBotStatus.mockResolvedValue({ ready: false })
       fetchPlayerState.mockResolvedValue([])
 
-      await store.discordTokenRemoved()
+      await store.resetAfterDiscordTokenRemoved()
 
       expect(store.activeTarget).toBe('local')
       expect(store.directory).toEqual([])

@@ -4,6 +4,8 @@ export interface DiscordConfig {
   tokenConfigured: boolean
   /** False when this system can't encrypt secrets at rest (e.g. Linux without a keyring) — the token is stored as plain text. */
   encrypted: boolean
+  /** The token comes from the DISCORD_TOKEN environment variable, which the app cannot remove. */
+  fromEnvironment?: boolean
 }
 
 export interface StorageConfig {

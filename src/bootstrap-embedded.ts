@@ -1,5 +1,6 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { AccessibilitySettings } from './config/accessibility-settings'
+import type { DiscordStatus } from './config/discord-token-settings'
 import type { HotkeySettings } from './config/hotkey-settings'
 import type { LocalOutputDevice } from './config/local-output-device-settings'
 import type { StorageWarning } from './json-file'
@@ -90,9 +91,9 @@ export interface EmbeddedApi {
     reconnect: () => Promise<void>
   }
   config: {
-    getDiscord: () => Promise<{ tokenConfigured: boolean, encrypted: boolean }>
-    setDiscordToken: (token: string) => Promise<{ tokenConfigured: boolean, encrypted: boolean }>
-    clearDiscordToken: () => Promise<{ tokenConfigured: boolean, encrypted: boolean }>
+    getDiscord: () => Promise<DiscordStatus>
+    setDiscordToken: (token: string) => Promise<DiscordStatus>
+    clearDiscordToken: () => Promise<DiscordStatus>
     getStoragePath: () => Promise<{ path: string | null }>
     setStoragePath: (path: string) => Promise<void>
     getBookmarks: () => Promise<{ name: string, url: string, favicon?: string }[]>
