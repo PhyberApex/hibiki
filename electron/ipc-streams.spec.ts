@@ -19,6 +19,7 @@ function fakePlayer() {
     startStream: jest.fn(),
     stopStream: jest.fn(),
     startEffectStream: jest.fn(),
+    setEffectStreamVolume: jest.fn(),
   }
 }
 
@@ -137,7 +138,7 @@ describe('registerAudioStreamHandlers: effect lane', () => {
     const id = await ipc.invoke('audio:startEffectStream', { guildId: 'g1' })
     expect(id).toMatch(/^stream-/)
     const stream: Readable = player.startEffectStream.mock.calls[0][1]
-    expect(player.startEffectStream).toHaveBeenCalledWith('g1', stream)
+    expect(player.startEffectStream).toHaveBeenCalledWith('g1', stream, id, undefined)
     const chunks = collect(stream)
     const done = ended(stream)
 
@@ -161,6 +162,18 @@ describe('registerAudioStreamHandlers: effect lane', () => {
     await ipc.invoke('audio:startEffectStream', { guildId: 'g1', streamId: 'ambience-a' })
 
     await firstEnded
+  })
+
+  it('passes a caller-chosen id and initial volume on to the player, and forwards live volume changes', async () => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    registerAudioStreamHandlers(ipc, player)
+
+    await ipc.invoke('audio:startEffectStream', { guildId: 'g1', streamId: 'browser-7', volume: 42 })
+    expect(player.startEffectStream).toHaveBeenCalledWith('g1', expect.anything(), 'browser-7', 42)
+
+    await ipc.invoke('audio:setEffectStreamVolume', { guildId: 'g1', streamId: 'browser-7', volume: 21 })
+    expect(player.setEffectStreamVolume).toHaveBeenCalledWith('g1', 'browser-7', 21)
   })
 
   it('routes a chunk without a streamId to the guild\'s first effect stream', async () => {

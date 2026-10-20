@@ -201,6 +201,19 @@ export function releaseAudioElementContext(element: HTMLAudioElement): void {
     entry.ctx.close().catch(() => {})
 }
 
+/** Chromium tab capture of a `WebContentsView` by the media source id the main process hands out (`browserView:getMediaSourceId`). */
+export function captureTabStream(mediaSourceId: string): Promise<MediaStream> {
+  return navigator.mediaDevices.getUserMedia({
+    audio: {
+      mandatory: {
+        chromeMediaSource: 'tab',
+        chromeMediaSourceId: mediaSourceId,
+      },
+    } as MediaTrackConstraints,
+    video: false,
+  })
+}
+
 /**
  * Capture from a MediaStream (e.g. from getUserMedia tab capture or getDisplayMedia).
  */

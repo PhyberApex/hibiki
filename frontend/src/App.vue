@@ -7,6 +7,7 @@ import AppToasts from '@/components/AppToasts.vue'
 import { reportHotkeyRegistrationFailures, startHotkeyDispatch } from '@/hotkeys'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
+import { useRoutedTabsStore } from '@/stores/routed-tabs'
 import { useScenePlaybackStore } from '@/stores/scene-playback'
 
 declare const __APP_VERSION__: string
@@ -14,6 +15,7 @@ const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0
 
 const route = useRoute()
 const player = usePlayerStore()
+const routedTabs = useRoutedTabsStore()
 // Instantiated app-wide so Scene playback (and its watchers) outlives any view.
 const scenePlayback = useScenePlaybackStore()
 const accessibility = useAccessibilityStore()
@@ -246,9 +248,9 @@ const showStorageWarnings = computed(() =>
             title="Scene is playing"
           >LIVE</span>
           <span
-            v-if="tab.path === '/browser' && player.browserStreamingCount > 0"
+            v-if="tab.path === '/browser' && routedTabs.routedCount > 0"
             class="streaming-badge"
-            title="Streaming audio to Discord"
+            title="A Browser tab is routed to the Output Target"
           >LIVE</span>
         </RouterLink>
       </nav>
@@ -292,9 +294,9 @@ const showStorageWarnings = computed(() =>
               title="Scene is playing"
             >LIVE</span>
             <span
-              v-if="tab.path === '/browser' && player.browserStreamingCount > 0"
+              v-if="tab.path === '/browser' && routedTabs.routedCount > 0"
               class="streaming-badge"
-              title="Streaming audio to Discord"
+              title="A Browser tab is routed to the Output Target"
             >LIVE</span>
           </RouterLink>
         </nav>

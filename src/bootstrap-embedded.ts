@@ -70,7 +70,8 @@ export interface EmbeddedApi {
     leave: (body: { guildId: string }) => Promise<void>
     stop: (guildId: string) => Promise<void>
     startStream: (guildId: string, stream: NodeJS.ReadableStream, metadata?: { id: string, name: string, filename: string, category: string }, streamId?: string) => void
-    startEffectStream: (guildId: string, stream: NodeJS.ReadableStream) => void
+    startEffectStream: (guildId: string, stream: NodeJS.ReadableStream, streamId?: string, volume?: number) => void
+    setEffectStreamVolume: (guildId: string, streamId: string, volume: number) => void
     stopStream: (guildId: string, streamId?: string) => void
     reportLocalSinkHealth: (event: import('./player/player').LocalSinkHealth) => void
     playMusic: (guildId: string, soundId: string, options: { volume: number, loop?: boolean, fadeInMs?: number }) => Promise<void>
@@ -277,8 +278,9 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       stop: guildId => player.stop(guildId),
       startStream: (guildId, stream, metadata, streamId) =>
         player.startStream(guildId, stream as import('node:stream').Readable, metadata as import('./player/player').TrackMetadata | undefined, streamId),
-      startEffectStream: (guildId, stream) =>
-        player.startEffectStream(guildId, stream as import('node:stream').Readable),
+      startEffectStream: (guildId, stream, streamId, volume) =>
+        player.startEffectStream(guildId, stream as import('node:stream').Readable, streamId, volume),
+      setEffectStreamVolume: (guildId, streamId, volume) => player.setEffectStreamVolume(guildId, streamId, volume),
       stopStream: (guildId, streamId) => player.stopStream(guildId, streamId),
       reportLocalSinkHealth: event => player.reportLocalSinkHealth(event),
       playMusic: (guildId, soundId, options) => player.playMusic(guildId, soundId, options),

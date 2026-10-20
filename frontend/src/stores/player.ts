@@ -52,7 +52,6 @@ export const usePlayerStore = defineStore('player', () => {
   const guildId = ref('')
   const channelId = ref('')
   const channelJoinBusy = ref(false)
-  const browserStreamingCount = ref(0)
   // The Scene started with Play/Stream, distinct from the open Scene — see
   // "Playing Scene" in CONTEXT.md. `scenePlaying` is kept as a computed for
   // existing readers (sidebar indicator, now-playing line). Mutate both
@@ -440,7 +439,6 @@ export const usePlayerStore = defineStore('player', () => {
     doReconnect,
     reconnecting,
     connectedGuildId,
-    browserStreamingCount,
     playingSceneId,
     playingSceneMode,
     scenePlaying,
