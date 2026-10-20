@@ -1866,3 +1866,29 @@ describe('sceneView — Music Mode control', () => {
     expect((loop.element as HTMLInputElement).checked).toBe(true)
   })
 })
+
+describe('sceneView — accessible editor controls', () => {
+  beforeEach(async () => {
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValue({
+      ...JSON.parse(JSON.stringify(scene)),
+      music: [{ soundId: 'm1', soundName: 'Tavern Theme', volume: 80, loop: true }],
+    })
+  })
+
+  it('names each per-sound editor control after its sound', async () => {
+    const wrapper = await mountScene()
+    const labels = wrapper.findAll('[aria-label]').map(el => el.attributes('aria-label'))
+    expect(labels).toEqual(expect.arrayContaining([
+      'Add ambience',
+      'Add music',
+      'Add effect',
+      'Volume for Rain',
+      'Enable Rain',
+      'Shortest repeat interval for Rain',
+      'Longest repeat interval for Rain',
+      'Volume for Tavern Theme',
+      'Loop Tavern Theme',
+    ]))
+  })
+})
