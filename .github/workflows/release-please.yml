@@ -22,6 +22,23 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
+  release-notes:
+    # After build-release: its release upload rewrites the release and could
+    # drop an edit made at the same time. always() so a failed Windows job
+    # still leaves the policy on the release.
+    if: always() && needs.release-please.outputs.release_created == 'true'
+    needs: [release-please, build-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Append the Code signing policy to the release notes
+        run: .github/scripts/append-release-policy.sh "${{ needs.release-please.outputs.tag_name }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   checks:
     if: needs.release-please.outputs.release_created == 'true'
     needs: release-please

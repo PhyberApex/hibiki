@@ -190,6 +190,30 @@ Hibiki has no account, no telemetry and no analytics. It only contacts:
 - **Your Vision Provider** (Anthropic, or the Base URL you set) — only when Vision to Vibe is turned on and you analyze an image.
 - **Websites you open** in the Browser tab.
 
+## Code signing policy
+
+<!-- Keep in sync with .github/release-notes/code-signing-policy.md, which is appended to every GitHub Release. -->
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+Windows builds are being moved to signing through SignPath Foundation. Until the first signed release ships, the Windows builds on the Releases page are unsigned.
+
+**Team roles.** Hibiki has one maintainer, [@PhyberApex](https://github.com/PhyberApex), who holds every role today:
+
+- **Authors (committers):** [@PhyberApex](https://github.com/PhyberApex). Pull requests from other contributors, including AI-agent-authored ones (see the [AI Disclaimer](#-ai-disclaimer)), are merged only by the maintainer.
+- **Reviewers:** [@PhyberApex](https://github.com/PhyberApex) reviews every pull request before it is merged.
+- **Approvers:** [@PhyberApex](https://github.com/PhyberApex) approves every signing request.
+
+**Policy.**
+
+- Release binaries are built on GitHub Actions from the tagged release commit, never on a workstation.
+- Every signing request is approved manually in SignPath by an approver.
+- Every team member has multi-factor authentication turned on for GitHub.
+- Only Hibiki's own binaries are signed. Bundled upstream open-source binaries, such as the prebuilt `@snazzah/davey` native module, ship unsigned as their upstream projects publish them, as SignPath's terms allow.
+- What the app contacts over the network is listed under [Privacy](#privacy).
+
+> **Windows note:** Windows SmartScreen may still show "Windows protected your PC" for the first signed releases. SmartScreen trusts a signature only once enough downloads under the same certificate have built up reputation, so the warning fades over several releases rather than disappearing with the first one.
+
 ## E2E tests (real Discord)
 
 The `e2e` directory contains tests that connect to a real Discord server and drive the Hibiki API.
