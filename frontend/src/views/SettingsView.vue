@@ -534,6 +534,7 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
           <button
             type="button"
             class="btn btn-primary"
+            data-testid="discord-token-save"
             :disabled="saving || !tokenInput.trim()"
             @click="saveToken"
           >

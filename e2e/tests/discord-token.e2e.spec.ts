@@ -82,7 +82,7 @@ test('Remove clears the token, takes the bot offline and makes Local active', as
 test('setting the token again reconnects the bot and the guild list reappears', async () => {
   await page.goto('hibiki://app/settings')
   await page.getByLabel('Bot token').fill(token)
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.getByTestId('discord-token-save').click()
 
   await expect.poll(botReady, { timeout: 30_000 }).toBe(true)
   await expect(page.getByText('Connected as')).toBeVisible({ timeout: 30_000 })
