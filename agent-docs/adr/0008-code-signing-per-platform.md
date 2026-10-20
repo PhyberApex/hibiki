@@ -38,7 +38,7 @@ Azure Artifact Signing, EV certificates and staying unsigned are ruled out for t
 **Plan A: SignPath Foundation.** Hibiki meets its terms: an OSI license for all components, public source, tagged releases, active maintenance, and builds on GitHub-hosted runners (`windows-latest` is already in the `build.yml` matrix). Bundled upstream binaries are allowed unsigned, which covers the prebuilt `@snazzah/davey` `.node` module (unpacked from asar by `forge.config.js`). It requires:
 
 - A **"Code signing policy"** section on the project home page (README) and on the release page. It must carry the attribution "Free code signing provided by SignPath.io, certificate by SignPath Foundation" and name the team roles (Authors, Reviewers, Approvers) with their members.
-- A **privacy statement** in the same place, naming what the app contacts: Discord (the bot connection the GM configures), the selected Vision Provider when Vision to Vibe is used (Anthropic, or the configured OpenAI-compatible Base URL), `raw.githubusercontent.com` for the Registry, pages the GM opens in the Browser tab, and the GitHub Releases check if #541 lands. This also answers #541's privacy question.
+- A **privacy statement** in the same place, naming what the app contacts. The README's Privacy section (added with the update notice, #541) already covers this: Discord (the bot connection the GM configures), the GitHub Releases check, `raw.githubusercontent.com` for the Registry, Google Fonts, the selected Vision Provider when Vision to Vibe is used (Anthropic, or the configured OpenAI-compatible Base URL), and pages the GM opens in the Browser tab. The Code signing policy links to it, and the release page carries both.
 - **MFA** on GitHub for every team member, and **manual approval** of every signing request in the SignPath web UI.
 - Product name and version metadata stay as they are. SignPath enforces them, so `forge.config.js` keeps `Hibiki`/`hibiki` and the version stays release-please's.
 - **Two signing requests per release.** Squirrel's `Setup.exe` embeds the nupkg as a PE resource that SignPath cannot open and sign. So in `build.yml`'s Windows job:
@@ -65,7 +65,7 @@ Signing credentials (the SignPath API token, or the Certum credentials, and late
 
 Follow-up issues are filed only for Plan A, the route actually taken:
 
-1. README (and release page) **Code signing policy** and **privacy statement** section, plus a Windows note that SmartScreen may still warn on early signed releases. It must exist before the SignPath application.
+1. README (and release page) **Code signing policy** section, linked to the existing Privacy section, plus a Windows note that SmartScreen may still warn on early signed releases. It must exist before the SignPath application.
 2. The **SignPath Foundation application** and the SignPath project setup: artifact configurations for the packaged directory and for `Setup.exe`, the signing policy with manual approval, and team MFA. This is maintainer-only work.
 3. The **two-stage signing in `build.yml`**'s Windows job, as described above, once the SignPath project exists.
 
