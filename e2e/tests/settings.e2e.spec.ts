@@ -72,7 +72,8 @@ function seed(): string {
     { id: SCENE_ID, name: SCENE_NAME, music: [], ambience: [], effects: [], createdAt: now, updatedAt: now },
   ]))
   writeFileSync(join(root, 'data', 'sound-tags.json'), JSON.stringify(tags))
-  writeFileSync(join(root, 'data', 'app-config.json'), JSON.stringify({}))
+  // The launch update check would GET GitHub on every (re)launch; keep the run off the network.
+  writeFileSync(join(root, 'data', 'app-config.json'), JSON.stringify({ updates: JSON.stringify({ enabled: false }) }))
   imagePath = join(root, 'battle-map.png')
   writeFileSync(imagePath, PNG)
   return root
@@ -229,6 +230,8 @@ test('Vision to Vibe analyses an image through a keyless OpenAI-compatible serve
   // The analysis is logged, the image and any key are not.
   await expect.poll(logText).toContain('Vision analysis returned 2 tag(s)')
   const log = logText()
+  expect(log).toContain('Update check skipped: turned off in Settings')
+  expect(log).not.toContain('Checking GitHub for a release')
   expect(log).not.toContain(image)
   expect(log).not.toMatch(/Bearer|Authorization/i)
 
