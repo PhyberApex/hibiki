@@ -76,6 +76,8 @@ export interface AudioCapture {
   speaking: Promise<void>
   /** Number of Opus packets received from the user so far. */
   packetCount: () => number
+  /** Number of those packets that carried encoded audio, i.e. were not the voice player's silence frame. */
+  audioPacketCount: () => number
   /** How many of those packets were the 3-byte Opus silence frame the voice player sends when it has nothing to play. */
   silenceFrameCount: () => number
   /** `Date.now()` of the last packet that was not a silence frame (encoded audio), or `undefined` before the first. */
@@ -141,6 +143,7 @@ export async function captureAudioFrom(
     speaking,
     packetCount: () => packets,
     silenceFrameCount: () => silenceFrames,
+    audioPacketCount: () => packets - silenceFrames,
     lastAudioPacketAt: () => lastAudioAt,
     stop: () => {
       opus.destroy()

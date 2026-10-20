@@ -164,7 +164,8 @@ test.describe('Hibiki Electron E2E', () => {
 
       await expect(capture.speaking).resolves.toBeUndefined()
       // Roughly 50 packets per second; a handful is enough to show audio flows, not just a speaking flag.
-      await expect.poll(() => capture!.packetCount(), { timeout: 15_000 }).toBeGreaterThanOrEqual(25)
+      // Silence frames do not count: the voice player sends them whenever the mixer has nothing.
+      await expect.poll(() => capture!.audioPacketCount(), { timeout: 15_000 }).toBeGreaterThanOrEqual(25)
 
       await invokeApi(page, 'player', 'stop', [guildId])
       await invokeApi(page, 'player', 'leave', [{ guildId }])
@@ -228,23 +229,24 @@ test.describe('Hibiki Electron E2E', () => {
   async function waitForOnlySilence(capture: AudioCapture, timeoutMs: number, windowMs = 1_000): Promise<number | undefined> {
     const startedAt = Date.now()
     const deadline = startedAt + timeoutMs + windowMs
-    const samples: { at: number, packets: number }[] = []
+    const samples: { at: number, silenceFrames: number }[] = []
+    let perSecond = 0
     while (Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 50))
       const now = Date.now()
-      samples.push({ at: now, packets: capture.packetCount() })
+      samples.push({ at: now, silenceFrames: capture.silenceFrameCount() })
       const windowStart = samples.find(s => s.at >= now - windowMs)!
-      if (now - windowStart.at < windowMs - 100 || now - startedAt < windowMs)
+      if (now - windowStart.at < windowMs - 100)
         continue
       const lastAudioAt = capture.lastAudioPacketAt()
       if (lastAudioAt !== undefined && lastAudioAt > windowStart.at)
         continue
-      const perSecond = (capture.packetCount() - windowStart.packets) / ((now - windowStart.at) / 1000)
-      expect(perSecond, `${perSecond} silence frames/s while stopped`).toBeGreaterThanOrEqual(30)
-      return lastAudioAt
+      perSecond = (capture.silenceFrameCount() - windowStart.silenceFrames) / ((now - windowStart.at) / 1000)
+      if (perSecond >= 30)
+        return lastAudioAt
     }
     const lastAudioAt = capture.lastAudioPacketAt()
-    throw new Error(`Hibiki was still sending audio ${timeoutMs} ms later (last audio packet ${lastAudioAt === undefined ? 'never' : `${Date.now() - lastAudioAt} ms ago`}; ${capture.packetCount()} packets received so far, ${capture.silenceFrameCount()} of them Opus silence frames)`)
+    throw new Error(`Hibiki was not sending only silence frames at >= 30/s ${timeoutMs} ms later (last window ${perSecond} silence frames/s; last audio packet ${lastAudioAt === undefined ? 'never' : `${Date.now() - lastAudioAt} ms ago`}; ${capture.packetCount()} packets received so far, ${capture.silenceFrameCount()} of them Opus silence frames)`)
   }
 
   /** The Output Target the renderer's Playing Scene is on (`playingSceneMode` in the player store). */
@@ -282,19 +284,19 @@ test.describe('Hibiki Electron E2E', () => {
       await invokeApi(page, 'player', 'playAmbience', [guildId, ambienceId, { volume: 100, repeatMin: 0, repeatMax: 0 }])
       await expect.poll(async () => (await targetState(page, guildId))?.ambience).toContain(ambienceId)
       await expect(capture.speaking).resolves.toBeUndefined()
-      const ambienceStart = capture.packetCount()
-      await expect.poll(() => capture!.packetCount() - ambienceStart, { timeout: 15_000 }).toBeGreaterThanOrEqual(25)
+      const ambienceStart = capture.audioPacketCount()
+      await expect.poll(() => capture!.audioPacketCount() - ambienceStart, { timeout: 15_000 }).toBeGreaterThanOrEqual(25)
 
       await invokeApi(page, 'player', 'stopAmbience', [guildId, ambienceId])
       await waitForOnlySilence(capture, 3_000)
       await expect.poll(async () => (await targetState(page, guildId))?.ambience ?? []).not.toContain(ambienceId)
 
       // Effect: a one-shot layered input that ends on its own after the file.
-      const effectStart = capture.packetCount()
+      const effectStart = capture.audioPacketCount()
       const effectStartedAt = Date.now()
       const instance = await invokeApi<{ instanceId: string, soundId: string } | undefined>(page, 'player', 'playEffect', [guildId, effectId, { volume: 100 }])
       expect(instance?.soundId).toBe(effectId)
-      await expect.poll(() => capture!.packetCount() - effectStart, { timeout: 10_000 }).toBeGreaterThanOrEqual(25)
+      await expect.poll(() => capture!.audioPacketCount() - effectStart, { timeout: 10_000 }).toBeGreaterThanOrEqual(25)
       const lastEffectAudioAt = await waitForOnlySilence(capture, EFFECT_SECONDS * 1000 + 5_000)
       // The audio stopped because the file played out, not because the effect was cut short.
       expect(lastEffectAudioAt).toBeDefined()
@@ -353,12 +355,13 @@ test.describe('Hibiki Electron E2E', () => {
       await expect.poll(() => playingSceneMode(page)).toBe(LOCAL)
 
       // Local -> Discord: the Scene restarts on Discord and Local is torn down.
-      const beforeDiscord = capture.packetCount()
+      const beforeDiscord = capture.audioPacketCount()
       await targetButton('Discord').click()
-      await expect.poll(() => capture!.packetCount() - beforeDiscord, { timeout: 10_000 }).toBeGreaterThanOrEqual(25)
+      await expect.poll(() => capture!.audioPacketCount() - beforeDiscord, { timeout: 10_000 }).toBeGreaterThanOrEqual(25)
       await expect.poll(async () => (await targetState(page, guildId))?.track?.id).toBe(musicId)
       await expect.poll(async () => (await targetState(page, LOCAL))?.track ?? null).toBeNull()
       expect((await targetState(page, LOCAL))?.ambience ?? []).toHaveLength(0)
+      expect((await targetState(page, LOCAL))?.effects ?? []).toHaveLength(0)
       await expect.poll(() => playingSceneMode(page)).toBe(guildId)
 
       // Discord -> Local: Hibiki sends only silence on Discord and the Scene plays locally again.
