@@ -14,6 +14,7 @@ import {
   updateVisionOpenAiModel,
   updateVisionProvider,
 } from '@/api/config'
+import { fetchUpdateCheckSettings, updateUpdateCheckEnabled } from '@/api/updates'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import SettingsView from './SettingsView.vue'
 
@@ -60,6 +61,11 @@ vi.mock('@/api/config', () => ({
   updateHotkeySettings: vi.fn().mockResolvedValue(undefined),
   fetchLocalOutputDevice: vi.fn().mockResolvedValue(null),
   updateLocalOutputDevice: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/api/updates', () => ({
+  fetchUpdateCheckSettings: vi.fn().mockResolvedValue({ enabled: true }),
+  updateUpdateCheckEnabled: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/api/hotkeys', () => ({
@@ -110,6 +116,37 @@ describe('settingsView', () => {
     await flushPromises()
     const headings = wrapper.findAll('h2')
     expect(headings.some(h => h.text() === 'Storage location')).toBe(true)
+  })
+
+  describe('updates section', () => {
+    it('shows the launch update check as on by default and saves turning it off', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      const toggle = wrapper.find<HTMLInputElement>('#update-check-enabled')
+      expect(toggle.element.checked).toBe(true)
+      await toggle.setValue(false)
+      await flushPromises()
+      expect(updateUpdateCheckEnabled).toHaveBeenCalledWith(false)
+      expect(toggle.element.checked).toBe(false)
+    })
+
+    it('reflects a stored opt-out', async () => {
+      vi.mocked(fetchUpdateCheckSettings).mockResolvedValueOnce({ enabled: false })
+      const wrapper = mountSettings()
+      await flushPromises()
+      expect(wrapper.find<HTMLInputElement>('#update-check-enabled').element.checked).toBe(false)
+    })
+
+    it('reverts the toggle and says so when saving fails', async () => {
+      vi.mocked(updateUpdateCheckEnabled).mockRejectedValueOnce(new Error('disk full'))
+      const wrapper = mountSettings()
+      await flushPromises()
+      const toggle = wrapper.find<HTMLInputElement>('#update-check-enabled')
+      await toggle.setValue(false)
+      await flushPromises()
+      expect(toggle.element.checked).toBe(true)
+      expect(wrapper.find('[data-testid="updates-section"]').text()).toContain('disk full')
+    })
   })
 
   describe('hotkeys section', () => {

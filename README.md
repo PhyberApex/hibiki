@@ -172,12 +172,23 @@ hibiki/
 
 Hibiki stores data as JSON files:
 
-- **`app-config.json`** — Discord token (when set in Settings), bookmarks, custom storage path, Vision to Vibe API key and toggle.
+- **`app-config.json`** — Discord token (when set in Settings), bookmarks, custom storage path, Vision to Vibe API key and toggle, the update check toggle and the last dismissed update.
 - **`sound-tags.json`** — Free-form tags you add to your Music/Ambience files (used by Vision to Vibe matching).
 - **`scenes.json`** — Scene definitions (soundboards with music, ambience, effects).
 - **Sound files** — stored on disk under `music/`, `effects/`, `ambience/` directories.
 
 When running as the Electron app, data lives in the platform's user data directory (e.g. `~/Library/Application Support/hibiki` on macOS). You can override paths via environment variables — see [.env.example](.env.example).
+
+## Privacy
+
+Hibiki has no account, no telemetry and no analytics. It only contacts:
+
+- **Discord** — once you set a bot token, to log the bot in and stream audio to voice channels.
+- **GitHub** — once per launch, one request to the Releases API (`api.github.com`) to see whether a newer version exists. Nothing is downloaded or installed. Turn it off in **Settings → Updates**.
+- **GitHub** — when you open the community scene registry, to fetch its index (`raw.githubusercontent.com`, cached for 24 hours).
+- **Google Fonts** — to load the app's typeface.
+- **Your Vision Provider** (Anthropic, or the Base URL you set) — only when Vision to Vibe is turned on and you analyze an image.
+- **Websites you open** in the Browser tab.
 
 ## E2E tests (real Discord)
 

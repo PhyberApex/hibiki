@@ -1,7 +1,15 @@
 <script setup lang="ts">
+import type { ToastLink } from '@/stores/toast'
+import { openExternal } from '@/api/electron'
+import { logInfo } from '@/audio/audio-element-diagnostics'
 import { useToastStore } from '@/stores/toast'
 
 const toastStore = useToastStore()
+
+function openLink(link: ToastLink) {
+  logInfo(`[toast] Opening ${link.url}`)
+  openExternal(link.url)
+}
 </script>
 
 <template>
@@ -14,10 +22,18 @@ const toastStore = useToastStore()
     >
       <span class="toast-text">{{ toast.text }}</span>
       <button
+        v-if="toast.link"
+        type="button"
+        class="toast-link"
+        @click="openLink(toast.link)"
+      >
+        {{ toast.link.label }}
+      </button>
+      <button
         type="button"
         class="toast-dismiss"
         aria-label="Dismiss notification"
-        @click="toastStore.dismiss(toast.id)"
+        @click="toastStore.dismissByUser(toast.id)"
       >
         ✕
       </button>
@@ -80,6 +96,23 @@ const toastStore = useToastStore()
   background: var(--color-bg-elevated);
   border-color: #fbbf24;
   color: #fbbf24;
+}
+
+.toast-link {
+  flex-shrink: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-accent);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.toast-link:hover {
+  color: var(--color-accent-hover);
 }
 
 .toast-dismiss {

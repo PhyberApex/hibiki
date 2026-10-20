@@ -20,6 +20,12 @@ vi.mock('@/api/hotkeys', () => ({
   onHotkeyFired: vi.fn().mockReturnValue(() => {}),
 }))
 
+const updatesApi = vi.hoisted(() => ({
+  checkForUpdate: vi.fn().mockResolvedValue(null),
+  dismissUpdate: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('@/api/updates', () => updatesApi)
+
 vi.mock('@/api/player', () => ({
   fetchPlayerState: vi.fn().mockResolvedValue([]),
   fetchBotStatus: vi.fn().mockResolvedValue({ ready: true, userTag: 'Bot#0' }),
@@ -44,6 +50,21 @@ const router = createRouter({
 })
 
 describe('app', () => {
+  it('checks for a newer release once on launch and shows it in a toast', async () => {
+    updatesApi.checkForUpdate.mockResolvedValueOnce({ version: '9.9.9', url: 'https://github.com/PhyberApex/hibiki/releases/tag/v9.9.9' })
+    await router.push('/scenes')
+    await router.isReady()
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia(), router],
+      },
+    })
+    await flushPromises()
+    expect(updatesApi.checkForUpdate).toHaveBeenCalled()
+    expect(wrapper.find('.toast-region').text()).toContain('Hibiki 9.9.9 is available.')
+    expect(wrapper.find('.toast-link').text()).toBe('View release')
+  })
+
   it('renders layout with sidebar and content', async () => {
     await router.push('/scenes')
     await router.isReady()

@@ -94,7 +94,7 @@ pnpm test:coverage:frontend               # Frontend only
 
 - **Frontend → Backend:** All communication uses Electron IPC via the `preload.js` bridge.
 - **IPC API:** Defined in `bootstrap-embedded.ts` as the `EmbeddedApi` interface.
-- **Domains:** `player`, `config`, `sounds`, `scenes`, `registry`, `vision` (matching the service structure).
+- **Domains:** `player`, `config`, `sounds`, `scenes`, `registry`, `vision`, `updates` (matching the service structure).
 - Frontend wrappers in `frontend/src/api/` provide typed functions (e.g., `joinChannel()`, `listScenes()`).
 - Audio streaming (Browser feature) uses chunked IPC: `audio:startStream`, `audio:chunk`, `audio:stopStream`.
 
@@ -120,7 +120,7 @@ Stored in `scenes.json`. Import/export bundles scenes with their sound files as 
 ### Storage
 
 Data lives in platform user data directory (e.g., `~/Library/Application Support/hibiki` on macOS):
-- `app-config.json` — Discord token (when set in UI), bookmarks, storage path override, master volume, global hotkey settings (`hotkeys`: enabled + the six Action Hotkeys), Vision to Vibe key + toggle
+- `app-config.json` — Discord token (when set in UI), bookmarks, storage path override, master volume, global hotkey settings (`hotkeys`: enabled + the six Action Hotkeys), Vision to Vibe key + toggle, launch update check (`updates`: enabled + dismissed version)
 - `scenes.json` — Scene definitions (optional `musicMode` — `sequential`/`shuffle`, absent = `single` — carried in exports and Registry bundles; optional `hotkey` on Scenes and Effect items: machine-local, validated unique in `scene-store.ts`, stripped from `.hibiki.zip` exports and dropped on import/registry install)
 - `sound-tags.json` — Sound Tags keyed by `<category>/<soundId>` (see `CONTEXT.md` glossary)
 - `music/`, `effects/`, `ambience/` — Sound files (copied on upload, keyed by UUID)
@@ -177,6 +177,10 @@ ADR-0005. The main process only registers and forwards: `electron/hotkeys.js` ke
 ### Routed Tabs
 
 CONTEXT.md defines **Routed Tab** and **Tab Volume**; ADR-0007 picks the mechanism. All routing state lives in `frontend/src/stores/routed-tabs.ts` (per tab: routed flag and Tab Volume, session-only, never persisted); `BrowserView.vue` is a thin consumer and `App.vue` instantiates the store so a routed tab keeps following the master volume, the Target handover and Discord join/leave while the GM is on any view. Per tab exactly one routing session exists while the tab is routed *and* the active Target can play; every other transition (toggle, handover, leave/rejoin, tab close) is a re-sync of that invariant, serialised per tab. The level sent is Tab Volume × master by `computeVolume()` from the scene playback store, applied instantly on every change of either. Under a Discord Target the session is a keyed effect stream (`browser-<tabId>`, `startEffectStream` with the initial level, `setEffectStreamVolume` live) fed from `captureTabStream` + `captureFromMediaStream`; Scene Stop, the Stop Hotkey and Stop all Effects never touch effect streams, so routed tabs survive them. Under the Local Target the session mutes the view (`browserView:setAudioMuted`) and replays the same tab capture through `frontend/src/audio/routed-tab-local-playback.ts` (a `GainNode` bound to the Output Device like the Local sink); the backend is not involved. A tab that is not routed plays raw from its `WebContentsView` at the site's own level under either Target. `e2e/tests/routed-tab-local.e2e.spec.ts` drives the Local path for real (capture, mute IPC, gain) with no Discord token.
+
+### Update Notice
+
+`src/updates/update-check.ts`: at launch the renderer (`frontend/src/updates/update-notice.ts`, called from `App.vue`) asks `updates.check()`, which makes one GET to the GitHub Releases API (`releases/latest`, 5 s timeout, never blocking startup) and returns a newer release unless the Settings toggle is off (then no request at all) or that version was dismissed. A newer release shows a sticky toast with a "View release" link; only the GM's dismiss (the toast's `onDismiss`, not a timeout or eviction) remembers the version. Notice only: no download, no install, so Homebrew/AUR/installers keep updating. The README's Privacy section lists it among what the app contacts.
 
 ### Logging
 

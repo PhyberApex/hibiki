@@ -3,19 +3,30 @@ import { ref } from 'vue'
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info'
 
+export interface ToastLink {
+  label: string
+  url: string
+}
+
 export interface Toast {
   id: number
   type: ToastType
   text: string
   key?: string
+  link?: ToastLink
 }
 
 export interface ToastInput {
   type: ToastType
   text: string
-  durationMs?: number
+  /** `null` keeps the toast until it is dismissed. */
+  durationMs?: number | null
   /** A later toast with the same key replaces the earlier one in place instead of stacking. */
   key?: string
+  /** Opened in the system browser from the toast. */
+  link?: ToastLink
+  /** Runs when the GM dismisses the toast, not when it times out or makes room for a newer one. */
+  onDismiss?: () => void
 }
 
 export const MAX_VISIBLE_TOASTS = 3
@@ -24,6 +35,7 @@ export const DEFAULT_TOAST_DURATION_MS = 4000
 export const useToastStore = defineStore('toast', () => {
   const toasts = ref<Toast[]>([])
   const timers = new Map<number, ReturnType<typeof setTimeout>>()
+  const dismissHandlers = new Map<number, () => void>()
   let nextId = 1
 
   function dismiss(id: number) {
@@ -32,10 +44,22 @@ export const useToastStore = defineStore('toast', () => {
       clearTimeout(timer)
       timers.delete(id)
     }
+    dismissHandlers.delete(id)
     toasts.value = toasts.value.filter(t => t.id !== id)
   }
 
-  function show({ type, text, durationMs = DEFAULT_TOAST_DURATION_MS, key }: ToastInput): number {
+  function dismissByUser(id: number) {
+    const onDismiss = dismissHandlers.get(id)
+    dismiss(id)
+    onDismiss?.()
+  }
+
+  function startTimer(id: number, durationMs: number | null) {
+    if (durationMs !== null)
+      timers.set(id, setTimeout(dismiss, durationMs, id))
+  }
+
+  function show({ type, text, durationMs = DEFAULT_TOAST_DURATION_MS, key, link, onDismiss }: ToastInput): number {
     // Warnings and errors must reach hibiki.log; the main process captures renderer warn/error.
     if (type === 'error')
       console.error(`[toast] ${text}`)
@@ -45,19 +69,26 @@ export const useToastStore = defineStore('toast', () => {
     const existing = key ? toasts.value.find(t => t.key === key) : undefined
     if (existing) {
       clearTimeout(timers.get(existing.id))
-      Object.assign(existing, { type, text })
-      timers.set(existing.id, setTimeout(dismiss, durationMs, existing.id))
+      timers.delete(existing.id)
+      Object.assign(existing, { type, text, link })
+      if (onDismiss)
+        dismissHandlers.set(existing.id, onDismiss)
+      else
+        dismissHandlers.delete(existing.id)
+      startTimer(existing.id, durationMs)
       return existing.id
     }
 
     const id = nextId++
-    toasts.value.push({ id, type, text, key })
-    // Oldest toast makes room once more than the visible cap are queued.
+    toasts.value.push({ id, type, text, key, link })
+    if (onDismiss)
+      dismissHandlers.set(id, onDismiss)
+    startTimer(id, durationMs)
+    // Oldest timed toast makes room once more than the visible cap are queued; a sticky one only goes when all are sticky.
     while (toasts.value.length > MAX_VISIBLE_TOASTS)
-      dismiss(toasts.value[0].id)
-    timers.set(id, setTimeout(dismiss, durationMs, id))
+      dismiss((toasts.value.find(t => timers.has(t.id)) ?? toasts.value[0]).id)
     return id
   }
 
-  return { toasts, show, dismiss }
+  return { toasts, show, dismiss, dismissByUser }
 })

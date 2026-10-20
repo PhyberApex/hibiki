@@ -80,4 +80,46 @@ describe('toast store', () => {
     vi.advanceTimersByTime(1)
     expect(store.toasts.map(t => t.text)).not.toContain('Master volume 70%')
   })
+
+  it('keeps a sticky toast (durationMs: null) until dismissed', () => {
+    const store = useToastStore()
+    const id = store.show({ type: 'info', text: 'Hibiki 1.7.0 is available', durationMs: null })
+    vi.advanceTimersByTime(60 * 60 * 1000)
+    expect(store.toasts).toHaveLength(1)
+    store.dismiss(id)
+    expect(store.toasts).toHaveLength(0)
+  })
+
+  it('carries a link for the toast to render', () => {
+    const store = useToastStore()
+    store.show({ type: 'info', text: 'update', link: { label: 'View release', url: 'https://github.com/x' } })
+    expect(store.toasts[0].link).toEqual({ label: 'View release', url: 'https://github.com/x' })
+  })
+
+  it('calls onDismiss only when the GM dismisses the toast, not on timeout or eviction', () => {
+    const store = useToastStore()
+    const onDismiss = vi.fn()
+    store.show({ type: 'info', text: 'timed', onDismiss })
+    vi.advanceTimersByTime(4000)
+    store.show({ type: 'info', text: 'evicted', onDismiss })
+    for (let i = 0; i < MAX_VISIBLE_TOASTS; i++)
+      store.show({ type: 'success', text: `t${i}` })
+    expect(store.toasts.map(t => t.text)).not.toContain('evicted')
+    expect(onDismiss).not.toHaveBeenCalled()
+    store.toasts.slice().forEach(t => store.dismiss(t.id))
+
+    const id = store.show({ type: 'info', text: 'by hand', durationMs: null, onDismiss })
+    store.dismissByUser(id)
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+    expect(store.toasts.map(t => t.text)).not.toContain('by hand')
+  })
+
+  it('keeps a sticky toast when newer timed toasts need room', () => {
+    const store = useToastStore()
+    store.show({ type: 'info', text: 'sticky', durationMs: null })
+    for (let i = 0; i < MAX_VISIBLE_TOASTS + 1; i++)
+      store.show({ type: 'success', text: `t${i}` })
+    expect(store.toasts).toHaveLength(MAX_VISIBLE_TOASTS)
+    expect(store.toasts.map(t => t.text)).toEqual(['sticky', 't2', 't3'])
+  })
 })

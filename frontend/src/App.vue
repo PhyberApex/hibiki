@@ -9,6 +9,7 @@ import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
 import { useRoutedTabsStore } from '@/stores/routed-tabs'
 import { useScenePlaybackStore } from '@/stores/scene-playback'
+import { showUpdateNotice } from '@/updates/update-notice'
 
 declare const __APP_VERSION__: string
 const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
@@ -71,6 +72,8 @@ onMounted(() => {
     if (!player.botStatus?.ready)
       startPollingWhenDisconnected()
   })
+  // In the background: the GitHub request has its own short timeout and never holds up launch.
+  void showUpdateNotice()
   fetchStorageWarnings().then((warnings) => {
     storageWarnings.value = warnings
   }).catch((err) => {

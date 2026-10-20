@@ -7,6 +7,7 @@ import type { SecretCodec } from './persistence'
 import type { OutputTargetKind } from './player/output-target'
 import type { MusicMode } from './scenes/scene-store'
 import type { SoundCategory } from './sound/sound.types'
+import type { AvailableUpdate, UpdateCheckSettings } from './updates/update-check'
 import type { VibeMatches } from './vision/vibe-matching'
 import type { VisionSettingsState } from './vision/vision-settings'
 import type { VibeAnalysis, VisionProviderId } from './vision/vision.service'
@@ -30,6 +31,8 @@ import { importScene } from './scenes/scene-import'
 import { createSceneRegistry } from './scenes/scene-registry'
 import { createSceneStore } from './scenes/scene-store'
 import { createSoundLibrary } from './sound/sound-library'
+import { createUpdateCheck } from './updates/update-check'
+import { getVersion } from './version'
 import { matchVibeLibrary } from './vision/vibe-matching'
 import { createVisionSettings } from './vision/vision-settings'
 import { createVisionService } from './vision/vision.service'
@@ -138,6 +141,12 @@ export interface EmbeddedApi {
     analyzeImageVibe: (imagePath: string) => Promise<VibeAnalysis>
     matchVibe: (vibeTags: string[]) => Promise<VibeMatches>
   }
+  updates: {
+    getSettings: () => Promise<UpdateCheckSettings>
+    setEnabled: (enabled: boolean) => Promise<void>
+    check: () => Promise<AvailableUpdate | null>
+    dismiss: (version: string) => Promise<void>
+  }
 }
 
 export interface EmbeddedApp {
@@ -207,6 +216,8 @@ export function createShutdownHandler(
 export interface EmbeddedAppOptions {
   /** Delivers the Local Target's mix to the renderer (the main process owns the window); see ADR-0004. */
   localSink?: import('./audio/local-sink-pump').LocalSink
+  /** The running app's version (`app.getVersion()`), which the update check compares against. */
+  appVersion?: string
 }
 
 export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOptions = {}): Promise<EmbeddedApp> {
@@ -236,6 +247,7 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
   const player = createPlayer(discord, sounds, { localSink: options.localSink })
 
   const visionSettings = createVisionSettings(config, appConfig)
+  const updateCheck = createUpdateCheck({ store: appConfig, currentVersion: options.appVersion ?? getVersion(), fetch })
   const vision = createVisionService({ getProviderConfig: visionSettings.getProviderConfig })
 
   // Read scenes.json, app-config.json, and (via sounds.list, which reads the
@@ -389,6 +401,12 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
         const [music, ambience] = await Promise.all([sounds.list('music'), sounds.list('ambience')])
         return matchVibeLibrary(vibeTags, { music, ambience })
       },
+    },
+    updates: {
+      getSettings: () => updateCheck.getSettings(),
+      setEnabled: enabled => updateCheck.setEnabled(enabled),
+      check: () => updateCheck.check(),
+      dismiss: version => updateCheck.dismiss(version),
     },
   }
 
