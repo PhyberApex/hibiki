@@ -100,7 +100,14 @@ The `.actrc` file in the repo root configures `act` to use the correct Docker im
 `E2E_SIDECAR_TOKEN` is the token of a **second** bot that is in the same test server with permission to connect to the voice channel. It never plays anything; it observes Hibiki from the outside:
 
 - **join / leave** – asserts Hibiki's voice state (through `sidecar-helper.ts#voiceChannelOf`) is the configured channel after joining and empty after leaving. Without the sidecar, these tests only check Hibiki's own UI.
-- **music played to Discord reaches another member** – uploads a WAV, joins the configured channel, starts Music, then the sidecar joins the same channel (muted, not deafened) and counts the Opus packets Hibiki sends. The test fails unless Discord reports Hibiki as speaking **and** packets arrive. It is skipped when the sidecar is not configured.
+- **music played to Discord reaches another member** – uploads a WAV, joins the configured channel, starts Music, then the sidecar joins the same channel (muted, not deafened) and counts the Opus packets Hibiki sends. The test fails unless Discord reports Hibiki as speaking **and** packets carrying audio arrive. It is skipped when the sidecar is not configured.
+- **ambience and effects reach another member and stop** – Ambience (repeat 0-0 s) and a 3 s Effect each deliver audio; after `stopAmbience`, and after the Effect plays out, only Opus silence frames arrive.
+- **Output Target handover** – plays a Scene on Local, switches to Discord (audio arrives, Local state empties), then back to Local (Discord gets only silence frames, Local plays the track again); `playingSceneMode` follows the Target.
+- **silence is sent, not dropped** – with silent Music playing, Hibiki keeps sending at least 30 packets/s.
+
+"Stopped" never means Hibiki stops sending: the voice player sends a 3-byte Opus silence frame (`F8 FF FE`) every 20 ms while connected (`maxMissedFrames: Infinity`, see ADR-0003), and Discord counts that as speaking. The sidecar tells silence frames from audio, so "stopped" is asserted as "only silence frames, at ~50/s". The silent WAV fixtures still count as audio: Hibiki encodes stereo, so encoded digital silence is `FC FF FE`.
+
+The ambience/effects and handover tests also check their `join`/`playAmbience`/`playEffect`/target-switch lines in `hibiki.log`. Each test removes its uploads and leaves the channel in `finally`.
 
 If the sidecar token is set but the sidecar cannot log in, or Hibiki never reaches `ready`, the run fails rather than silently skipping the Discord-side checks.
 

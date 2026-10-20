@@ -65,11 +65,23 @@ export async function voiceChannelOf(sidecar: Client, guildId: string, userId: s
   return member.voice.channelId ?? guild.voiceStates.cache.get(userId)?.channelId ?? null
 }
 
+/**
+ * The Opus frame `@discordjs/voice` sends in place of audio when its resource yields nothing.
+ * Encoded digital silence from a file differs: Hibiki encodes stereo, so its TOC byte is 0xFC, not 0xF8.
+ */
+const SILENCE_FRAME = Buffer.from([0xF8, 0xFF, 0xFE])
+
 export interface AudioCapture {
   /** Resolves once Discord reports the user as speaking. */
   speaking: Promise<void>
   /** Number of Opus packets received from the user so far. */
   packetCount: () => number
+  /** Number of those packets that carried encoded audio, i.e. were not the voice player's silence frame. */
+  audioPacketCount: () => number
+  /** How many of those packets were the 3-byte Opus silence frame the voice player sends when it has nothing to play. */
+  silenceFrameCount: () => number
+  /** `Date.now()` of the last packet that was not a silence frame (encoded audio), or `undefined` before the first. */
+  lastAudioPacketAt: () => number | undefined
   /** Leaves the voice channel and stops counting. */
   stop: () => void
 }
@@ -113,9 +125,15 @@ export async function captureAudioFrom(
   })
 
   let packets = 0
+  let silenceFrames = 0
+  let lastAudioAt: number | undefined
   const opus = receiver.subscribe(userId, { end: { behavior: EndBehaviorType.Manual } })
-  opus.on('data', () => {
+  opus.on('data', (packet: Buffer) => {
     packets += 1
+    if (packet.equals(SILENCE_FRAME))
+      silenceFrames += 1
+    else
+      lastAudioAt = Date.now()
   })
   opus.on('error', (err) => {
     console.warn('[sidecar] opus receive stream error:', err.message)
@@ -124,6 +142,9 @@ export async function captureAudioFrom(
   return {
     speaking,
     packetCount: () => packets,
+    silenceFrameCount: () => silenceFrames,
+    audioPacketCount: () => packets - silenceFrames,
+    lastAudioPacketAt: () => lastAudioAt,
     stop: () => {
       opus.destroy()
       connection.destroy()
