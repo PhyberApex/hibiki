@@ -192,9 +192,11 @@ Hibiki has no account, no telemetry and no analytics. It only contacts:
 
 ## Code signing policy
 
+<!-- Keep in sync with .github/release-notes/code-signing-policy.md, which is appended to every GitHub Release. -->
+
 Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 
-Windows builds are being moved to signing through SignPath Foundation. Until the first signed release ships, the Windows builds on the Releases page are unsigned. macOS builds are not signed (see the macOS note under [Download](#download)).
+Windows builds are being moved to signing through SignPath Foundation. Until the first signed release ships, the Windows builds on the Releases page are unsigned.
 
 **Team roles.** Hibiki has one maintainer, [@PhyberApex](https://github.com/PhyberApex), who holds every role today:
 
@@ -206,6 +208,7 @@ Windows builds are being moved to signing through SignPath Foundation. Until the
 
 - Release binaries are built on GitHub Actions from the tagged release commit, never on a workstation.
 - Every signing request is approved manually in SignPath by an approver.
+- Every team member has multi-factor authentication turned on for GitHub.
 - Only Hibiki's own binaries are signed. Bundled upstream open-source binaries, such as the prebuilt `@snazzah/davey` native module, ship unsigned as their upstream projects publish them, as SignPath's terms allow.
 - What the app contacts over the network is listed under [Privacy](#privacy).
 

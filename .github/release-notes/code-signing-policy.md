@@ -2,7 +2,7 @@
 
 Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 
-Windows builds are being moved to signing through SignPath Foundation. Until the first signed release ships, the Windows builds on this page are unsigned. macOS builds are not signed (see the [macOS note](https://github.com/PhyberApex/hibiki#download)).
+Windows builds are being moved to signing through SignPath Foundation. Until the first signed release ships, the Windows builds on this page are unsigned.
 
 **Team roles.** Hibiki has one maintainer, [@PhyberApex](https://github.com/PhyberApex), who holds every role today:
 
@@ -14,6 +14,7 @@ Windows builds are being moved to signing through SignPath Foundation. Until the
 
 - Release binaries are built on GitHub Actions from the tagged release commit, never on a workstation.
 - Every signing request is approved manually in SignPath by an approver.
+- Every team member has multi-factor authentication turned on for GitHub.
 - Only Hibiki's own binaries are signed. Bundled upstream open-source binaries, such as the prebuilt `@snazzah/davey` native module, ship unsigned as their upstream projects publish them, as SignPath's terms allow.
 - What the app contacts over the network is listed in the README's [Privacy](https://github.com/PhyberApex/hibiki#privacy) section.
 
