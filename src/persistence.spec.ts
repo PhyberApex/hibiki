@@ -52,6 +52,17 @@ describe('createAppConfig', () => {
     const entries = await readdir(dataDir)
     expect(entries).not.toContain('app-config.json.tmp')
   })
+
+  it('delete removes the key from the file, leaving the others', async () => {
+    const appConfig = createAppConfig(config)
+    await appConfig.set('discord.token', 'abc123')
+    await appConfig.set('kept', 'yes')
+    await appConfig.delete('discord.token')
+    const data = JSON.parse(readFileSync(join(tempRoot, 'data', 'app-config.json'), 'utf-8'))
+    expect('discord.token' in data).toBe(false)
+    expect(data.kept).toBe('yes')
+    expect(await appConfig.get('discord.token')).toBeNull()
+  })
 })
 
 describe('createAppConfig with a corrupt store', () => {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  clearDiscordToken,
   fetchAccessibilitySettings,
   fetchActiveOutputTarget,
   fetchDiscordConfig,
@@ -58,6 +59,16 @@ describe('config API', () => {
       domain: 'config',
       method: 'setDiscordToken',
       args: ['token123'],
+    })
+  })
+
+  it('clearDiscordToken uses apiCall', async () => {
+    mockInvoke.mockResolvedValue({ tokenConfigured: false, encrypted: true })
+    expect(await clearDiscordToken()).toEqual({ tokenConfigured: false, encrypted: true })
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'clearDiscordToken',
+      args: [],
     })
   })
 

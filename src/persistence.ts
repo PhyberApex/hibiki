@@ -74,6 +74,14 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
       log.info(SECRET_KEYS.has(key) ? `Set "${key}" (secret, ${value ? 'non-empty' : 'cleared'})` : `Set "${key}" = ${value.length > 120 ? `${value.slice(0, 117)}...` : value}`)
       return store.update(data => ({ next: { ...data, [key]: toStore }, result: undefined }))
     },
+    /** Removes the key entirely (absent afterwards, not empty). */
+    async delete(key: string): Promise<void> {
+      log.info(`Deleted "${key}"`)
+      return store.update((data) => {
+        const { [key]: _removed, ...next } = data
+        return { next, result: undefined }
+      })
+    },
     /** Whether secret keys (`discord.token`, `vision.apiKey`) are being encrypted at rest right now. */
     secretsEncrypted: codec.available,
   }

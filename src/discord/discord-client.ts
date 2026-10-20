@@ -81,6 +81,18 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
     }
   }
 
+  /**
+   * Takes the bot offline even while a login is still in flight (unlike
+   * `destroy`, which only acts on a ready client), leaving a fresh client
+   * for the next `login`/`reconnect`.
+   */
+  async function logout(): Promise<void> {
+    log.info(`Logging out (client ${client.isReady() ? 'ready' : 'not ready'})`)
+    const old = client
+    client = attachClientLogging(new Client(CLIENT_OPTIONS))
+    await old.destroy()
+  }
+
   async function reconnect(): Promise<void> {
     log.info('Reconnecting…')
     await destroy()
@@ -149,6 +161,7 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
   return {
     login,
     destroy,
+    logout,
     reconnect,
     getClient,
     leaveVoiceChannel,

@@ -4,6 +4,8 @@ export interface DiscordConfig {
   tokenConfigured: boolean
   /** False when this system can't encrypt secrets at rest (e.g. Linux without a keyring) — the token is stored as plain text. */
   encrypted: boolean
+  /** The token comes from the DISCORD_TOKEN environment variable, which the app cannot remove. */
+  fromEnvironment?: boolean
 }
 
 export interface StorageConfig {
@@ -64,6 +66,12 @@ export function fetchDiscordConfig(): Promise<DiscordConfig> {
 export function updateDiscordToken(token: string): Promise<DiscordConfig> {
   requireElectron()
   return apiCall('config', 'setDiscordToken', [token])
+}
+
+/** Removes the stored token: the bot goes offline, voice ends and Local becomes active if Discord was. */
+export function clearDiscordToken(): Promise<DiscordConfig> {
+  requireElectron()
+  return apiCall('config', 'clearDiscordToken', [])
 }
 
 export function fetchStoragePath(): Promise<StorageConfig> {

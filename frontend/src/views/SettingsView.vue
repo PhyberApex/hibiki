@@ -3,6 +3,7 @@ import type { DiscordConfig, HotkeySettings, LocalOutputDevice, VisionConfig, Vi
 import type { HotkeyFailure } from '@/api/hotkeys'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
+  clearDiscordToken,
   fetchDiscordConfig,
   fetchHotkeySettings,
   fetchLocalOutputDevice,
@@ -27,16 +28,19 @@ import {
 import { fetchHotkeyStatus } from '@/api/hotkeys'
 import { fetchLogPath, openLogFolder } from '@/api/logs'
 import { fetchUpdateCheckSettings, updateUpdateCheckEnabled } from '@/api/updates'
+import { logInfo } from '@/audio/audio-element-diagnostics'
 import { listOutputDevices, outputDeviceRouter } from '@/audio/output-device'
 import HotkeyRecorder from '@/components/HotkeyRecorder.vue'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
+import { useScenePlaybackStore } from '@/stores/scene-playback'
 
 const player = usePlayerStore()
 const accessibility = useAccessibilityStore()
 const discordConfig = ref<DiscordConfig | null>(null)
 const tokenInput = ref('')
 const saving = ref(false)
+const removing = ref(false)
 const message = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
 const storagePath = ref<string | null>(null)
@@ -187,6 +191,30 @@ async function saveToken() {
   }
   finally {
     saving.value = false
+  }
+}
+
+async function removeToken() {
+  // eslint-disable-next-line no-alert -- simple confirm for destructive action
+  if (!confirm('Remove the Discord bot token? The bot goes offline, and you will need to paste the token again to use Discord.'))
+    return
+  removing.value = true
+  message.value = null
+  try {
+    // Stop the renderer's side of a Scene playing on Discord while its voice connection still exists.
+    if (!player.isLocalActive)
+      useScenePlaybackStore().stopScene()
+    discordConfig.value = await clearDiscordToken()
+    await player.resetAfterDiscordTokenRemoved()
+    logInfo('[settings] Discord token removed')
+    message.value = { type: 'success', text: 'Token removed. The bot is offline; playback now uses this computer.' }
+  }
+  catch (e) {
+    console.error('[settings] Could not remove the Discord token:', e)
+    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t remove the token. Try again.' }
+  }
+  finally {
+    removing.value = false
   }
 }
 
@@ -506,12 +534,26 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
           <button
             type="button"
             class="btn btn-primary"
+            data-testid="discord-token-save"
             :disabled="saving || !tokenInput.trim()"
             @click="saveToken"
           >
             {{ saving ? 'Saving…' : 'Save' }}
           </button>
+          <button
+            v-if="discordConfig?.tokenConfigured && !discordConfig.fromEnvironment"
+            type="button"
+            class="btn btn-ghost"
+            data-testid="discord-token-remove"
+            :disabled="removing || saving"
+            @click="removeToken"
+          >
+            {{ removing ? 'Removing…' : 'Remove' }}
+          </button>
         </div>
+        <p v-if="discordConfig?.fromEnvironment" class="field-hint">
+          The token comes from the DISCORD_TOKEN environment variable; unset it to remove the token.
+        </p>
         <p v-if="discordConfig && !discordConfig.encrypted" class="field-hint field-hint-warning">
           Not encrypted on this system — stored as plain text.
         </p>

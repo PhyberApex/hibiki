@@ -613,6 +613,35 @@ describe('createPlayer', () => {
     })
   })
 
+  describe('disconnectAllVoice', () => {
+    it('leaves voice in every Discord guild and keeps the Local Target playing', async () => {
+      const connections: Record<string, FakeConnection> = {
+        'guild-1': createFakeConnection('channel-a'),
+        'guild-2': createFakeConnection('channel-b'),
+      }
+      ;(voice.joinVoiceChannel as jest.Mock)
+        .mockReturnValueOnce(connections['guild-1'])
+        .mockReturnValueOnce(connections['guild-2'])
+      ;(voice.getVoiceConnection as jest.Mock).mockImplementation((guildId: string) => connections[guildId])
+      const sounds = createFakeSoundLibrary({ getFile: jest.fn().mockResolvedValue({ id: 'x', name: 'X', filename: 'x.mp3', category: 'music', path: '/x.mp3' }) })
+      const player = createPlayer(createFakeDiscordClient(), sounds, { localSink: { start: jest.fn(), write: jest.fn(), stop: jest.fn() } })
+      await player.connect(fakeChannelFor('guild-1'))
+      await player.connect(fakeChannelFor('guild-2'))
+      await player.playMusic(LOCAL_TARGET_ID, 'x', { volume: 50 })
+      const localEngine = getEngineMock()
+      const stateChanged = jest.fn()
+      player.onStateChanged(stateChanged)
+
+      await player.disconnectAllVoice()
+
+      expect(connections['guild-1'].destroy).toHaveBeenCalledTimes(1)
+      expect(connections['guild-2'].destroy).toHaveBeenCalledTimes(1)
+      expect(localEngine.stopAllMusic).not.toHaveBeenCalled()
+      expect((await player.getState()).map(s => s.targetId)).toEqual([LOCAL_TARGET_ID])
+      expect(stateChanged).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('destroyAll', () => {
     it('destroys every connected guild\'s manager and clears live state', async () => {
       const connectionA = createFakeConnection('channel-a')
