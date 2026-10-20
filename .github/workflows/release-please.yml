@@ -22,6 +22,20 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
+  release-notes:
+    if: needs.release-please.outputs.release_created == 'true'
+    needs: release-please
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Append the Code signing policy to the release notes
+        run: .github/scripts/append-release-policy.sh "${{ needs.release-please.outputs.tag_name }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   checks:
     if: needs.release-please.outputs.release_created == 'true'
     needs: release-please
