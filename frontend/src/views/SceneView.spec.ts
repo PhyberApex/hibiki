@@ -1876,7 +1876,7 @@ describe('sceneView — accessible editor controls', () => {
     })
   })
 
-  it('names every unlabelled editor control after its sound', async () => {
+  it('names each per-sound editor control after its sound', async () => {
     const wrapper = await mountScene()
     const labels = wrapper.findAll('[aria-label]').map(el => el.attributes('aria-label'))
     expect(labels).toEqual(expect.arrayContaining([

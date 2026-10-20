@@ -113,4 +113,4 @@ If the sidecar token is set but the sidecar cannot log in, or Hibiki never reach
 
 ## Local Target test (no secrets)
 
-`tests/local-target.e2e.spec.ts` seeds a throwaway profile (`HIBIKI_USER_DATA_DIR`) and plays Music, Ambience and an Effect through the Local Target with no Discord token. Run it on its own with `pnpm exec playwright test tests/local-target.e2e.spec.ts` (under `xvfb-run` on a headless Linux box); CI runs it in the `e2e-local` job.
+`tests/local-target.e2e.spec.ts` seeds a throwaway profile (`HIBIKI_USER_DATA_DIR`) and plays Music, Ambience and an Effect through the Local Target with no Discord token. `tests/scene-ui.e2e.spec.ts` does the same through the UI: it creates a Scene in the editor, plays, toggles, triggers and stops it from the Scene view, moves the master volume and deletes it. Run either on its own with `pnpm exec playwright test tests/<file>` (under `xvfb-run` on a headless Linux box); CI runs both in the `e2e-local` job.

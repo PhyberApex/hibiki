@@ -103,7 +103,7 @@ test('creates, plays, edits live, stops and deletes a Scene through the UI on th
   await page.getByRole('button', { name: 'New scene' }).click()
   await page.getByLabel('Scene name').fill(SCENE_NAME)
   await page.getByRole('button', { name: 'Create', exact: true }).click()
-  await expect(page.getByRole('heading', { name: SCENE_NAME })).toBeVisible()
+  await expect(page.getByRole('heading', { name: SCENE_NAME, exact: true })).toBeVisible()
 
   await page.getByLabel('Add music').selectOption({ label: MUSIC.name })
   await expect(page.getByLabel(`Loop ${MUSIC.name}`)).toBeChecked()
@@ -111,6 +111,9 @@ test('creates, plays, edits live, stops and deletes a Scene through the UI on th
 
   await page.getByLabel('Add ambience').selectOption({ label: AMBIENCE.name })
   await expect(page.getByLabel(`Enable ${AMBIENCE.name}`)).toBeChecked()
+  // 0-0 is the default, so move off it first: the save proves the selects are wired.
+  await page.getByLabel(`Shortest repeat interval for ${AMBIENCE.name}`).selectOption('5')
+  await expect.poll(async () => (await listScenes())[0]?.ambience[0]).toMatchObject({ repeatMin: 5, repeatMax: 5 })
   await page.getByLabel(`Shortest repeat interval for ${AMBIENCE.name}`).selectOption('0')
   await page.getByLabel(`Longest repeat interval for ${AMBIENCE.name}`).selectOption('0')
   await setRange(page.getByLabel(`Volume for ${AMBIENCE.name}`), 40)
@@ -132,6 +135,12 @@ test('creates, plays, edits live, stops and deletes a Scene through the UI on th
   await expect.poll(async () => (await localState())?.ambience ?? [], { timeout: 5_000 }).toContain(AMBIENCE.id)
   await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible()
   await expect(page.getByText(`${MUSIC.name} · 1 ambience`)).toBeVisible()
+  // The Scene list badges the Playing Scene; going there and back does not stop it.
+  await page.getByRole('link', { name: 'Scenes', exact: true }).click()
+  await expect(page.getByRole('link', { name: new RegExp(SCENE_NAME) }).getByLabel('Playing locally')).toBeVisible()
+  await page.getByRole('link', { name: new RegExp(SCENE_NAME) }).click()
+  await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible()
+  expect((await localState())?.track?.id).toBe(MUSIC.id)
 
   // 3. Ambience follows its card's toggle.
   await page.getByLabel(`Enable ${AMBIENCE.name}`).uncheck()
@@ -173,5 +182,6 @@ test('creates, plays, edits live, stops and deletes a Scene through the UI on th
   await expect.poll(logText).toContain('Local sink started in the renderer')
   const log = logText()
   expect(log).not.toMatch(/Local sink (failed|deviceLost)/)
+  expect(log).not.toContain('Local sink AudioContext suspended')
   expect(log).not.toMatch(/\[error\]\s+\[renderer\]\s+\[scenes?\]/)
 })
