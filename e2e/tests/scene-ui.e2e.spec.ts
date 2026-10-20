@@ -134,7 +134,9 @@ test('creates, plays, edits live, stops and deletes a Scene through the UI on th
   await expect.poll(async () => (await localState())?.track?.id, { timeout: 5_000 }).toBe(MUSIC.id)
   await expect.poll(async () => (await localState())?.ambience ?? [], { timeout: 5_000 }).toContain(AMBIENCE.id)
   await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible()
-  await expect(page.getByText(`${MUSIC.name} · 1 ambience`)).toBeVisible()
+  // The nav's LIVE badge is the indicator at every width; the now-playing line only shows in the compact layout.
+  await expect(page.getByTitle('Scene is playing').filter({ visible: true })).toBeVisible()
+  await expect(page.locator('.now-playing-line')).toHaveText(`${MUSIC.name} · 1 ambience`)
   // The Scene list badges the Playing Scene; going there and back does not stop it.
   await page.getByRole('link', { name: 'Scenes', exact: true }).click()
   await expect(page.getByRole('link', { name: new RegExp(SCENE_NAME) }).getByLabel('Playing locally')).toBeVisible()
