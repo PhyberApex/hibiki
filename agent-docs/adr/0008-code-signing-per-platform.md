@@ -29,7 +29,7 @@ No Windows route gives instant SmartScreen trust any more. Reputation builds up 
 
 ### macOS: deferred
 
-No Apple Developer Program for now. **Trigger to revisit:** the first Mac user who is not the maintainer asks for a signed build. Until then the `xattr -cr` note in the README and on the docs site (`docs/index.md`, `docs/compare.md`) stays as it is, and no follow-up issue is filed. When the trigger fires, the route is the one in "macOS options" above: `osxSign` + `osxNotarize` in `forge.config.js`, the certificate and notarization credentials as GitHub Actions secrets, and the README note replaced by a plain "the app is signed and notarized".
+No Apple Developer Program for now. **Trigger to revisit:** the first Mac user who is not the maintainer asks for a signed build. Until then the `xattr -cr` note in the README and on the docs site (`docs/index.md`), and the quarantine mention in `docs/compare.md`, stay as they are, and no follow-up issue is filed. When the trigger fires, the route is the one in "macOS options" above: `osxSign` + `osxNotarize` in `forge.config.js`, the certificate and notarization credentials as GitHub Actions secrets, and the README note replaced by a plain "the app is signed and notarized".
 
 ### Windows: Plan A SignPath Foundation, Plan B Certum Open Source Code Signing
 
