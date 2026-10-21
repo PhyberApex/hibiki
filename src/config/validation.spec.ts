@@ -22,8 +22,9 @@ describe('validationSchema', () => {
   })
 
   it('ignores env keys it does not own', () => {
-    const result = Joi.attempt({ PATH: '/usr/bin', HOME: 42 }, validationSchema)
-    expect(result.PATH).toBe('/usr/bin')
+    const { error, value } = validationSchema.validate({ PATH: '/usr/bin', HOME: 42 })
+    expect(error).toBeUndefined()
+    expect(value).toMatchObject({ PATH: '/usr/bin', HOME: 42 })
   })
 
   it.each([

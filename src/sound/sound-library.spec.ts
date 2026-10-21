@@ -245,7 +245,7 @@ describe('sound library edge cases', () => {
     await expect(lib.canDecode('effects', saved.id)).resolves.toBe(false)
   })
 
-  it('save gives two uploads with the same name distinct ids', async () => {
+  it('save keys each upload by slug and upload time, so a repeated name gets its own file', async () => {
     const now = jest.spyOn(Date, 'now')
     now.mockReturnValueOnce(1000).mockReturnValueOnce(2000)
     const lib = createSoundLibrary(config)

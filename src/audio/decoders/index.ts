@@ -56,7 +56,7 @@ export async function canDecode(filePath: string): Promise<boolean> {
   }
   const decodable = await decoder.probe(filePath)
   if (!decodable)
-    log.warn(`${basename(filePath)} has a "${ext}" extension but its header does not look like that format; renderer fallback will be used`)
+    log.warn(`${basename(filePath)} has a "${ext}" extension but its header is not that format, or a variant the backend decoder does not support; renderer fallback will be used`)
   return decodable
 }
 

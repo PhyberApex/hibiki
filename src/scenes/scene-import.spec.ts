@@ -191,4 +191,15 @@ describe('importScene', () => {
     const scene = await importScene(config, createManifestZip(manifest))
     expect(scene.music[0]!.soundId).toBe('Lost Theme')
   })
+
+  it('never reuses an id from the archive, so an existing scene with that id survives', async () => {
+    const existing = await importScene(config, createManifestZip(makeManifest({ displayName: 'Original' })))
+    const clash = await importScene(config, createManifestZip(makeManifest({
+      displayName: 'Clash',
+      scene: { id: existing.id, music: [], ambience: [], effects: [] },
+    })))
+    expect(clash.id).not.toBe(existing.id)
+    const { createSceneStore } = await import('./scene-store')
+    expect((await createSceneStore(config).get(existing.id))?.name).toBe('Original')
+  })
 })

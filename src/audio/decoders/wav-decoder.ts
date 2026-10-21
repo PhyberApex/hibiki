@@ -17,7 +17,14 @@ interface WavFormat {
   dataSize: number
 }
 
-/** Cheap RIFF/WAVE magic-byte check; does not validate the rest of the structure. */
+/** Integer PCM at 8/16/24/32 bits or 32-bit IEEE float; anything else (ADPCM, A-law, ...) is left to the renderer. */
+function isSupportedFormat({ formatTag, bitsPerSample }: WavFormat): boolean {
+  if (formatTag === WAVE_FORMAT_IEEE_FLOAT)
+    return bitsPerSample === 32
+  return formatTag === WAVE_FORMAT_PCM && [8, 16, 24, 32].includes(bitsPerSample)
+}
+
+/** RIFF/WAVE magic bytes plus a fmt chunk in a format `createWavPcmStream` decodes, found before the data chunk. Reads only chunk headers and fmt. */
 export async function probeWav(filePath: string): Promise<boolean> {
   const handle = await open(filePath, 'r')
   try {
@@ -26,6 +33,7 @@ export async function probeWav(filePath: string): Promise<boolean> {
     return bytesRead === 12
       && header.toString('ascii', 0, 4) === 'RIFF'
       && header.toString('ascii', 8, 12) === 'WAVE'
+      && isSupportedFormat(await parseWavFormat(handle))
   }
   catch {
     return false
@@ -69,8 +77,6 @@ async function parseWavFormat(handle: FileHandle): Promise<WavFormat> {
     else if (chunk.id === 'data') {
       if (!fmt)
         throw new Error('WAV data chunk appeared before fmt chunk')
-      if (fmt.formatTag !== WAVE_FORMAT_PCM && fmt.formatTag !== WAVE_FORMAT_IEEE_FLOAT)
-        throw new Error(`Unsupported WAV format tag: ${fmt.formatTag}`)
       return { ...fmt, dataStart: bodyOffset, dataSize: chunk.size }
     }
 
@@ -106,11 +112,9 @@ function samplesToFloat32(data: Buffer, format: WavFormat): Float32Array[] {
           sample -= 0x1000000
         value = sample / 8388608
       }
-      else if (bitsPerSample === 32) {
-        value = data.readInt32LE(offset) / 2147483648
-      }
       else {
-        throw new Error(`Unsupported WAV bit depth: ${bitsPerSample}`)
+        // 32-bit integer; isSupportedFormat rules out every other depth.
+        value = data.readInt32LE(offset) / 2147483648
       }
       out[c][f] = value
     }
@@ -124,6 +128,8 @@ export function createWavPcmStream(filePath: string): Readable {
     const handle = await open(filePath, 'r')
     try {
       const format = await parseWavFormat(handle)
+      if (!isSupportedFormat(format))
+        throw new Error(`Unsupported WAV format: tag ${format.formatTag}, ${format.bitsPerSample}-bit`)
       const resampler = new PcmResampler(format.sampleRate, format.channels)
       const bytesPerFrame = (format.bitsPerSample / 8) * format.channels
       const chunkFrames = 16384

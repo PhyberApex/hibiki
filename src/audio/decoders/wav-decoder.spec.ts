@@ -8,6 +8,7 @@ import { createWavPcmStream, probeWav } from './wav-decoder'
 const PCM = 1
 const ADPCM = 2
 const IEEE_FLOAT = 3
+const A_LAW = 6
 const EXTENSIBLE = 0xFFFE
 
 interface WavSpec {
@@ -100,7 +101,9 @@ function int24(value: number): Buffer {
   return b
 }
 
-const HALF = 16384 // 0.5 full scale after the resampler's * 32767 + round
+// +-0.5 of full scale after the resampler's `* 32767` and Math.round.
+const HALF = 16384
+const NEG_HALF = -16383
 const N = 8
 
 describe('probeWav', () => {
@@ -119,6 +122,29 @@ describe('probeWav', () => {
   it('rejects a directory it cannot read', async () => {
     await expect(probeWav(dir)).resolves.toBe(false)
   })
+
+  it.each([
+    ['8-bit PCM', PCM, 8, false],
+    ['32-bit PCM', PCM, 32, false],
+    ['32-bit float', IEEE_FLOAT, 32, false],
+    ['extensible 24-bit PCM', PCM, 24, true],
+  ])('accepts %s', async (_label, formatTag, bitsPerSample, extensible) => {
+    await expect(probeWav(writeTemp(buildWav({ formatTag, bitsPerSample, extensible, data: Buffer.alloc(8) })))).resolves.toBe(true)
+  })
+
+  it.each([
+    ['ADPCM', ADPCM, 4, false],
+    ['A-law', A_LAW, 8, false],
+    ['extensible ADPCM', ADPCM, 16, true],
+    ['12-bit PCM', PCM, 12, false],
+    ['64-bit float', IEEE_FLOAT, 64, false],
+  ])('rejects %s so the renderer fallback plays it', async (_label, formatTag, bitsPerSample, extensible) => {
+    await expect(probeWav(writeTemp(buildWav({ formatTag, bitsPerSample, extensible, data: Buffer.alloc(8) })))).resolves.toBe(false)
+  })
+
+  it('rejects a file with no data chunk', async () => {
+    await expect(probeWav(writeTemp(buildWav({ data: Buffer.alloc(0), omitData: true })))).resolves.toBe(false)
+  })
 })
 
 describe('createWavPcmStream', () => {
@@ -132,7 +158,7 @@ describe('createWavPcmStream', () => {
       b.writeFloatLE(0.5)
       return repeat(b, N * 2)
     })()],
-  ])('decodes %s PCM at full scale', async (_label, bitsPerSample, formatTag, data) => {
+  ])('decodes %s samples to the expected level', async (_label, bitsPerSample, formatTag, data) => {
     const out = frames(await decode(buildWav({ bitsPerSample, formatTag, data })))
     expect(out).toHaveLength(N)
     for (const [l, r] of out) {
@@ -143,7 +169,7 @@ describe('createWavPcmStream', () => {
 
   it('sign-extends negative 24-bit samples', async () => {
     const out = frames(await decode(buildWav({ bitsPerSample: 24, data: repeat(int24(-0x400000), N * 2) })))
-    expect(out[0]).toEqual([-16383, -16383])
+    expect(out[0]).toEqual([NEG_HALF, NEG_HALF])
   })
 
   it('reads the sub-format of a WAVE_FORMAT_EXTENSIBLE fmt chunk', async () => {
@@ -156,7 +182,7 @@ describe('createWavPcmStream', () => {
       data: repeat(sample, N * 2),
     })))
     expect(out).toHaveLength(N)
-    expect(out[0]).toEqual([-16383, -16383])
+    expect(out[0]).toEqual([NEG_HALF, NEG_HALF])
   })
 
   it('duplicates a mono channel into both stereo channels', async () => {
@@ -169,7 +195,7 @@ describe('createWavPcmStream', () => {
   it('keeps stereo channels apart', async () => {
     const frame = Buffer.from([0x00, 0x40, 0x00, 0xC0]) // +0.5, -0.5
     const out = frames(await decode(buildWav({ data: repeat(frame, N) })))
-    expect(out[0]).toEqual([HALF, -16383])
+    expect(out[0]).toEqual([HALF, NEG_HALF])
   })
 
   it('resamples non-48 kHz input through the PcmResampler', async () => {
@@ -199,17 +225,14 @@ describe('createWavPcmStream', () => {
     await expect(decode(buildWav({ data: Buffer.alloc(4), omitFmt: true }))).rejects.toThrow('WAV data chunk appeared before fmt chunk')
   })
 
-  it('rejects an unsupported bit depth', async () => {
-    await expect(decode(buildWav({ bitsPerSample: 12, channels: 2, data: Buffer.alloc(12) }))).rejects.toThrow('Unsupported WAV bit depth: 12')
-  })
-
   it.each([
-    ['ADPCM', ADPCM, false],
-    ['A-law', 6, false],
-    ['extensible ADPCM', ADPCM, true],
-  ])('rejects a non-PCM %s format', async (_label, formatTag, extensible) => {
-    await expect(decode(buildWav({ formatTag, extensible, bitsPerSample: 16, data: Buffer.alloc(16) })))
+    ['ADPCM', ADPCM, 16, false],
+    ['A-law', A_LAW, 8, false],
+    ['extensible ADPCM', ADPCM, 16, true],
+    ['12-bit PCM', PCM, 12, false],
+  ])('rejects %s, which probeWav would also refuse', async (_label, formatTag, bitsPerSample, extensible) => {
+    await expect(decode(buildWav({ formatTag, extensible, bitsPerSample, data: Buffer.alloc(24) })))
       .rejects
-      .toThrow(`Unsupported WAV format tag: ${formatTag}`)
+      .toThrow(`Unsupported WAV format: tag ${formatTag}, ${bitsPerSample}-bit`)
   })
 })
