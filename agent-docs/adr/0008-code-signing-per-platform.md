@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (decided by the maintainer on 2026-10-19 in #545)
+Accepted (decided by the maintainer on 2026-10-19 in #545). Amended 2026-10-21: Plan A was declined, see "Outcome".
 
 ## Context
 
@@ -60,6 +60,19 @@ Signing credentials (the SignPath API token, or the Certum credentials, and late
 | macOS, Apple Developer Program (deferred) | ~$99/year | Renew the membership; rotate the Developer ID certificate (5-year validity) and its Actions secret before expiry |
 | Windows Plan A, SignPath Foundation | Free | Approve every signing request (two per release); keep MFA on for the team; keep the Code signing policy and privacy statement current (any new network contact is a policy change); SignPath may re-review the project |
 | Windows Plan B, Certum Open Source | ~49–89 EUR/year | Renew within the 459-day validity, including re-verification as an open-source developer; sign every release by hand on the workstation |
+
+## Outcome (2026-10-21)
+
+SignPath Foundation declined the application (#593) on 2026-10-21. The reason given was the program's visibility bar: community adoption (stars, forks, contributors), independent coverage or discussions, or institutional backing, and sustained engagement. Reapplying later was explicitly welcomed, and a paid SignPath subscription was offered instead.
+
+The maintainer chose **not** to take Plan B yet. Windows builds **stay unsigned** for now. With 31 release downloads across all versions at the time of the decision, the Certum subscription and a manual signing step per release buy very little, and a paid SignPath subscription would cost more than Certum while still needing a certificate of Hibiki's own.
+
+**Triggers to revisit**, whichever comes first:
+
+- Reapply to SignPath Foundation once the project shows the signals they named: a meaningful number of stars or forks, an external contributor, or an independent article or discussion thread about Hibiki.
+- Take Plan B (Certum) if a second Windows user who is not the maintainer asks for a signed build before that.
+
+The README's Code signing policy section and the release-page copy stay, reworded to say the builds are unsigned, because the team roles and process they describe will be needed verbatim by any future application and cost nothing to keep. The SignPath attribution was removed from the README, the release-notes template and the docs site download block (which had been added in #595 and #598). Follow-ups #593 and #594 are closed; no Plan B issues are filed until a trigger fires.
 
 ## Follow-up work
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Appends the Code signing policy (.github/release-notes/code-signing-policy.md)
 # to a GitHub Release's notes, below the changelog release-please wrote.
-# SignPath Foundation requires the policy on the release page as well as the
-# README (ADR-0008). Idempotent: a release that already carries the section is
+# The policy is published on the release page as well as the README
+# (ADR-0008). Idempotent: a release that already carries the section is
 # left alone, so re-running the workflow does not duplicate it (nor refresh
 # an older copy of the text). The README carries the same section; keep both in sync.
 # Needs `contents: write` on GH_TOKEN.
