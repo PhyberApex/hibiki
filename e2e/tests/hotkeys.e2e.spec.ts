@@ -72,8 +72,7 @@ function hotkeyStatus(): Promise<HotkeyStatus> {
 }
 
 /** Every accelerator Hibiki asked the OS for, whether the OS granted it or refused it. */
-async function heldKeys(): Promise<string[]> {
-  const { registered, failures } = await hotkeyStatus()
+function requestedKeys({ registered, failures }: HotkeyStatus): string[] {
   return [...new Set([...registered, ...failures.map(f => f.accelerator)])].sort()
 }
 
@@ -88,12 +87,12 @@ async function fire(accelerator: string): Promise<void> {
 }
 
 /**
- * A key press as the user makes it: the OS only delivers a key Hibiki holds. Where the OS refuses
- * every key (Wayland, some headless X servers) the test stands in for it for each key Hibiki asked for.
- * Resolves to whether the press reached the app.
+ * A key press as the user makes it: the OS only delivers a key Hibiki asked for. A key the OS
+ * refused (Wayland, some headless X servers) is delivered anyway, so the rest of the flow still
+ * runs there; only the registration itself goes unproven. Resolves to whether the press reached the app.
  */
 async function press(accelerator: string): Promise<boolean> {
-  if (!(await heldKeys()).includes(accelerator))
+  if (!requestedKeys(await hotkeyStatus()).includes(accelerator))
     return false
   await fire(accelerator)
   return true
@@ -138,7 +137,7 @@ test('Scene and Effect Hotkeys register, fire on the Local Target, follow a rebi
   // 1. Both seeded keys are registered, or refused with a reason that Settings → Diagnostics shows.
   const status = await hotkeyStatus()
   expect(status.enabled).toBe(true)
-  expect(await heldKeys()).toEqual(['F13', 'F14'])
+  expect(requestedKeys(status)).toEqual(['F13', 'F14'])
   for (const failure of status.failures)
     expect(failure.reason).not.toBe('')
   if (status.failures.length > 0) {
@@ -172,7 +171,7 @@ test('Scene and Effect Hotkeys register, fire on the Local Target, follow a rebi
   // Playwright's keyboard has no key beyond F12, so the keydown is dispatched with the physical code.
   await recorder.dispatchEvent('keydown', { code: 'F15', key: 'F15' })
   await expect(page.getByRole('button', { name: /^Scene Hotkey: F15\./ })).toBeVisible()
-  await expect.poll(heldKeys).toEqual(['F14', 'F15'])
+  await expect.poll(async () => requestedKeys(await hotkeyStatus())).toEqual(['F14', 'F15'])
 
   // Even delivered straight to the app, F13 is bound to nothing any more.
   await fire('F13')
