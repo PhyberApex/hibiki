@@ -24,6 +24,39 @@ import { createUsageStats } from './usage-stats/usage-stats'
 import { createVisionSettings } from './vision/vision-settings'
 import { createVisionService } from './vision/vision.service'
 
+// getEmbeddedApp wires real services together; every one of them is replaced
+// here so these tests exercise only the EmbeddedApi glue: argument guards,
+// normalisation and the routing of each call to the right service.
+jest.mock('node:fs/promises', () => ({ mkdir: jest.fn() }))
+jest.mock('@discordjs/voice', () => ({ generateDependencyReport: jest.fn(() => 'report') }))
+jest.mock('@snazzah/davey', () => ({}))
+jest.mock('./config', () => ({ getConfig: jest.fn() }))
+jest.mock('./config/discord-token-settings', () => ({ createDiscordTokenSettings: jest.fn(), isDiscordTokenConfigured: jest.fn(() => false) }))
+jest.mock('./config/hotkey-settings', () => ({ createHotkeySettings: jest.fn() }))
+jest.mock('./config/local-output-device-settings', () => ({ createLocalOutputDeviceSettings: jest.fn() }))
+jest.mock('./config/output-target-settings', () => ({ createOutputTargetSettings: jest.fn() }))
+jest.mock('./config/usage-stats-settings', () => ({ createUsageStatsSettings: jest.fn(() => ({})) }))
+jest.mock('./discord/discord-client', () => ({ createDiscordClient: jest.fn() }))
+jest.mock('./json-file', () => ({ getStorageWarnings: jest.fn() }))
+jest.mock('./persistence', () => ({ createAppConfig: jest.fn() }))
+jest.mock('./player/player', () => ({ createPlayer: jest.fn() }))
+jest.mock('./scenes/scene-export', () => ({ exportScene: jest.fn() }))
+jest.mock('./scenes/scene-import', () => ({ importScene: jest.fn() }))
+jest.mock('./scenes/scene-registry', () => ({ createSceneRegistry: jest.fn() }))
+jest.mock('./scenes/scene-store', () => ({ createSceneStore: jest.fn() }))
+jest.mock('./sound/sound-library', () => ({ createSoundLibrary: jest.fn() }))
+jest.mock('./updates/update-check', () => ({ createUpdateCheck: jest.fn() }))
+jest.mock('./usage-stats/usage-stats', () => ({
+  buildUserAgent: jest.fn(() => 'ua'),
+  createUmamiSender: jest.fn(() => ({})),
+  createUsageStats: jest.fn(),
+  resolveUsageStatsHost: jest.fn((host?: string) => host ?? 'https://stats.example'),
+  USAGE_STATS_HOST: 'https://stats.example',
+  USAGE_STATS_WEBSITE_ID: 'site',
+}))
+jest.mock('./vision/vision-settings', () => ({ createVisionSettings: jest.fn() }))
+jest.mock('./vision/vision.service', () => ({ createVisionService: jest.fn() }))
+
 const spies = {
   debug: jest.spyOn(console, 'debug').mockImplementation(() => {}),
   info: jest.spyOn(console, 'info').mockImplementation(() => {}),
@@ -75,39 +108,6 @@ describe('createShutdownHandler', () => {
     expect(discord.destroy).toHaveBeenCalledTimes(1)
   })
 })
-
-// getEmbeddedApp wires real services together; every one of them is replaced
-// here so these tests exercise only the EmbeddedApi glue: argument guards,
-// normalisation and the routing of each call to the right service.
-jest.mock('node:fs/promises', () => ({ mkdir: jest.fn() }))
-jest.mock('@discordjs/voice', () => ({ generateDependencyReport: jest.fn(() => 'report') }))
-jest.mock('@snazzah/davey', () => ({}))
-jest.mock('./config', () => ({ getConfig: jest.fn() }))
-jest.mock('./config/discord-token-settings', () => ({ createDiscordTokenSettings: jest.fn(), isDiscordTokenConfigured: jest.fn(() => false) }))
-jest.mock('./config/hotkey-settings', () => ({ createHotkeySettings: jest.fn() }))
-jest.mock('./config/local-output-device-settings', () => ({ createLocalOutputDeviceSettings: jest.fn() }))
-jest.mock('./config/output-target-settings', () => ({ createOutputTargetSettings: jest.fn() }))
-jest.mock('./config/usage-stats-settings', () => ({ createUsageStatsSettings: jest.fn(() => ({})) }))
-jest.mock('./discord/discord-client', () => ({ createDiscordClient: jest.fn() }))
-jest.mock('./json-file', () => ({ getStorageWarnings: jest.fn() }))
-jest.mock('./persistence', () => ({ createAppConfig: jest.fn() }))
-jest.mock('./player/player', () => ({ createPlayer: jest.fn() }))
-jest.mock('./scenes/scene-export', () => ({ exportScene: jest.fn() }))
-jest.mock('./scenes/scene-import', () => ({ importScene: jest.fn() }))
-jest.mock('./scenes/scene-registry', () => ({ createSceneRegistry: jest.fn() }))
-jest.mock('./scenes/scene-store', () => ({ createSceneStore: jest.fn() }))
-jest.mock('./sound/sound-library', () => ({ createSoundLibrary: jest.fn() }))
-jest.mock('./updates/update-check', () => ({ createUpdateCheck: jest.fn() }))
-jest.mock('./usage-stats/usage-stats', () => ({
-  buildUserAgent: jest.fn(() => 'ua'),
-  createUmamiSender: jest.fn(() => ({})),
-  createUsageStats: jest.fn(),
-  resolveUsageStatsHost: jest.fn((host?: string) => host ?? 'https://stats.example'),
-  USAGE_STATS_HOST: 'https://stats.example',
-  USAGE_STATS_WEBSITE_ID: 'site',
-}))
-jest.mock('./vision/vision-settings', () => ({ createVisionSettings: jest.fn() }))
-jest.mock('./vision/vision.service', () => ({ createVisionService: jest.fn() }))
 
 const config = {
   database: { path: '/data/db/scenes.json' },
@@ -189,7 +189,6 @@ function fakeServices() {
     hotkeySettings: {
       get: jest.fn().mockResolvedValue({ enabled: true }),
       set: jest.fn().mockResolvedValue(undefined),
-      getActionHotkeys: jest.fn(),
     },
     outputTargets: {
       getActive: jest.fn().mockResolvedValue('local'),
@@ -235,7 +234,7 @@ function fakeServices() {
 
 type Services = ReturnType<typeof fakeServices>
 
-function wire(services: Services): void {
+function stubServiceFactories(services: Services): void {
   jest.mocked(getConfig).mockReturnValue(config as any)
   jest.mocked(createAppConfig).mockReturnValue(services.appConfig as any)
   jest.mocked(createDiscordClientImpl).mockReturnValue(services.discord as any)
@@ -267,8 +266,10 @@ describe('getEmbeddedApp', () => {
   beforeEach(async () => {
     jest.clearAllMocks()
     services = fakeServices()
-    wire(services)
+    stubServiceFactories(services)
     api = (await getEmbeddedApp()).api
+    // The storage warm-up lists music; start each test from a clean slate.
+    services.sounds.list.mockClear()
   })
 
   describe('startup', () => {
@@ -296,7 +297,7 @@ describe('getEmbeddedApp', () => {
       const err = new Error('corrupt scenes.json')
       services = fakeServices()
       services.scenes.list.mockRejectedValueOnce(err)
-      wire(services)
+      stubServiceFactories(services)
 
       await expect(getEmbeddedApp()).resolves.toHaveProperty('api')
       expect(spies.error).toHaveBeenCalledWith('[hibiki]', 'Storage warm-up failed:', err)
@@ -327,6 +328,7 @@ describe('getEmbeddedApp', () => {
 
     it('rejects a missing channel id', async () => {
       await expect(api.player.join({ guildId: 'guild-1', channelId: '' })).rejects.toThrow('Channel ID required')
+      await expect(api.player.join({ guildId: 'guild-1' } as any)).rejects.toThrow('Channel ID required')
       expect(services.player.connect).not.toHaveBeenCalled()
     })
 
@@ -414,12 +416,12 @@ describe('getEmbeddedApp', () => {
     })
 
     it('stores accessibility settings and the scene fade length normalised', async () => {
-      const accessibility = await api.config.getAccessibility()
-      await api.config.setAccessibility(accessibility)
-      await expect(api.config.getAccessibility()).resolves.toEqual(accessibility)
+      await expect(api.config.getAccessibility()).resolves.toEqual({ luminancePulses: true, reduceMotion: null })
+      await api.config.setAccessibility({ luminancePulses: false, reduceMotion: 'yes' } as any)
+      await expect(api.config.getAccessibility()).resolves.toEqual({ luminancePulses: false, reduceMotion: null })
 
       await api.config.setSceneFadeLength(2)
-      expect(services.appConfig.set).toHaveBeenCalledWith('scene.fadeLength', expect.any(String))
+      expect(services.appConfig.set).toHaveBeenCalledWith('scene.fadeLength', '2')
       await expect(api.config.getSceneFadeLength()).resolves.toBe(2)
     })
 
@@ -480,9 +482,7 @@ describe('getEmbeddedApp', () => {
       await api.sounds.listEffects()
       await api.sounds.listAmbience()
 
-      expect(services.sounds.list).toHaveBeenCalledWith('music')
-      expect(services.sounds.list).toHaveBeenCalledWith('effects')
-      expect(services.sounds.list).toHaveBeenCalledWith('ambience')
+      expect(services.sounds.list.mock.calls).toEqual([['music'], ['effects'], ['ambience']])
     })
 
     it('passes a Buffer through on upload', async () => {
@@ -576,8 +576,7 @@ describe('getEmbeddedApp', () => {
     it('matches Vibe Tags against the Music and Ambience libraries only', async () => {
       const matches = await api.vision.matchVibe(['forest'])
 
-      expect(services.sounds.list).toHaveBeenCalledWith('music')
-      expect(services.sounds.list).toHaveBeenCalledWith('ambience')
+      expect(services.sounds.list.mock.calls).toEqual([['music'], ['ambience']])
       expect(matches.music.map(m => m.sound.id)).toEqual(['music-1'])
       expect(matches.ambience.map(m => m.sound.id)).toEqual(['ambience-1'])
     })
@@ -619,7 +618,7 @@ describe('getEmbeddedApp', () => {
       ['config', 'setHotkeySettings', [{ enabled: false }]],
     ]
 
-    function register() {
+    function registerThroughIpc() {
       const ipc = fakeIpcMain()
       const hotkeys = { sync: jest.fn().mockResolvedValue(undefined) }
       registerApiHandler(ipc, api, () => hotkeys)
@@ -627,7 +626,7 @@ describe('getEmbeddedApp', () => {
     }
 
     it.each(hotkeyMutations)('re-syncs hotkeys exactly once after %s.%s', async (domain, method, args) => {
-      const { ipc, hotkeys } = register()
+      const { ipc, hotkeys } = registerThroughIpc()
 
       await ipc.invoke('api', { domain, method, args })
 
@@ -635,7 +634,7 @@ describe('getEmbeddedApp', () => {
     })
 
     it('does not re-sync hotkeys after a call outside scenes, registry and the hotkey settings', async () => {
-      const { ipc, hotkeys } = register()
+      const { ipc, hotkeys } = registerThroughIpc()
 
       await ipc.invoke('api', { domain: 'player', method: 'stop', args: ['g'] })
       await ipc.invoke('api', { domain: 'config', method: 'setVisionEnabled', args: [true] })
@@ -645,7 +644,7 @@ describe('getEmbeddedApp', () => {
     })
 
     it('logs a failing call with its domain and method', async () => {
-      const { ipc } = register()
+      const { ipc } = registerThroughIpc()
 
       await expect(ipc.invoke('api', { domain: 'player', method: 'join', args: [{ guildId: 'ghost', channelId: 'voice-1' }] }))
         .rejects
