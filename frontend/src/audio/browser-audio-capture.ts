@@ -225,7 +225,14 @@ export async function captureFromMediaStream(
   if (ctx.state === 'suspended')
     await ctx.resume()
 
-  await ensureWorklet(ctx)
+  try {
+    await ensureWorklet(ctx)
+  }
+  catch (err) {
+    // The caller gets the rejection and no session to stop, so nothing else would close this context.
+    void ctx.close().catch(() => {})
+    throw err
+  }
   const source = ctx.createMediaStreamSource(stream)
   const worklet = createWorkletNode(ctx, onChunk)
 

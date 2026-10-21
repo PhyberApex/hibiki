@@ -1,6 +1,15 @@
 import type { LocalSinkHealth, SinkAudioContextLike } from './local-sink'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LocalSink, sinkDeathToast } from './local-sink'
+import { reportLocalSinkHealth } from '../api/player'
+import { useToastStore } from '../stores/toast'
+import { installLocalSink, LocalSink, sinkDeathToast } from './local-sink'
+import { outputDeviceRouter } from './output-device'
+
+vi.mock('../api/player', () => ({ reportLocalSinkHealth: vi.fn() }))
+vi.mock('../stores/toast', () => {
+  const toast = { show: vi.fn() }
+  return { useToastStore: () => toast }
+})
 
 function packet(sample: number, frames = 960): Uint8Array {
   const bytes = new Uint8Array(frames * 4)
@@ -229,5 +238,141 @@ describe('localSink', () => {
     expect(sinkDeathToast({ type: 'deviceLost', message: 'device unplugged' }))
       .toBe('Local playback stopped: device unplugged. Pick an Output Device in Settings.')
     expect(sinkDeathToast({ type: 'failed' })).toContain('failed')
+  })
+})
+
+describe('installLocalSink', () => {
+  type Listener = (payload?: unknown) => void
+  let listeners: Map<string, Listener>
+  let offs: Array<ReturnType<typeof vi.fn>>
+  let fake: ReturnType<typeof fakeContext>
+  let contextOptions: unknown[]
+
+  let uninstalls: Array<() => void>
+
+  /** Installs the sink and uninstalls it after the test, so no sink stays subscribed to the shared router. */
+  function install() {
+    const uninstall = installLocalSink()
+    uninstalls.push(uninstall)
+    return uninstall
+  }
+
+  function emit(channel: string, payload?: unknown) {
+    listeners.get(channel)?.(payload)
+  }
+
+  function flush(): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, 0))
+  }
+
+  beforeEach(() => {
+    listeners = new Map()
+    uninstalls = []
+    offs = []
+    fake = fakeContext()
+    contextOptions = []
+    ;(window as any).hibiki = {
+      invoke: vi.fn(),
+      on: vi.fn((channel: string, listener: Listener) => {
+        listeners.set(channel, listener)
+        const off = vi.fn()
+        offs.push(off)
+        return off
+      }),
+    }
+    vi.stubGlobal('AudioContext', class {
+      constructor(options: unknown) {
+        contextOptions.push(options)
+        return fake.ctx as any
+      }
+    })
+    vi.mocked(reportLocalSinkHealth).mockResolvedValue(undefined)
+  })
+  afterEach(() => {
+    uninstalls.forEach(uninstall => uninstall())
+    vi.useRealTimers()
+    delete (window as any).hibiki
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+    vi.restoreAllMocks()
+  })
+
+  it('is a no-op outside Electron', () => {
+    delete (window as any).hibiki
+    expect(() => installLocalSink()()).not.toThrow()
+  })
+
+  it('plays packets from audio:localSinkChunk and reports started through the player API', () => {
+    install()
+    emit('audio:localSinkStart')
+    emit('audio:localSinkChunk', packet(1))
+    expect(fake.started).toHaveLength(1)
+    expect(contextOptions).toEqual([{ sampleRate: 48000, latencyHint: 'interactive' }])
+    expect(reportLocalSinkHealth).toHaveBeenCalledWith({ type: 'started', sampleRate: 48000 })
+  })
+
+  it('reports deviceLost, toasts the reason, and stops scheduling', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    install()
+    emit('audio:localSinkChunk', packet(1))
+    fake.ctx.onerror?.({ message: 'device unplugged' })
+    expect(reportLocalSinkHealth).toHaveBeenLastCalledWith({ type: 'deviceLost', message: 'device unplugged' })
+    expect(error).toHaveBeenCalledWith('[local-sink] deviceLost: device unplugged')
+    expect(useToastStore().show).toHaveBeenCalledWith({ type: 'error', text: sinkDeathToast({ type: 'deviceLost', message: 'device unplugged' }) })
+    expect(fake.ctx.close).toHaveBeenCalled()
+    emit('audio:localSinkChunk', packet(1))
+    expect(fake.started).toHaveLength(1)
+  })
+
+  it('reports failed, toasts the reason, and stops scheduling', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    install()
+    emit('audio:localSinkChunk', packet(1))
+    fake.ctx.state = 'closed'
+    fake.ctx.onstatechange?.()
+    expect(reportLocalSinkHealth).toHaveBeenLastCalledWith({ type: 'failed', message: 'AudioContext was closed' })
+    expect(useToastStore().show).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }))
+    fake.ctx.state = 'running'
+    emit('audio:localSinkChunk', packet(1))
+    expect(fake.started).toHaveLength(1)
+  })
+
+  it('logs a health report that could not be delivered', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.mocked(reportLocalSinkHealth).mockRejectedValue(new Error('ipc down'))
+    install()
+    emit('audio:localSinkChunk', packet(1))
+    await flush()
+    expect(warn).toHaveBeenCalledWith('[local-sink] could not report sink health:', expect.any(Error))
+  })
+
+  it('opens on the resolved Output Device and follows its changes', () => {
+    const setSinkId = vi.fn(async () => {})
+    ;(fake.ctx as { setSinkId?: unknown }).setSinkId = setSinkId
+    vi.spyOn(outputDeviceRouter, 'sinkId', 'get').mockReturnValue('usb')
+    const subscribe = vi.spyOn(outputDeviceRouter, 'subscribe')
+    install()
+    emit('audio:localSinkChunk', packet(1))
+    expect(contextOptions).toEqual([{ sampleRate: 48000, latencyHint: 'interactive', sinkId: 'usb' }])
+    subscribe.mock.calls[0][0]('builtin')
+    expect(setSinkId).toHaveBeenCalledWith('builtin')
+  })
+
+  it('drains on audio:localSinkStop', () => {
+    vi.useFakeTimers()
+    install()
+    emit('audio:localSinkChunk', packet(1))
+    emit('audio:localSinkStop')
+    vi.advanceTimersByTime(1000)
+    expect(fake.ctx.close).toHaveBeenCalledOnce()
+  })
+
+  it('unsubscribes every channel and disposes the sink on uninstall', () => {
+    const uninstall = install()
+    emit('audio:localSinkChunk', packet(1))
+    uninstall()
+    expect(offs).toHaveLength(3)
+    offs.forEach(off => expect(off).toHaveBeenCalledOnce())
+    expect(fake.ctx.close).toHaveBeenCalledOnce()
   })
 })
