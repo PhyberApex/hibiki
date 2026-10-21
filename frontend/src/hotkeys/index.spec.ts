@@ -1,4 +1,6 @@
 import type { HotkeyDeps, HotkeyOutcome } from './dispatch'
+import type { HotkeySettings } from '@/api/config'
+import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchHotkeySettings } from '@/api/config'
 import { fetchHotkeyStatus, onHotkeyFired } from '@/api/hotkeys'
@@ -35,10 +37,6 @@ function install() {
   return { fire, stop, off }
 }
 
-function flush(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0))
-}
-
 describe('startHotkeyDispatch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -53,7 +51,7 @@ describe('startHotkeyDispatch', () => {
   it('dispatches a fired accelerator once', async () => {
     const { fire } = install()
     fire('F13')
-    await flush()
+    await flushPromises()
     expect(dispatchHotkey).toHaveBeenCalledExactlyOnceWith('F13', expect.any(Object))
   })
 
@@ -64,12 +62,12 @@ describe('startHotkeyDispatch', () => {
     }))
     const { fire } = install()
     fire('F13')
-    fire('F14')
-    await flush()
+    fire('F13')
+    await flushPromises()
     expect(vi.mocked(dispatchHotkey).mock.calls.map(c => c[0])).toEqual(['F13'])
     finishFirst('played')
-    await flush()
-    expect(vi.mocked(dispatchHotkey).mock.calls.map(c => c[0])).toEqual(['F13', 'F14'])
+    await flushPromises()
+    expect(vi.mocked(dispatchHotkey).mock.calls.map(c => c[0])).toEqual(['F13', 'F13'])
   })
 
   it('returns the unsubscribe that removes the listener', () => {
@@ -81,7 +79,7 @@ describe('startHotkeyDispatch', () => {
   it('wires the dispatch deps to the stores, config, toasts and usage stats', async () => {
     const { fire } = install()
     fire('F13')
-    await flush()
+    await flushPromises()
     const deps = vi.mocked(dispatchHotkey).mock.calls[0][1] as HotkeyDeps
 
     expect(deps.playingSceneId()).toBe('storm')
@@ -90,7 +88,7 @@ describe('startHotkeyDispatch', () => {
     expect(deps.playScene).toBe(playback.playScene)
     expect(deps.stopAllEffects).toBe(playback.stopAllEffectInstances)
 
-    vi.mocked(fetchHotkeySettings).mockResolvedValue({ enabled: true, stopHotkey: 'F16' } as never)
+    vi.mocked(fetchHotkeySettings).mockResolvedValue({ enabled: true, stopHotkey: 'F16' } as HotkeySettings)
     await expect(deps.getActionHotkeys()).resolves.toEqual({ stopHotkey: 'F16' })
 
     deps.showVolume(40)

@@ -1,4 +1,5 @@
 import type { LocalSinkHealth, SinkAudioContextLike } from './local-sink'
+import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reportLocalSinkHealth } from '../api/player'
 import { useToastStore } from '../stores/toast'
@@ -261,10 +262,6 @@ describe('installLocalSink', () => {
     listeners.get(channel)?.(payload)
   }
 
-  function flush(): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, 0))
-  }
-
   beforeEach(() => {
     listeners = new Map()
     uninstalls = []
@@ -342,7 +339,7 @@ describe('installLocalSink', () => {
     vi.mocked(reportLocalSinkHealth).mockRejectedValue(new Error('ipc down'))
     install()
     emit('audio:localSinkChunk', packet(1))
-    await flush()
+    await flushPromises()
     expect(warn).toHaveBeenCalledWith('[local-sink] could not report sink health:', expect.any(Error))
   })
 

@@ -367,6 +367,14 @@ describe('browser-audio-capture', () => {
       expect(ctx.createMediaElementSource).toHaveBeenCalledOnce()
     })
 
+    it('rejects and closes the context when a suspended context cannot resume', async () => {
+      const { ctx } = stubAudio('suspended')
+      ctx.resume.mockRejectedValue(new Error('no user gesture'))
+      const { captureFromMediaStream } = await load()
+      await expect(captureFromMediaStream({ getTracks: () => [] } as unknown as MediaStream, vi.fn())).rejects.toThrow('no user gesture')
+      expect(ctx.close).toHaveBeenCalledOnce()
+    })
+
     it('resumes a suspended context before capturing', async () => {
       const { ctx } = stubAudio('suspended')
       const { captureFromMediaStream } = await load()
@@ -397,14 +405,13 @@ describe('browser-audio-capture', () => {
     })
 
     it('a stale session stop() does not tear down the newer capture', async () => {
-      const { source, worklets } = stubAudio()
+      const { worklets } = stubAudio()
       const { captureFromAudioElement, releaseAudioElementContext } = await load()
       const element = document.createElement('audio')
       const first = await captureFromAudioElement(element, vi.fn())
       await captureFromAudioElement(element, vi.fn())
       first.stop()
       expect(worklets[1].disconnect).not.toHaveBeenCalled()
-      source.disconnect.mockClear()
       releaseAudioElementContext(element)
       // The newer worklet was still the active one, so release tears it down.
       expect(worklets[1].disconnect).toHaveBeenCalled()

@@ -222,10 +222,9 @@ export async function captureFromMediaStream(
   onChunk: AudioChunkCallback,
 ): Promise<CaptureSession> {
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE })
-  if (ctx.state === 'suspended')
-    await ctx.resume()
-
   try {
+    if (ctx.state === 'suspended')
+      await ctx.resume()
     await ensureWorklet(ctx)
   }
   catch (err) {

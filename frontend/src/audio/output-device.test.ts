@@ -1,3 +1,4 @@
+import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchLocalOutputDevice } from '@/api/config'
 import { listOutputDevices, OutputDeviceRouter, resolveOutputDevice } from './output-device'
@@ -92,10 +93,6 @@ describe('installOutputDevice', () => {
     return Object.assign(document.createElement('audio'), { setSinkId })
   }
 
-  function flush(): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, 0))
-  }
-
   beforeEach(() => {
     devices = [output('builtin', 'Built-in Output')]
     onDeviceChange = undefined
@@ -120,11 +117,13 @@ describe('installOutputDevice', () => {
     const { installOutputDevice, outputDeviceRouter } = await load()
     const notify = vi.fn()
     installOutputDevice(notify)
-    await flush()
+    await flushPromises()
     expect(notify).toHaveBeenCalledExactlyOnceWith('USB Speaker')
     expect(outputDeviceRouter.sinkId).toBe('')
+    devices = [output('builtin', 'Built-in Output'), output('hdmi', 'HDMI')]
     await onDeviceChange?.()
     expect(notify).toHaveBeenCalledOnce()
+    expect(outputDeviceRouter.sinkId).toBe('')
   })
 
   it('re-resolves on devicechange and routes bound audio elements to the device', async () => {
@@ -133,7 +132,7 @@ describe('installOutputDevice', () => {
     bindAudioElement(el)
     expect(el.setSinkId).not.toHaveBeenCalled()
     installOutputDevice(vi.fn())
-    await flush()
+    await flushPromises()
     devices = [output('builtin', 'Built-in Output'), output('usb', 'USB Speaker')]
     await onDeviceChange?.()
     expect(outputDeviceRouter.sinkId).toBe('usb')
@@ -147,13 +146,13 @@ describe('installOutputDevice', () => {
     devices = [output('usb', 'USB Speaker')]
     const { bindAudioElement, installOutputDevice } = await load()
     installOutputDevice(vi.fn())
-    await flush()
+    await flushPromises()
     const el = audioElement()
     bindAudioElement(el)
     expect(el.setSinkId).toHaveBeenCalledWith('usb')
   })
 
-  it('logs a setSinkId rejection and leaves the element on the system default', async () => {
+  it('logs a setSinkId rejection instead of throwing', async () => {
     devices = [output('usb', 'USB Speaker')]
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { bindAudioElement, installOutputDevice } = await load()
@@ -162,7 +161,7 @@ describe('installOutputDevice', () => {
     }))
     bindAudioElement(el)
     installOutputDevice(vi.fn())
-    await flush()
+    await flushPromises()
     expect(el.setSinkId).toHaveBeenCalledWith('usb')
     expect(warn).toHaveBeenCalledWith('[output-device] could not route an audio element:', expect.any(Error))
   })
@@ -171,7 +170,7 @@ describe('installOutputDevice', () => {
     devices = [output('usb', 'USB Speaker')]
     const { bindAudioElement, installOutputDevice } = await load()
     installOutputDevice(vi.fn())
-    await flush()
+    await flushPromises()
     expect(() => bindAudioElement(document.createElement('audio'))).not.toThrow()
   })
 
@@ -182,7 +181,7 @@ describe('installOutputDevice', () => {
     const { installOutputDevice, outputDeviceRouter } = await load()
     const notify = vi.fn()
     installOutputDevice(notify)
-    await flush()
+    await flushPromises()
     expect(warn).toHaveBeenCalledWith('[output-device] could not load the stored Output Device:', expect.any(Error))
     expect(outputDeviceRouter.sinkId).toBe('')
     expect(notify).not.toHaveBeenCalled()
@@ -193,7 +192,7 @@ describe('installOutputDevice', () => {
     mediaDevices.enumerateDevices.mockRejectedValueOnce(new Error('denied'))
     const { installOutputDevice } = await load()
     installOutputDevice(vi.fn())
-    await flush()
+    await flushPromises()
     expect(warn).toHaveBeenCalledWith('[output-device] could not list output devices:', expect.any(Error))
   })
 
