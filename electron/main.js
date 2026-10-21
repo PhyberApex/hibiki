@@ -350,7 +350,14 @@ app.whenReady().then(async () => {
   let handle
   let api
   try {
-    const embedded = await getEmbeddedApp(createSecretCodec(), { localSink: createLocalSink(() => mainWindow), appVersion: app.getVersion() })
+    const embedded = await getEmbeddedApp(createSecretCodec(), {
+      localSink: createLocalSink(() => mainWindow),
+      appVersion: app.getVersion(),
+      usageStats: {
+        gate: { packaged: app.isPackaged, killSwitch: process.env.HIBIKI_USAGE_STATS === 'off' },
+        environment: { electronVersion: process.versions.electron, platform: process.platform, arch: process.arch, locale: app.getLocale() },
+      },
+    })
     handle = embedded
     api = embedded.api
   }

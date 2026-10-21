@@ -5,10 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchMasterVolume, fetchSceneFadeLength, updateMasterVolume } from '@/api/config'
 import { playAmbience, playEffect, playMusic, stopAmbience, stopEffects, stopMusic } from '@/api/player'
 import { canDecode } from '@/api/sounds'
+import { trackUsage } from '@/api/usage-stats'
 import { usePlayerStore } from '@/stores/player'
 import { useScenePlaybackStore } from './scene-playback'
 
 vi.mock('@/api/scenes', () => ({ getScene: vi.fn() }))
+vi.mock('@/api/usage-stats', () => ({ trackUsage: vi.fn() }))
 vi.mock('@/api/sounds', () => ({
   soundStreamUrl: vi.fn((type: string, id: string) => `hibiki://sound/${type}/${id}`),
   canDecode: vi.fn().mockResolvedValue(true),
@@ -411,5 +413,83 @@ describe('scene playback store: Music Mode', () => {
     await flushPromises()
     expect(playingEls).toHaveLength(2)
     expect(store.playingMusicId).toBeNull()
+  })
+})
+
+describe('scene playback store: Usage Stats', () => {
+  const statsScene: Scene = {
+    id: 'st',
+    name: 'Tavern',
+    ambience: [{ soundId: 'amb-1', soundName: 'Rain', volume: 80, enabled: true }, { soundId: 'amb-2', soundName: 'Fire', volume: 80, enabled: false }],
+    music: [{ soundId: 'mus-1', soundName: 'Theme', volume: 100, loop: true }],
+    effects: [{ soundId: 'fx-1', soundName: 'Thunder', volume: 100 }, { soundId: 'fx-2', soundName: 'Door', volume: 100 }, { soundId: 'fx-3', soundName: 'Bell', volume: 100 }],
+    musicMode: 'shuffle',
+    createdAt: '',
+    updatedAt: '',
+  }
+
+  function joinDiscord() {
+    const player = usePlayerStore()
+    player.guildId = 'g1'
+    player.playerState = [{ guildId: 'g1', connectedChannelId: 'c1' }] as never
+  }
+
+  const events = (name: string) => vi.mocked(trackUsage).mock.calls.map(([event]) => event).filter(event => event.name === name)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    usePlayerStore().activeTarget = 'local'
+  })
+
+  it('emits one scene-play per Scene start with the mode, item counts and Target kind, never names', async () => {
+    const store = useScenePlaybackStore()
+    store.musicSounds = [{ id: 'mus-1', name: 'Theme', filename: 'theme.mp3' } as never]
+
+    await store.playScene(statsScene)
+
+    expect(events('scene-play')).toEqual([
+      { name: 'scene-play', data: { musicMode: 'shuffle', music: 1, ambience: 2, effects: 3, target: 'local' } },
+    ])
+  })
+
+  it('emits scene-play for a Scene Crossfade too', async () => {
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValue({ ...statsScene, musicMode: undefined })
+    const store = useScenePlaybackStore()
+
+    await store.crossfadeToScene('st')
+
+    expect(events('scene-play')).toEqual([
+      { name: 'scene-play', data: { musicMode: 'single', music: 1, ambience: 2, effects: 3, target: 'local' } },
+    ])
+  })
+
+  it('emits nothing when the Scene cannot play', async () => {
+    usePlayerStore().activeTarget = 'discord'
+    await useScenePlaybackStore().playScene(statsScene)
+    expect(trackUsage).not.toHaveBeenCalled()
+  })
+
+  it('a Target handover emits target-switch and no second scene-play', async () => {
+    joinDiscord()
+    usePlayerStore().activeTarget = 'discord'
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValue(statsScene)
+    const store = useScenePlaybackStore()
+    await store.playScene(statsScene)
+
+    await store.switchTarget('local')
+    await flushPromises()
+
+    expect(usePlayerStore().playingSceneMode).toBe('local')
+    expect(events('scene-play')).toHaveLength(1)
+    expect(events('scene-play')[0].data).toEqual(expect.objectContaining({ target: 'discord' }))
+    expect(events('target-switch')).toEqual([{ name: 'target-switch', data: { target: 'local' } }])
+  })
+
+  it('switching to the Target already active emits nothing', async () => {
+    await useScenePlaybackStore().switchTarget('local')
+    expect(trackUsage).not.toHaveBeenCalled()
   })
 })

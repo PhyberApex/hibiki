@@ -3,6 +3,7 @@ import { computed, reactive, watch } from 'vue'
 import { sendEffectChunk, setEffectStreamVolume, startEffectStream, stopEffectStream } from '@/api/audio-stream'
 import { getBrowserViewMediaSourceId, setBrowserViewAudioMuted } from '@/api/browser-view'
 import { LOCAL_TARGET_ID } from '@/api/config'
+import { trackUsage } from '@/api/usage-stats'
 import { logDebug, logInfo } from '@/audio/audio-element-diagnostics'
 import { captureFromMediaStream, captureTabStream } from '@/audio/browser-audio-capture'
 import { createRoutedTabLocalPlayback } from '@/audio/routed-tab-local-playback'
@@ -184,6 +185,7 @@ export const useRoutedTabsStore = defineStore('routedTabs', () => {
   function setRouted(tabId: number, routed: boolean): Promise<void> {
     logInfo(`[browser] tab ${tabId} ${routed ? 'route' : 'un-route'} requested (active Target ${player.targetId}, can play: ${player.canPlay})`)
     stateOf(tabId).routed = routed
+    trackUsage({ name: 'routed-tab-toggle', data: { routed, target: player.activeTarget } })
     return sync(tabId)
   }
 

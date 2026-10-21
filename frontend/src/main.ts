@@ -1,6 +1,7 @@
 import { createPinia } from 'pinia'
 
 import { createApp } from 'vue'
+import { bindUsageStatsRouter } from './api/usage-stats'
 import App from './App.vue'
 import { installLocalSink } from './audio/local-sink'
 import { installOutputDevice } from './audio/output-device'
@@ -28,6 +29,7 @@ installLocalSink()
 
 app.use(createPinia())
 app.use(router)
+bindUsageStatsRouter(router)
 
 // The Local Target's Output Device: resolved against connected devices, with one warning per absence.
 installOutputDevice(label => useToastStore().show({ type: 'warning', text: `${label} not found, playing through the system default` }))

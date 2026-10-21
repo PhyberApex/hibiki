@@ -1,6 +1,7 @@
 import { fetchHotkeySettings } from '@/api/config'
 import { fetchHotkeyStatus, onHotkeyFired } from '@/api/hotkeys'
 import { listScenes } from '@/api/scenes'
+import { trackUsage } from '@/api/usage-stats'
 import { logInfo } from '@/audio/audio-element-diagnostics'
 import { usePlayerStore } from '@/stores/player'
 import { useScenePlaybackStore } from '@/stores/scene-playback'
@@ -57,6 +58,7 @@ export function startHotkeyDispatch(): () => void {
       logInfo,
       // Renderer debug output never reaches hibiki.log, and this is the line that explains "nothing happened".
       logDebug: logInfo,
+      trackFired: kind => trackUsage({ name: 'hotkey-fired', data: { kind } }),
     }))
   })
 }

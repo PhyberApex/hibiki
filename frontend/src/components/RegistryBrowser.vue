@@ -2,6 +2,7 @@
 import type { RegistryEntry } from '@/api/registry'
 import { computed, onMounted, ref } from 'vue'
 import { getRegistryIndex, installFromRegistry } from '@/api/registry'
+import { trackUsage } from '@/api/usage-stats'
 
 const emit = defineEmits<{
   close: []
@@ -47,6 +48,7 @@ async function install(entry: RegistryEntry) {
   installMessage.value = null
   try {
     const scene = await installFromRegistry(entry.slug)
+    trackUsage({ name: 'registry-install', data: { entryId: entry.slug } })
     installMessage.value = { type: 'success', text: `Installed "${scene.name}"` }
     emit('installed', scene.id)
   }
