@@ -83,8 +83,8 @@ async function close(): Promise<void> {
   app = undefined
 }
 
-/** Makes the next "Open file" dialog pick `path`, as the GM would in the OS file picker. */
-async function pickFileNext(path: string): Promise<void> {
+/** Makes every "Open file" dialog from now on pick `path`, as the GM would in the OS file picker. */
+async function stubOpenDialog(path: string): Promise<void> {
   await app!.evaluate(({ dialog }, picked) => {
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [picked] })) as typeof dialog.showOpenDialog
   }, path)
@@ -93,7 +93,7 @@ async function pickFileNext(path: string): Promise<void> {
 /** Imports `archive` through the Scenes list's Import button and returns the Scene it opened. */
 async function importThroughUi(archive: string): Promise<Scene> {
   await page.goto('hibiki://app/scenes')
-  await pickFileNext(archive)
+  await stubOpenDialog(archive)
   await page.getByRole('button', { name: 'Import', exact: true }).click()
   await expect(page).toHaveURL(/hibiki:\/\/app\/scenes\/[^/]+$/)
   const id = decodeURIComponent(page.url().split('/').pop()!)
@@ -155,7 +155,10 @@ test('a .hibiki.zip exported by one profile imports into another, duplicates and
     expect(manifest.scene.ambience[0]).toMatchObject({ soundName: AMBIENCE.name, volume: AMBIENCE.volume, enabled: true, bundled: true })
     expect(manifest.scene.effects[0]).toMatchObject({ soundName: EFFECT.name, volume: EFFECT.volume, bundled: true })
 
+    // What an export writes when the Effect's file is gone from the library: no file, not bundled.
     zip.deleteFile(`sounds/effects/${EFFECT.id}.wav`)
+    manifest.scene.effects[0] = { soundName: EFFECT.name, volume: EFFECT.volume, bundled: false }
+    zip.updateFile('hibiki-scene.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'))
     zip.writeZip(trimmedArchive)
   })
 
@@ -189,7 +192,7 @@ test('a .hibiki.zip exported by one profile imports into another, duplicates and
       expect(Object.keys(files[category])).toContain(`${sound.id}.wav`)
   })
 
-  await test.step('importing it again adds a renamed copy without touching the first', async () => {
+  await test.step('importing it again adds a renamed copy sharing the same sound files', async () => {
     const before = storedFiles(profileB)
     const second = await importThroughUi(archive)
     const copyName = `${SCENE_NAME} (imported)`
@@ -202,7 +205,7 @@ test('a .hibiki.zip exported by one profile imports into another, duplicates and
     expect(second.effects).toEqual(first.effects)
     expect(await invokeApi<Scene>(page, 'scenes', 'get', [first.id])).toMatchObject({ name: SCENE_NAME, music: first.music, ambience: first.ambience, effects: first.effects })
     expect((await invokeApi<Scene[]>(page, 'scenes', 'list')).map(s => s.name).sort()).toEqual([SCENE_NAME, copyName])
-    // The bundled sounds keep their ids, so the copy shares B's files rather than adding or altering any.
+    // The bundled sounds keep their ids: the import rewrites the same files with the same bytes, adding none.
     expect(storedFiles(profileB)).toEqual(before)
   })
 
