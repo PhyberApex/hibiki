@@ -23,7 +23,7 @@ function makeConfig() {
   }
 }
 
-function setup(options: { gate?: UsageStatsGate, send?: (payload: UsageStatsPayload) => Promise<void>, timeoutMs?: number } = {}) {
+function setup(options: { gate?: UsageStatsGate, send?: (payload: UsageStatsPayload) => Promise<void>, timeoutMs?: number, environment?: Partial<typeof ENVIRONMENT> } = {}) {
   const config = makeConfig()
   const sent: UsageStatsPayload[] = []
   const sender = {
@@ -36,7 +36,7 @@ function setup(options: { gate?: UsageStatsGate, send?: (payload: UsageStatsPayl
     settings: createUsageStatsSettings(createAppConfig(config)),
     sender,
     gate: options.gate ?? { packaged: true, killSwitch: false },
-    environment: ENVIRONMENT,
+    environment: { ...ENVIRONMENT, ...options.environment },
     timeoutMs: options.timeoutMs,
   })
   const appConfigFile = join(config.audio.storageRoot, 'data', 'app-config.json')
@@ -86,7 +86,7 @@ describe('createUsageStats', () => {
     expect(sent).toEqual([{
       name: 'app-start',
       url: '/',
-      hostname: 'hibiki-desktop',
+      hostname: 'app.hibiki.phyberapex.de',
       data: { platform: 'linux', arch: 'x64', version: '1.7.0', locale: 'en-US' },
     }])
   })
@@ -98,6 +98,25 @@ describe('createUsageStats', () => {
     await usageStats.track({ name: 'app-start', data: { platform: 'my-guild', guildId: '123' } })
     await flush()
     expect(sent[0].data).toEqual({ platform: 'linux', arch: 'x64', version: '1.7.0', locale: 'en-US' })
+  })
+
+  it.each([
+    ['zh-Hant-TW', 'zh-TW'],
+    ['es-419', 'es-419'],
+    ['de', 'de'],
+  ])('reduces locale %s to %s instead of losing app-start', async (locale, sentLocale) => {
+    const { usageStats, sent } = setup({ environment: { locale } })
+    await usageStats.setEnabled(true)
+    await flush()
+    expect(sent[0].data.locale).toBe(sentLocale)
+  })
+
+  it('leaves out an arch the allowlist does not know but still counts the launch', async () => {
+    const { usageStats, sent } = setup({ environment: { arch: 'riscv64' } })
+    await usageStats.setEnabled(true)
+    await flush()
+    expect(sent[0].data).toEqual({ platform: 'linux', version: '1.7.0', locale: 'en-US' })
+    expect(warn).not.toHaveBeenCalled()
   })
 
   it('sends nothing when switched off, and nothing afterwards', async () => {
@@ -139,8 +158,8 @@ describe('createUsageStats', () => {
     await usageStats.track({ name: 'routed-tab-toggle', url: '/browser', data: { routed: true, target: 'discord' } })
     await flush()
     expect(sent).toEqual([
-      { ...SCENE_PLAY, hostname: 'hibiki-desktop' },
-      { name: 'routed-tab-toggle', url: '/browser', hostname: 'hibiki-desktop', data: { routed: true, target: 'discord' } },
+      { ...SCENE_PLAY, hostname: 'app.hibiki.phyberapex.de' },
+      { name: 'routed-tab-toggle', url: '/browser', hostname: 'app.hibiki.phyberapex.de', data: { routed: true, target: 'discord' } },
     ])
     expect(debug).toHaveBeenCalledWith('[usage-stats]', 'Sending scene-play (url /scenes/:id):', JSON.stringify(SCENE_PLAY.data))
   })

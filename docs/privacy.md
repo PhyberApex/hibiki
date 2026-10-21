@@ -50,7 +50,7 @@ When they are on, the app sends these events, and nothing else, to the self-host
 | `vision-analyze` | You analyze an image with Vision to Vibe | The Vision Provider kind (`claude` or `openai-compatible`), never the image |
 | `registry-install` | You install a Scene from the community Registry | The public Registry entry id (e.g. `battlefield-clash`) |
 
-Every event also carries the name of the screen it happened on (for example `/settings` or `/scenes/:id`, never a Scene's id), the fixed hostname `hibiki-desktop`, and a User-Agent naming the app instead of a browser, for example `Hibiki/1.7.0 (Electron/41.0.0; Linux x86_64)`.
+Every event also carries the name of the screen it happened on (for example `/settings` or `/scenes/:id`, never a Scene's id), the fixed hostname `app.hibiki.phyberapex.de` (a label for the dashboard, never contacted), and a User-Agent naming the app instead of a browser, for example `Hibiki/1.7.0 (Electron/41.0.0; Linux x86_64)`.
 
 - **No identifier is stored.** Hibiki keeps nothing on your computer that identifies the machine or the install, so switching Usage Stats off leaves nothing to delete. Umami's own daily salted hash (see above) is the only notion of a visitor, so the numbers show active machines per day, not installs.
 - **Never sent:** server (guild) or channel names or ids, Scene, sound or Hotkey names, website addresses, images, or anything else you created.

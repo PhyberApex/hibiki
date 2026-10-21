@@ -59,7 +59,7 @@ export const USAGE_STATS_EVENTS: Readonly<Record<string, Readonly<Record<string,
 export const USAGE_STATS_URLS: readonly string[] = ['/', '/media', '/scenes', '/scenes/:id', '/browser', '/settings', '/about']
 
 /** Sent as Umami's `hostname` with every event; the Umami website's "domain" is the same. */
-export const USAGE_STATS_HOSTNAME = 'hibiki-desktop'
+export const USAGE_STATS_HOSTNAME = 'app.hibiki.phyberapex.de'
 
 export function isAllowedValue(rule: UsageStatsValueRule, value: unknown): boolean {
   switch (rule.type) {

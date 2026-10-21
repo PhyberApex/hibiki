@@ -154,19 +154,38 @@ export function createUsageStats(options: {
       .finally(() => clearTimeout(timer))
   }
 
+  /**
+   * `app-start` is built here from the environment, never from the caller.
+   * A value the allowlist does not know (an unusual arch, a locale with a
+   * script subtag) is reduced or left out, so the launch is still counted.
+   */
+  function appStartData(): Record<string, string> {
+    const rules = USAGE_STATS_EVENTS['app-start']
+    const candidates: Record<string, string> = {
+      platform: environment.platform,
+      arch: environment.arch,
+      version: environment.appVersion,
+      locale: environment.locale.split(/[-_]/)[0],
+    }
+    const region = /[-_]([A-Z]{2}|\d{3})$/i.exec(environment.locale)?.[1]
+    if (region)
+      candidates.locale = `${candidates.locale}-${region.toUpperCase()}`
+    return Object.fromEntries(Object.entries(candidates).filter(([key, value]) => isAllowedValue(rules[key], value)))
+  }
+
   /** Resolves once the event is dropped or handed to the sender; never waits for the network, never rejects. */
   async function track(event: UsageStatsEvent): Promise<void> {
     try {
-      const candidate = event?.name === 'app-start'
-        ? { ...event, data: { platform: environment.platform, arch: environment.arch, version: environment.appVersion, locale: environment.locale } }
-        : event
+      const candidate = event?.name === 'app-start' ? { ...event, data: appStartData() } : event
       const result = validate(candidate)
       if ('reason' in result) {
         log.warn(`Dropped a Usage Stats event: ${result.reason}`)
         return
       }
-      if (gatedBecause || !(await settings.get()).enabled)
+      if (gatedBecause || !(await settings.get()).enabled) {
+        log.debug(`Not sending ${result.payload.name}: ${gatedBecause ?? 'Usage Stats are off'}`)
         return
+      }
       dispatch({ ...result.payload, hostname: USAGE_STATS_HOSTNAME })
     }
     catch (err) {

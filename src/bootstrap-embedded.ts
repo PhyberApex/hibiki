@@ -37,7 +37,7 @@ import { createSceneRegistry } from './scenes/scene-registry'
 import { createSceneStore } from './scenes/scene-store'
 import { createSoundLibrary } from './sound/sound-library'
 import { createUpdateCheck } from './updates/update-check'
-import { buildUserAgent, createUmamiSender, createUsageStats, resolveUsageStatsHost, USAGE_STATS_WEBSITE_ID } from './usage-stats/usage-stats'
+import { buildUserAgent, createUmamiSender, createUsageStats, resolveUsageStatsHost, USAGE_STATS_HOST, USAGE_STATS_WEBSITE_ID } from './usage-stats/usage-stats'
 import { getVersion } from './version'
 import { matchVibeLibrary } from './vision/vibe-matching'
 import { createVisionSettings } from './vision/vision-settings'
@@ -283,7 +283,7 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
     gate: options.usageStats?.gate ?? { packaged: false, killSwitch: false },
     environment: usageStatsEnvironment,
   })
-  if (usageStatsHost !== resolveUsageStatsHost(undefined))
+  if (usageStatsHost !== USAGE_STATS_HOST)
     log.info(`Usage Stats host overridden by HIBIKI_USAGE_STATS_HOST: ${usageStatsHost}`)
 
   // Read scenes.json, app-config.json, and (via sounds.list, which reads the
@@ -446,7 +446,14 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       dismiss: version => updateCheck.dismiss(version),
     },
     usageStats: {
-      track: event => usageStats.track(event),
+      // `app-start` belongs to the main process (launch, toggle on); a renderer copy would inflate the count.
+      track: async (event) => {
+        if (event?.name === 'app-start') {
+          log.warn('Dropped a Usage Stats event: app-start is sent by the main process only')
+          return
+        }
+        await usageStats.track(event)
+      },
     },
   }
 
