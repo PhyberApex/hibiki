@@ -195,9 +195,7 @@ Hibiki has no account. It only contacts:
 
 <!-- Keep in sync with .github/release-notes/code-signing-policy.md, which is appended to every GitHub Release. -->
 
-Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
-
-Windows builds are being moved to signing through SignPath Foundation. Until the first signed release ships, the Windows builds on the Releases page are unsigned.
+Hibiki's builds are currently **unsigned** on every platform. An application to the SignPath Foundation free code signing program was declined on 2026-10-21 because the project does not yet have enough public visibility (stars, forks, contributors, independent coverage). The maintainer will reapply once it does. Until then, this section documents how releases are produced so that a future signing identity can be trusted.
 
 **Team roles.** Hibiki has one maintainer, [@PhyberApex](https://github.com/PhyberApex), who holds every role today:
 
@@ -208,12 +206,12 @@ Windows builds are being moved to signing through SignPath Foundation. Until the
 **Policy.**
 
 - Release binaries are built on GitHub Actions from the tagged release commit, never on a workstation.
-- Every signing request is approved manually in SignPath by an approver.
+- Once signing is in place, every signing request is approved manually by an approver.
 - Every team member has multi-factor authentication turned on for GitHub.
-- Only Hibiki's own binaries are signed. Bundled upstream open-source binaries, such as the prebuilt `@snazzah/davey` native module, ship unsigned as their upstream projects publish them, as SignPath's terms allow.
+- Only Hibiki's own binaries will be signed. Bundled upstream open-source binaries, such as the prebuilt `@snazzah/davey` native module, ship unsigned as their upstream projects publish them.
 - What the app contacts over the network is listed under [Privacy](#privacy).
 
-> **Windows note:** Windows SmartScreen may still show "Windows protected your PC" for the first signed releases. SmartScreen trusts a signature only once enough downloads under the same certificate have built up reputation, so the warning fades over several releases rather than disappearing with the first one.
+> **Windows note:** Windows SmartScreen shows "Windows protected your PC" for the unsigned installer. Click **More info**, then **Run anyway**. Once releases are signed, the warning still takes several releases to fade, because SmartScreen trusts a signature only after enough downloads under the same certificate have built up reputation.
 
 ## E2E tests (real Discord)
 
