@@ -3,12 +3,14 @@ import type { AccessibilitySettings } from './config/accessibility-settings'
 import type { DiscordStatus } from './config/discord-token-settings'
 import type { HotkeySettings } from './config/hotkey-settings'
 import type { LocalOutputDevice } from './config/local-output-device-settings'
+import type { UsageStatsSettings } from './config/usage-stats-settings'
 import type { StorageWarning } from './json-file'
 import type { SecretCodec } from './persistence'
 import type { OutputTargetKind } from './player/output-target'
 import type { MusicMode } from './scenes/scene-store'
 import type { SoundCategory } from './sound/sound.types'
 import type { AvailableUpdate, UpdateCheckSettings } from './updates/update-check'
+import type { UsageStatsEnvironment, UsageStatsEvent, UsageStatsGate } from './usage-stats/usage-stats'
 import type { VibeMatches } from './vision/vibe-matching'
 import type { VisionSettingsState } from './vision/vision-settings'
 import type { VibeAnalysis, VisionProviderId } from './vision/vision.service'
@@ -22,6 +24,7 @@ import { createHotkeySettings } from './config/hotkey-settings'
 import { createLocalOutputDeviceSettings } from './config/local-output-device-settings'
 import { createOutputTargetSettings } from './config/output-target-settings'
 import { normalizeSceneFadeLength, parseSceneFadeLength } from './config/scene-fade-settings'
+import { createUsageStatsSettings } from './config/usage-stats-settings'
 import { createDiscordClient } from './discord/discord-client'
 import { getStorageWarnings } from './json-file'
 import { createLogger } from './logger'
@@ -34,6 +37,7 @@ import { createSceneRegistry } from './scenes/scene-registry'
 import { createSceneStore } from './scenes/scene-store'
 import { createSoundLibrary } from './sound/sound-library'
 import { createUpdateCheck } from './updates/update-check'
+import { buildUserAgent, createUmamiSender, createUsageStats, resolveUsageStatsHost, USAGE_STATS_HOST, USAGE_STATS_WEBSITE_ID } from './usage-stats/usage-stats'
 import { getVersion } from './version'
 import { matchVibeLibrary } from './vision/vibe-matching'
 import { createVisionSettings } from './vision/vision-settings'
@@ -116,6 +120,9 @@ export interface EmbeddedApi {
     setVisionOpenAiBaseUrl: (baseUrl: string) => Promise<VisionSettingsState>
     setVisionOpenAiModel: (model: string) => Promise<VisionSettingsState>
     setVisionEnabled: (enabled: boolean) => Promise<VisionSettingsState>
+    getUsageStats: () => Promise<UsageStatsSettings>
+    setUsageStatsEnabled: (enabled: boolean) => Promise<UsageStatsSettings>
+    markUsageStatsPrompted: () => Promise<UsageStatsSettings>
     getStorageWarnings: () => Promise<StorageWarning[]>
   }
   sounds: {
@@ -149,6 +156,10 @@ export interface EmbeddedApi {
     setEnabled: (enabled: boolean) => Promise<void>
     check: () => Promise<AvailableUpdate | null>
     dismiss: (version: string) => Promise<void>
+  }
+  usageStats: {
+    /** Fire-and-forget: resolves once the event is dropped or handed to the sender, never rejects. */
+    track: (event: UsageStatsEvent) => Promise<void>
   }
 }
 
@@ -221,6 +232,12 @@ export interface EmbeddedAppOptions {
   localSink?: import('./audio/local-sink-pump').LocalSink
   /** The running app's version (`app.getVersion()`), which the update check compares against. */
   appVersion?: string
+  /**
+   * Usage Stats (ADR-0008): the gate (packaged build, `HIBIKI_USAGE_STATS=off`)
+   * and the Electron-only parts of the environment, injected by the main
+   * process. Without it nothing is ever sent.
+   */
+  usageStats?: { gate: UsageStatsGate, environment: Omit<UsageStatsEnvironment, 'appVersion'> }
 }
 
 export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOptions = {}): Promise<EmbeddedApp> {
@@ -255,6 +272,19 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
   const visionSettings = createVisionSettings(config, appConfig)
   const updateCheck = createUpdateCheck({ store: appConfig, currentVersion: options.appVersion ?? getVersion(), fetch })
   const vision = createVisionService({ getProviderConfig: visionSettings.getProviderConfig })
+  const usageStatsEnvironment: UsageStatsEnvironment = {
+    appVersion: options.appVersion ?? getVersion(),
+    ...(options.usageStats?.environment ?? { electronVersion: process.versions.electron ?? 'none', platform: process.platform, arch: process.arch, locale: 'en' }),
+  }
+  const usageStatsHost = resolveUsageStatsHost(process.env.HIBIKI_USAGE_STATS_HOST)
+  const usageStats = createUsageStats({
+    settings: createUsageStatsSettings(appConfig),
+    sender: createUmamiSender({ host: usageStatsHost, websiteId: USAGE_STATS_WEBSITE_ID, userAgent: buildUserAgent(usageStatsEnvironment) }),
+    gate: options.usageStats?.gate ?? { packaged: false, killSwitch: false },
+    environment: usageStatsEnvironment,
+  })
+  if (usageStatsHost !== USAGE_STATS_HOST)
+    log.info(`Usage Stats host overridden by HIBIKI_USAGE_STATS_HOST: ${usageStatsHost}`)
 
   // Read scenes.json, app-config.json, and (via sounds.list, which reads the
   // sound-tags store) sound-tags.json up front, so a corrupt file is detected
@@ -270,6 +300,7 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
     log.error('Storage warm-up failed:', err)
   })
   log.info('Services ready; Discord login scheduled')
+  void usageStats.track({ name: 'app-start' })
 
   // Defer login to avoid blocking app startup
   // Discord will connect in background after main window shows
@@ -360,6 +391,9 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       setVisionOpenAiBaseUrl: baseUrl => visionSettings.setOpenAiBaseUrl(baseUrl),
       setVisionOpenAiModel: model => visionSettings.setOpenAiModel(model),
       setVisionEnabled: enabled => visionSettings.setEnabled(enabled),
+      getUsageStats: () => usageStats.getSettings(),
+      setUsageStatsEnabled: enabled => usageStats.setEnabled(enabled),
+      markUsageStatsPrompted: () => usageStats.markPrompted(),
       getStorageWarnings: async () => getStorageWarnings(),
     },
     sounds: {
@@ -410,6 +444,16 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       setEnabled: enabled => updateCheck.setEnabled(enabled),
       check: () => updateCheck.check(),
       dismiss: version => updateCheck.dismiss(version),
+    },
+    usageStats: {
+      // `app-start` belongs to the main process (launch, toggle on); a renderer copy would inflate the count.
+      track: async (event) => {
+        if (event?.name === 'app-start') {
+          log.warn('Dropped a Usage Stats event: app-start is sent by the main process only')
+          return
+        }
+        await usageStats.track(event)
+      },
     },
   }
 

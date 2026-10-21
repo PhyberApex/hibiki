@@ -17,6 +17,7 @@ import {
   updateVisionProvider,
 } from '@/api/config'
 import { fetchUpdateCheckSettings, updateUpdateCheckEnabled } from '@/api/updates'
+import { fetchUsageStats, updateUsageStatsEnabled } from '@/api/usage-stats'
 import { useAccessibilityStore } from '@/stores/accessibility'
 import { usePlayerStore } from '@/stores/player'
 import SettingsView from './SettingsView.vue'
@@ -71,6 +72,11 @@ vi.mock('@/api/config', () => ({
 vi.mock('@/api/updates', () => ({
   fetchUpdateCheckSettings: vi.fn().mockResolvedValue({ enabled: true }),
   updateUpdateCheckEnabled: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/api/usage-stats', () => ({
+  fetchUsageStats: vi.fn().mockResolvedValue({ enabled: false, prompted: false }),
+  updateUsageStatsEnabled: vi.fn().mockResolvedValue({ enabled: true, prompted: false }),
 }))
 
 vi.mock('@/api/hotkeys', () => ({
@@ -203,6 +209,47 @@ describe('settingsView', () => {
       await flushPromises()
       expect(toggle.element.checked).toBe(true)
       expect(wrapper.find('[data-testid="updates-section"]').text()).toContain('disk full')
+    })
+  })
+
+  describe('usage stats section', () => {
+    it('shows Usage Stats off by default and saves switching them on', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      const toggle = wrapper.find<HTMLInputElement>('#usage-stats-enabled')
+      expect(toggle.element.checked).toBe(false)
+      await toggle.setValue(true)
+      await flushPromises()
+      expect(updateUsageStatsEnabled).toHaveBeenCalledWith(true)
+      expect(toggle.element.checked).toBe(true)
+    })
+
+    it('reflects a stored opt-in', async () => {
+      vi.mocked(fetchUsageStats).mockResolvedValueOnce({ enabled: true, prompted: true })
+      const wrapper = mountSettings()
+      await flushPromises()
+      expect(wrapper.find<HTMLInputElement>('#usage-stats-enabled').element.checked).toBe(true)
+    })
+
+    it('reverts the toggle and says so when saving fails', async () => {
+      vi.mocked(updateUsageStatsEnabled).mockRejectedValueOnce(new Error('disk full'))
+      const wrapper = mountSettings()
+      await flushPromises()
+      const toggle = wrapper.find<HTMLInputElement>('#usage-stats-enabled')
+      await toggle.setValue(true)
+      await flushPromises()
+      expect(toggle.element.checked).toBe(false)
+      expect(wrapper.find('[data-testid="usage-stats-section"]').text()).toContain('disk full')
+    })
+
+    it('lists every event that is sent and links the privacy page', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      const items = wrapper.findAll('[data-testid="usage-stats-list"] li').map(li => li.text())
+      expect(items).toHaveLength(7)
+      expect(items.join('\n')).toContain('Scene played')
+      expect(items.join('\n')).toContain('never the key')
+      expect(wrapper.find('[data-testid="usage-stats-privacy-link"]').attributes('href')).toBe('https://phyberapex.github.io/hibiki/privacy')
     })
   })
 

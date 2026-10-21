@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { sendEffectChunk, setEffectStreamVolume, startEffectStream, stopEffectStream } from '@/api/audio-stream'
 import { getBrowserViewMediaSourceId, setBrowserViewAudioMuted } from '@/api/browser-view'
+import { trackUsage } from '@/api/usage-stats'
 import { captureFromMediaStream, captureTabStream } from '@/audio/browser-audio-capture'
 import { createRoutedTabLocalPlayback } from '@/audio/routed-tab-local-playback'
 import { usePlayerStore } from '@/stores/player'
@@ -10,6 +11,7 @@ import { useScenePlaybackStore } from '@/stores/scene-playback'
 import { useRoutedTabsStore } from './routed-tabs'
 
 vi.mock('@/api/scenes', () => ({ getScene: vi.fn() }))
+vi.mock('@/api/usage-stats', () => ({ trackUsage: vi.fn() }))
 vi.mock('@/api/sounds', () => ({ soundStreamUrl: vi.fn(), canDecode: vi.fn().mockResolvedValue(true) }))
 vi.mock('@/api/player', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/player')>()
@@ -313,5 +315,32 @@ describe('routed tabs store', () => {
 
     expect(startEffectStream).not.toHaveBeenCalled()
     expect(store.isRouted(5)).toBe(false)
+  })
+
+  describe('usage stats', () => {
+    it('emits routed-tab-toggle on the GM\'s toggle, with the Target kind', async () => {
+      joinDiscord()
+      const store = useRoutedTabsStore()
+      await store.toggleRouting(1)
+      await store.toggleRouting(1)
+      expect(vi.mocked(trackUsage).mock.calls).toEqual([
+        [{ name: 'routed-tab-toggle', data: { routed: true, target: 'discord' } }],
+        [{ name: 'routed-tab-toggle', data: { routed: false, target: 'discord' } }],
+      ])
+    })
+
+    it('emits nothing for re-syncs from a handover or a tab close', async () => {
+      joinDiscord()
+      const store = useRoutedTabsStore()
+      await store.toggleRouting(1)
+      vi.mocked(trackUsage).mockClear()
+
+      usePlayerStore().activeTarget = 'local'
+      await nextTick()
+      await flush()
+      await store.forgetTab(1)
+
+      expect(trackUsage).not.toHaveBeenCalled()
+    })
   })
 })

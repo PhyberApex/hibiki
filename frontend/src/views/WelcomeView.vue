@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchDiscordConfig } from '@/api/config'
+import { fetchUsageStats, markUsageStatsPrompted, updateUsageStatsEnabled } from '@/api/usage-stats'
 import { logInfo } from '@/audio/audio-element-diagnostics'
 import { usePlayerStore } from '@/stores/player'
 
@@ -8,6 +10,31 @@ declare const __APP_VERSION__: string
 const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
 const router = useRouter()
 const player = usePlayerStore()
+
+// The one-time Usage Stats invitation (ADR-0008): either answer is final.
+const showUsageStatsCard = ref(false)
+
+onMounted(async () => {
+  try {
+    showUsageStatsCard.value = !(await fetchUsageStats()).prompted
+  }
+  catch (err) {
+    console.warn('[welcome] could not read the Usage Stats settings:', err)
+  }
+})
+
+async function answerUsageStats(enable: boolean) {
+  showUsageStatsCard.value = false
+  logInfo(`[welcome] Usage Stats invitation answered: ${enable ? 'enable' : 'not now'}`)
+  try {
+    await markUsageStatsPrompted()
+    if (enable)
+      await updateUsageStatsEnabled(true)
+  }
+  catch (err) {
+    console.error('[welcome] could not save the Usage Stats answer:', err)
+  }
+}
 
 async function playAtTheTable() {
   logInfo('[welcome] onboarding path chosen: local (play at the table)')
@@ -57,6 +84,20 @@ async function playInDiscord() {
         <span class="path-desc">Play into a voice channel with your own bot token.</span>
       </button>
     </div>
+
+    <section v-if="showUsageStatsCard" class="usage-stats-card" data-testid="usage-stats-card" aria-label="Usage Stats">
+      <p class="usage-stats-text">
+        Help improve Hibiki by sharing anonymous usage stats. Off unless you say so; no identifier is stored, and Settings lists exactly what is sent.
+      </p>
+      <div class="usage-stats-actions">
+        <button type="button" class="btn-usage btn-usage-enable" data-testid="usage-stats-enable" @click="answerUsageStats(true)">
+          Enable
+        </button>
+        <button type="button" class="btn-usage" data-testid="usage-stats-not-now" @click="answerUsageStats(false)">
+          Not now
+        </button>
+      </div>
+    </section>
 
     <span class="welcome-version">v{{ appVersion }}</span>
   </div>
@@ -159,6 +200,52 @@ async function playInDiscord() {
 .path-desc {
   font-size: 0.8rem;
   color: var(--color-text-muted);
+}
+
+.usage-stats-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 1.25rem;
+  max-width: 31rem;
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 12px);
+}
+
+.usage-stats-text {
+  flex: 1 1 18rem;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.usage-stats-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-usage {
+  appearance: none;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.btn-usage:hover,
+.btn-usage:focus-visible {
+  border-color: var(--color-accent);
+}
+
+.btn-usage-enable {
+  border-color: var(--color-accent);
+  background: var(--color-accent-muted);
 }
 
 .welcome-version {

@@ -22,7 +22,11 @@ export interface HotkeyDeps {
   refuse: (text: string) => void
   logInfo: (message: string) => void
   logDebug: (message: string) => void
+  /** Usage Stats: the press resolved to a binding of this kind (never the key itself). */
+  trackFired: (kind: HotkeyKind) => void
 }
+
+export type HotkeyKind = 'scene' | 'effect' | 'action'
 
 export type HotkeyOutcome = 'played' | 'crossfaded' | 'stopped' | 'volume' | 'effect' | 'ignored' | 'refused' | 'failed'
 
@@ -52,6 +56,7 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
     const playingId = deps.playingSceneId()
 
     if (actionHotkeys.stopHotkey === accelerator) {
+      deps.trackFired('action')
       if (!playingId) {
         log('stop', null, 'ignored')
         return 'ignored'
@@ -62,6 +67,7 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
     }
 
     if (actionHotkeys.stopEffectsHotkey === accelerator) {
+      deps.trackFired('action')
       if (deps.activeEffectCount() === 0) {
         deps.logDebug(`[hotkeys] ${accelerator} -> stop all Effects, Target ${target}: ignored, no Effect is playing`)
         return 'ignored'
@@ -75,6 +81,7 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
       ? VOLUME_STEP
       : actionHotkeys.volumeDownHotkey === accelerator ? -VOLUME_STEP : 0
     if (volumeStep) {
+      deps.trackFired('action')
       const action = volumeStep > 0 ? 'volume up' : 'volume down'
       const volume = await deps.stepMasterVolume(volumeStep)
       if (volume === null) {
@@ -90,6 +97,7 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
       ? 1
       : actionHotkeys.previousSceneHotkey === accelerator ? -1 : 0
     if (direction) {
+      deps.trackFired('action')
       const action = direction > 0 ? 'next Scene' : 'previous Scene'
       const currentIndex = playingId ? scenes.findIndex(s => s.id === playingId) : -1
       const destination = currentIndex === -1
@@ -113,6 +121,7 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
 
     const scene = scenes.find(s => s.hotkey === accelerator)
     if (scene) {
+      deps.trackFired('scene')
       if (playingId === scene.id) {
         deps.stopScene()
         log('toggle Scene', scene.id, 'stopped')
@@ -136,6 +145,7 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
       deps.logDebug(`[hotkeys] ${accelerator} ignored: no Scene or Stop binding, and no Effect in the Playing Scene (${playingId ?? 'none'})`)
       return 'ignored'
     }
+    deps.trackFired('effect')
     if (!deps.canPlay())
       return refuse('play Effect', playing.id)
     await deps.playEffect(effect)

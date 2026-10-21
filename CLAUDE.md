@@ -94,7 +94,7 @@ pnpm test:coverage:frontend               # Frontend only
 
 - **Frontend → Backend:** All communication uses Electron IPC via the `preload.js` bridge.
 - **IPC API:** Defined in `bootstrap-embedded.ts` as the `EmbeddedApi` interface.
-- **Domains:** `player`, `config`, `sounds`, `scenes`, `registry`, `vision`, `updates` (matching the service structure).
+- **Domains:** `player`, `config`, `sounds`, `scenes`, `registry`, `vision`, `updates`, `usageStats` (matching the service structure).
 - Frontend wrappers in `frontend/src/api/` provide typed functions (e.g., `joinChannel()`, `listScenes()`).
 - Audio streaming (Browser feature) uses chunked IPC: `audio:startStream`, `audio:chunk`, `audio:stopStream`.
 
@@ -120,12 +120,12 @@ Stored in `scenes.json`. Import/export bundles scenes with their sound files as 
 ### Storage
 
 Data lives in platform user data directory (e.g., `~/Library/Application Support/hibiki` on macOS):
-- `app-config.json` — Discord token (when set in UI; Settings → Remove deletes the key via `config.clearDiscordToken`, which also leaves voice, logs the bot out and falls back to the Local Target — `src/config/discord-token-settings.ts`), bookmarks, storage path override, master volume, global hotkey settings (`hotkeys`: enabled + the six Action Hotkeys), Vision to Vibe key + toggle, launch update check (`updates`: enabled + dismissed version)
+- `app-config.json` — Discord token (when set in UI; Settings → Remove deletes the key via `config.clearDiscordToken`, which also leaves voice, logs the bot out and falls back to the Local Target — `src/config/discord-token-settings.ts`), bookmarks, storage path override, master volume, global hotkey settings (`hotkeys`: enabled + the six Action Hotkeys), Vision to Vibe key + toggle, launch update check (`updates`: enabled + dismissed version), Usage Stats (`usageStats`: enabled + prompted, both default false)
 - `scenes.json` — Scene definitions (optional `musicMode` — `sequential`/`shuffle`, absent = `single` — carried in exports and Registry bundles; optional `hotkey` on Scenes and Effect items: machine-local, validated unique in `scene-store.ts`, stripped from `.hibiki.zip` exports and dropped on import/registry install)
 - `sound-tags.json` — Sound Tags keyed by `<category>/<soundId>` (see `CONTEXT.md` glossary)
 - `music/`, `effects/`, `ambience/` — Sound files (copied on upload, keyed by UUID)
 
-Override paths with env vars: `HIBIKI_STORAGE_PATH`, `HIBIKI_MUSIC_DIR`, `HIBIKI_EFFECTS_DIR`, `HIBIKI_DATA_PATH` (see `.env.example`). `HIBIKI_USER_DATA_DIR` moves Electron's whole user data directory (used by the screenshot capture in `e2e/screenshots/` to run against a throwaway profile). The Vision to Vibe API keys can also come from env — `HIBIKI_VISION_API_KEY` for Claude, `HIBIKI_VISION_OPENAI_API_KEY` for the OpenAI-compatible provider — each env var winning over its stored counterpart, like `DISCORD_TOKEN`. There is no env var for provider selection; that lives only in `app-config.json`. `HIBIKI_DAVE_ENCRYPTION=off` joins voice without Discord's end-to-end encryption (DAVE), a diagnostic for "bot shows as speaking but nobody hears it" (`src/audio/voice-options.ts`).
+Override paths with env vars: `HIBIKI_STORAGE_PATH`, `HIBIKI_MUSIC_DIR`, `HIBIKI_EFFECTS_DIR`, `HIBIKI_DATA_PATH` (see `.env.example`). `HIBIKI_USER_DATA_DIR` moves Electron's whole user data directory (used by the screenshot capture in `e2e/screenshots/` to run against a throwaway profile). The Vision to Vibe API keys can also come from env — `HIBIKI_VISION_API_KEY` for Claude, `HIBIKI_VISION_OPENAI_API_KEY` for the OpenAI-compatible provider — each env var winning over its stored counterpart, like `DISCORD_TOKEN`. There is no env var for provider selection; that lives only in `app-config.json`. `HIBIKI_USAGE_STATS_HOST` points Usage Stats at a test Umami instance and `HIBIKI_USAGE_STATS=off` is their kill switch (see "Usage Stats" below). `HIBIKI_DAVE_ENCRYPTION=off` joins voice without Discord's end-to-end encryption (DAVE), a diagnostic for "bot shows as speaking but nobody hears it" (`src/audio/voice-options.ts`).
 
 ## Key Development Patterns
 
@@ -181,6 +181,10 @@ CONTEXT.md defines **Routed Tab** and **Tab Volume**; ADR-0007 picks the mechani
 ### Update Notice
 
 `src/updates/update-check.ts`: at launch the renderer (`frontend/src/updates/update-notice.ts`, called from `App.vue`) asks `updates.check()`, which makes one GET to the GitHub Releases API (`releases/latest`, 5 s timeout, never blocking startup) and returns a newer release unless the Settings toggle is off (then no request at all) or that version was dismissed. A newer release shows a sticky toast with a "View release" link; only the GM's dismiss (the toast's `onDismiss`, not a timeout or eviction) remembers the version. Notice only: no download, no install, so Homebrew/AUR/installers keep updating. The README's Privacy section lists it among what the app contacts.
+
+### Usage Stats
+
+ADR-0008, CONTEXT.md. Opt-in, off by default, no identifier stored. `src/usage-stats/usage-stats.ts#createUsageStats` is the single gate: it drops everything while disabled, in an unpackaged build or under `HIBIKI_USAGE_STATS=off` (both injected from `electron/main.js` as the gate, never read inside the service), validates every event against `src/usage-stats/allowlist.ts` (names, keys, value rules, and the router's path patterns as Umami `url`), and sends fire-and-forget through `@umami/node` (5 s timeout, no retry, no queue) with a synthetic `Hibiki/<version> (Electron/<v>; <OS> <arch>)` User-Agent. The renderer only calls `trackUsage` (`frontend/src/api/usage-stats.ts`, the `usageStats.track` IPC call, carrying the route pattern bound in `main.ts`); settings live in `src/config/usage-stats-settings.ts` behind `config.getUsageStats`/`setUsageStatsEnabled`/`markUsageStatsPrompted` (switching on sends `app-start`). **Adding or widening an event means changing the allowlist, `docs/privacy.md`, the Settings "What is sent" list and ADR-0008 in the same PR.**
 
 ### Logging
 

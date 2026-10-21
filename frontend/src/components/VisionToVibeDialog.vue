@@ -6,6 +6,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { openFileDialog } from '@/api/config'
 import { getPathForFile } from '@/api/electron'
+import { trackUsage } from '@/api/usage-stats'
 import { analyzeImageVibe, matchVibe } from '@/api/vision'
 
 type MatchCategory = 'music' | 'ambience'
@@ -82,6 +83,7 @@ async function analyze(imagePath: string) {
   stage.value = 'analyzing'
   error.value = null
   imageName.value = fileNameOf(imagePath)
+  trackUsage({ name: 'vision-analyze', data: { provider: props.provider } })
   try {
     const result = await analyzeImageVibe(imagePath)
     analysis.value = result

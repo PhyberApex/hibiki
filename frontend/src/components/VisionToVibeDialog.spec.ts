@@ -2,12 +2,15 @@ import type { SoundFile } from '@/api/sounds'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { openFileDialog } from '@/api/config'
+import { trackUsage } from '@/api/usage-stats'
 import { analyzeImageVibe, matchVibe } from '@/api/vision'
 import VisionToVibeDialog from './VisionToVibeDialog.vue'
 
 vi.mock('@/api/config', () => ({
   openFileDialog: vi.fn(),
 }))
+
+vi.mock('@/api/usage-stats', () => ({ trackUsage: vi.fn() }))
 
 vi.mock('@/api/vision', () => ({
   analyzeImageVibe: vi.fn(),
@@ -69,6 +72,7 @@ describe('visionToVibeDialog', () => {
     await flushPromises()
     expect(analyzeImageVibe).toHaveBeenCalledWith('/tmp/map.png')
     expect(matchVibe).toHaveBeenCalledWith(['warm', 'tavern'])
+    expect(trackUsage).toHaveBeenCalledWith({ name: 'vision-analyze', data: { provider: 'claude' } })
     expect(wrapper.text()).toContain('A cozy tavern.')
     expect(wrapper.findAll('.vibe-tag').map(t => t.text())).toEqual(['warm', 'tavern'])
     expect(wrapper.find('[data-testid="vibe-music-matches"]').text()).toContain('TAVERN')

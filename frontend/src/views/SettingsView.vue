@@ -28,6 +28,7 @@ import {
 import { fetchHotkeyStatus } from '@/api/hotkeys'
 import { fetchLogPath, openLogFolder } from '@/api/logs'
 import { fetchUpdateCheckSettings, updateUpdateCheckEnabled } from '@/api/updates'
+import { fetchUsageStats, updateUsageStatsEnabled } from '@/api/usage-stats'
 import { logInfo } from '@/audio/audio-element-diagnostics'
 import { listOutputDevices, outputDeviceRouter } from '@/audio/output-device'
 import HotkeyRecorder from '@/components/HotkeyRecorder.vue'
@@ -53,6 +54,21 @@ const accessibilityMessage = ref<{ type: 'success' | 'error', text: string } | n
 const updateCheckEnabled = ref(true)
 const savingUpdateCheck = ref(false)
 const updateCheckMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+
+const usageStatsEnabled = ref(false)
+const savingUsageStats = ref(false)
+const usageStatsMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+const PRIVACY_PAGE_URL = 'https://phyberapex.github.io/hibiki/privacy'
+// Mirrors the backend allowlist (src/usage-stats/allowlist.ts) and docs/privacy.md.
+const USAGE_STATS_EVENTS = [
+  { name: 'App start', sent: 'Operating system, processor architecture, Hibiki version, language' },
+  { name: 'Scene played', sent: 'Music Mode, how many Music, Ambience and Effect items, Discord or Local' },
+  { name: 'Output switched', sent: 'Discord or Local' },
+  { name: 'Browser tab routed', sent: 'On or off, Discord or Local' },
+  { name: 'Hotkey pressed', sent: 'Scene, Effect or Action Hotkey (never the key)' },
+  { name: 'Vision to Vibe used', sent: 'Claude or OpenAI-compatible' },
+  { name: 'Registry Scene installed', sent: 'The public Registry entry id' },
+]
 
 const sceneFadeLength = ref(3)
 const savingFadeLength = ref(false)
@@ -455,6 +471,23 @@ async function toggleUpdateCheck(event: Event) {
   }
 }
 
+async function toggleUsageStats(event: Event) {
+  const input = event.target as HTMLInputElement
+  const enabled = input.checked
+  savingUsageStats.value = true
+  usageStatsMessage.value = null
+  try {
+    usageStatsEnabled.value = (await updateUsageStatsEnabled(enabled)).enabled
+  }
+  catch (e) {
+    input.checked = usageStatsEnabled.value
+    usageStatsMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not save the Usage Stats setting.' }
+  }
+  finally {
+    savingUsageStats.value = false
+  }
+}
+
 function setActionHotkey(field: ActionHotkeyField, value: string | undefined) {
   const { [field]: _previous, ...rest } = hotkeySettings.value
   return saveHotkeySettings(value ? { ...rest, [field]: value } : rest)
@@ -469,6 +502,9 @@ onMounted(() => {
   void fetchUpdateCheckSettings().then(({ enabled }) => {
     updateCheckEnabled.value = enabled
   }).catch(e => console.error('[settings] Could not load the update check setting:', e))
+  void fetchUsageStats().then(({ enabled }) => {
+    usageStatsEnabled.value = enabled
+  }).catch(e => console.error('[settings] Could not load the Usage Stats setting:', e))
   navigator.mediaDevices?.addEventListener?.('devicechange', refreshOutputDevices)
 })
 onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', refreshOutputDevices))
@@ -733,6 +769,60 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
         :class="[updateCheckMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
       >
         {{ updateCheckMessage.text }}
+      </p>
+    </section>
+
+    <hr class="divider">
+
+    <section class="section" data-testid="usage-stats-section">
+      <div class="section-header">
+        <h2 class="section-title">
+          Usage Stats
+        </h2>
+      </div>
+      <p class="section-desc">
+        Anonymous counts of which features get used, sent to the project's own Umami server so development follows what GMs actually do. Off unless you switch it on. No identifier is stored on this computer, so switching off leaves nothing behind.
+      </p>
+      <div class="toggle-list">
+        <div class="toggle-row">
+          <input
+            id="usage-stats-enabled"
+            type="checkbox"
+            class="toggle-input"
+            :checked="usageStatsEnabled"
+            :disabled="savingUsageStats"
+            @change="toggleUsageStats"
+          >
+          <div class="toggle-text">
+            <label for="usage-stats-enabled" class="toggle-title">Share anonymous Usage Stats</label>
+            <span class="toggle-desc">Never includes server, channel, Scene, sound or Hotkey names, website addresses, or anything else you created.</span>
+          </div>
+        </div>
+      </div>
+      <div class="usage-stats-list" data-testid="usage-stats-list">
+        <span class="field-label">What is sent</span>
+        <ul>
+          <li v-for="event in USAGE_STATS_EVENTS" :key="event.name">
+            <strong>{{ event.name }}</strong>: {{ event.sent }}
+          </li>
+        </ul>
+        <p class="section-desc">
+          Every event also carries the name of the screen you are on and identifies the app as Hibiki with its version and operating system. The full list is on the
+          <a
+            :href="PRIVACY_PAGE_URL"
+            target="_blank"
+            rel="noopener"
+            class="settings-link"
+            data-testid="usage-stats-privacy-link"
+          >privacy page</a>.
+        </p>
+      </div>
+      <p
+        v-if="usageStatsMessage"
+        class="status-message settings-message"
+        :class="[usageStatsMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+      >
+        {{ usageStatsMessage.text }}
       </p>
     </section>
 
@@ -1245,6 +1335,26 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
 }
 
 /* ── Vision to Vibe ── */
+
+.usage-stats-list {
+  margin-top: 1rem;
+}
+
+.usage-stats-list ul {
+  margin: 0.4rem 0 0.75rem;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.usage-stats-list li + li {
+  margin-top: 0.2rem;
+}
+
+.usage-stats-list strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
 
 .privacy-note {
   display: block;

@@ -1,4 +1,4 @@
-import type { HotkeyDeps } from './dispatch'
+import type { HotkeyDeps, HotkeyKind } from './dispatch'
 import type { Scene } from '@/api/scenes'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { dispatchHotkey } from './dispatch'
@@ -35,6 +35,7 @@ function makeDeps(overrides: Partial<HotkeyDeps> = {}): HotkeyDeps {
     refuse: vi.fn(),
     logInfo: vi.fn(),
     logDebug: vi.fn(),
+    trackFired: vi.fn(),
     ...overrides,
   }
 }
@@ -194,6 +195,35 @@ describe('hotkey dispatcher', () => {
       expect(await dispatchHotkey('F19', deps)).toBe('refused')
       expect(deps.refuse).toHaveBeenCalled()
       expect(deps.playScene).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('usage stats', () => {
+    const stormPlaying: Partial<HotkeyDeps> = { playingSceneId: () => 'storm' }
+    it.each<[string, string, Partial<HotkeyDeps>, HotkeyKind]>([
+      ['a Scene Hotkey', 'F13', {}, 'scene'],
+      ['an Effect Hotkey', 'F14', stormPlaying, 'effect'],
+      ['the Stop Hotkey', 'F16', stormPlaying, 'action'],
+      ['the Stop all Effects Hotkey', 'F17', {}, 'action'],
+      ['Next Scene', 'F19', {}, 'action'],
+      ['Volume Up', 'F21', {}, 'action'],
+    ])('reports %s by kind only', async (_name, accelerator, overrides, kind) => {
+      const deps = makeDeps(overrides)
+      await dispatchHotkey(accelerator, deps)
+      expect(deps.trackFired).toHaveBeenCalledTimes(1)
+      expect(deps.trackFired).toHaveBeenCalledWith(kind)
+    })
+
+    it('reports a bound press even when it is refused', async () => {
+      const deps = makeDeps({ canPlay: () => false })
+      expect(await dispatchHotkey('F13', deps)).toBe('refused')
+      expect(deps.trackFired).toHaveBeenCalledWith('scene')
+    })
+
+    it('reports nothing for a key that resolves to no binding', async () => {
+      const deps = makeDeps()
+      expect(await dispatchHotkey('F14', deps)).toBe('ignored')
+      expect(deps.trackFired).not.toHaveBeenCalled()
     })
   })
 })

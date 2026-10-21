@@ -26,6 +26,7 @@ import {
 } from '@/api/player'
 import { getScene } from '@/api/scenes'
 import { canDecode, soundStreamUrl } from '@/api/sounds'
+import { trackUsage } from '@/api/usage-stats'
 import { logDebug, logInfo, waitForPlayable, watchAudioElement } from '@/audio/audio-element-diagnostics'
 import { selectBackendPlaybackPath } from '@/audio/backend-playback-path'
 import {
@@ -822,7 +823,29 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // by a Target handover to Discord while no channel is connected.
   const pendingHandoverSceneId = ref<string | null>(null)
 
+  // Usage Stats: one `scene-play` per Scene start, whatever triggered it,
+  // except the restart of a Target handover (that is a `target-switch`).
+  function trackScenePlay(target: Scene) {
+    trackUsage({
+      name: 'scene-play',
+      data: {
+        musicMode: normalizeMusicMode(target.musicMode),
+        music: target.music.length,
+        ambience: target.ambience.length,
+        effects: target.effects.length,
+        target: player.activeTarget,
+      },
+    })
+  }
+
   async function playScene(target: Scene) {
+    if (!canPlay.value || !targetId.value)
+      return
+    trackScenePlay(target)
+    await startScene(target)
+  }
+
+  async function startScene(target: Scene) {
     if (!canPlay.value || !targetId.value)
       return
     stopScene()
@@ -864,7 +887,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     try {
       const target = openScene.value?.id === sceneToRestart ? openScene.value : await getScene(sceneToRestart)
       if (target)
-        await playScene(target)
+        await startScene(target)
     }
     catch (e) {
       console.error('[scene] Target handover could not restart the Scene:', e)
@@ -876,6 +899,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       return
     const playingId = player.playingSceneId
     logInfo(`[scene] switching Output Target ${player.activeTarget} -> ${kind}${playingId ? `, restarting Scene ${playingId}` : ''}`)
+    trackUsage({ name: 'target-switch', data: { target: kind } })
     stopScene()
     await player.setActiveTarget(kind)
     await loadGlobalVolume()
@@ -1099,6 +1123,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       return
     const durationMs = await sceneFadeMs()
     player.setPlayingScene(target.id, targetId.value)
+    trackScenePlay(target)
     sceneTransitionFlash.trigger(SCENE_START_FLASH)
     crossfadeAmbience(target, durationMs)
     releaseMusicMode('crossfaded away')
