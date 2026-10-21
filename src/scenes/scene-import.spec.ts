@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import AdmZip from 'adm-zip'
@@ -23,9 +23,11 @@ describe('importScene', () => {
     mkdirSync(join(tempRoot, 'data'), { recursive: true })
   })
 
-  function createManifestZip(manifest: object): string {
+  function createManifestZip(manifest: object, files: Record<string, string> = {}): string {
     const zip = new AdmZip()
     zip.addFile('hibiki-scene.json', Buffer.from(JSON.stringify(manifest), 'utf-8'))
+    for (const [entryName, content] of Object.entries(files))
+      zip.addFile(entryName, Buffer.from(content))
     const zipPath = join(tempRoot, `test-${Date.now()}.zip`)
     zip.writeZip(zipPath)
     return zipPath
@@ -126,5 +128,78 @@ describe('importScene', () => {
       scene: { musicMode: 'loop-forever', music: [], ambience: [], effects: [] },
     })))
     expect(invalid).not.toHaveProperty('musicMode')
+  })
+
+  it('throws on a manifest that is not valid JSON', async () => {
+    const zip = new AdmZip()
+    zip.addFile('hibiki-scene.json', Buffer.from('{ not json', 'utf-8'))
+    const zipPath = join(tempRoot, 'malformed.zip')
+    zip.writeZip(zipPath)
+    await expect(importScene(config, zipPath)).rejects.toThrow(SyntaxError)
+  })
+
+  it('falls back to the manifest name, then to a default, when there is no displayName', async () => {
+    const byName = await importScene(config, createManifestZip(makeManifest({ displayName: '', name: 'slug-only' })))
+    expect(byName.name).toBe('slug-only')
+    const unnamed = await importScene(config, createManifestZip(makeManifest({ displayName: '', name: '' })))
+    expect(unnamed.name).toBe('Imported scene')
+  })
+
+  it('keeps appending (imported) until the name is free, ignoring case', async () => {
+    await importScene(config, createManifestZip(makeManifest({ displayName: 'Twice' })))
+    await importScene(config, createManifestZip(makeManifest({ displayName: 'twice' })))
+    const third = await importScene(config, createManifestZip(makeManifest({ displayName: 'TWICE' })))
+    expect(third.name).toBe('TWICE (imported) (imported)')
+  })
+
+  it('extracts bundled sounds into each category\'s directory and points items at them', async () => {
+    const manifest = makeManifest({
+      displayName: 'Bundled',
+      scene: {
+        music: [{ soundName: 'Theme', volume: 80, loop: true, bundled: true, bundledPath: 'sounds/music/theme-1.mp3' }],
+        ambience: [{ soundName: 'Rain', volume: 40, enabled: false, bundled: true, bundledPath: 'sounds/ambience/rain-2.ogg' }],
+        effects: [{ soundName: 'Boom', volume: 100, bundled: true, bundledPath: 'sounds/effects/boom-3.wav' }],
+      },
+    })
+    const zipPath = createManifestZip(manifest, {
+      'sounds/music/theme-1.mp3': 'music-bytes',
+      'sounds/ambience/rain-2.ogg': 'ambience-bytes',
+      'sounds/effects/boom-3.wav': 'effect-bytes',
+      'sounds/effects/.DS_Store': 'junk',
+    })
+
+    const scene = await importScene(config, zipPath)
+
+    expect(readFileSync(join(config.audio.musicDir, 'theme-1.mp3'), 'utf-8')).toBe('music-bytes')
+    expect(readFileSync(join(config.audio.ambienceDir, 'rain-2.ogg'), 'utf-8')).toBe('ambience-bytes')
+    expect(readFileSync(join(config.audio.effectsDir, 'boom-3.wav'), 'utf-8')).toBe('effect-bytes')
+    expect(existsSync(join(config.audio.effectsDir, '.DS_Store'))).toBe(false)
+    expect(scene.music).toEqual([{ soundId: 'theme-1', soundName: 'Theme', volume: 80, loop: true }])
+    expect(scene.ambience).toEqual([{ soundId: 'rain-2', soundName: 'Rain', volume: 40, enabled: false }])
+    expect(scene.effects).toEqual([{ soundId: 'boom-3', soundName: 'Boom', volume: 100 }])
+  })
+
+  it('falls back to the sound name when a bundled file is missing from the archive', async () => {
+    const manifest = makeManifest({
+      displayName: 'Missing Bundle',
+      scene: {
+        music: [{ soundName: 'Lost Theme', volume: 50, bundled: true, bundledPath: 'sounds/music/lost.mp3' }],
+        ambience: [],
+        effects: [],
+      },
+    })
+    const scene = await importScene(config, createManifestZip(manifest))
+    expect(scene.music[0]!.soundId).toBe('Lost Theme')
+  })
+
+  it('never reuses an id from the archive, so an existing scene with that id survives', async () => {
+    const existing = await importScene(config, createManifestZip(makeManifest({ displayName: 'Original' })))
+    const clash = await importScene(config, createManifestZip(makeManifest({
+      displayName: 'Clash',
+      scene: { id: existing.id, music: [], ambience: [], effects: [] },
+    })))
+    expect(clash.id).not.toBe(existing.id)
+    const { createSceneStore } = await import('./scene-store')
+    expect((await createSceneStore(config).get(existing.id))?.name).toBe('Original')
   })
 })
