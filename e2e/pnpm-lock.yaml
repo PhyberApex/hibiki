@@ -14,6 +14,9 @@ importers:
       '@playwright/test':
         specifier: 1.64.1
         version: 1.64.1
+      adm-zip:
+        specifier: ^0.6.1
+        version: 0.6.1
       discord.js:
         specifier: ^14.16.3
         version: 14.27.0
@@ -524,6 +527,10 @@ packages:
   '@vladfrangu/async_event_emitter@2.4.7':
     resolution: {integrity: sha512-Xfe6rpCTxSxfbswi/W/Pz7zp1WWSNn4A0eW4mLkQUewCrXXtMj31lCg+iQyTkh/CkusZSq9eDflu7tjEDXUY6g==}
     engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
+
+  adm-zip@0.6.1:
+    resolution: {integrity: sha512-Xwrja8nx9e5o2N1my4DsKCeKpdrnACyr1wtbPxBDgGzKzKyE9kRtBFA8mWldI+RVlD7CBZNWY/wQ2+ydwOR6kQ==}
+    engines: {node: '>=14.0'}
 
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
@@ -1167,6 +1174,8 @@ snapshots:
   '@vitest/spy@5.0.5': {}
 
   '@vladfrangu/async_event_emitter@2.4.7': {}
+
+  adm-zip@0.6.1: {}
 
   assertion-error@2.0.1: {}
 

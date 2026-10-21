@@ -141,4 +141,4 @@ jobs:
         run: pnpm --dir e2e exec playwright install chromium --with-deps
 
       - name: Run Local Target E2E tests (no Discord secrets)
-        run: xvfb-run --auto-servernum pnpm --dir e2e exec playwright test tests/local-target.e2e.spec.ts tests/scene-ui.e2e.spec.ts tests/settings.e2e.spec.ts tests/hotkeys.e2e.spec.ts
+        run: xvfb-run --auto-servernum pnpm --dir e2e exec playwright test tests/local-target.e2e.spec.ts tests/scene-ui.e2e.spec.ts tests/settings.e2e.spec.ts tests/hotkeys.e2e.spec.ts tests/scene-package.e2e.spec.ts
