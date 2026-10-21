@@ -51,15 +51,17 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
     }
     log.info('Logging in…')
 
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    let onReady = () => {}
     const readyPromise = new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Discord client ready timeout')), READY_TIMEOUT_MS)
-      const onReady = () => {
-        clearTimeout(timeout)
-        client.off(Events.ClientReady, onReady)
-        resolve()
-      }
+      timeout = setTimeout(() => reject(new Error('Discord client ready timeout')), READY_TIMEOUT_MS)
+      onReady = () => resolve()
       client.on(Events.ClientReady, onReady)
     })
+    // The timer runs during `client.login` too, before anything awaits it: a
+    // slow login that ends ready would otherwise leave this rejection unhandled.
+    // Awaiting `readyPromise` below still sees the timeout.
+    readyPromise.catch(() => {})
 
     try {
       await client.login(token)
@@ -69,6 +71,11 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
     catch (err) {
       log.error('Login failed:', err)
       throw err
+    }
+    finally {
+      // Also on a failed login, so neither the timer nor the listener outlives it.
+      clearTimeout(timeout)
+      client.off(Events.ClientReady, onReady)
     }
 
     log.info('Login complete')
