@@ -31,6 +31,10 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+function chooseButton(wrapper: ReturnType<typeof mountDialog>) {
+  return wrapper.find('.resolve-option .btn-primary')
+}
+
 async function chooseFile(wrapper: ReturnType<typeof mountDialog>, files: File[]) {
   const input = wrapper.find<HTMLInputElement>('input[type="file"]')
   Object.defineProperty(input.element, 'files', { value: files, configurable: true })
@@ -119,7 +123,7 @@ describe('resolveSoundDialog', () => {
       const wrapper = mountDialog()
       const input = wrapper.find<HTMLInputElement>('input[type="file"]')
       const click = vi.spyOn(input.element, 'click')
-      await wrapper.find('.resolve-option .btn-primary').trigger('click')
+      await chooseButton(wrapper).trigger('click')
       expect(click).toHaveBeenCalled()
       expect(input.attributes('accept')).toBe('audio/*')
     })
@@ -139,7 +143,7 @@ describe('resolveSoundDialog', () => {
       vi.mocked(uploadSound).mockReturnValue(pending.promise)
       const wrapper = mountDialog()
       await chooseFile(wrapper, [new File(['x'], 'thunder.mp3')])
-      const button = wrapper.find('.resolve-option .btn-primary')
+      const button = chooseButton(wrapper)
       expect(button.text()).toBe('Uploading...')
       expect(button.attributes('disabled')).toBeDefined()
 
@@ -156,7 +160,7 @@ describe('resolveSoundDialog', () => {
       await flushPromises()
       expect(wrapper.find('.resolve-error').text()).toBe('Unsupported format')
       expect(wrapper.emitted('resolved')).toBeUndefined()
-      expect(wrapper.find('.resolve-option .btn-primary').attributes('disabled')).toBeUndefined()
+      expect(chooseButton(wrapper).attributes('disabled')).toBeUndefined()
     })
 
     it('falls back to a generic message for a non-Error rejection', async () => {

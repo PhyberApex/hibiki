@@ -43,12 +43,10 @@ const dungeon = entry('dungeon', { name: 'Dark Dungeon', author: 'Lich', descrip
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  let reject!: (err: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
+  const promise = new Promise<T>((res) => {
     resolve = res
-    reject = rej
   })
-  return { promise, resolve, reject }
+  return { promise, resolve }
 }
 
 async function mountLoaded(scenes: RegistryEntry[] = [tavern, dungeon]) {
@@ -60,6 +58,10 @@ async function mountLoaded(scenes: RegistryEntry[] = [tavern, dungeon]) {
 
 function entryNames(wrapper: ReturnType<typeof mount>) {
   return wrapper.findAll('.registry-entry-name').map(n => n.text())
+}
+
+function refreshButton(wrapper: ReturnType<typeof mount>) {
+  return wrapper.find('.registry-toolbar button')
 }
 
 function installButton(wrapper: ReturnType<typeof mount>, name: string) {
@@ -76,6 +78,11 @@ describe('registryBrowser', () => {
     vi.mocked(trackUsage).mockReset()
   })
 
+  it('is a labelled dialog', async () => {
+    const wrapper = await mountLoaded()
+    expect(wrapper.find('[role="dialog"]').attributes('aria-label')).toBe('Browse Community Scenes')
+  })
+
   it('shows a loading state until the index arrives', async () => {
     const pending = deferred<RegistryIndex>()
     vi.mocked(getRegistryIndex).mockReturnValue(pending.promise)
@@ -83,7 +90,7 @@ describe('registryBrowser', () => {
     await flushPromises()
     expect(getRegistryIndex).toHaveBeenCalledWith(false)
     expect(wrapper.text()).toContain('Loading registry...')
-    const refresh = wrapper.find('.registry-toolbar button')
+    const refresh = refreshButton(wrapper)
     expect(refresh.text()).toBe('...')
     expect(refresh.attributes('disabled')).toBeDefined()
 
@@ -170,7 +177,7 @@ describe('registryBrowser', () => {
   it('refresh re-fetches the index bypassing the cache', async () => {
     const wrapper = await mountLoaded([tavern])
     vi.mocked(getRegistryIndex).mockResolvedValueOnce(index([tavern, dungeon]))
-    await wrapper.find('.registry-toolbar button').trigger('click')
+    await refreshButton(wrapper).trigger('click')
     await flushPromises()
     expect(getRegistryIndex).toHaveBeenLastCalledWith(true)
     expect(entryNames(wrapper)).toEqual(['Cozy Tavern', 'Dark Dungeon'])
@@ -180,9 +187,11 @@ describe('registryBrowser', () => {
     const wrapper = await mountLoaded([tavern])
     const pending = deferred<RegistryIndex>()
     vi.mocked(getRegistryIndex).mockReturnValueOnce(pending.promise)
-    await wrapper.find('.registry-toolbar button').trigger('click')
+    await refreshButton(wrapper).trigger('click')
     expect(wrapper.text()).not.toContain('Loading registry...')
     expect(entryNames(wrapper)).toEqual(['Cozy Tavern'])
+    expect(refreshButton(wrapper).text()).toBe('...')
+    expect(refreshButton(wrapper).attributes('disabled')).toBeDefined()
     pending.resolve(index([tavern]))
     await flushPromises()
   })
@@ -256,12 +265,6 @@ describe('registryBrowser', () => {
   })
 
   describe('closing', () => {
-    it('is a labelled dialog', async () => {
-      const wrapper = await mountLoaded()
-      const dialog = wrapper.find('[role="dialog"]')
-      expect(dialog.attributes('aria-label')).toBe('Browse Community Scenes')
-    })
-
     it('emits close from the close button', async () => {
       const wrapper = await mountLoaded()
       await wrapper.find('button[aria-label="Close"]').trigger('click')
