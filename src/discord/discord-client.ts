@@ -51,13 +51,11 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
     }
     log.info('Logging in…')
 
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    let onReady = () => {}
     const readyPromise = new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Discord client ready timeout')), READY_TIMEOUT_MS)
-      const onReady = () => {
-        clearTimeout(timeout)
-        client.off(Events.ClientReady, onReady)
-        resolve()
-      }
+      timeout = setTimeout(() => reject(new Error('Discord client ready timeout')), READY_TIMEOUT_MS)
+      onReady = () => resolve()
       client.on(Events.ClientReady, onReady)
     })
 
@@ -69,6 +67,11 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
     catch (err) {
       log.error('Login failed:', err)
       throw err
+    }
+    finally {
+      // Also on a failed login: an armed timer would reject unhandled 15 s later.
+      clearTimeout(timeout)
+      client.off(Events.ClientReady, onReady)
     }
 
     log.info('Login complete')
