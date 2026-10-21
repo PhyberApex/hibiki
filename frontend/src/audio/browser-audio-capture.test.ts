@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // Test the pure functions by importing them. They are not exported directly,
 // so we test via the module's behavior or extract them.
@@ -299,6 +299,153 @@ describe('browser-audio-capture', () => {
       await expect(captureDisplayMedia(onChunk)).rejects.toThrow('No audio in selected source')
 
       vi.unstubAllGlobals()
+    })
+  })
+
+  describe('failure and lifecycle paths', () => {
+    function stubAudio(state = 'running') {
+      const worklets: Array<{ port: { onmessage: ((e: MessageEvent) => void) | null }, connect: ReturnType<typeof vi.fn>, disconnect: ReturnType<typeof vi.fn> }> = []
+      const source = { connect: vi.fn(), disconnect: vi.fn() }
+      const ctx = {
+        state,
+        resume: vi.fn(async () => {
+          ctx.state = 'running'
+        }),
+        close: vi.fn(async () => {
+          ctx.state = 'closed'
+        }),
+        createMediaElementSource: vi.fn(() => source),
+        createMediaStreamSource: vi.fn(() => source),
+        audioWorklet: { addModule: vi.fn(async (_url: string) => {}) },
+        destination: {},
+      }
+      vi.stubGlobal('AudioContext', class {
+        constructor() { return ctx as any }
+      })
+      vi.stubGlobal('AudioWorkletNode', class {
+        constructor() {
+          const node = { port: { onmessage: null }, connect: vi.fn(), disconnect: vi.fn() }
+          worklets.push(node)
+          return node as any
+        }
+      })
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:worklet')
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+      return { ctx, source, worklets }
+    }
+
+    async function load() {
+      vi.resetModules()
+      return import('./browser-audio-capture')
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    })
+
+    it('rejects and closes the context when the AudioWorklet module fails to load', async () => {
+      const { ctx } = stubAudio()
+      ctx.audioWorklet.addModule.mockRejectedValue(new Error('worklet blocked'))
+      const { captureFromMediaStream } = await load()
+      const stream = { getTracks: () => [] } as unknown as MediaStream
+      await expect(captureFromMediaStream(stream, vi.fn())).rejects.toThrow('worklet blocked')
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:worklet')
+      expect(ctx.close).toHaveBeenCalledOnce()
+      expect(ctx.state).toBe('closed')
+    })
+
+    it('rejects an element capture when the worklet fails, and retries the module next time', async () => {
+      const { ctx } = stubAudio()
+      ctx.audioWorklet.addModule.mockRejectedValueOnce(new Error('worklet blocked'))
+      const { captureFromAudioElement } = await load()
+      const element = document.createElement('audio')
+      await expect(captureFromAudioElement(element, vi.fn())).rejects.toThrow('worklet blocked')
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:worklet')
+      await expect(captureFromAudioElement(element, vi.fn())).resolves.toBeDefined()
+      expect(ctx.audioWorklet.addModule).toHaveBeenCalledTimes(2)
+      expect(ctx.createMediaElementSource).toHaveBeenCalledOnce()
+    })
+
+    it('rejects and closes the context when a suspended context cannot resume', async () => {
+      const { ctx } = stubAudio('suspended')
+      ctx.resume.mockRejectedValue(new Error('no user gesture'))
+      const { captureFromMediaStream } = await load()
+      await expect(captureFromMediaStream({ getTracks: () => [] } as unknown as MediaStream, vi.fn())).rejects.toThrow('no user gesture')
+      expect(ctx.close).toHaveBeenCalledOnce()
+    })
+
+    it('resumes a suspended context before capturing', async () => {
+      const { ctx } = stubAudio('suspended')
+      const { captureFromMediaStream } = await load()
+      await captureFromMediaStream({ getTracks: () => [] } as unknown as MediaStream, vi.fn())
+      expect(ctx.resume).toHaveBeenCalledOnce()
+    })
+
+    it('converts worklet messages to interleaved s16 stereo chunks', async () => {
+      const { worklets } = stubAudio()
+      const { captureFromMediaStream } = await load()
+      const onChunk = vi.fn()
+      await captureFromMediaStream({ getTracks: () => [] } as unknown as MediaStream, onChunk)
+      worklets[0].port.onmessage?.({ data: { left: new Float32Array([1, -1]), right: new Float32Array([0, 0.5]) } } as MessageEvent)
+      expect(Array.from(new Int16Array(onChunk.mock.calls[0][0]))).toEqual([0x7FFF, 0, -0x8000, Math.floor(0.5 * 0x7FFF)])
+    })
+
+    it('reuses the element context, registers the worklet once, and replaces a still-active capture', async () => {
+      const { ctx, source, worklets } = stubAudio()
+      const { captureFromAudioElement } = await load()
+      const element = document.createElement('audio')
+      await captureFromAudioElement(element, vi.fn())
+      await captureFromAudioElement(element, vi.fn())
+      expect(ctx.createMediaElementSource).toHaveBeenCalledOnce()
+      expect(ctx.audioWorklet.addModule).toHaveBeenCalledOnce()
+      expect(worklets[0].disconnect).toHaveBeenCalled()
+      expect(worklets[0].port.onmessage).toBeNull()
+      expect(source.connect).toHaveBeenLastCalledWith(worklets[1])
+    })
+
+    it('a stale session stop() does not tear down the newer capture', async () => {
+      const { worklets } = stubAudio()
+      const { captureFromAudioElement, releaseAudioElementContext } = await load()
+      const element = document.createElement('audio')
+      const first = await captureFromAudioElement(element, vi.fn())
+      await captureFromAudioElement(element, vi.fn())
+      first.stop()
+      expect(worklets[1].disconnect).not.toHaveBeenCalled()
+      releaseAudioElementContext(element)
+      // The newer worklet was still the active one, so release tears it down.
+      expect(worklets[1].disconnect).toHaveBeenCalled()
+    })
+
+    it('opens a fresh context for an element whose context was closed', async () => {
+      const { ctx } = stubAudio()
+      const { captureFromAudioElement } = await load()
+      const element = document.createElement('audio')
+      await captureFromAudioElement(element, vi.fn())
+      ctx.state = 'closed'
+      await captureFromAudioElement(element, vi.fn())
+      expect(ctx.createMediaElementSource).toHaveBeenCalledTimes(2)
+    })
+
+    it('captureTabStream asks for the tab by its media source id, audio only', async () => {
+      const stream = {}
+      const getUserMedia = vi.fn(async () => stream)
+      vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } })
+      const { captureTabStream } = await load()
+      await expect(captureTabStream('tab:42')).resolves.toBe(stream)
+      expect(getUserMedia).toHaveBeenCalledWith({
+        audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: 'tab:42' } },
+        video: false,
+      })
+    })
+
+    it('captureDisplayMedia captures a picked source that has audio', async () => {
+      const { ctx } = stubAudio()
+      const stream = { getAudioTracks: () => [{}], getTracks: () => [] }
+      vi.stubGlobal('navigator', { mediaDevices: { getDisplayMedia: vi.fn(async () => stream) } })
+      const { captureDisplayMedia } = await load()
+      await expect(captureDisplayMedia(vi.fn())).resolves.toHaveProperty('stop')
+      expect(ctx.createMediaStreamSource).toHaveBeenCalledWith(stream)
     })
   })
 })

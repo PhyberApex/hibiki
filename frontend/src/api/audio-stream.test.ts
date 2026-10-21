@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   sendAudioChunk,
   sendEffectChunk,
+  setEffectStreamVolume,
   startAudioStream,
   startEffectStream,
   stopAudioStream,
@@ -120,5 +121,48 @@ describe('audio-stream API', () => {
   it('sendAudioChunk throws when not in Electron', () => {
     delete (window as any).hibiki
     expect(() => sendAudioChunk('g1', new ArrayBuffer(8))).toThrow('Electron')
+  })
+
+  it('setEffectStreamVolume uses invoke with the stream id and level', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await setEffectStreamVolume('g1', 'browser-7', 42)
+    expect(mockInvoke).toHaveBeenCalledWith('audio:setEffectStreamVolume', { guildId: 'g1', streamId: 'browser-7', volume: 42 })
+  })
+
+  it('startEffectStream passes an initial volume', async () => {
+    mockInvoke.mockResolvedValue('browser-7')
+    await startEffectStream('g1', 'browser-7', 30)
+    expect(mockInvoke).toHaveBeenCalledWith('audio:startEffectStream', { guildId: 'g1', streamId: 'browser-7', volume: 30 })
+  })
+
+  it.each([
+    ['startAudioStream', 'audio:startStream', () => startAudioStream('g1', undefined, 'music-1')],
+    ['stopAudioStream', 'audio:stopStream', () => stopAudioStream('g1', 'music-1')],
+    ['startEffectStream', 'audio:startEffectStream', () => startEffectStream('g1', 'music-1')],
+    ['stopEffectStream', 'audio:stopEffectStream', () => stopEffectStream('g1', 'music-1')],
+    ['setEffectStreamVolume', 'audio:setEffectStreamVolume', () => setEffectStreamVolume('g1', 'music-1', 50)],
+  ])('%s propagates the rejection of the call for its stream', async (_name, channel, call) => {
+    const error = new Error('no such stream')
+    mockInvoke.mockRejectedValue(error)
+    await expect(call()).rejects.toBe(error)
+    expect(mockInvoke).toHaveBeenCalledWith(channel, expect.objectContaining({ guildId: 'g1', streamId: 'music-1' }))
+  })
+
+  it('stopAudioStream throws when not in Electron', () => {
+    delete (window as any).hibiki
+    expect(() => stopAudioStream('g1')).toThrow('Electron')
+  })
+
+  it('setEffectStreamVolume throws when not in Electron', () => {
+    delete (window as any).hibiki
+    expect(() => setEffectStreamVolume('g1', 'browser-7', 50)).toThrow('Electron')
+  })
+
+  it.each([
+    ['sendAudioChunk', () => sendAudioChunk('g1', new ArrayBuffer(8))],
+    ['sendEffectChunk', () => sendEffectChunk('g1', new ArrayBuffer(8))],
+  ])('%s throws when the bridge has no send', (_name, call) => {
+    ;(window as any).hibiki = { invoke: mockInvoke }
+    expect(call).toThrow('Electron send not available')
   })
 })
