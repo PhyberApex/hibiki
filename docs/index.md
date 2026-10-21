@@ -19,6 +19,7 @@ title: Home
         <li><a href="https://github.com/PhyberApex/hibiki/releases">All releases</a></li>
       </ul>
       <p class="download-note">Open source, MIT. You bring your own Discord bot token; nothing runs on anyone else's server.</p>
+      <p class="download-note">Windows builds are signed through <a href="https://signpath.org">SignPath Foundation</a>, free code signing provided by <a href="https://about.signpath.io">SignPath.io</a>. See the <a href="https://github.com/PhyberApex/hibiki#code-signing-policy">code signing policy</a>.</p>
     </div>
   </div>
 
