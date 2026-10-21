@@ -1,4 +1,4 @@
-import * as Joi from 'joi'
+import Joi from 'joi'
 
 /** Validates only our env keys; other keys (e.g. PATH, HOME) are ignored so we can pass process.env. */
 export const validationSchema = Joi.object({

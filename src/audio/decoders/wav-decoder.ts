@@ -4,6 +4,7 @@ import { open } from 'node:fs/promises'
 import { PcmResampler } from './pcm-resample'
 import { createProducerStream } from './pcm-stream'
 
+const WAVE_FORMAT_PCM = 1
 const WAVE_FORMAT_IEEE_FLOAT = 3
 const WAVE_FORMAT_EXTENSIBLE = 0xFFFE
 
@@ -68,6 +69,8 @@ async function parseWavFormat(handle: FileHandle): Promise<WavFormat> {
     else if (chunk.id === 'data') {
       if (!fmt)
         throw new Error('WAV data chunk appeared before fmt chunk')
+      if (fmt.formatTag !== WAVE_FORMAT_PCM && fmt.formatTag !== WAVE_FORMAT_IEEE_FLOAT)
+        throw new Error(`Unsupported WAV format tag: ${fmt.formatTag}`)
       return { ...fmt, dataStart: bodyOffset, dataSize: chunk.size }
     }
 

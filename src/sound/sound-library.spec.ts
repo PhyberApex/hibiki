@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSoundLibrary } from './sound-library'
@@ -187,5 +187,123 @@ describe('canDecode', () => {
   it('rejects for an unknown sound id', async () => {
     const lib = createSoundLibrary(config)
     await expect(lib.canDecode('music', 'does-not-exist')).rejects.toThrow(/not found/)
+  })
+})
+
+describe('sound library edge cases', () => {
+  let tempRoot: string
+  let config: {
+    discord: { token: string }
+    audio: { storageRoot: string, musicDir: string, effectsDir: string, ambienceDir: string, webDistDir: string }
+    database: { path: string }
+  }
+
+  beforeEach(() => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-sound-edge-'))
+    config = {
+      discord: { token: '' },
+      audio: {
+        storageRoot: tempRoot,
+        musicDir: join(tempRoot, 'music'),
+        effectsDir: join(tempRoot, 'effects'),
+        ambienceDir: join(tempRoot, 'ambience'),
+        webDistDir: 'web-dist',
+      },
+      database: { path: join(tempRoot, 'data', 'hibiki.json') },
+    }
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+    rmSync(tempRoot, { recursive: true, force: true })
+  })
+
+  it('list returns empty for a category whose directory does not exist', async () => {
+    await expect(createSoundLibrary(config).list('ambience')).resolves.toEqual([])
+  })
+
+  it.each([
+    ['music', 'musicDir'],
+    ['effects', 'effectsDir'],
+    ['ambience', 'ambienceDir'],
+  ] as const)('save writes %s into its own directory', async (category, dirKey) => {
+    const saved = await createSoundLibrary(config).save(category, { buffer: Buffer.from('abc'), originalname: 'Dragon Roar!.ogg' })
+    expect(saved).toMatchObject({ category, size: 3, tags: [] })
+    expect(saved.id).toMatch(/^dragon-roar-\d+$/)
+    expect(readFileSync(join(config.audio[dirKey], saved.filename), 'utf-8')).toBe('abc')
+  })
+
+  it('save defaults a name without an extension to .mp3', async () => {
+    const saved = await createSoundLibrary(config).save('music', { buffer: Buffer.from('x'), originalname: 'no-extension' })
+    expect(saved.filename).toBe(`${saved.id}.mp3`)
+  })
+
+  it('save keeps an unsupported extension, which then has no backend decoder', async () => {
+    const lib = createSoundLibrary(config)
+    const saved = await lib.save('effects', { buffer: Buffer.from('not audio'), originalname: 'notes.txt' })
+    expect(saved.filename).toMatch(/\.txt$/)
+    await expect(lib.canDecode('effects', saved.id)).resolves.toBe(false)
+  })
+
+  it('save gives two uploads with the same name distinct ids', async () => {
+    const now = jest.spyOn(Date, 'now')
+    now.mockReturnValueOnce(1000).mockReturnValueOnce(2000)
+    const lib = createSoundLibrary(config)
+    const a = await lib.save('music', { buffer: Buffer.from('a'), originalname: 'theme.mp3' })
+    const b = await lib.save('music', { buffer: Buffer.from('b'), originalname: 'theme.mp3' })
+    expect([a.id, b.id]).toEqual(['theme-1000', 'theme-2000'])
+    expect((await lib.list('music')).map(f => f.id).sort()).toEqual(['theme-1000', 'theme-2000'])
+  })
+
+  it('remove rejects an unknown id', async () => {
+    mkdirSync(config.audio.effectsDir, { recursive: true })
+    await expect(createSoundLibrary(config).remove('effects', 'ghost')).rejects.toThrow('Sound \'ghost\' not found in effects')
+  })
+
+  it('treats glob characters in an id literally', async () => {
+    mkdirSync(config.audio.musicDir, { recursive: true })
+    writeFileSync(join(config.audio.musicDir, 'battle.mp3'), 'x')
+    const lib = createSoundLibrary(config)
+    await expect(lib.getFilePath('music', '*')).rejects.toThrow(/not found/)
+    writeFileSync(join(config.audio.musicDir, 'boss (phase 2).mp3'), 'x')
+    await expect(lib.getFilePath('music', 'boss (phase 2)')).resolves.toBe(join(config.audio.musicDir, 'boss (phase 2).mp3'))
+  })
+
+  it('getFile returns metadata and path for an ambience sound', async () => {
+    mkdirSync(config.audio.ambienceDir, { recursive: true })
+    writeFileSync(join(config.audio.ambienceDir, 'forest_night.ogg'), 'abcd')
+    const file = await createSoundLibrary(config).getFile('ambience', 'forest_night')
+    expect(file).toMatchObject({
+      id: 'forest_night',
+      name: 'Forest Night',
+      filename: 'forest_night.ogg',
+      category: 'ambience',
+      size: 4,
+      tags: [],
+      path: join(config.audio.ambienceDir, 'forest_night.ogg'),
+    })
+  })
+
+  describe('getFileByIdOrName', () => {
+    beforeEach(() => {
+      mkdirSync(config.audio.musicDir, { recursive: true })
+      writeFileSync(join(config.audio.musicDir, 'tavern-song-123.mp3'), 'x')
+    })
+
+    it('finds a sound by id', async () => {
+      await expect(createSoundLibrary(config).getFileByIdOrName('music', 'tavern-song-123')).resolves.toMatchObject({ id: 'tavern-song-123' })
+    })
+
+    it('falls back to a case-insensitive id match', async () => {
+      await expect(createSoundLibrary(config).getFileByIdOrName('music', 'TAVERN-SONG-123')).resolves.toMatchObject({ id: 'tavern-song-123' })
+    })
+
+    it('falls back to a case-insensitive partial name match', async () => {
+      await expect(createSoundLibrary(config).getFileByIdOrName('music', 'song')).resolves.toMatchObject({ id: 'tavern-song-123' })
+    })
+
+    it('rejects when nothing matches', async () => {
+      await expect(createSoundLibrary(config).getFileByIdOrName('music', 'dragon')).rejects.toThrow('No music found matching \'dragon\'')
+    })
   })
 })

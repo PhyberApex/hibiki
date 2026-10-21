@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSceneRegistry } from './scene-registry'
@@ -28,25 +28,126 @@ describe('createSceneRegistry', () => {
     mkdirSync(join(tempRoot, 'data'), { recursive: true })
   })
 
+  let fetchMock: jest.SpyInstance
+
+  beforeEach(() => {
+    fetchMock = jest.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('unexpected network call'))
+  })
+
   afterEach(() => {
+    fetchMock.mockRestore()
+    delete process.env.HIBIKI_USER_DATA
     rmSync(tempRoot, { recursive: true, force: true })
   })
 
-  it('getIndex fetches from remote when no cache exists', async () => {
+  const cachePath = () => join(tempRoot, 'data', 'registry-cache.json')
+
+  function writeCache(data: object, fetchedAt = new Date().toISOString()) {
+    writeFileSync(cachePath(), JSON.stringify({ fetchedAt, data }))
+  }
+
+  function respondWith(body: unknown, init: { status?: number, statusText?: string } = {}) {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(body), init))
+  }
+
+  const remoteIndex = { version: 1, updatedAt: '', scenes: [] }
+
+  it('getIndex fetches from remote and caches the index when no cache exists', async () => {
+    respondWith(remoteIndex)
+    await expect(createSceneRegistry(config).getIndex()).resolves.toEqual(remoteIndex)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(readFileSync(cachePath(), 'utf-8')).data).toEqual(remoteIndex)
+  })
+
+  it('getIndex returns a cached index without fetching, however old', async () => {
+    writeCache({ ...remoteIndex, version: 7 }, '2000-01-01T00:00:00.000Z')
+    await expect(createSceneRegistry(config).getIndex()).resolves.toMatchObject({ version: 7 })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('getIndex refetches when the cache file is not valid JSON', async () => {
+    writeFileSync(cachePath(), '{ broken')
+    respondWith(remoteIndex)
+    await expect(createSceneRegistry(config).getIndex()).resolves.toEqual(remoteIndex)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('fetchIndex serves a fresh cache and refetches a stale one', async () => {
     const registry = createSceneRegistry(config)
-    try {
-      const index = await registry.getIndex()
-      expect(index).toHaveProperty('version')
-      expect(index).toHaveProperty('scenes')
-    }
-    catch (err) {
-      expect(err).toBeInstanceOf(Error)
-    }
+    writeCache({ ...remoteIndex, version: 2 })
+    await expect(registry.fetchIndex()).resolves.toMatchObject({ version: 2 })
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    writeCache({ ...remoteIndex, version: 2 }, new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString())
+    respondWith({ ...remoteIndex, version: 3 })
+    await expect(registry.fetchIndex()).resolves.toMatchObject({ version: 3 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('fetchIndex(true) ignores a fresh cache', async () => {
+    writeCache({ ...remoteIndex, version: 2 })
+    respondWith({ ...remoteIndex, version: 4 })
+    await expect(createSceneRegistry(config).fetchIndex(true)).resolves.toMatchObject({ version: 4 })
+  })
+
+  it('fetchIndex throws on a non-OK response and leaves the cache untouched', async () => {
+    respondWith({}, { status: 503, statusText: 'Service Unavailable' })
+    await expect(createSceneRegistry(config).fetchIndex()).rejects.toThrow('Failed to fetch registry index: 503 Service Unavailable')
+    expect(existsSync(cachePath())).toBe(false)
+  })
+
+  it('fetchIndex propagates a network failure', async () => {
+    await expect(createSceneRegistry(config).fetchIndex()).rejects.toThrow('unexpected network call')
+  })
+
+  it('keeps the cache under HIBIKI_USER_DATA when set', async () => {
+    const userData = join(tempRoot, 'user-data')
+    mkdirSync(join(userData, 'data'), { recursive: true })
+    process.env.HIBIKI_USER_DATA = userData
+    respondWith(remoteIndex)
+    await createSceneRegistry(config).fetchIndex()
+    expect(existsSync(join(userData, 'data', 'registry-cache.json'))).toBe(true)
+    expect(existsSync(cachePath())).toBe(false)
   })
 
   it('installFromRegistry throws for unknown slug', async () => {
+    writeCache(remoteIndex)
+    await expect(createSceneRegistry(config).installFromRegistry('nonexistent')).rejects.toThrow('Scene \'nonexistent\' not found in registry')
+  })
+
+  it('installFromRegistry fails without saving when the index cannot be fetched', async () => {
+    respondWith({}, { status: 500, statusText: 'Internal Server Error' })
+    await expect(createSceneRegistry(config).installFromRegistry('anything')).rejects.toThrow('Failed to fetch registry index: 500')
+    const { createSceneStore } = await import('./scene-store')
+    await expect(createSceneStore(config).list()).resolves.toEqual([])
+  })
+
+  it('installFromRegistry maps every category to reference-only items and dedupes the name', async () => {
+    const entry = {
+      name: 'Tavern',
+      slug: 'tavern',
+      description: '',
+      author: '',
+      version: '1.0.0',
+      tags: [],
+      category: 'environment',
+      audioBundled: false,
+      createdAt: '',
+      updatedAt: '',
+      scene: {
+        music: [{ soundName: 'Lute', volume: 70, loop: true, source: { name: 'Lute song' } }],
+        ambience: [{ soundName: 'Crowd', volume: 30, enabled: false, source: { name: 'Crowd noise' } }],
+        effects: [{ soundName: 'Mug', volume: 90, source: { name: 'Mug clink' } }],
+      },
+    }
+    writeCache({ ...remoteIndex, scenes: [entry] })
     const registry = createSceneRegistry(config)
-    await expect(registry.installFromRegistry('nonexistent')).rejects.toThrow()
+    const first = await registry.installFromRegistry('tavern')
+    expect(first.name).toBe('Tavern')
+    expect(first.music).toEqual([{ soundId: 'Lute', soundName: 'Lute', volume: 70, loop: true, source: { name: 'Lute song' } }])
+    expect(first.ambience).toEqual([{ soundId: 'Crowd', soundName: 'Crowd', volume: 30, enabled: false, source: { name: 'Crowd noise' } }])
+    expect(first.effects).toEqual([{ soundId: 'Mug', soundName: 'Mug', volume: 90, source: { name: 'Mug clink' } }])
+    expect((await registry.installFromRegistry('tavern')).name).toBe('Tavern (imported)')
   })
 
   it('installFromRegistry drops any hotkey present in the entry', async () => {

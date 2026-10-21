@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import AdmZip from 'adm-zip'
@@ -84,5 +84,79 @@ describe('exportScene', () => {
     }
     expect((await read(seq.id)).scene.musicMode).toBe('sequential')
     expect((await read(plain.id)).scene.musicMode).toBe('single')
+  })
+
+  function readManifest(zipPath: string) {
+    return JSON.parse(new AdmZip(zipPath).getEntry('hibiki-scene.json')!.getData().toString('utf-8'))
+  }
+
+  it('exports a Scene with empty categories as a manifest with empty lists and no sounds', async () => {
+    const { createSceneStore } = await import('./scene-store')
+    const saved = await createSceneStore(config).save({ name: 'Empty  Scene!' })
+    const targetZip = join(tempRoot, 'empty-scene.zip')
+    await exportScene(config, saved.id, targetZip)
+
+    const zip = new AdmZip(targetZip)
+    expect(zip.getEntries().map(e => e.entryName)).toEqual(['hibiki-scene.json'])
+    const data = readManifest(targetZip)
+    expect(data.name).toBe('empty-scene')
+    expect(data.scene).toMatchObject({ music: [], ambience: [], effects: [] })
+  })
+
+  it('bundles each referenced sound once per category and carries item settings', async () => {
+    writeFileSync(join(musicDir, 'theme-1.mp3'), 'music-bytes')
+    writeFileSync(join(ambienceDir, 'rain-2.ogg'), 'ambience-bytes')
+    writeFileSync(join(effectsDir, 'boom-3.wav'), 'effect-bytes')
+    const { createSceneStore } = await import('./scene-store')
+    const saved = await createSceneStore(config).save({
+      name: 'Bundled',
+      music: [
+        { soundId: 'theme-1', soundName: 'Theme', volume: 80, loop: true },
+        { soundId: 'theme-1', soundName: 'Theme again', volume: 60 },
+      ],
+      ambience: [{ soundId: 'rain-2', volume: 40, enabled: false, source: { name: 'Rain pack' } }],
+      effects: [{ soundId: 'boom-3', soundName: 'Boom' }],
+    })
+    const targetZip = join(tempRoot, 'bundled.zip')
+    await exportScene(config, saved.id, targetZip)
+
+    const zip = new AdmZip(targetZip)
+    expect(zip.getEntries().map(e => e.entryName).sort()).toEqual([
+      'hibiki-scene.json',
+      'sounds/ambience/rain-2.ogg',
+      'sounds/effects/boom-3.wav',
+      'sounds/music/theme-1.mp3',
+    ])
+    expect(zip.getEntry('sounds/music/theme-1.mp3')!.getData().toString('utf-8')).toBe('music-bytes')
+
+    const { scene } = readManifest(targetZip)
+    expect(scene.music).toEqual([
+      { soundName: 'Theme', volume: 80, bundled: true, bundledPath: 'sounds/music/theme-1.mp3', loop: true },
+      { soundName: 'Theme again', volume: 60, bundled: true, bundledPath: 'sounds/music/theme-1.mp3' },
+    ])
+    expect(scene.ambience).toEqual([
+      { soundName: 'rain-2', volume: 40, bundled: true, bundledPath: 'sounds/ambience/rain-2.ogg', enabled: false, source: { name: 'Rain pack' } },
+    ])
+    expect(scene.effects).toEqual([
+      { soundName: 'Boom', bundled: true, bundledPath: 'sounds/effects/boom-3.wav' },
+    ])
+  })
+
+  it('bundles the sounds it finds and references the ones missing on disk', async () => {
+    writeFileSync(join(effectsDir, 'present-4.wav'), 'here')
+    const { createSceneStore } = await import('./scene-store')
+    const saved = await createSceneStore(config).save({
+      name: 'Partly Missing',
+      effects: [{ soundId: 'present-4', soundName: 'Present' }, { soundId: 'gone-5', soundName: 'Gone' }],
+    })
+    const targetZip = join(tempRoot, 'partly-missing.zip')
+    await exportScene(config, saved.id, targetZip)
+
+    const { scene } = readManifest(targetZip)
+    expect(scene.effects).toEqual([
+      { soundName: 'Present', bundled: true, bundledPath: 'sounds/effects/present-4.wav' },
+      { soundName: 'Gone', bundled: false },
+    ])
+    expect(new AdmZip(targetZip).getEntry('sounds/effects/gone-5.wav')).toBeNull()
   })
 })
