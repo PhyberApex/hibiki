@@ -63,7 +63,8 @@ function makeAppConfig(stored: string | null = null): AppConfig & { get: jest.Mo
   return { get: jest.fn(async () => stored), set: jest.fn(async () => {}) }
 }
 
-function current(): FakeClient {
+/** The client most recently constructed by the module under test (a logout/reconnect replaces it). */
+function latestClient(): FakeClient {
   return mockClients[mockClients.length - 1]
 }
 
@@ -124,18 +125,18 @@ describe('createDiscordClient', () => {
   it('creates a client with the Guilds and GuildVoiceStates intents', () => {
     const { GatewayIntentBits } = jest.requireActual('discord.js')
     createDiscordClient(makeConfig(), makeAppConfig())
-    expect(current().options).toEqual({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] })
+    expect(latestClient().options).toEqual({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] })
   })
 
   describe('login token resolution', () => {
     it('logs in with DISCORD_TOKEN without consulting the store', async () => {
       const appConfig = makeAppConfig('stored-token')
       const discord = createDiscordClient(makeConfig(TOKEN), appConfig)
-      loginBecomesReady(current())
+      loginBecomesReady(latestClient())
 
       await discord.login()
 
-      expect(current().login).toHaveBeenCalledWith(TOKEN)
+      expect(latestClient().login).toHaveBeenCalledWith(TOKEN)
       expect(appConfig.get).not.toHaveBeenCalled()
       expect(info).toHaveBeenCalledWith('[discord]', 'Login complete')
     })
@@ -143,12 +144,12 @@ describe('createDiscordClient', () => {
     it('falls back to the stored token when DISCORD_TOKEN is empty', async () => {
       const appConfig = makeAppConfig('stored-token')
       const discord = createDiscordClient(makeConfig(''), appConfig)
-      loginBecomesReady(current())
+      loginBecomesReady(latestClient())
 
       await discord.login()
 
       expect(appConfig.get).toHaveBeenCalledWith('discord.token')
-      expect(current().login).toHaveBeenCalledWith('stored-token')
+      expect(latestClient().login).toHaveBeenCalledWith('stored-token')
     })
 
     it('skips login and warns when no token is configured anywhere', async () => {
@@ -156,7 +157,7 @@ describe('createDiscordClient', () => {
 
       await discord.login()
 
-      expect(current().login).not.toHaveBeenCalled()
+      expect(latestClient().login).not.toHaveBeenCalled()
       expect(warn).toHaveBeenCalledWith('[discord]', 'No token configured — skipping login')
     })
   })
@@ -164,7 +165,7 @@ describe('createDiscordClient', () => {
   describe('login readiness', () => {
     it('does not wait for clientReady when the client is ready once login resolves', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      const client = current()
+      const client = latestClient()
       client.login.mockImplementation(async () => {
         becomeReady(client)
         return 'ok'
@@ -190,7 +191,7 @@ describe('createDiscordClient', () => {
     it('logs a failing login at error and rethrows it', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
       const failure = new Error('An invalid token was provided.')
-      current().login.mockRejectedValue(failure)
+      latestClient().login.mockRejectedValue(failure)
 
       await expect(discord.login()).rejects.toBe(failure)
 
@@ -201,12 +202,42 @@ describe('createDiscordClient', () => {
     it('disarms the ready timeout when login fails, so nothing rejects later', async () => {
       jest.useFakeTimers()
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      current().login.mockRejectedValue(new Error('An invalid token was provided.'))
+      const client = latestClient()
+      const listenersBefore = client.listenerCount(Events.ClientReady)
+      client.login.mockRejectedValue(new Error('An invalid token was provided.'))
 
       await expect(discord.login()).rejects.toThrow()
 
       expect(jest.getTimerCount()).toBe(0)
-      expect(current().listenerCount(Events.ClientReady)).toBe(1)
+      expect(client.listenerCount(Events.ClientReady)).toBe(listenersBefore)
+    })
+
+    it('completes a login slower than the ready timeout without an unhandled rejection', async () => {
+      jest.useFakeTimers()
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+      try {
+        const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
+        const client = latestClient()
+        client.login.mockImplementation(() => new Promise((resolve) => {
+          setTimeout(() => {
+            becomeReady(client)
+            resolve('ok')
+          }, 20_000)
+        }))
+
+        const pending = discord.login()
+        await jest.advanceTimersByTimeAsync(20_000)
+        await pending
+        // Unhandled rejections are reported on a later macrotask.
+        await new Promise(resolve => jest.requireActual('node:timers').setImmediate(resolve))
+
+        expect(unhandled).not.toHaveBeenCalled()
+        expect(info).toHaveBeenCalledWith('[discord]', 'Login complete')
+      }
+      finally {
+        process.off('unhandledRejection', unhandled)
+      }
     })
   })
 
@@ -218,7 +249,7 @@ describe('createDiscordClient', () => {
 
     it('reports the bot user once ready', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      loginBecomesReady(current())
+      loginBecomesReady(latestClient())
       await discord.login()
 
       expect(discord.getBotStatus()).toEqual({ ready: true, userTag: 'Hibiki#0001', userId: 'bot-1' })
@@ -238,7 +269,7 @@ describe('createDiscordClient', () => {
         channel('t1', 'general', false),
         channel('s1', null, true),
       ])
-      becomeReady(current(), [tavern, guild('g2', 'Dungeon', [])])
+      becomeReady(latestClient(), [tavern, guild('g2', 'Dungeon', [])])
 
       expect(discord.listGuildDirectory()).toEqual([
         {
@@ -255,31 +286,31 @@ describe('createDiscordClient', () => {
   describe('destroy', () => {
     it('destroys a ready client', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      becomeReady(current())
+      becomeReady(latestClient())
 
       await discord.destroy()
 
-      expect(current().destroy).toHaveBeenCalled()
+      expect(latestClient().destroy).toHaveBeenCalled()
       expect(info).toHaveBeenCalledWith('[discord]', 'Destroying client')
     })
 
     it('leaves a client that is not ready alone', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
       await discord.destroy()
-      expect(current().destroy).not.toHaveBeenCalled()
+      expect(latestClient().destroy).not.toHaveBeenCalled()
     })
   })
 
   describe('logout', () => {
     it('destroys the old client even before ready and leaves a fresh one', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      const old = current()
+      const old = latestClient()
 
       await discord.logout()
 
       expect(old.destroy).toHaveBeenCalled()
       expect(mockClients).toHaveLength(2)
-      expect(discord.getClient()).toBe(current())
+      expect(discord.getClient()).toBe(latestClient())
       expect(discord.getClient()).not.toBe(old)
       expect(info).toHaveBeenCalledWith('[discord]', 'Logging out (client not ready)')
     })
@@ -288,13 +319,13 @@ describe('createDiscordClient', () => {
   describe('reconnect', () => {
     it('destroys the ready client and logs in again on a fresh one', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      const old = current()
+      const old = latestClient()
       becomeReady(old)
       mockOnCreate = client => loginBecomesReady(client)
 
       await discord.reconnect()
 
-      const fresh = current()
+      const fresh = latestClient()
       expect(old.destroy).toHaveBeenCalled()
       expect(fresh).not.toBe(old)
       expect(fresh.login).toHaveBeenCalledWith(TOKEN)
@@ -305,7 +336,7 @@ describe('createDiscordClient', () => {
 
     it('logs a failing re-login at error and rethrows it', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      becomeReady(current())
+      becomeReady(latestClient())
       const failure = new Error('gateway down')
       mockOnCreate = client => client.login.mockRejectedValue(failure)
 
@@ -323,7 +354,7 @@ describe('createDiscordClient', () => {
 
     it('returns false for an unknown guild or when the bot is not in voice', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      becomeReady(current(), [guild('g1', 'Tavern', [], { channelId: null })])
+      becomeReady(latestClient(), [guild('g1', 'Tavern', [], { channelId: null })])
 
       await expect(discord.leaveVoiceChannel('nope')).resolves.toBe(false)
       await expect(discord.leaveVoiceChannel('g1')).resolves.toBe(false)
@@ -332,7 +363,7 @@ describe('createDiscordClient', () => {
     it('leaves through the gateway and logs it', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
       const voice = { channelId: 'v1', setChannel: jest.fn(async () => {}) }
-      becomeReady(current(), [guild('g1', 'Tavern', [], voice)])
+      becomeReady(latestClient(), [guild('g1', 'Tavern', [], voice)])
 
       await expect(discord.leaveVoiceChannel('g1')).resolves.toBe(true)
 
@@ -346,7 +377,7 @@ describe('createDiscordClient', () => {
       const voice = { channelId: 'v1', setChannel: jest.fn(async () => {
         throw failure
       }) }
-      becomeReady(current(), [guild('g1', 'Tavern', [], voice)])
+      becomeReady(latestClient(), [guild('g1', 'Tavern', [], voice)])
 
       await expect(discord.leaveVoiceChannel('g1')).resolves.toBe(false)
 
@@ -358,13 +389,13 @@ describe('createDiscordClient', () => {
     it('is empty before ready and for an unknown guild', () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
       expect(discord.getBotVoiceStateForGuild('g1')).toEqual({ channelId: null, channelName: null })
-      becomeReady(current())
+      becomeReady(latestClient())
       expect(discord.getBotVoiceStateForGuild('g1')).toEqual({ channelId: null, channelName: null })
     })
 
     it('reports the bot\'s current voice channel', () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      becomeReady(current(), [
+      becomeReady(latestClient(), [
         guild('g1', 'Tavern', [], { channelId: 'v1', channel: { id: 'v1', name: 'Voice' } }),
         guild('g2', 'Dungeon', [], { channelId: null, channel: { id: 'v2', name: 'Crypt' } }),
       ])
@@ -377,7 +408,7 @@ describe('createDiscordClient', () => {
   describe('gateway event logging', () => {
     it('logs every gateway event under [discord]', () => {
       createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      const client = current()
+      const client = latestClient()
       const clientError = new Error('boom')
 
       becomeReady(client, [guild('g1', 'Tavern', []), guild('g2', 'Dungeon', [])])
@@ -401,21 +432,21 @@ describe('createDiscordClient', () => {
       const discord = createDiscordClient(makeConfig(''), makeAppConfig(null))
       await discord.reconnect()
 
-      current().emit(Events.Invalidated)
+      latestClient().emit(Events.Invalidated)
 
       expect(error).toHaveBeenCalledWith('[discord]', 'Session invalidated by Discord; a reconnect is required')
     })
 
     it('never writes the token into a log line', async () => {
       const discord = createDiscordClient(makeConfig(''), makeAppConfig(TOKEN))
-      loginBecomesReady(current(), [guild('g1', 'Tavern', [])])
+      loginBecomesReady(latestClient(), [guild('g1', 'Tavern', [])])
       await discord.login()
-      current().emit(Events.ShardDisconnect, { code: 1000 }, 0)
-      current().emit(Events.Error, new Error('boom'))
+      latestClient().emit(Events.ShardDisconnect, { code: 1000 }, 0)
+      latestClient().emit(Events.Error, new Error('boom'))
       await discord.logout()
 
       const failing = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      current().login.mockRejectedValue(new Error('An invalid token was provided.'))
+      latestClient().login.mockRejectedValue(new Error('An invalid token was provided.'))
       await expect(failing.login()).rejects.toThrow()
 
       const lines = allLogLines(debug, info, warn, error)

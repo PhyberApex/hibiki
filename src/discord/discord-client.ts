@@ -58,6 +58,10 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
       onReady = () => resolve()
       client.on(Events.ClientReady, onReady)
     })
+    // The timer runs during `client.login` too, before anything awaits it: a
+    // slow login that ends ready would otherwise leave this rejection unhandled.
+    // Awaiting `readyPromise` below still sees the timeout.
+    readyPromise.catch(() => {})
 
     try {
       await client.login(token)
@@ -69,7 +73,7 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
       throw err
     }
     finally {
-      // Also on a failed login: an armed timer would reject unhandled 15 s later.
+      // Also on a failed login, so neither the timer nor the listener outlives it.
       clearTimeout(timeout)
       client.off(Events.ClientReady, onReady)
     }
