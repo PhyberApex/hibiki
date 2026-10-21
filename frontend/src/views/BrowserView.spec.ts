@@ -131,6 +131,10 @@ function button(label: string) {
   return wrapper!.find(`button[aria-label="${label}"]`)
 }
 
+function urlValue() {
+  return (wrapper!.find('.url-input').element as HTMLInputElement).value
+}
+
 function routeButton() {
   return wrapper!.find('.toolbar-btn-stream')
 }
@@ -153,6 +157,7 @@ describe('browserView', () => {
       { x: 10.4, y: 80.6, width: 799.5, height: 600.2 } as DOMRect,
     )
     nextId = 1
+    resizeCallback = null
     vi.mocked(createBrowserView).mockImplementation(() => Promise.resolve(nextId++))
     vi.mocked(listBookmarks).mockResolvedValue([])
     const track = { stop: vi.fn() }
@@ -177,7 +182,7 @@ describe('browserView', () => {
       expect(showBrowserView).toHaveBeenCalledWith(1)
       expect(setBrowserViewBounds).toHaveBeenCalledWith(1, { x: 10, y: 81, width: 800, height: 600 })
       expect(tabPills()).toHaveLength(1)
-      expect((wrapper!.find('.url-input').element as HTMLInputElement).value).toBe(DEFAULT_URL)
+      expect(urlValue()).toBe(DEFAULT_URL)
       // The default tab cannot be closed.
       expect(tabPills()[0]!.find('.browser-tab-close').exists()).toBe(false)
     })
@@ -208,7 +213,7 @@ describe('browserView', () => {
       expect(showBrowserView).toHaveBeenCalledWith(1)
       expect(setBrowserViewBounds).toHaveBeenCalledWith(1, expect.any(Object))
       expect(tabPills()[0]!.classes()).toContain('browser-tab-pill-active')
-      expect((wrapper!.find('.url-input').element as HTMLInputElement).value).toBe(DEFAULT_URL)
+      expect(urlValue()).toBe(DEFAULT_URL)
     })
 
     it('clicking the already active tab does nothing', async () => {
@@ -299,7 +304,7 @@ describe('browserView', () => {
       const pill = tabPills()[0]!
       expect(pill.find('.browser-tab-title').text()).toBe('Example')
       expect(pill.find('img.browser-tab-favicon').attributes('src')).toBe('https://example.com/icon.png')
-      expect((wrapper!.find('.url-input').element as HTMLInputElement).value).toBe('https://example.com/a')
+      expect(urlValue()).toBe('https://example.com/a')
 
       browserEvents.get('browserView:titleUpdated')!(1, '')
       browserEvents.get('browserView:faviconUpdated')!(1, null)
@@ -364,7 +369,7 @@ describe('browserView', () => {
       await wrapper!.find('.url-form').trigger('submit')
 
       expect(loadBrowserViewURL).toHaveBeenCalledWith(1, 'https://example.com')
-      expect((wrapper!.find('.url-input').element as HTMLInputElement).value).toBe('https://example.com')
+      expect(urlValue()).toBe('https://example.com')
     })
 
     it('submitting an empty URL does nothing', async () => {
@@ -382,6 +387,10 @@ describe('browserView', () => {
       { name: 'Tabletop Audio', url: 'https://tabletopaudio.com', favicon: 'https://tabletopaudio.com/icon.png' },
       { name: 'Example', url: 'https://example.com' },
     ]
+
+    function withBookmarks() {
+      vi.mocked(listBookmarks).mockResolvedValue(saved.map(b => ({ ...b })))
+    }
 
     it('shows stored bookmarks with their favicons', async () => {
       vi.mocked(listBookmarks).mockResolvedValue(saved)
@@ -424,7 +433,7 @@ describe('browserView', () => {
     })
 
     it('removing a bookmark from the bar persists the rest', async () => {
-      vi.mocked(listBookmarks).mockResolvedValue(saved.map(b => ({ ...b })))
+      withBookmarks()
       await mountBrowser()
 
       await wrapper!.findAll('.bookmark-remove')[0]!.trigger('click')
@@ -435,7 +444,7 @@ describe('browserView', () => {
     })
 
     it('swallows a failed save', async () => {
-      vi.mocked(listBookmarks).mockResolvedValue(saved.map(b => ({ ...b })))
+      withBookmarks()
       vi.mocked(saveBookmarks).mockRejectedValue(new Error('disk full'))
       await mountBrowser()
 
@@ -446,7 +455,7 @@ describe('browserView', () => {
     })
 
     it('clicking a bookmark opens it in a new tab', async () => {
-      vi.mocked(listBookmarks).mockResolvedValue(saved.map(b => ({ ...b })))
+      withBookmarks()
       await mountBrowser()
 
       await wrapper!.findAll('.bookmark-item-main')[1]!.trigger('click')
@@ -457,7 +466,7 @@ describe('browserView', () => {
     })
 
     it('renames a bookmark on Enter and persists it', async () => {
-      vi.mocked(listBookmarks).mockResolvedValue(saved.map(b => ({ ...b })))
+      withBookmarks()
       await mountBrowser()
 
       await wrapper!.findAll('.bookmark-edit')[1]!.trigger('click')
@@ -481,7 +490,7 @@ describe('browserView', () => {
     })
 
     it('a blank rename falls back to the URL', async () => {
-      vi.mocked(listBookmarks).mockResolvedValue(saved.map(b => ({ ...b })))
+      withBookmarks()
       await mountBrowser()
 
       await wrapper!.findAll('.bookmark-edit')[1]!.trigger('click')
@@ -494,7 +503,7 @@ describe('browserView', () => {
     })
 
     it('escape cancels a rename without saving', async () => {
-      vi.mocked(listBookmarks).mockResolvedValue(saved.map(b => ({ ...b })))
+      withBookmarks()
       await mountBrowser()
 
       await wrapper!.findAll('.bookmark-edit')[0]!.trigger('click')
@@ -508,7 +517,7 @@ describe('browserView', () => {
     })
 
     it('removing the bookmark being renamed ends the rename', async () => {
-      vi.mocked(listBookmarks).mockResolvedValue(saved.map(b => ({ ...b })))
+      withBookmarks()
       await mountBrowser()
 
       await wrapper!.findAll('.bookmark-edit')[0]!.trigger('click')
@@ -521,7 +530,7 @@ describe('browserView', () => {
 
     it('offers bookmarks in the empty state, renamable and openable', async () => {
       vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.mocked(listBookmarks).mockResolvedValue(saved.map(b => ({ ...b })))
+      withBookmarks()
       vi.mocked(createBrowserView).mockRejectedValueOnce(new Error('boom'))
       await mountBrowser()
 
@@ -574,6 +583,7 @@ describe('browserView', () => {
       expect(startEffectStream).toHaveBeenCalledWith('g1', 'browser-2', 50)
       expect(captureTabStream).toHaveBeenCalledWith('source-2')
       expect(stopEffectStream).not.toHaveBeenCalled()
+      expect(captureStop).not.toHaveBeenCalled()
       expect(useRoutedTabsStore().routedCount).toBe(2)
       expect(wrapper!.findAll('.browser-tab-streaming')).toHaveLength(2)
     })
@@ -683,6 +693,19 @@ describe('browserView', () => {
 
       await wrapper!.find('input[aria-label="Tab Volume"]').setValue('60')
       expect(localSetLevel).toHaveBeenCalledWith(0.3)
+    })
+
+    it('un-routing stops the local mix and unmutes the tab', async () => {
+      await mountBrowser()
+      await routeButton().trigger('click')
+      await flush()
+
+      await routeButton().trigger('click')
+      await flush()
+
+      expect(localStop).toHaveBeenCalled()
+      expect(setBrowserViewAudioMuted).toHaveBeenLastCalledWith(1, false)
+      expect(routeButton().text()).toContain('Mix locally')
     })
   })
 
