@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createSceneRegistry } from './scene-registry'
+import { createSceneRegistry, REGISTRY_INDEX_URL, resolveRegistryIndexUrl } from './scene-registry'
 
 describe('createSceneRegistry', () => {
   let tempRoot: string
@@ -110,6 +110,32 @@ describe('createSceneRegistry', () => {
     expect(existsSync(cachePath())).toBe(false)
   })
 
+  it('fetchIndex fetches the default index URL unless given another', async () => {
+    respondWith(remoteIndex)
+    await createSceneRegistry(config).fetchIndex(true)
+    expect(fetchMock).toHaveBeenLastCalledWith(REGISTRY_INDEX_URL)
+    respondWith(remoteIndex)
+    await createSceneRegistry(config, 'http://127.0.0.1:9/index.json').fetchIndex(true)
+    expect(fetchMock).toHaveBeenLastCalledWith('http://127.0.0.1:9/index.json')
+  })
+
+  it('ignores a cache fetched from a different index URL', async () => {
+    respondWith({ ...remoteIndex, version: 5 })
+    await createSceneRegistry(config).fetchIndex()
+    respondWith({ ...remoteIndex, version: 6 })
+    const other = createSceneRegistry(config, 'http://127.0.0.1:9/index.json')
+    await expect(other.getIndex()).resolves.toMatchObject({ version: 6 })
+    await expect(other.fetchIndex()).resolves.toMatchObject({ version: 6 })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads a cache without a recorded URL as fetched from the default index', async () => {
+    writeCache({ ...remoteIndex, version: 2 })
+    await expect(createSceneRegistry(config).getIndex()).resolves.toMatchObject({ version: 2 })
+    respondWith({ ...remoteIndex, version: 3 })
+    await expect(createSceneRegistry(config, 'http://127.0.0.1:9/index.json').getIndex()).resolves.toMatchObject({ version: 3 })
+  })
+
   it('installFromRegistry throws for unknown slug', async () => {
     writeCache(remoteIndex)
     await expect(createSceneRegistry(config).installFromRegistry('nonexistent')).rejects.toThrow('Scene \'nonexistent\' not found in registry')
@@ -199,5 +225,16 @@ describe('createSceneRegistry', () => {
     const registry = createSceneRegistry(config)
     expect((await registry.installFromRegistry('seq')).musicMode).toBe('sequential')
     expect(await registry.installFromRegistry('odd')).not.toHaveProperty('musicMode')
+  })
+})
+
+describe('resolveRegistryIndexUrl', () => {
+  it('falls back to the default index for an unset or blank override', () => {
+    expect(resolveRegistryIndexUrl(undefined)).toBe(REGISTRY_INDEX_URL)
+    expect(resolveRegistryIndexUrl('  ')).toBe(REGISTRY_INDEX_URL)
+  })
+
+  it('uses a set override, trimmed', () => {
+    expect(resolveRegistryIndexUrl(' http://127.0.0.1:4000/index.json ')).toBe('http://127.0.0.1:4000/index.json')
   })
 })

@@ -9,13 +9,20 @@ import { createSceneStore, normalizeMusicMode } from './scene-store'
 
 const log = createLogger('scene-registry')
 
-const REGISTRY_INDEX_URL = 'https://raw.githubusercontent.com/PhyberApex/hibiki/main/registry/index.json'
+export const REGISTRY_INDEX_URL = 'https://raw.githubusercontent.com/PhyberApex/hibiki/main/registry/index.json'
 const CACHE_FILENAME = 'registry-cache.json'
 const STALE_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 interface CachedIndex {
   fetchedAt: string
+  /** Absent in caches written before `HIBIKI_REGISTRY_INDEX_URL`: those came from the default index. */
+  url?: string
   data: RegistryIndex
+}
+
+/** The index to fetch: `HIBIKI_REGISTRY_INDEX_URL` when set, else the project's own. */
+export function resolveRegistryIndexUrl(override: string | undefined): string {
+  return override?.trim() || REGISTRY_INDEX_URL
 }
 
 function getCachePath(config: Config): string {
@@ -66,13 +73,25 @@ function registryEntryToScene(entry: RegistryEntry): Omit<Scene, 'id' | 'created
   }
 }
 
-export function createSceneRegistry(config: Config) {
+export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_URL) {
   const cachePath = getCachePath(config)
+
+  /** A cached index, unless it was fetched from another index URL. */
+  async function readOwnCache(): Promise<CachedIndex | null> {
+    const cached = await readCache(cachePath)
+    if (!cached)
+      return null
+    const cachedUrl = cached.url ?? REGISTRY_INDEX_URL
+    if (cachedUrl === indexUrl)
+      return cached
+    log.info(`Ignoring registry cache fetched from ${cachedUrl}; the index is now ${indexUrl}`)
+    return null
+  }
 
   return {
     async fetchIndex(forceRefresh = false): Promise<RegistryIndex> {
       if (!forceRefresh) {
-        const cached = await readCache(cachePath)
+        const cached = await readOwnCache()
         if (cached) {
           const age = Date.now() - new Date(cached.fetchedAt).getTime()
           if (age < STALE_MS)
@@ -80,19 +99,19 @@ export function createSceneRegistry(config: Config) {
         }
       }
 
-      log.info('Fetching registry index…')
-      const response = await fetch(REGISTRY_INDEX_URL)
+      log.info(`Fetching registry index from ${indexUrl}…`)
+      const response = await fetch(indexUrl)
       if (!response.ok)
-        throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText}`)
+        throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText} (${indexUrl})`)
 
       const data = await response.json() as RegistryIndex
-      await writeCache(cachePath, { fetchedAt: new Date().toISOString(), data })
+      await writeCache(cachePath, { fetchedAt: new Date().toISOString(), url: indexUrl, data })
       log.info(`Registry index cached (${data.scenes.length} scenes)`)
       return data
     },
 
     async getIndex(): Promise<RegistryIndex> {
-      const cached = await readCache(cachePath)
+      const cached = await readOwnCache()
       if (cached)
         return cached.data
       return this.fetchIndex()

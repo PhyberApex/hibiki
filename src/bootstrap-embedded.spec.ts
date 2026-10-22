@@ -16,7 +16,7 @@ import { LOCAL_TARGET_ID } from './player/output-target'
 import { createPlayer as createPlayerImpl } from './player/player'
 import { exportScene } from './scenes/scene-export'
 import { importScene } from './scenes/scene-import'
-import { createSceneRegistry } from './scenes/scene-registry'
+import { createSceneRegistry, REGISTRY_INDEX_URL } from './scenes/scene-registry'
 import { createSceneStore } from './scenes/scene-store'
 import { createSoundLibrary } from './sound/sound-library'
 import { createUpdateCheck } from './updates/update-check'
@@ -42,7 +42,10 @@ jest.mock('./persistence', () => ({ createAppConfig: jest.fn() }))
 jest.mock('./player/player', () => ({ createPlayer: jest.fn() }))
 jest.mock('./scenes/scene-export', () => ({ exportScene: jest.fn() }))
 jest.mock('./scenes/scene-import', () => ({ importScene: jest.fn() }))
-jest.mock('./scenes/scene-registry', () => ({ createSceneRegistry: jest.fn() }))
+jest.mock('./scenes/scene-registry', () => ({
+  ...jest.requireActual('./scenes/scene-registry'),
+  createSceneRegistry: jest.fn(),
+}))
 jest.mock('./scenes/scene-store', () => ({ createSceneStore: jest.fn() }))
 jest.mock('./sound/sound-library', () => ({ createSoundLibrary: jest.fn() }))
 jest.mock('./updates/update-check', () => ({ createUpdateCheck: jest.fn() }))
@@ -301,6 +304,23 @@ describe('getEmbeddedApp', () => {
 
       await expect(getEmbeddedApp()).resolves.toHaveProperty('api')
       expect(spies.error).toHaveBeenCalledWith('[hibiki]', 'Storage warm-up failed:', err)
+    })
+
+    it('fetches the default Scene Registry index and logs it', () => {
+      expect(createSceneRegistry).toHaveBeenCalledWith(config, REGISTRY_INDEX_URL)
+      expect(spies.info).toHaveBeenCalledWith('[hibiki]', `Scene Registry index: ${REGISTRY_INDEX_URL}`)
+    })
+
+    it('fetches the index from HIBIKI_REGISTRY_INDEX_URL when set, and logs the override', async () => {
+      process.env.HIBIKI_REGISTRY_INDEX_URL = 'http://127.0.0.1:4000/index.json'
+      try {
+        await getEmbeddedApp()
+      }
+      finally {
+        delete process.env.HIBIKI_REGISTRY_INDEX_URL
+      }
+      expect(createSceneRegistry).toHaveBeenLastCalledWith(config, 'http://127.0.0.1:4000/index.json')
+      expect(spies.info).toHaveBeenCalledWith('[hibiki]', 'Scene Registry index overridden by HIBIKI_REGISTRY_INDEX_URL: http://127.0.0.1:4000/index.json')
     })
 
     it('exposes the shutdown handler and the player state subscription', async () => {
