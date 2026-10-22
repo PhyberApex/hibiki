@@ -79,7 +79,13 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
   /** A cached index, unless it was fetched from another index URL. */
   async function readOwnCache(): Promise<CachedIndex | null> {
     const cached = await readCache(cachePath)
-    return cached && (cached.url ?? REGISTRY_INDEX_URL) === indexUrl ? cached : null
+    if (!cached)
+      return null
+    const cachedUrl = cached.url ?? REGISTRY_INDEX_URL
+    if (cachedUrl === indexUrl)
+      return cached
+    log.info(`Ignoring registry cache fetched from ${cachedUrl}; the index is now ${indexUrl}`)
+    return null
   }
 
   return {
@@ -93,10 +99,10 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
         }
       }
 
-      log.info('Fetching registry index…')
+      log.info(`Fetching registry index from ${indexUrl}…`)
       const response = await fetch(indexUrl)
       if (!response.ok)
-        throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText}`)
+        throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText} (${indexUrl})`)
 
       const data = await response.json() as RegistryIndex
       await writeCache(cachePath, { fetchedAt: new Date().toISOString(), url: indexUrl, data })

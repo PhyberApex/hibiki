@@ -79,7 +79,7 @@ let profile: string
 let app: ElectronApplication | undefined
 let page: Page
 const requests: string[] = []
-const registry = createServer((req, res) => {
+const indexServer = createServer((req, res) => {
   requests.push(req.url ?? '')
   if (req.url === '/registry/index.json') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -112,21 +112,21 @@ function logText(): string {
 }
 
 test.beforeAll(async () => {
-  await new Promise<void>(resolve => registry.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => indexServer.listen(0, '127.0.0.1', resolve))
   profile = seed()
 })
 
 test.afterAll(async () => {
   if (app)
     await closeElectronApp(app)
-  await new Promise<void>(resolve => registry.close(() => resolve()))
+  await new Promise<void>(resolve => indexServer.close(() => resolve()))
   if (profile)
     rmSync(profile, { recursive: true, force: true })
 })
 
 test('a Scene installed from the Registry browser lands in the Scenes view, its sounds resolvable', async () => {
   test.setTimeout(180_000)
-  const indexUrl = `http://127.0.0.1:${(registry.address() as AddressInfo).port}/registry/index.json`
+  const indexUrl = `http://127.0.0.1:${(indexServer.address() as AddressInfo).port}/registry/index.json`
   let installed!: Scene
 
   await test.step('the app fetches the index from HIBIKI_REGISTRY_INDEX_URL and lists its entry', async () => {
@@ -147,19 +147,19 @@ test('a Scene installed from the Registry browser lands in the Scenes view, its 
     await expect.poll(logText).toContain(`Scene Registry index overridden by HIBIKI_REGISTRY_INDEX_URL: ${indexUrl}`)
 
     await page.getByRole('button', { name: 'Browse community scenes' }).click()
-    const browser = page.getByRole('dialog', { name: 'Browse Community Scenes' })
-    await expect(browser).toBeVisible()
-    await expect(browser.getByText(SCENE_NAME, { exact: true })).toBeVisible()
-    await expect(browser.getByText('by e2e', { exact: true })).toBeVisible()
+    const registryDialog = page.getByRole('dialog', { name: 'Browse Community Scenes' })
+    await expect(registryDialog).toBeVisible()
+    await expect(registryDialog.getByText(SCENE_NAME, { exact: true })).toBeVisible()
+    await expect(registryDialog.getByText('by e2e', { exact: true })).toBeVisible()
     expect(requests).toEqual(['/registry/index.json'])
     // The index contents stay out of the log; only its URL and size go in.
     expect(logText()).not.toContain(INDEX.scenes[0].description)
   })
 
   await test.step('Install adds the Scene, opens it and drops the entry\'s Hotkeys', async () => {
-    const browser = page.getByRole('dialog', { name: 'Browse Community Scenes' })
-    await browser.getByRole('button', { name: 'Install' }).click()
-    await expect(browser).toBeHidden()
+    const registryDialog = page.getByRole('dialog', { name: 'Browse Community Scenes' })
+    await registryDialog.getByRole('button', { name: 'Install' }).click()
+    await expect(registryDialog).toBeHidden()
     await expect(page).toHaveURL(/hibiki:\/\/app\/scenes\/[^/]+$/)
     await expect(page.getByRole('heading', { name: SCENE_NAME, exact: true })).toBeVisible()
 
@@ -178,6 +178,11 @@ test('a Scene installed from the Registry browser lands in the Scenes view, its 
     const cache = JSON.parse(readFileSync(join(profile, 'data', 'registry-cache.json'), 'utf8'))
     expect(cache).toMatchObject({ url: indexUrl, data: { scenes: [{ slug: SLUG }] } })
     await expect.poll(logText).toContain(`Installed "${SCENE_NAME}" from registry (${installed.id})`)
+
+    await page.goto('hibiki://app/scenes')
+    await page.getByText(SCENE_NAME, { exact: true }).click()
+    await expect(page).toHaveURL(`hibiki://app/scenes/${installed.id}`)
+    await expect(page.getByRole('heading', { name: SCENE_NAME, exact: true })).toBeVisible()
   })
 
   await test.step('its sounds show as missing until resolved against the GM\'s library', async () => {
