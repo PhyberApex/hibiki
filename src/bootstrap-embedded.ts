@@ -33,7 +33,7 @@ import { targetKind } from './player/output-target'
 import { createPlayer } from './player/player'
 import { exportScene } from './scenes/scene-export'
 import { importScene } from './scenes/scene-import'
-import { createSceneRegistry } from './scenes/scene-registry'
+import { createSceneRegistry, REGISTRY_INDEX_URL, resolveRegistryIndexUrl } from './scenes/scene-registry'
 import { createSceneStore } from './scenes/scene-store'
 import { createSoundLibrary } from './sound/sound-library'
 import { createUpdateCheck } from './updates/update-check'
@@ -257,7 +257,12 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
   const sounds = createSoundLibrary(config)
   const hotkeySettings = createHotkeySettings(appConfig, () => createSceneStore(config).list())
   const scenes = createSceneStore(config, { getActionHotkeys: hotkeySettings.getActionHotkeys })
-  const registry = createSceneRegistry(config)
+  const registryIndexUrl = resolveRegistryIndexUrl(process.env.HIBIKI_REGISTRY_INDEX_URL)
+  if (registryIndexUrl !== REGISTRY_INDEX_URL)
+    log.info(`Scene Registry index overridden by HIBIKI_REGISTRY_INDEX_URL: ${registryIndexUrl}`)
+  else
+    log.info(`Scene Registry index: ${registryIndexUrl}`)
+  const registry = createSceneRegistry(config, registryIndexUrl)
   const discord = createDiscordClient(config, appConfig)
   const player = createPlayer(discord, sounds, { localSink: options.localSink })
   const discordToken = createDiscordTokenSettings({
