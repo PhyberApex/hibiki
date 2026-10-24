@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.7.0](https://github.com/PhyberApex/hibiki/compare/v1.6.0...v1.7.0) (2026-10-24)
+
+
+### Features
+
+* **browser:** Routed Tabs follow the master volume and get a Tab Volume ([#540](https://github.com/PhyberApex/hibiki/issues/540)) ([#583](https://github.com/PhyberApex/hibiki/issues/583)) ([edc86d3](https://github.com/PhyberApex/hibiki/commit/edc86d30b10a6eaaf3ebc468102f9a746d487592))
+* **hotkeys:** add Action Hotkeys for Stop all Effects, master volume and previous/next Scene ([#553](https://github.com/PhyberApex/hibiki/issues/553)) ([3778d87](https://github.com/PhyberApex/hibiki/commit/3778d87b9a968e2c7c46bca0ca146b0b83269901))
+* **local:** pick an Output Device for the Local Target ([#549](https://github.com/PhyberApex/hibiki/issues/549)) ([4a4584e](https://github.com/PhyberApex/hibiki/commit/4a4584e56b6d5de24f0a5be7d25ff408c6b3ec23))
+* opt-in Usage Stats, off by default (ADR-0008) ([#604](https://github.com/PhyberApex/hibiki/issues/604)) ([473fd27](https://github.com/PhyberApex/hibiki/commit/473fd27ebc43b7603809df3cd05255c5895daf86))
+* **scenes:** add Music Mode (single, sequential, shuffle) with renderer-driven advance ([#563](https://github.com/PhyberApex/hibiki/issues/563)) ([fe574d5](https://github.com/PhyberApex/hibiki/commit/fe574d51b2071e9e8b5ba140bb8f3ea55cb915e9))
+* **settings:** a Remove action clears the Discord token ([#597](https://github.com/PhyberApex/hibiki/issues/597)) ([0847b08](https://github.com/PhyberApex/hibiki/commit/0847b083746f13f102ade127ecb7875d9e0c1496))
+* show an update notice on launch when a newer release exists ([#587](https://github.com/PhyberApex/hibiki/issues/587)) ([3a0ebf7](https://github.com/PhyberApex/hibiki/commit/3a0ebf74c45911010b7386eb772b8a7a33d179ab))
+
+
+### Bug Fixes
+
+* **audio:** send unsupported WAV variants to the renderer fallback; close backend branch gaps ([#614](https://github.com/PhyberApex/hibiki/issues/614)) ([5b038bf](https://github.com/PhyberApex/hibiki/commit/5b038bf05a2a4ead210c06b411c00f7961b448b5))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.135.0 ([#556](https://github.com/PhyberApex/hibiki/issues/556)) ([04e116a](https://github.com/PhyberApex/hibiki/commit/04e116a9669e3c0cc0b4c603adf4964ffc647041))
+* **deps:** update dependency @anthropic-ai/sdk to ^0.137.0 ([#621](https://github.com/PhyberApex/hibiki/issues/621)) ([d5fe505](https://github.com/PhyberApex/hibiki/commit/d5fe5053e47b4a15cd166f65a16bae1a917514b9))
+
 ## [1.6.0](https://github.com/PhyberApex/hibiki/compare/v1.5.0...v1.6.0) (2026-10-15)
 
 
