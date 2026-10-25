@@ -225,7 +225,7 @@ See [e2e/README.md](e2e/README.md) for details on sidecar bot setup and optional
 
 ## Docs
 
-- **Architecture** — See [CLAUDE.md](CLAUDE.md) for architecture, IPC patterns, and development guidelines.
+- **Architecture** — [CONTEXT.md](CONTEXT.md) for the domain vocabulary, [agent-docs/adr/](agent-docs/adr/) for design decisions, [CLAUDE.md](CLAUDE.md) for development rules.
 - **Docs website** — The [docs/](docs/) folder is a Jekyll site deployed via GitHub Pages. See [docs/README.md](docs/README.md).
 - **Scene packs** — [hibiki-scene-packs](https://github.com/PhyberApex/hibiki-scene-packs) hosts ready-to-import `.hibiki.zip` scenes with bundled CC0 audio (tavern, forest, dungeon, battle, storm, crypt, high seas, market).
 
