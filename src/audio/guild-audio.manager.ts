@@ -122,7 +122,7 @@ export class GuildAudioManager extends EventEmitter {
    * from the shared `musicStreams` bookkeeping above so that crossfading a
    * new backend track never reaches into a renderer-fallback stream (the
    * `audio:startStream` path) that happens to be sharing the same guild —
-   * see CLAUDE.md's Backend Sound Library Playback section.
+   * see `agent-docs/adr/0003-backend-sound-library-playback.md`.
    */
   private backendTrackId?: string
   /**

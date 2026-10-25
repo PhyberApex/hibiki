@@ -1,324 +1,62 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
-
-**Hibiki (響)** is a desktop audio companion for Discord, built as an Electron app. It plays music, ambience, and sound effects in Discord voice channels from a desktop UI. Originally designed for Dungeons & Dragons (background music, ambient soundscapes, one-shot effects) but works for any server.
-
-**Current state:** The project has migrated from a monorepo (separate `apps/bot` and `apps/web`) to a unified Electron app. The repo root is the single application package (`electron/`, `src/`, `frontend/`), with `e2e/` as a separate workspace for Playwright tests.
-
-## Common Commands
-
-**IMPORTANT:** Always run `nvm use` before executing any pnpm commands to activate the Node.js version pinned in `.nvmrc`.
-
-All commands run from the **repo root**:
-
-```bash
-# First, activate the correct Node version
-nvm use
-
-# Development
-pnpm dev                # Build and launch Electron app
-pnpm build              # Build backend (tsc) + frontend (Vite) without launching
-
-# Quality checks (ALWAYS run after code changes)
-pnpm lint               # ESLint on backend and frontend
-pnpm lint:fix           # Auto-fix linting issues
-pnpm test               # Run Jest (backend) + Vitest (frontend) tests
-
-# E2E tests
-pnpm run build          # Build first
-pnpm test:e2e           # Playwright tests against Electron app
-
-# Distribution (Electron Forge handles everything automatically)
-pnpm dist               # Package for current platform (alias for pnpm make)
-pnpm dist:mac           # macOS (ZIP for x64 and arm64)
-pnpm dist:win           # Windows (Squirrel installer + ZIP)
-pnpm dist:linux         # Linux (DEB + ZIP)
-pnpm make               # Primary build command (same as pnpm dist)
-pnpm package            # Create unpacked app only (for testing)
-```
-
-### Testing Individual Components
-
-```bash
-# Backend tests (Jest)
-pnpm test:backend                         # All backend tests
-pnpm test:watch                           # Watch mode
-node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js <file>   # Single test file
-
-# Frontend tests (Vitest)
-pnpm test:frontend                        # All frontend tests
-cd frontend && npx vitest run <file>      # Single test file
-
-# Coverage
-pnpm test:coverage                        # Both backend + frontend
-pnpm test:coverage:backend                # Backend only
-pnpm test:coverage:frontend               # Frontend only
-```
-
-## Architecture
-
-### Electron Structure
-
-```text
-.                      # Repo root = the application package
-├── electron/          # Electron main process
-│   ├── main.js        # Entry point: boots backend, creates window, IPC handlers
-│   └── preload.js     # Bridge: exposes safe IPC to renderer
-├── src/               # Backend (runs in Electron main process)
-│   ├── bootstrap-embedded.ts    # Wires services, exposes IPC API
-│   ├── discord/       # Discord.js client (login, voice, guild directory)
-│   ├── player/        # Playback engine (voice connections, audio streams, volume)
-│   ├── sound/         # Sound library (list, upload, delete files)
-│   ├── scenes/        # Scene store + import/export (soundboards)
-│   ├── audio/         # Audio mixing (guild-specific managers)
-│   ├── vision/        # Vision to Vibe (Claude image analysis + Sound Tag matching)
-│   ├── config/        # Configuration (env + validation)
-│   └── persistence.ts # JSON key-value store (app-config.json)
-├── frontend/          # Vue 3 renderer (Electron renderer process)
-│   └── src/
-│       ├── api/       # IPC wrappers (typed frontend API calling backend)
-│       ├── audio/     # Web Audio capture (AudioWorklet for browser streaming)
-│       ├── composables/ # Reusable Vue composition helpers
-│       ├── stores/    # Pinia stores (player state, guild directory, accessibility)
-│       └── views/     # Pages (Welcome, Scenes, Browser, Media, Settings)
-├── e2e/               # Playwright E2E workspace (separate package)
-├── registry/          # Community scene registry (index + schema)
-├── web-dist/          # Built frontend (Vite output)
-└── dist/              # Compiled backend (tsc output)
-```
+Guidance for agents working in this repository. The code, `package.json` scripts and `.env.example` answer "what exists"; this file holds what they cannot: rules, conventions and the reasons behind non-obvious choices.
 
-### Communication: IPC Only (No HTTP)
+## Project
 
-- **Frontend → Backend:** All communication uses Electron IPC via the `preload.js` bridge.
-- **IPC API:** Defined in `bootstrap-embedded.ts` as the `EmbeddedApi` interface.
-- **Domains:** `player`, `config`, `sounds`, `scenes`, `registry`, `vision`, `updates`, `usageStats` (matching the service structure).
-- Frontend wrappers in `frontend/src/api/` provide typed functions (e.g., `joinChannel()`, `listScenes()`).
-- Audio streaming (Browser feature) uses chunked IPC: `audio:startStream`, `audio:chunk`, `audio:stopStream`.
+**Hibiki (響)** is an Electron desktop companion that plays music, ambience and sound effects into Discord voice channels or the GM's own speakers, built for tabletop Game Masters. Domain vocabulary lives in `CONTEXT.md` (glossary: Scene, Output Target, Routed Tab, Music Mode, ...), decisions in `agent-docs/adr/`. Use those terms in code, issues and docs.
 
-### Multi-Guild Architecture
+Processes: `electron/` is the main process shell (window, IPC plumbing, hotkeys, protocol), `src/` the backend services that run inside it, `frontend/` the Vue 3 renderer, `e2e/` a separate Playwright workspace.
 
-- Bot can be in multiple Discord servers simultaneously.
-- **One voice channel per guild** — each guild has independent:
-  - Voice connection
-  - Playback state (playing/stopped, current sound)
-  - Volume levels (music, effects, ambience)
-- `GuildAudioManager` (`src/audio/guild-audio.manager.ts`) manages per-guild state.
-- Player (`src/player/player.ts`) coordinates all guild managers.
+## Working rules
 
-### Scenes System
+- **Node version**: run `nvm use` before any `pnpm` command; in a fresh shell use `source ~/.nvm/nvm.sh && nvm use && <command>`. Node 24 is load-bearing: the backend's CommonJS output `require()`s ESM-only decoder packages through native `require(esm)`, and Jest needs `--experimental-vm-modules` for the same (already baked into the `test:*` scripts, so always go through them or copy their flags).
+- **After every code change** run `pnpm lint` and `pnpm test` and fix what they report before calling the change done. Blocking.
+- **Logging is part of every change** (see Logging below). New or changed behaviour must leave a trace in `hibiki.log`: entry point, outcome, failure paths. The 1.4.0 Windows "bot joins but is silent" bugs went undiagnosed for a release because the packaged app logged nothing.
+- **IPC only, no HTTP.** Frontend and backend talk through the `preload.js` bridge. Adding a backend capability: service method in `src/`, expose it on `EmbeddedApi` in `src/bootstrap-embedded.ts`, let the generic `api` handler in `electron/main.js` carry it (a dedicated channel only when state must live in main, like hotkeys and audio streams), typed wrapper in `frontend/src/api/`.
+- **Single test file**: backend `node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js <file>`, frontend `cd frontend && npx vitest run <file>`.
+- **E2E** launches the built app: `pnpm build` first. The Discord suite needs `DISCORD_TOKEN` in `.env` plus `e2e/.env.e2e` (see `e2e/README.md`); the Local Target suite needs no token. `electron/main.js` and `preload.js` are covered only by e2e; the other `electron/*.js` modules have Jest specs.
+- **Electron majors**: PR CI builds and runs e2e but never packages. Before merging an Electron bump, read its breaking-changes doc against `electron/` and run `pnpm package` locally, booting the result against a throwaway `HIBIKI_USER_DATA_DIR`.
 
-**Scene** = soundboard with three categories:
-- **Music:** Tracks with volume, loop option
-- **Ambience:** Loops with random interval repeats, volume, enabled/disabled toggle
-- **Effects:** One-shot sounds
+## Storage and environment
 
-Stored in `scenes.json`. Import/export bundles scenes with their sound files as `.hibiki.zip` archives.
+User data lives in Electron's `userData` directory: `app-config.json` (settings and secrets), `scenes.json`, `sound-tags.json`, the sound folders and `logs/hibiki.log`. `.env.example` lists every env override. Secrets from env (`DISCORD_TOKEN`, the Vision keys) win over their stored counterpart; the Vision Provider selection has no env var. `HIBIKI_USER_DATA_DIR` moves the whole `userData` directory and is how e2e and the screenshot capture get a throwaway profile. Secret keys are encrypted at rest through a `SecretCodec` built in main from `safeStorage` (#412); on Linux the `basic_text` backend counts as unavailable because it does not encrypt.
 
-### Storage
+## Audio: the rules that are easy to break
 
-Data lives in platform user data directory (e.g., `~/Library/Application Support/hibiki` on macOS):
-- `app-config.json` — Discord token (when set in UI; Settings → Remove deletes the key via `config.clearDiscordToken`, which also leaves voice, logs the bot out and falls back to the Local Target — `src/config/discord-token-settings.ts`), bookmarks, storage path override, master volume, global hotkey settings (`hotkeys`: enabled + the six Action Hotkeys), Vision to Vibe key + toggle, launch update check (`updates`: enabled + dismissed version), Usage Stats (`usageStats`: enabled + prompted, both default false)
-- `scenes.json` — Scene definitions (optional `musicMode` — `sequential`/`shuffle`, absent = `single` — carried in exports and Registry bundles; optional `hotkey` on Scenes and Effect items: machine-local, validated unique in `scene-store.ts`, stripped from `.hibiki.zip` exports and dropped on import/registry install)
-- `sound-tags.json` — Sound Tags keyed by `<category>/<soundId>` (see `CONTEXT.md` glossary)
-- `music/`, `effects/`, `ambience/` — Sound files (copied on upload, keyed by UUID)
+ADR-0003 (backend playback), ADR-0004 (Local Target sink) and ADR-0007 (Routed Tabs) explain each of these in full with the measurements behind them. Read the ADR before touching `src/audio/`.
 
-Override paths with env vars: `HIBIKI_STORAGE_PATH`, `HIBIKI_MUSIC_DIR`, `HIBIKI_EFFECTS_DIR`, `HIBIKI_DATA_PATH` (see `.env.example`). `HIBIKI_USER_DATA_DIR` moves Electron's whole user data directory (used by the screenshot capture in `e2e/screenshots/` to run against a throwaway profile). The Vision to Vibe API keys can also come from env — `HIBIKI_VISION_API_KEY` for Claude, `HIBIKI_VISION_OPENAI_API_KEY` for the OpenAI-compatible provider — each env var winning over its stored counterpart, like `DISCORD_TOKEN`. There is no env var for provider selection; that lives only in `app-config.json`. `HIBIKI_USAGE_STATS_HOST` points Usage Stats at a test Umami instance and `HIBIKI_USAGE_STATS=off` is their kill switch (see "Usage Stats" below). `HIBIKI_REGISTRY_INDEX_URL` fetches the community Scene Registry index from another URL than the project's `registry/index.json` (`src/scenes/scene-registry.ts`; used by `e2e/tests/registry.e2e.spec.ts` against a local server; a cached index from another URL is ignored). `HIBIKI_DAVE_ENCRYPTION=off` joins voice without Discord's end-to-end encryption (DAVE), a diagnostic for "bot shows as speaking but nobody hears it" (`src/audio/voice-options.ts`).
+- Decoded PCM reaches a mixer input only through `feedMixerInput`; `node-audio-mixer` inputs have no backpressure of their own.
+- The mixer runs with a one-packet `highWaterMark` (`MIXER_PACKET_BYTES`) and `generateSilence: false`; `maxMissedFrames` is `Infinity`. Never re-enable `generateSilence` and never assume the voice player's `play()` ran once and stays playing.
+- "Finished playing" is the `onEnded` callback after the mixer input drains, never the source stream's `end` (which only means "fully decoded"). Loop and interval restarts hang off `onEnded`.
+- `player`/`AudioEngine` have no master-volume concept: every `playMusic`/`playAmbience`/`playEffect` call carries a final absolute 0–100 `options.volume`, already multiplied by the master volume in the renderer (`computeVolume()`). There is no per-guild volume API (removed in #419). The one live-adjustable chunked-IPC input is a keyed effect stream (a Routed Tab) via `setEffectStreamVolume`.
+- A Sound Library file with no backend decoder (m4a/AAC) takes the renderer fallback: audio element, chunked IPC under a Discord Target, the element itself under the Local Target. `sounds.canDecode` decides per sound.
+- Scene Stop, the Stop Hotkey and Stop all Effects never touch effect streams, so Routed Tabs survive them.
+- Music Mode (ADR-0006) is driven entirely by the renderer's scene playback store; `GuildAudioManager`/`player`/`AudioEngine` know nothing about modes or lists.
+- The Scene is a template. Playback state lives per Output Target in `GuildAudioManager`; think Target-first (a guild id or `LOCAL_TARGET_ID`). Switching Target is a hard handover: stop on the old, restart the Playing Scene from the top on the new.
 
-## Key Development Patterns
+## Feature policies
 
-### IPC API Addition
+- **Vision to Vibe** (ADR-0001, ADR-0002): opt-in, off by default. The button renders only when the toggle is on and the selected provider is configured (Claude needs a key; `openai-compatible` needs a key or a non-default Base URL); the backend re-checks the gate. Never retain the analyzed image.
+- **Update Notice**: one GET to the GitHub Releases API at launch, never blocking startup, skipped when the toggle is off. Notice only, no download or install, so package managers keep updating. Only the GM's explicit dismiss remembers a version. The README Privacy section lists everything the app contacts; keep it current.
+- **Usage Stats** (ADR-0008): opt-in, off by default, no identifier stored. `createUsageStats` is the single gate and takes "unpackaged build" and `HIBIKI_USAGE_STATS=off` as injected flags from main, never reading them itself. **Adding or widening an event changes the allowlist, `docs/privacy.md`, the Settings "What is sent" list and ADR-0008 in the same PR.**
+- **Global Hotkeys** (ADR-0005): main only registers and forwards; resolution and action happen in the renderer, one press at a time.
 
-When adding a new backend feature:
-1. Add the service method in the appropriate backend file (e.g., `src/player/player.ts`).
-2. Expose it in `src/bootstrap-embedded.ts` via the `EmbeddedApi` interface.
-3. Register the IPC handler in `electron/main.js` (or use the generic `api` handler).
-4. Add a typed wrapper in the frontend (e.g., `frontend/src/api/player.ts`).
+## Logging
 
-### Audio Streaming (Chunked IPC)
+Every bug report from a packaged build arrives with exactly one artifact: `<userData>/logs/hibiki.log`. Code that does not log there is invisible in production.
 
-Audio chunks are captured in the renderer via Web Audio API + AudioWorklet (`frontend/src/audio/browser-audio-capture.ts`) and sent over IPC to the backend, which streams them to Discord voice — used by a Routed Tab under a Discord Target (always; a `WebContentsView` has no backend decoder) and by the renderer fallback for a Sound Library file with no backend decoder (m4a/AAC, see "Backend Sound Library Playback" below). See "Routed Tabs" below for what the Browser tab does under either Target.
+- **Backend (`src/`)**: `createLogger('module')` from `src/logger.ts`. `debug` for hot-path detail (per-stream, per-tick), `info` for every user-triggered action and state change (join/leave, play/stop, config writes, voice and AudioPlayer transitions), `warn` for degraded-but-handled, `error` for failures with the error object. `console.*` only inside `src/logger.ts`.
+- **Main process (`electron/`)**: `createLogger('area')` from `electron/logger.js`, same levels. The generic `api` handler logs every failed call, so a backend method only logs what the error alone would not explain.
+- **Renderer (`frontend/`)**: `console.warn`/`console.error` with a `[view]` prefix, `logInfo`/`logDebug` from `frontend/src/audio/audio-element-diagnostics.ts` for the rest. Main captures warnings, errors and any info/debug line starting with `[` into the same file; Vue errors, uncaught errors and rejections are routed there by `frontend/src/main.ts`.
+- **Never log** tokens, API keys, image contents or anything a GM would not want in a bug report. Log that a secret was set or cleared, not its value.
+- **When adding a feature**, log its entry point (what was asked, with ids and the few parameters that matter), its outcome and every failure path. If a future "it does nothing on my machine" report could not be diagnosed from the log alone, the logging is incomplete.
 
-- **Backend:** `player.startStream(guildId, stream, metadata?, streamId?)` feeds a long-lived Music slot in `AudioEngine` (the Scene Music fallback); `player.startEffectStream(guildId, stream, streamId?, volume?)` spawns a new layered mixer input per call (a Routed Tab, keyed `browser-<tabId>` with its initial level, and the Scene Ambience/Effects fallback — an Ambience fallback stream is keyed `ambience-<soundId>`). Both accept a Node.js `Readable`. `player.setEffectStreamVolume(guildId, streamId, volume)` sets a keyed effect stream's level live (`AudioEngine.setEffectStreamVolume`, the mixer input's `params.volume`); un-keyed effect streams are fire-and-forget.
-- **Frontend → Main** (`frontend/src/api/audio-stream.ts`): `audio:startStream`/chunked `audio:chunk`/`audio:stopStream` for the Music lane; `audio:startEffectStream` (optional `volume`)/chunked `audio:effectChunk`/`audio:stopEffectStream` for the effect lane, plus `audio:setEffectStreamVolume` for a keyed effect stream.
-- **Main process** (`electron/ipc-streams.js#registerAudioStreamHandlers`, wired from `electron/main.js`): Creates `PassThrough` streams per `streamId`, writes chunks, pipes to the backend; chunks for an unknown stream are dropped with one `warn` per stream.
+## Agent workflow
 
-### Vision to Vibe
-
-Opt-in feature (off by default) that sends an image to a Vision Provider and matches the returned Vibe Tags against the GM's own Sound Tags. See `agent-docs/adr/0001-vision-to-vibe-matching.md` and `agent-docs/adr/0002-vision-providers.md`.
-- Two Vision Providers: `claude` (default, pinned model, unchanged behavior) and `openai-compatible` (one adapter speaking the OpenAI Chat Completions format against a configurable Base URL + Model — reaches OpenAI itself, compatible gateways, or local servers like Ollama/LM Studio).
-- Backend: `src/vision/vision.service.ts` (provider-agnostic `VisionProvider`, plus `createClaudeVisionProvider` and `createOpenAICompatibleVisionProvider`) and `src/vision/vibe-matching.ts` (pure ranking, Music + Ambience only, top 5 per category).
-- `src/vision/vision-settings.ts` resolves the selected provider's full config (key, and for `openai-compatible`, Base URL/Model), each provider's key stored and retained independently in `app-config.json`.
-- Sound Tags live in `sound-tags.json` via `src/sound/sound-tags.store.ts`, merged into `SoundFile.tags` by the sound library.
-- Gating: the scene editor's "Vision to Vibe" button only renders when the Settings toggle is on **and** the selected provider is configured (`config.getVision().configured`) — Claude needs a key; `openai-compatible` needs a key **or** a non-default Base URL (for keyless local servers). The backend re-checks this gate in `analyzeImageVibe`.
-- Never retain the analyzed image; it is read from disk, sent once, and dropped.
-
-### Backend Sound Library Playback
-
-Sound Library playback for Discord decodes and mixes in the main process, feeding `AudioEngine`'s mixer directly; playback state stays per guild in `GuildAudioManager`. See `agent-docs/adr/0003-backend-sound-library-playback.md`.
-- Decoders: `src/audio/decoders/` — JS/WASM only, no bundled ffmpeg binary. `canDecode(filePath)` and `createPcmStream(filePath)` cover mp3, wav, ogg (vorbis and opus), and flac, producing 48 kHz stereo signed 16-bit LE PCM via the stateful `PcmResampler`.
-- A file whose format has no backend decoder (m4a/AAC, most likely) falls back to the renderer path (audio element → chunked IPC), which also remains for a Routed Tab under a Discord Target; local preview always stays in the renderer.
-- Decoded PCM reaches a mixer input only through `feedMixerInput` (`src/audio/mixer-feed.ts`), which caps what is queued in the input at ~300 ms and applies backpressure to the decoder; `node-audio-mixer` inputs have none of their own. The mixer runs with a one-packet `highWaterMark` (`MIXER_PACKET_BYTES`, 3840 bytes = 20 ms) so every tick takes one packet from every input that has one; without it concurrent sounds (music + ambience) come out as alternating solo bursts. The feed pads a source's trailing partial packet so the input can still drain and fire `onEnded`. "Finished playing" is the `onEnded` callback of `AudioEngine.playMusicFromStream`, which fires after the input drains — never the source stream's `end`, which only means "fully decoded". Loop and interval-repeat restarts in `GuildAudioManager` hang off that callback.
-- Decoded PCM reaches a mixer input only through `feedMixerInput` (`src/audio/mixer-feed.ts`), which caps what is queued in the input at ~300 ms and applies backpressure to the decoder; `node-audio-mixer` inputs have none of their own. "Finished playing" is the `onEnded` callback of `AudioEngine.playMusicFromStream`, which fires after the input drains — never the source stream's `end`, which only means "fully decoded". Loop and interval-repeat restarts in `GuildAudioManager` hang off that callback.
-- `AudioEngine` runs the mixer with `generateSilence: false`: silence is the voice player's job (it sends its own silence frames when `read()` yields nothing), because the mixer's generator starves the player on Windows' ~15 ms timers and chops silence into music between feed refills. `maxMissedFrames` is `Infinity`, each mixer output is primed with one silence frame so the player starts immediately, and an `idle` player gets a fresh mixer output and `play()` call. Never assume `play()` ran once at construction and stays playing, and never re-enable `generateSilence`.
-- `sounds.canDecode(type, id)` is exposed over IPC (`src/bootstrap-embedded.ts`, wrapped in `frontend/src/api/sounds.ts#canDecode`) so playback code can pick the right path per sound.
-- These decoder packages are ESM-only; the backend's CommonJS output `require()`s them using Node 24's native `require(esm)` support. Jest needs the `--experimental-vm-modules` flag for its own equivalent support, which is why `test:backend`/`test:watch`/`test:coverage:backend` invoke `node --experimental-vm-modules node_modules/.bin/jest` instead of the `jest` bin directly.
-
-### Local Target Sink
-
-The Local Target (`LOCAL_TARGET_ID`) plays through the same backend mixer as Discord (ADR-0004). `AudioEngine({ localSink })` has no voice player; `LocalSinkPump` (`src/audio/local-sink-pump.ts`) paces the mixer output to real time (one 20 ms packet per tick, silence when empty) into a `LocalSink`, which `electron/ipc-streams.js#createLocalSink` implements as `audio:localSinkStart`/`audio:localSinkChunk`/`audio:localSinkStop` sent to the renderer. The pump runs while any stream is active and stops 10 s after the last. Renderer: `frontend/src/audio/local-sink.ts` schedules packets on the Web Audio clock behind a ~100 ms jitter lead (`jitter-buffer.ts`) and reports health (`started`, `suspended`, `resumed`, `underruns` every 2 s, `deviceLost`, `failed`) via `player.reportLocalSinkHealth`; `deviceLost`/`failed` stop all playback on the Local Target. The Output Device (CONTEXT.md) is stored via `config.getLocalOutputDevice`/`setLocalOutputDevice` (`src/config/local-output-device-settings.ts`; System default = absence). The renderer resolves it against connected devices in `frontend/src/audio/output-device.ts` (no `getUserMedia`), switches the running `AudioContext` and bound `<audio>` elements with `setSinkId`, warns once per absence and falls back to the system default.
-
-### Global Hotkeys
-
-ADR-0005. The main process only registers and forwards: `electron/hotkeys.js` keeps `globalShortcut` in step with the Scenes and hotkey settings (diffing lives in `src/hotkeys/hotkey-registrar.ts`, Electron-free and unit-tested), re-syncing after any `scenes.*`/`registry.*` call and `config.setHotkeySettings`. Two channels sit outside the generic `api` handler because the registrar state lives in main: `hotkeys:getStatus` (registration failures) and `hotkey:fired { accelerator }` (main -> renderer). The renderer resolves a fired key in `frontend/src/hotkeys/dispatch.ts` and acts on the active Output Target through the scene playback store; one press is handled at a time.
-
-### Routed Tabs
-
-CONTEXT.md defines **Routed Tab** and **Tab Volume**; ADR-0007 picks the mechanism. All routing state lives in `frontend/src/stores/routed-tabs.ts` (per tab: routed flag and Tab Volume, session-only, never persisted); `BrowserView.vue` is a thin consumer and `App.vue` instantiates the store so a routed tab keeps following the master volume, the Target handover and Discord join/leave while the GM is on any view. Per tab exactly one routing session exists while the tab is routed *and* the active Target can play; every other transition (toggle, handover, leave/rejoin, tab close) is a re-sync of that invariant, serialised per tab. The level sent is Tab Volume × master by `computeVolume()` from the scene playback store, applied instantly on every change of either. Under a Discord Target the session is a keyed effect stream (`browser-<tabId>`, `startEffectStream` with the initial level, `setEffectStreamVolume` live) fed from `captureTabStream` + `captureFromMediaStream`; Scene Stop, the Stop Hotkey and Stop all Effects never touch effect streams, so routed tabs survive them. Under the Local Target the session mutes the view (`browserView:setAudioMuted`) and replays the same tab capture through `frontend/src/audio/routed-tab-local-playback.ts` (a `GainNode` bound to the Output Device like the Local sink); the backend is not involved. A tab that is not routed plays raw from its `WebContentsView` at the site's own level under either Target. `e2e/tests/routed-tab-local.e2e.spec.ts` drives the Local path for real (capture, mute IPC, gain) with no Discord token.
-
-### Update Notice
-
-`src/updates/update-check.ts`: at launch the renderer (`frontend/src/updates/update-notice.ts`, called from `App.vue`) asks `updates.check()`, which makes one GET to the GitHub Releases API (`releases/latest`, 5 s timeout, never blocking startup) and returns a newer release unless the Settings toggle is off (then no request at all) or that version was dismissed. A newer release shows a sticky toast with a "View release" link; only the GM's dismiss (the toast's `onDismiss`, not a timeout or eviction) remembers the version. Notice only: no download, no install, so Homebrew/AUR/installers keep updating. The README's Privacy section lists it among what the app contacts.
-
-### Usage Stats
-
-ADR-0008, CONTEXT.md. Opt-in, off by default, no identifier stored. `src/usage-stats/usage-stats.ts#createUsageStats` is the single gate: it drops everything while disabled, in an unpackaged build or under `HIBIKI_USAGE_STATS=off` (both injected from `electron/main.js` as the gate, never read inside the service), validates every event against `src/usage-stats/allowlist.ts` (names, keys, value rules, and the router's path patterns as Umami `url`), and sends fire-and-forget through `@umami/node` (5 s timeout, no retry, no queue) with a synthetic `Hibiki/<version> (Electron/<v>; <OS> <arch>)` User-Agent. The renderer only calls `trackUsage` (`frontend/src/api/usage-stats.ts`, the `usageStats.track` IPC call, carrying the route pattern bound in `main.ts`); settings live in `src/config/usage-stats-settings.ts` behind `config.getUsageStats`/`setUsageStatsEnabled`/`markUsageStatsPrompted` (switching on sends `app-start`). **Adding or widening an event means changing the allowlist, `docs/privacy.md`, the Settings "What is sent" list and ADR-0008 in the same PR.**
-
-### Logging
-
-Every bug report from a packaged build arrives with exactly one artifact: `<userData>/logs/hibiki.log` (Settings → Diagnostics → Open log folder). Code that does not log there is invisible in production, so logging is part of the feature, not an afterthought.
-
-- **Backend (`src/`)**: `const log = createLogger('module')` from `src/logger.ts`. Levels: `debug` for hot-path detail worth having after the fact (per-stream, per-tick), `info` for every user-triggered action and state change (join/leave, play/stop, config writes, voice connection and AudioPlayer state transitions), `warn` for degraded-but-handled, `error` for failures (include the error object). Never `console.*` directly outside `src/logger.ts`.
-- **Main process (`electron/`)**: `createLogger('area')` from `electron/logger.js` (`ipc`, `window`, `browser`, `protocol`, `app`, `renderer`), same levels as the backend. The same module mirrors every console method into the log file with timestamps and rotates it at 5 MB. The generic `api` IPC handler logs every failed call, so a backend method only needs to log what the error alone would not explain.
-- **Renderer (`frontend/`)**: `console.warn`/`console.error` with a `[view]` prefix, and `logInfo('[view] ...')`/`logDebug('[view] ...')` from `frontend/src/audio/audio-element-diagnostics.ts` for info/debug lines. The main process captures renderer `warning`/`error` console messages, plus info and debug messages that start with `[`, into the same log file; `<audio>` elements created through `createAudioEl` in `SceneView.vue` report errors/stalls automatically and `waitForPlayable` warns about loads that hang; `frontend/src/main.ts` routes Vue errors, uncaught errors and unhandled rejections there too. Nothing else is needed on the renderer side.
-- **Never log** tokens, API keys, image contents, or anything a GM would not want in a bug report. Log that a secret was set or cleared, not its value.
-- **When adding a feature**, log its entry point (what was asked, with ids and the few parameters that matter), its outcome, and every failure path. If a future "it does nothing on my machine" report could not be diagnosed from the log alone, the logging is incomplete.
-
-### Scene Playback
-
-Scenes are **not** played directly in a single action. The frontend (SceneView) iterates over scene items and calls the player API individually:
-- Music: `playMusic(guildId, soundId, options)`
-- Ambience: `playAmbience(guildId, soundId, options)`
-- Effects: `playEffect(guildId, soundId, options)`
-
-Each call's `options.volume` is the per-item volume already multiplied by the master volume slider (`computeVolume()` in `SceneView.vue`) — `player`/`AudioEngine` have no master-volume concept of their own, they only ever receive a final absolute 0–100 value. The master volume itself is persisted per Output Target in `app-config.json` via the `config` IPC domain (`getMasterVolume(targetId)`/`setMasterVolume(targetId, value)`, `src/config/output-target-settings.ts`; the legacy single value migrates to the Discord Target), next to the active Target (`getActiveOutputTarget`/`setActiveOutputTarget`; default Local without a stored Discord token, else Discord). Player calls are addressed to a Target id — a guild id, or the reserved `LOCAL_TARGET_ID` (`src/player/output-target.ts`), whose playback calls play through the Local sink (see "Local Target Sink"); the renderer-native sources (`startStream`/`startEffectStream`/`setEffectStreamVolume`: Routed Tab, m4a fallback) are a logged no-op there because the renderer plays them directly.
-
-The Scene view routes everything (Play, ambience toggles, Music, Effects) to the **active Output Target**, chosen with the Target toggle in the playback bar (`player.activeTarget`, `player.targetId`, `player.canPlay` in `frontend/src/stores/player.ts`). The Local Target needs no voice connection and hides the sidebar's guild/channel controls. Switching Target is a hard handover (`switchTarget` in `SceneView.vue`): everything stops on the old Target and the Playing Scene restarts from the top on the new one (waiting for a joined channel on Discord). `playingSceneMode` holds the Target id the Playing Scene is on. The renderer fallback (m4a) is captured and streamed only under a Discord Target; under Local the audio element is the output. There is no separate local-preview path any more.
-
-A Scene's **Music Mode** (`single` | `sequential` | `shuffle`, CONTEXT.md, ADR-0006) is driven entirely by the scene playback store (`frontend/src/stores/scene-playback.ts`): it detects a played-out track (the backend state push losing the confirmed-started track, or the audio element's `ended`), picks the next one with the pure `frontend/src/audio/music-mode.ts` selector from the source Scene's live Music list, and starts it with the Scene fade length as `fadeInMs`. A Stop, Scene Crossfade, Target switch or jump bumps a Music intent counter so nothing stale advances. `GuildAudioManager`/`player`/`AudioEngine` know nothing about modes or lists.
-
-The scene is a **template**, not a runtime object. Playback state lives in `GuildAudioManager`.
-
-## Important Rules
-
-### After Every Code Change
-
-**ALWAYS** run `nvm use` first, then `pnpm lint` and `pnpm test` after editing backend or frontend code. Fix any issues before considering the change complete. This is a **blocking requirement** (from `.cursor/rules/verify-after-changes.mdc`).
-
-### Logging Is Part of Every Change
-
-New or changed behaviour must leave a trace in `hibiki.log` (see "Logging" above): entry point, outcome, failure paths. The Windows "bot joins but is silent" bugs of 1.4.0 went undiagnosed for a release because the packaged app logged nothing anywhere.
-
-### Discord Bot Token
-
-- Required for the bot to connect.
-- Set via `DISCORD_TOKEN` env var OR in the app's **Settings** page (stored in `app-config.json`).
-- Backend reads from config first, falls back to env.
-
-### Node Version
-
-**Node.js 24 required** (see `.nvmrc`). **MUST run `nvm use` before any pnpm commands** to activate the correct version.
-- The voice stack encodes Opus via `opusscript` (WASM) — no native module, so dev and packaged builds use the same path.
-- Electron 41+ requires Node 24+.
-- Always use `source ~/.nvm/nvm.sh && nvm use && <command>` when running commands in new shells.
-
-## Testing
-
-### Backend (Jest)
-
-- Config: `jest.config.js`
-- Test files: `src/**/*.spec.ts`, plus `electron/**/*.spec.ts` for the main-process modules (`main.js`/`preload.js` stay e2e-only)
-- Run: `pnpm test:backend`
-- Watch: `pnpm test:watch`
-
-### Frontend (Vitest)
-
-- Config: `frontend/vitest.config.ts`
-- Test files: `frontend/src/**/*.{spec,test}.ts`
-- Run: `pnpm test:frontend`
-
-### E2E (Playwright)
-
-- Located in `e2e/` workspace package.
-- Launches the Electron app and drives it via Playwright.
-- Requires: `.env` with `DISCORD_TOKEN` and `e2e/.env.e2e` with `E2E_GUILD_ID`, `E2E_VOICE_CHANNEL_ID` (optional).
-- **Important:** Build the app first (`pnpm build`) before running E2E.
-- See `e2e/README.md` for Electron 33 + Playwright compatibility notes.
-
-## Migration Context
-
-The project is transitioning from a Docker-based monorepo to an Electron app. See `docs/electron-migration-plan.md` for the full migration plan (phases 1-5). **Current status:** Phases 1-3 mostly complete (permissions and slash commands removed, repo flattened to a single root package + `e2e/`, Electron shell added).
-
-**What was removed:**
-- NestJS backend (replaced with plain TypeScript services in `src/`)
-- HTTP API (replaced with IPC)
-- Docker (Dockerfile, docker-compose)
-- Permission system and slash commands (app-only control now)
-- Monorepo `apps/bot` and `apps/web` (merged into the root package)
-
-**Key differences from old structure:**
-- No HTTP server; all communication is IPC.
-- Bot runs in Electron main process, not a separate Node service.
-- Token configurable in UI, not just env.
-
-## Tech Stack
-
-- **Electron 41** — Main + renderer processes
-- **Discord.js 14** — Bot, voice connections
-- **Vue 3** — Frontend (Composition API, `<script setup>`)
-- **Pinia** — State management
-- **Vue Router** — Frontend routing
-- **Vite** — Frontend build
-- **TypeScript** — Backend and frontend
-- **Jest** — Backend testing
-- **Vitest** — Frontend testing
-- **Playwright** — E2E testing
-- **Web Audio API** — Browser audio capture (AudioWorklet)
-- **@discordjs/voice** — Discord voice streaming
-- **node-audio-mixer** — Audio mixing for multiple streams
-
-## Common Pitfalls
-
-- **Don't add HTTP endpoints** — This is an Electron app; use IPC only.
-- **Per-guild state** — Always think guild-first. Most player methods take `guildId`.
-- **Scene is not a runtime object** — Scenes are templates; playback state is in `GuildAudioManager`.
-- **Build before E2E** — E2E tests launch the built app, not dev mode.
-- **Audio streaming is chunked IPC** — High-volume data; use the existing `audio:chunk` pattern, not single IPC calls.
-- **There is no per-guild music/effects volume API** — `player.getVolume`/`setVolume` were removed as dead code (#419); every `playMusic`/`playAmbience`/`playEffect` call takes its own absolute `options.volume` already scaled by the master volume (see Scene Playback above). `AudioEngine`'s `DEFAULT_VOLUMES` is just the fallback for the chunked-IPC paths (m4a fallback, an effect stream started without a level) when no explicit volume is given. A keyed effect stream (a Routed Tab) is the one chunked-IPC input that *is* live-adjustable, through `setEffectStreamVolume`.
-
-## Agent skills
-
-### Issue tracker
-
-Issues and specs live in GitHub Issues (PhyberApex/hibiki), managed via the `gh` CLI. See `agent-docs/issue-tracker.md`.
-
-### Triage labels
-
-Default canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), used as-is. See `agent-docs/triage-labels.md`.
-
-### Domain docs
-
-Single-context layout — `CONTEXT.md` + `agent-docs/adr/` at the repo root (neither exists yet). See `agent-docs/domain.md`.
-
-## References
-
-- **README.md** — User-facing setup, download, quick start
-- **frontend/README.md** — Renderer (Vue) architecture, local dev instructions
-- **CONTRIBUTING.md** — Setup, lint/test requirements, PR workflow
-- **docs/electron-migration-plan.md** — Full migration roadmap
-- **e2e/README.md** — E2E test setup, Electron + Playwright compatibility
+- Issues and specs: GitHub Issues (PhyberApex/hibiki) via `gh`, see `agent-docs/issue-tracker.md`.
+- Triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`, see `agent-docs/triage-labels.md`.
+- Domain docs: `CONTEXT.md` + `agent-docs/adr/`, see `agent-docs/domain.md`.
 
 ## Design Context
 

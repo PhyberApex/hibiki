@@ -29,4 +29,4 @@ pnpm build         # Build frontend only (outputs to web-dist/)
 
 All backend communication uses Electron IPC via the preload bridge. No HTTP API.
 
-See [CLAUDE.md](../CLAUDE.md) for detailed architecture.
+See [CONTEXT.md](../CONTEXT.md) for the domain vocabulary and [agent-docs/adr/](../agent-docs/adr/) for design decisions.
