@@ -249,7 +249,7 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
   await ensureStorageDirs(config)
   log.info(`Storage root ${config.audio.storageRoot}: music ${config.audio.musicDir}, effects ${config.audio.effectsDir}, ambience ${config.audio.ambienceDir}, data ${config.database.path}`)
   const appConfig = createAppConfig(config, codec)
-  log.info(`Secrets at rest are ${appConfig.secretsEncrypted ? 'encrypted' : 'NOT encrypted (no OS keychain backend available)'}`)
+  log.info(`Secrets at rest are ${appConfig.secretsEncrypted ? 'encrypted' : 'NOT encrypted (no usable OS keychain backend; see any safeStorage warning above)'}`)
 
   const localOutputDevice = createLocalOutputDeviceSettings(appConfig)
   const outputTargets = createOutputTargetSettings(appConfig, () => isDiscordTokenConfigured(appConfig, config.discord.token))

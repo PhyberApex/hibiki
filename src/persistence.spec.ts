@@ -156,6 +156,12 @@ describe('createAppConfig with a secret codec', () => {
     return JSON.parse(readFileSync(configPath, 'utf-8'))
   }
 
+  function writeStoredConfig(data: Record<string, string>) {
+    const configPath = join(secretConfig.audio.storageRoot, 'data', 'app-config.json')
+    mkdirSync(dirname(configPath), { recursive: true })
+    writeFileSync(configPath, JSON.stringify(data))
+  }
+
   beforeEach(() => {
     secretConfig = makeSecretConfig()
     clearStorageWarnings()
@@ -187,9 +193,7 @@ describe('createAppConfig with a secret codec', () => {
   })
 
   it('re-encrypts a secret when decryption reports the key has rotated', async () => {
-    const configPath = join(secretConfig.audio.storageRoot, 'data', 'app-config.json')
-    mkdirSync(dirname(configPath), { recursive: true })
-    writeFileSync(configPath, JSON.stringify({ 'discord.token': 'enc:v1:old(abc123)', 'storage.path': '/tmp/music' }))
+    writeStoredConfig({ 'discord.token': 'enc:v1:old(abc123)', 'storage.path': '/tmp/music' })
 
     const appConfig = createAppConfig(secretConfig, fakeCodec())
     expect(await appConfig.get('discord.token')).toBe('abc123')
@@ -197,9 +201,7 @@ describe('createAppConfig with a secret codec', () => {
   })
 
   it('leaves a secret alone when decryption does not ask for re-encryption', async () => {
-    const configPath = join(secretConfig.audio.storageRoot, 'data', 'app-config.json')
-    mkdirSync(dirname(configPath), { recursive: true })
-    writeFileSync(configPath, JSON.stringify({ 'discord.token': 'enc:v1:enc(abc123)' }))
+    writeStoredConfig({ 'discord.token': 'enc:v1:enc(abc123)' })
     const codec = fakeCodec()
     const encrypt = jest.spyOn(codec, 'encrypt')
 
@@ -209,9 +211,7 @@ describe('createAppConfig with a secret codec', () => {
   })
 
   it('still returns the secret when re-encrypting it fails', async () => {
-    const configPath = join(secretConfig.audio.storageRoot, 'data', 'app-config.json')
-    mkdirSync(dirname(configPath), { recursive: true })
-    writeFileSync(configPath, JSON.stringify({ 'discord.token': 'enc:v1:old(abc123)' }))
+    writeStoredConfig({ 'discord.token': 'enc:v1:old(abc123)' })
     const codec = fakeCodec()
     codec.encrypt = async () => {
       throw new Error('keychain locked')

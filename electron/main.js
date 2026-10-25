@@ -72,10 +72,7 @@ async function createSecretCodec() {
   return {
     available: await isSecretEncryptionAvailable(),
     encrypt: async plaintext => (await safeStorage.encryptStringAsync(plaintext)).toString('base64'),
-    decrypt: async (ciphertext) => {
-      const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(ciphertext, 'base64'))
-      return { result, shouldReEncrypt }
-    },
+    decrypt: ciphertext => safeStorage.decryptStringAsync(Buffer.from(ciphertext, 'base64')),
   }
 }
 

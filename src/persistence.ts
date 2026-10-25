@@ -14,8 +14,13 @@ const CONFIG_FILENAME = 'app-config.json'
 export interface SecretCodec {
   available: boolean
   encrypt: (plaintext: string) => Promise<string>
-  /** `shouldReEncrypt` means the key rotated: the plaintext should be written back through `encrypt`. */
-  decrypt: (ciphertext: string) => Promise<{ result: string, shouldReEncrypt: boolean }>
+  decrypt: (ciphertext: string) => Promise<DecryptedSecret>
+}
+
+/** Mirrors `safeStorage.decryptStringAsync`: `shouldReEncrypt` means the key rotated, so the plaintext should be written back through `encrypt`. */
+export interface DecryptedSecret {
+  result: string
+  shouldReEncrypt: boolean
 }
 
 const NOOP_CODEC: SecretCodec = {
@@ -40,6 +45,7 @@ const log = createLogger('app-config')
 export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC) {
   const filePath = getConfigFilePath(config)
   const store = createJsonFileStore<Record<string, string>>(filePath, { defaultValue: {}, isValid: isPlainObject })
+  const encryptForStorage = async (plaintext: string) => ENCRYPTED_PREFIX + await codec.encrypt(plaintext)
 
   return {
     async get(key: string): Promise<string | null> {
@@ -51,7 +57,7 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
         return raw
 
       if (raw.startsWith(ENCRYPTED_PREFIX)) {
-        let decrypted: Awaited<ReturnType<SecretCodec['decrypt']>>
+        let decrypted: DecryptedSecret
         try {
           decrypted = await codec.decrypt(raw.slice(ENCRYPTED_PREFIX.length))
         }
@@ -62,10 +68,13 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
         }
         if (decrypted.shouldReEncrypt && codec.available) {
           try {
-            const reEncrypted = ENCRYPTED_PREFIX + await codec.encrypt(decrypted.result)
+            const reEncrypted = await encryptForStorage(decrypted.result)
             // Only replace the value we decrypted; a concurrent `set` wins.
-            await store.update(latest => ({ next: latest[key] === raw ? { ...latest, [key]: reEncrypted } : latest, result: undefined }))
-            log.info(`Re-encrypted secret "${key}" after an encryption key rotation`)
+            const written = await store.update(latest => latest[key] === raw
+              ? { next: { ...latest, [key]: reEncrypted }, result: true }
+              : { next: latest, result: false })
+            if (written)
+              log.info(`Re-encrypted secret "${key}" after an encryption key rotation`)
           }
           catch (err) {
             log.warn(`Could not re-encrypt secret "${key}" after an encryption key rotation; keeping the stored value`, err)
@@ -77,14 +86,14 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
       // Legacy plaintext value: hand it back as-is, and migrate it to encrypted storage if we can.
       if (codec.available) {
         log.info(`Migrating plaintext secret "${key}" to encrypted storage`)
-        const encrypted = ENCRYPTED_PREFIX + await codec.encrypt(raw)
+        const encrypted = await encryptForStorage(raw)
         await store.update(latest => ({ next: { ...latest, [key]: encrypted }, result: undefined }))
       }
       return raw
     },
     async set(key: string, value: string): Promise<void> {
       const toStore = SECRET_KEYS.has(key) && codec.available
-        ? ENCRYPTED_PREFIX + await codec.encrypt(value)
+        ? await encryptForStorage(value)
         : value
       log.info(SECRET_KEYS.has(key) ? `Set "${key}" (secret, ${value ? 'non-empty' : 'cleared'})` : `Set "${key}" = ${value.length > 120 ? `${value.slice(0, 117)}...` : value}`)
       return store.update(data => ({ next: { ...data, [key]: toStore }, result: undefined }))
