@@ -140,12 +140,13 @@ describe('createAppConfig with a secret codec', () => {
   function fakeCodec(available = true): SecretCodec {
     return {
       available,
-      encrypt: value => `enc(${value})`,
-      decrypt: (value) => {
-        const match = /^enc\((.*)\)$/.exec(value)
+      encrypt: async value => `enc(${value})`,
+      // `old(...)` stands for ciphertext under a rotated key: it still decrypts, but asks to be re-encrypted.
+      decrypt: async (value) => {
+        const match = /^(enc|old)\((.*)\)$/.exec(value)
         if (!match)
           throw new Error('cannot decrypt')
-        return match[1]
+        return { result: match[2], shouldReEncrypt: match[1] === 'old' }
       },
     }
   }
@@ -153,6 +154,12 @@ describe('createAppConfig with a secret codec', () => {
   function readStoredConfig(): Record<string, string> {
     const configPath = join(secretConfig.audio.storageRoot, 'data', 'app-config.json')
     return JSON.parse(readFileSync(configPath, 'utf-8'))
+  }
+
+  function writeStoredConfig(data: Record<string, string>) {
+    const configPath = join(secretConfig.audio.storageRoot, 'data', 'app-config.json')
+    mkdirSync(dirname(configPath), { recursive: true })
+    writeFileSync(configPath, JSON.stringify(data))
   }
 
   beforeEach(() => {
@@ -183,6 +190,36 @@ describe('createAppConfig with a secret codec', () => {
     const appConfig = createAppConfig(secretConfig, fakeCodec())
     expect(await appConfig.get('discord.token')).toBe('legacy-plain')
     expect(readStoredConfig()['discord.token']).toBe('enc:v1:enc(legacy-plain)')
+  })
+
+  it('re-encrypts a secret when decryption reports the key has rotated', async () => {
+    writeStoredConfig({ 'discord.token': 'enc:v1:old(abc123)', 'storage.path': '/tmp/music' })
+
+    const appConfig = createAppConfig(secretConfig, fakeCodec())
+    expect(await appConfig.get('discord.token')).toBe('abc123')
+    expect(readStoredConfig()).toEqual({ 'discord.token': 'enc:v1:enc(abc123)', 'storage.path': '/tmp/music' })
+  })
+
+  it('leaves a secret alone when decryption does not ask for re-encryption', async () => {
+    writeStoredConfig({ 'discord.token': 'enc:v1:enc(abc123)' })
+    const codec = fakeCodec()
+    const encrypt = jest.spyOn(codec, 'encrypt')
+
+    const appConfig = createAppConfig(secretConfig, codec)
+    expect(await appConfig.get('discord.token')).toBe('abc123')
+    expect(encrypt).not.toHaveBeenCalled()
+  })
+
+  it('still returns the secret when re-encrypting it fails', async () => {
+    writeStoredConfig({ 'discord.token': 'enc:v1:old(abc123)' })
+    const codec = fakeCodec()
+    codec.encrypt = async () => {
+      throw new Error('keychain locked')
+    }
+
+    const appConfig = createAppConfig(secretConfig, codec)
+    expect(await appConfig.get('discord.token')).toBe('abc123')
+    expect(readStoredConfig()['discord.token']).toBe('enc:v1:old(abc123)')
   })
 
   it('treats an undecryptable value as not configured, not a crash', async () => {
