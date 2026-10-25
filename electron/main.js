@@ -50,20 +50,32 @@ let hotkeys = null
  * On Linux without a keyring, `safeStorage` reports encryption as available
  * but silently falls back to a `basic_text` backend that doesn't actually
  * encrypt — so that backend is treated as unavailable too (see issue #412).
+ * Must run after `app.whenReady()`: the async encryptor initialises lazily
+ * on the first call, and the Linux backend is `unknown` before then.
  */
-function isSecretEncryptionAvailable() {
-  if (!safeStorage.isEncryptionAvailable())
+async function isSecretEncryptionAvailable() {
+  try {
+    if (!await safeStorage.isAsyncEncryptionAvailable())
+      return false
+  }
+  catch (err) {
+    appLog.warn('Could not initialise safeStorage encryption; storing secrets unencrypted', err)
     return false
+  }
   if (process.platform === 'linux' && typeof safeStorage.getSelectedStorageBackend === 'function')
     return safeStorage.getSelectedStorageBackend() !== 'basic_text'
   return true
 }
 
-function createSecretCodec() {
+/** Uses only the async `safeStorage` methods; the sync ones are deprecated in Electron 45 and removed in 46. */
+async function createSecretCodec() {
   return {
-    available: isSecretEncryptionAvailable(),
-    encrypt: plaintext => safeStorage.encryptString(plaintext).toString('base64'),
-    decrypt: ciphertext => safeStorage.decryptString(Buffer.from(ciphertext, 'base64')),
+    available: await isSecretEncryptionAvailable(),
+    encrypt: async plaintext => (await safeStorage.encryptStringAsync(plaintext)).toString('base64'),
+    decrypt: async (ciphertext) => {
+      const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(ciphertext, 'base64'))
+      return { result, shouldReEncrypt }
+    },
   }
 }
 
@@ -350,7 +362,7 @@ app.whenReady().then(async () => {
   let handle
   let api
   try {
-    const embedded = await getEmbeddedApp(createSecretCodec(), {
+    const embedded = await getEmbeddedApp(await createSecretCodec(), {
       localSink: createLocalSink(() => mainWindow),
       appVersion: app.getVersion(),
       usageStats: {

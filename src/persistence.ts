@@ -6,20 +6,22 @@ import { createLogger } from './logger'
 const CONFIG_FILENAME = 'app-config.json'
 
 /**
- * Only the main process can build a real codec (it wraps Electron's
- * `safeStorage`), so it's injected rather than imported — this keeps
- * `src/` loadable under Jest without Electron present.
+ * Only the main process can build a real codec (it wraps Electron's async
+ * `safeStorage` API), so it's injected rather than imported — this keeps
+ * `src/` loadable under Jest without Electron present. `available` is
+ * resolved once at boot, before the codec is handed over.
  */
 export interface SecretCodec {
   available: boolean
-  encrypt: (plaintext: string) => string
-  decrypt: (ciphertext: string) => string
+  encrypt: (plaintext: string) => Promise<string>
+  /** `shouldReEncrypt` means the key rotated: the plaintext should be written back through `encrypt`. */
+  decrypt: (ciphertext: string) => Promise<{ result: string, shouldReEncrypt: boolean }>
 }
 
 const NOOP_CODEC: SecretCodec = {
   available: false,
-  encrypt: value => value,
-  decrypt: value => value,
+  encrypt: async value => value,
+  decrypt: async value => ({ result: value, shouldReEncrypt: false }),
 }
 
 /** The only keys ever written to disk encrypted — see `agent-docs` issue #412. */
@@ -49,27 +51,40 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
         return raw
 
       if (raw.startsWith(ENCRYPTED_PREFIX)) {
+        let decrypted: Awaited<ReturnType<SecretCodec['decrypt']>>
         try {
-          return codec.decrypt(raw.slice(ENCRYPTED_PREFIX.length))
+          decrypted = await codec.decrypt(raw.slice(ENCRYPTED_PREFIX.length))
         }
         catch {
           // Undecryptable (e.g. written on another machine/user) — treat as not configured, not a crash.
           log.warn(`Stored secret "${key}" could not be decrypted on this machine; treating it as not configured`)
           return null
         }
+        if (decrypted.shouldReEncrypt && codec.available) {
+          try {
+            const reEncrypted = ENCRYPTED_PREFIX + await codec.encrypt(decrypted.result)
+            // Only replace the value we decrypted; a concurrent `set` wins.
+            await store.update(latest => ({ next: latest[key] === raw ? { ...latest, [key]: reEncrypted } : latest, result: undefined }))
+            log.info(`Re-encrypted secret "${key}" after an encryption key rotation`)
+          }
+          catch (err) {
+            log.warn(`Could not re-encrypt secret "${key}" after an encryption key rotation; keeping the stored value`, err)
+          }
+        }
+        return decrypted.result
       }
 
       // Legacy plaintext value: hand it back as-is, and migrate it to encrypted storage if we can.
       if (codec.available) {
         log.info(`Migrating plaintext secret "${key}" to encrypted storage`)
-        const encrypted = ENCRYPTED_PREFIX + codec.encrypt(raw)
+        const encrypted = ENCRYPTED_PREFIX + await codec.encrypt(raw)
         await store.update(latest => ({ next: { ...latest, [key]: encrypted }, result: undefined }))
       }
       return raw
     },
     async set(key: string, value: string): Promise<void> {
       const toStore = SECRET_KEYS.has(key) && codec.available
-        ? ENCRYPTED_PREFIX + codec.encrypt(value)
+        ? ENCRYPTED_PREFIX + await codec.encrypt(value)
         : value
       log.info(SECRET_KEYS.has(key) ? `Set "${key}" (secret, ${value ? 'non-empty' : 'cleared'})` : `Set "${key}" = ${value.length > 120 ? `${value.slice(0, 117)}...` : value}`)
       return store.update(data => ({ next: { ...data, [key]: toStore }, result: undefined }))
