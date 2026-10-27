@@ -11,7 +11,9 @@ const MUSIC_MODES: readonly MusicMode[] = ['single', 'sequential', 'shuffle']
 
 /** Absent or unknown values read as `single`, matching `src/scenes/scene-store.ts#normalizeMusicMode`. */
 export function normalizeMusicMode(raw: unknown): MusicMode {
-  return MUSIC_MODES.includes(raw as MusicMode) ? raw as MusicMode : 'single'
+  return MUSIC_MODES.includes(raw as MusicMode)
+    ? raw as MusicMode
+    : 'single'
 }
 
 /** The chosen track, its index in the list it was picked from, and the shuffle bag left after it (empty outside shuffle). */
@@ -56,7 +58,9 @@ function insertAtRandom(into: string[], ids: readonly string[], random: () => nu
 
 /** A fresh shuffle bag of every track in `list` except `exclude` (the one already playing). */
 export function shuffleBagWithout(list: readonly string[], exclude: string | null, random: () => number = Math.random): string[] {
-  return shuffled([...new Set(list)].filter(id => id !== exclude), random)
+  return shuffled([
+    ...new Set(list),
+  ].filter(id => id !== exclude), random)
 }
 
 /** The track a Scene's Music starts with: the first in single and sequential, a random one (with a fresh bag) in shuffle. */
@@ -65,9 +69,16 @@ export function selectFirstTrack(mode: MusicMode, list: readonly string[], rando
     return null
   if (mode !== 'shuffle')
     return { soundId: list[0]!, index: 0, bag: [] }
-  const pass = shuffled([...new Set(list)], random)
+  const pass = shuffled([
+    ...new Set(list),
+  ], random)
   const [first, ...bag] = pass
-  return { soundId: first!, index: list.indexOf(first!), bag, pass }
+  return {
+    soundId: first!,
+    index: list.indexOf(first!),
+    bag,
+    pass,
+  }
 }
 
 /** The track to advance to once `current` has played out, or null when nothing should follow (single mode, empty list). */
@@ -78,9 +89,13 @@ export function selectNextTrack(input: NextTrackInput): SelectedTrack | null {
     return null
 
   if (mode === 'sequential') {
-    const at = current !== null && list[currentIndex] === current ? currentIndex : list.indexOf(current ?? '')
+    const at = current !== null && list[currentIndex] === current
+      ? currentIndex
+      : list.indexOf(current ?? '')
     // A removed current track: whatever slid into its slot plays next.
-    const index = at >= 0 ? (at + 1) % list.length : Math.max(0, currentIndex) % list.length
+    const index = at >= 0
+      ? (at + 1) % list.length
+      : Math.max(0, currentIndex) % list.length
     return { soundId: list[index]!, index, bag: [] }
   }
 
@@ -90,7 +105,15 @@ export function selectNextTrack(input: NextTrackInput): SelectedTrack | null {
   const remaining = insertAtRandom(bag.filter(id => live.has(id) && id !== current), added, random)
   if (remaining.length > 0) {
     const [next, ...rest] = remaining
-    return { soundId: next!, index: list.indexOf(next!), bag: rest, pass: [...passIds, ...added] }
+    return {
+      soundId: next!,
+      index: list.indexOf(next!),
+      bag: rest,
+      pass: [
+        ...passIds,
+        ...added,
+      ],
+    }
   }
   // New pass: reshuffle, never opening with the track that just played.
   const pass = shuffled([...live], random)
@@ -99,5 +122,10 @@ export function selectNextTrack(input: NextTrackInput): SelectedTrack | null {
     ;[pass[0], pass[swap]] = [pass[swap]!, pass[0]!]
   }
   const [next, ...rest] = pass
-  return { soundId: next!, index: list.indexOf(next!), bag: rest, pass: [...pass] }
+  return {
+    soundId: next!,
+    index: list.indexOf(next!),
+    bag: rest,
+    pass: [...pass],
+  }
 }

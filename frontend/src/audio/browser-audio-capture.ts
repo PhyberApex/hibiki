@@ -20,7 +20,9 @@ function float32ToInt16(float32: Float32Array): ArrayBuffer {
   const int16 = new Int16Array(len)
   for (let i = 0; i < len; i++) {
     const s = Math.max(-1, Math.min(1, float32[i]))
-    int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
+    int16[i] = s < 0
+      ? s * 0x8000
+      : s * 0x7FFF
   }
   return int16.buffer
 }

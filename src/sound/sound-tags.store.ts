@@ -39,7 +39,9 @@ export function createSoundTagsStore(config: Config) {
     async get(category: SoundCategory, id: string): Promise<string[]> {
       const data = await store.read()
       const tags = data[tagKey(category, id)]
-      return Array.isArray(tags) ? tags : []
+      return Array.isArray(tags)
+        ? tags
+        : []
     },
 
     async set(category: SoundCategory, id: string, tags: string[]): Promise<string[]> {

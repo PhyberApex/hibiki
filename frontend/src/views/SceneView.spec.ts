@@ -16,7 +16,9 @@ vi.mock('@/api/scenes', () => ({
 }))
 
 vi.mock('@/api/sounds', () => ({
-  listAmbience: vi.fn().mockResolvedValue([{ id: 'amb-1', name: 'Rain', filename: 'rain.mp3' }]),
+  listAmbience: vi.fn().mockResolvedValue([
+    { id: 'amb-1', name: 'Rain', filename: 'rain.mp3' },
+  ]),
   listMusic: vi.fn().mockResolvedValue([]),
   listEffects: vi.fn().mockResolvedValue([
     { id: 'fx-1', name: 'Thunder', filename: 'thunder.mp3' },
@@ -58,7 +60,12 @@ const UNCONFIGURED_VISION = {
   enabled: false,
   configured: false,
   claude: { keyConfigured: false, configured: false },
-  openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+  openaiCompatible: {
+    keyConfigured: false,
+    configured: false,
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-6-astra',
+  },
 }
 
 vi.mock('@/api/config', () => ({
@@ -67,7 +74,12 @@ vi.mock('@/api/config', () => ({
     enabled: false,
     configured: false,
     claude: { keyConfigured: false, configured: false },
-    openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+    openaiCompatible: {
+      keyConfigured: false,
+      configured: false,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-6-astra',
+    },
   }),
   openFileDialog: vi.fn().mockResolvedValue(null),
   saveFileDialog: vi.fn().mockResolvedValue(null),
@@ -87,14 +99,23 @@ vi.mock('@/api/vision', () => ({
 }))
 
 vi.mock('@/audio/browser-audio-capture', () => ({
-  captureFromAudioElement: vi.fn().mockImplementation(() => Promise.resolve({ stop: vi.fn() })),
+  captureFromAudioElement: vi.fn().mockImplementation(() => Promise.resolve({
+    stop: vi.fn(),
+  })),
   releaseAudioElementContext: vi.fn(),
 }))
 
 const scene = {
   id: 's1',
   name: 'Storm',
-  ambience: [{ soundId: 'amb-1', soundName: 'Rain', volume: 80, enabled: true }],
+  ambience: [
+    {
+      soundId: 'amb-1',
+      soundName: 'Rain',
+      volume: 80,
+      enabled: true,
+    },
+  ],
   music: [],
   effects: [
     { soundId: 'fx-1', soundName: 'Thunder' },
@@ -107,7 +128,11 @@ const router = createRouter({
   routes: [
     { path: '/scenes', name: 'scenes', component: SceneView },
     { path: '/scenes/:id', name: 'scene', component: SceneView },
-    { path: '/media', name: 'media', component: () => Promise.resolve({ template: '<div>Media</div>' }) },
+    {
+      path: '/media',
+      name: 'media',
+      component: () => Promise.resolve({ template: '<div>Media</div>' }),
+    },
   ],
 })
 
@@ -125,8 +150,14 @@ function stubMediaElement() {
       queueMicrotask(() => this.dispatchEvent(new Event('canplaythrough')))
     },
   })
-  Object.defineProperty(mediaProto, 'play', { configurable: true, value: vi.fn().mockResolvedValue(undefined) })
-  Object.defineProperty(mediaProto, 'pause', { configurable: true, value: vi.fn() })
+  Object.defineProperty(mediaProto, 'play', {
+    configurable: true,
+    value: vi.fn().mockResolvedValue(undefined),
+  })
+  Object.defineProperty(mediaProto, 'pause', {
+    configurable: true,
+    value: vi.fn(),
+  })
 }
 
 async function mountScene() {
@@ -158,7 +189,13 @@ async function mountSceneJoined() {
   })
   const player = usePlayerStore(pinia)
   player.playerState = [
-    { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+    {
+      guildId: 'g1',
+      connectedChannelId: 'c1',
+      isIdle: true,
+      track: null,
+      source: 'live' as const,
+    },
   ]
   player.guildId = 'g1'
   await flushPromises()
@@ -229,7 +266,14 @@ describe('sceneView — Scene import', () => {
     const imported = {
       id: 's2',
       name: 'Imported',
-      music: [{ soundId: 'bundled-track', soundName: 'Bundled Track', volume: 60, loop: true }],
+      music: [
+        {
+          soundId: 'bundled-track',
+          soundName: 'Bundled Track',
+          volume: 60,
+          loop: true,
+        },
+      ],
       ambience: [],
       effects: [],
     }
@@ -237,13 +281,18 @@ describe('sceneView — Scene import', () => {
     vi.mocked(importScene).mockResolvedValueOnce(imported as never)
     vi.mocked(listScenes).mockResolvedValueOnce([imported as never])
     vi.mocked(getScene).mockResolvedValueOnce(JSON.parse(JSON.stringify(imported)))
-    vi.mocked(listMusic).mockResolvedValueOnce([{ id: 'bundled-track', name: 'Bundled Track', filename: 'bundled-track.mp3' } as never])
+    vi.mocked(listMusic).mockResolvedValueOnce([
+      { id: 'bundled-track', name: 'Bundled Track', filename: 'bundled-track.mp3' } as never,
+    ])
 
     await router.push('/scenes')
     await router.isReady()
     const wrapper = mount(SceneView, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
         stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
       },
     })
@@ -273,8 +322,24 @@ describe('sceneView — Scene list refresh', () => {
 
   it('reloads the Scene list when navigating back from an edited Scene so its counts are not stale', async () => {
     const { getScene, listScenes } = await import('@/api/scenes')
-    const empty = { id: 's3', name: 'Fresh', ambience: [], music: [], effects: [] }
-    const withTrack = { ...empty, music: [{ soundId: 'amb-1', soundName: 'Rain', volume: 80, loop: true }] }
+    const empty = {
+      id: 's3',
+      name: 'Fresh',
+      ambience: [],
+      music: [],
+      effects: [],
+    }
+    const withTrack = {
+      ...empty,
+      music: [
+        {
+          soundId: 'amb-1',
+          soundName: 'Rain',
+          volume: 80,
+          loop: true,
+        },
+      ],
+    }
     vi.mocked(listScenes).mockResolvedValue([empty as never])
     vi.mocked(getScene).mockResolvedValue(JSON.parse(JSON.stringify(withTrack)))
 
@@ -282,7 +347,10 @@ describe('sceneView — Scene list refresh', () => {
     await router.isReady()
     const wrapper = mount(SceneView, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
         stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
       },
     })
@@ -368,11 +436,20 @@ describe('sceneView — compact layout now-playing summary', () => {
 
   it('names the currently playing music track', async () => {
     const { listMusic } = await import('@/api/sounds')
-    vi.mocked(listMusic).mockResolvedValueOnce([{ id: 'm1', name: 'Tavern Theme', filename: 'tavern.mp3' }])
+    vi.mocked(listMusic).mockResolvedValueOnce([
+      { id: 'm1', name: 'Tavern Theme', filename: 'tavern.mp3' },
+    ])
     const { getScene } = await import('@/api/scenes')
     vi.mocked(getScene).mockResolvedValueOnce({
       ...JSON.parse(JSON.stringify(scene)),
-      music: [{ soundId: 'm1', soundName: 'Tavern Theme', volume: 80, loop: false }],
+      music: [
+        {
+          soundId: 'm1',
+          soundName: 'Tavern Theme',
+          volume: 80,
+          loop: false,
+        },
+      ],
     })
     const wrapper = await mountScene()
     await wrapper.find('.btn-play-scene').trigger('click')
@@ -383,13 +460,22 @@ describe('sceneView — compact layout now-playing summary', () => {
 
   it('shows "Scene playing" (never "Nothing playing") while Stop is still the active action, even after a track ends on its own', async () => {
     const { listMusic } = await import('@/api/sounds')
-    vi.mocked(listMusic).mockResolvedValueOnce([{ id: 'm1', name: 'Tavern Theme', filename: 'tavern.mp3' }])
+    vi.mocked(listMusic).mockResolvedValueOnce([
+      { id: 'm1', name: 'Tavern Theme', filename: 'tavern.mp3' },
+    ])
     const { getScene } = await import('@/api/scenes')
     vi.mocked(getScene).mockResolvedValueOnce({
       id: 's1',
       name: 'Storm',
       ambience: [],
-      music: [{ soundId: 'm1', soundName: 'Tavern Theme', volume: 80, loop: false }],
+      music: [
+        {
+          soundId: 'm1',
+          soundName: 'Tavern Theme',
+          volume: 80,
+          loop: false,
+        },
+      ],
       effects: [],
     })
     const playSpy = vi.spyOn(mediaProto, 'play').mockImplementation(function (this: HTMLMediaElement) {
@@ -468,7 +554,12 @@ describe('sceneView — Vision to Vibe entry point', () => {
       enabled: true,
       configured: true,
       claude: { keyConfigured: false, configured: false },
-      openaiCompatible: { keyConfigured: false, configured: true, baseUrl: 'http://localhost:11434/v1', model: 'local-vision' },
+      openaiCompatible: {
+        keyConfigured: false,
+        configured: true,
+        baseUrl: 'http://localhost:11434/v1',
+        model: 'local-vision',
+      },
     })
     const wrapper = await mountScene()
     expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(true)
@@ -498,7 +589,10 @@ describe('sceneView — overlapping effects', () => {
         const instance = Reflect.construct(target, args) as HTMLAudioElement
         // Give each element its own `pause` mock — spying on the shared
         // prototype-level stub would dedupe to a single spy across elements.
-        Object.defineProperty(instance, 'pause', { configurable: true, value: vi.fn() })
+        Object.defineProperty(instance, 'pause', {
+          configurable: true,
+          value: vi.fn(),
+        })
         audioInstances.push(instance)
         return instance
       },
@@ -707,7 +801,9 @@ describe('sceneView — backend-decoded Effects (ADR-0003)', () => {
     await wrapper.find('.effect-trigger').trigger('click')
     await flushPromises()
 
-    expect(playBackendEffect).toHaveBeenCalledWith('g1', 'fx-1', { volume: expect.closeTo(64) })
+    expect(playBackendEffect).toHaveBeenCalledWith('g1', 'fx-1', {
+      volume: expect.closeTo(64),
+    })
     expect(startEffectStream).not.toHaveBeenCalled()
     expect(sendEffectChunk).not.toHaveBeenCalled()
   })
@@ -787,7 +883,10 @@ describe('sceneView — Effect Instance indicator (#509)', () => {
     // Local preview and the Discord-fallback path both read a known
     // duration off the `<audio>` element once it's loaded/playing (jsdom
     // itself never reports one) — fixed at 2s for every element here.
-    Object.defineProperty(mediaProto, 'duration', { configurable: true, get: () => 2 })
+    Object.defineProperty(mediaProto, 'duration', {
+      configurable: true,
+      get: () => 2,
+    })
   })
 
   beforeEach(async () => {
@@ -802,7 +901,10 @@ describe('sceneView — Effect Instance indicator (#509)', () => {
     vi.stubGlobal('Audio', new Proxy(OriginalAudio, {
       construct(target, args) {
         const instance = Reflect.construct(target, args) as HTMLAudioElement
-        Object.defineProperty(instance, 'pause', { configurable: true, value: vi.fn() })
+        Object.defineProperty(instance, 'pause', {
+          configurable: true,
+          value: vi.fn(),
+        })
         audioInstances.push(instance)
         return instance
       },
@@ -883,14 +985,23 @@ describe('sceneView — Effect Instance indicator (#509)', () => {
     const { stopEffect: stopBackendEffect } = await import('@/api/player')
     const { wrapper, player } = await mountSceneJoined()
 
-    player.playerState = [{
-      guildId: 'g1',
-      connectedChannelId: 'c1',
-      isIdle: false,
-      track: null,
-      source: 'live',
-      effects: [{ instanceId: 'backend-effect:1', soundId: 'fx-1', startedAt: new Date().toISOString(), durationMs: 2000 }],
-    }]
+    player.playerState = [
+      {
+        guildId: 'g1',
+        connectedChannelId: 'c1',
+        isIdle: false,
+        track: null,
+        source: 'live',
+        effects: [
+          {
+            instanceId: 'backend-effect:1',
+            soundId: 'fx-1',
+            startedAt: new Date().toISOString(),
+            durationMs: 2000,
+          },
+        ],
+      },
+    ]
     await flushPromises()
 
     expect(wrapper.find('.effect-timer').text()).toBe('0:00 / 0:02')
@@ -962,7 +1073,13 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     const { stopEffectStream } = await import('@/api/audio-stream')
     const { wrapper, player } = await mountSceneWithPlayer()
     player.playerState = [
-      { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      {
+        guildId: 'g1',
+        connectedChannelId: 'c1',
+        isIdle: true,
+        track: null,
+        source: 'live' as const,
+      },
     ]
     player.guildId = 'g1'
     await flushPromises()
@@ -1033,13 +1150,22 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
 
   it('stops a local music track via the inline per-track Stop button after re-opening the playing Scene', async () => {
     const { listMusic } = await import('@/api/sounds')
-    vi.mocked(listMusic).mockImplementation(async () => [{ id: 'm1', name: 'Tavern Theme', filename: 'tavern.mp3' }])
+    vi.mocked(listMusic).mockImplementation(async () => [
+      { id: 'm1', name: 'Tavern Theme', filename: 'tavern.mp3' },
+    ])
     const { getScene } = await import('@/api/scenes')
     vi.mocked(getScene).mockImplementation(async () => ({
       id: 's1',
       name: 'Storm',
       ambience: [],
-      music: [{ soundId: 'm1', soundName: 'Tavern Theme', volume: 80, loop: false }],
+      music: [
+        {
+          soundId: 'm1',
+          soundName: 'Tavern Theme',
+          volume: 80,
+          loop: false,
+        },
+      ],
       effects: [],
     }))
 
@@ -1131,7 +1257,13 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     })
     const player = usePlayerStore(pinia)
     player.playerState = [
-      { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      {
+        guildId: 'g1',
+        connectedChannelId: 'c1',
+        isIdle: true,
+        track: null,
+        source: 'live' as const,
+      },
     ]
     player.guildId = 'g1'
     await flushPromises()
@@ -1204,8 +1336,22 @@ describe('sceneView — Scene Crossfade', () => {
   const sceneX = {
     id: 'x1',
     name: 'Camp',
-    ambience: [{ soundId: 'amb-1', soundName: 'Rain', volume: 80, enabled: true }],
-    music: [{ soundId: 'm1', soundName: 'Track One', volume: 80, loop: false }],
+    ambience: [
+      {
+        soundId: 'amb-1',
+        soundName: 'Rain',
+        volume: 80,
+        enabled: true,
+      },
+    ],
+    music: [
+      {
+        soundId: 'm1',
+        soundName: 'Track One',
+        volume: 80,
+        loop: false,
+      },
+    ],
     effects: [],
   }
   // amb-1 is shared with sceneX (at a different volume, to prove the glide),
@@ -1214,13 +1360,36 @@ describe('sceneView — Scene Crossfade', () => {
     id: 'y1',
     name: 'Tavern',
     ambience: [
-      { soundId: 'amb-1', soundName: 'Rain', volume: 40, enabled: true },
-      { soundId: 'amb-2', soundName: 'Wind', volume: 60, enabled: true },
+      {
+        soundId: 'amb-1',
+        soundName: 'Rain',
+        volume: 40,
+        enabled: true,
+      },
+      {
+        soundId: 'amb-2',
+        soundName: 'Wind',
+        volume: 60,
+        enabled: true,
+      },
     ],
-    music: [{ soundId: 'm2', soundName: 'Track Two', volume: 80, loop: false }],
+    music: [
+      {
+        soundId: 'm2',
+        soundName: 'Track Two',
+        volume: 80,
+        loop: false,
+      },
+    ],
     effects: [],
   }
-  const sceneZ = { id: 'z1', name: 'Silence', ambience: [], music: [], effects: [] }
+  const sceneZ = {
+    id: 'z1',
+    name: 'Silence',
+    ambience: [],
+    music: [],
+    effects: [],
+  }
 
   beforeEach(async () => {
     const { getScene } = await import('@/api/scenes')
@@ -1250,7 +1419,10 @@ describe('sceneView — Scene Crossfade', () => {
     vi.stubGlobal('Audio', new Proxy(OriginalAudio, {
       construct(target, args) {
         const instance = Reflect.construct(target, args) as HTMLAudioElement
-        Object.defineProperty(instance, 'pause', { configurable: true, value: vi.fn() })
+        Object.defineProperty(instance, 'pause', {
+          configurable: true,
+          value: vi.fn(),
+        })
         audioInstances.push(instance)
         return instance
       },
@@ -1330,7 +1502,13 @@ describe('sceneView — Scene Crossfade', () => {
     const { startAudioStream, stopAudioStream } = await import('@/api/audio-stream')
     const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
     player.playerState = [
-      { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+      {
+        guildId: 'g1',
+        connectedChannelId: 'c1',
+        isIdle: true,
+        track: null,
+        source: 'live' as const,
+      },
     ]
     player.guildId = 'g1'
     await flushPromises()
@@ -1366,7 +1544,13 @@ describe('sceneView — Scene Crossfade', () => {
       const { playMusic } = await import('@/api/player')
       const { wrapper, player } = await mountAt('/scenes/x1')
       player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          connectedChannelId: 'c1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       player.guildId = 'g1'
       await flushPromises()
@@ -1374,7 +1558,11 @@ describe('sceneView — Scene Crossfade', () => {
       await wrapper.find('.btn-play-scene').trigger('click')
       await flushPromises()
 
-      expect(playMusic).toHaveBeenCalledWith('g1', 'm1', { volume: expect.closeTo(64), loop: false, fadeInMs: 0 })
+      expect(playMusic).toHaveBeenCalledWith('g1', 'm1', {
+        volume: expect.closeTo(64),
+        loop: false,
+        fadeInMs: 0,
+      })
       expect(startAudioStream).not.toHaveBeenCalled()
     })
 
@@ -1382,7 +1570,13 @@ describe('sceneView — Scene Crossfade', () => {
       const { playMusic, stopMusic } = await import('@/api/player')
       const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
       player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          connectedChannelId: 'c1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       player.guildId = 'g1'
       await flushPromises()
@@ -1394,7 +1588,11 @@ describe('sceneView — Scene Crossfade', () => {
       await testRouter.push('/scenes/y1')
       await flushPromises()
 
-      expect(playMusic).toHaveBeenCalledWith('g1', 'm2', { volume: expect.closeTo(64), loop: false, fadeInMs: 100 })
+      expect(playMusic).toHaveBeenCalledWith('g1', 'm2', {
+        volume: expect.closeTo(64),
+        loop: false,
+        fadeInMs: 100,
+      })
       // The backend fades and stops the previous track itself (see
       // GuildAudioManager.playMusic) — the renderer must not also call
       // stopMusic for it.
@@ -1405,7 +1603,13 @@ describe('sceneView — Scene Crossfade', () => {
       const { playMusic, stopMusic } = await import('@/api/player')
       const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
       player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          connectedChannelId: 'c1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       player.guildId = 'g1'
       await flushPromises()
@@ -1437,7 +1641,13 @@ describe('sceneView — Scene Crossfade', () => {
       const { stopMusic } = await import('@/api/player')
       const { wrapper, player } = await mountAt('/scenes/x1')
       player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          connectedChannelId: 'c1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       player.guildId = 'g1'
       await flushPromises()
@@ -1460,7 +1670,13 @@ describe('sceneView — Scene Crossfade', () => {
       const { playMusic, stopMusic } = await import('@/api/player')
       const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
       player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          connectedChannelId: 'c1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       player.guildId = 'g1'
       await flushPromises()
@@ -1491,7 +1707,13 @@ describe('sceneView — Scene Crossfade', () => {
       const { playAmbience } = await import('@/api/player')
       const { wrapper, player } = await mountAt('/scenes/x1')
       player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          connectedChannelId: 'c1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       player.guildId = 'g1'
       await flushPromises()
@@ -1499,7 +1721,12 @@ describe('sceneView — Scene Crossfade', () => {
       await wrapper.find('.btn-play-scene').trigger('click')
       await flushPromises()
 
-      expect(playAmbience).toHaveBeenCalledWith('g1', 'amb-1', { volume: expect.closeTo(64), repeatMin: 0, repeatMax: 0, fadeInMs: 0 })
+      expect(playAmbience).toHaveBeenCalledWith('g1', 'amb-1', {
+        volume: expect.closeTo(64),
+        repeatMin: 0,
+        repeatMax: 0,
+        fadeInMs: 0,
+      })
       expect(startEffectStream).not.toHaveBeenCalled()
       expect(sendEffectChunk).not.toHaveBeenCalled()
     })
@@ -1508,7 +1735,13 @@ describe('sceneView — Scene Crossfade', () => {
       const { playAmbience, setAmbienceVolume } = await import('@/api/player')
       const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
       player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          connectedChannelId: 'c1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       player.guildId = 'g1'
       await flushPromises()
@@ -1525,14 +1758,25 @@ describe('sceneView — Scene Crossfade', () => {
       expect(setAmbienceVolume).toHaveBeenCalledWith('g1', 'amb-1', expect.closeTo(32), { rampMs: 100 })
       expect(playAmbience).not.toHaveBeenCalledWith('g1', 'amb-1', expect.anything())
       // amb-2 is new to the target Scene — starts fresh via the backend with a fade-in.
-      expect(playAmbience).toHaveBeenCalledWith('g1', 'amb-2', { volume: expect.closeTo(48), repeatMin: 0, repeatMax: 0, fadeInMs: 100 })
+      expect(playAmbience).toHaveBeenCalledWith('g1', 'amb-2', {
+        volume: expect.closeTo(48),
+        repeatMin: 0,
+        repeatMax: 0,
+        fadeInMs: 100,
+      })
     })
 
     it('stops an outgoing-only Ambience sound via the backend when the target Scene drops it', async () => {
       const { stopAmbience } = await import('@/api/player')
       const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
       player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          connectedChannelId: 'c1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       player.guildId = 'g1'
       await flushPromises()
@@ -1551,7 +1795,13 @@ describe('sceneView — Scene Crossfade', () => {
       const { stopAmbience } = await import('@/api/player')
       const { wrapper, player } = await mountAt('/scenes/x1')
       player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          connectedChannelId: 'c1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       player.guildId = 'g1'
       await flushPromises()
@@ -1575,7 +1825,13 @@ describe('sceneView — Scene Crossfade', () => {
       const { playAmbience, setAmbienceVolume } = await import('@/api/player')
       const { wrapper, player, router: testRouter } = await mountAt('/scenes/x1')
       player.playerState = [
-        { guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          connectedChannelId: 'c1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       player.guildId = 'g1'
       await flushPromises()
@@ -1623,7 +1879,10 @@ describe('sceneView — Output Target routing (#517)', () => {
     await router.isReady()
     const pinia = createPinia()
     const wrapper = mount(SceneView, {
-      global: { plugins: [pinia, router], stubs: { RegistryBrowser: true, ResolveSoundDialog: true } },
+      global: {
+        plugins: [pinia, router],
+        stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+      },
     })
     await flushPromises()
     const player = usePlayerStore(pinia)
@@ -1632,7 +1891,15 @@ describe('sceneView — Output Target routing (#517)', () => {
     return { wrapper, player }
   }
 
-  const joined = [{ guildId: 'g1', connectedChannelId: 'c1', isIdle: true, track: null, source: 'live' as const }]
+  const joined = [
+    {
+      guildId: 'g1',
+      connectedChannelId: 'c1',
+      isIdle: true,
+      track: null,
+      source: 'live' as const,
+    },
+  ]
 
   it('plays a Scene on the Local Target with no voice connection and a single Play button', async () => {
     const { playAmbience } = await import('@/api/player')
@@ -1729,7 +1996,9 @@ describe('sceneView — Output Target routing (#517)', () => {
 
   it('shows and writes the active Target\'s master volume', async () => {
     const { fetchMasterVolume, updateMasterVolume } = await import('@/api/config')
-    vi.mocked(fetchMasterVolume).mockImplementation(async (id: string) => (id === LOCAL_TARGET_ID ? 35 : 80))
+    vi.mocked(fetchMasterVolume).mockImplementation(async (id: string) => (id === LOCAL_TARGET_ID
+      ? 35
+      : 80))
     const { wrapper } = await mountTarget('discord')
     await wrapper.findAll('.target-option').find(b => b.text() === 'Local')!.trigger('click')
     await flushPromises()
@@ -1758,7 +2027,9 @@ describe('sceneView — Output Target routing (#517)', () => {
 
   it('shows which Target a Playing Scene is on in the Scene list', async () => {
     const { listScenes } = await import('@/api/scenes')
-    vi.mocked(listScenes).mockResolvedValue([JSON.parse(JSON.stringify(scene))])
+    vi.mocked(listScenes).mockResolvedValue([
+      JSON.parse(JSON.stringify(scene)),
+    ])
     const { wrapper, player } = await mountTarget('local')
     await wrapper.find('.btn-play-scene').trigger('click')
     await flushPromises()
@@ -1816,7 +2087,12 @@ describe('sceneView hotkeys', () => {
 
   it('shows the bound key as a chip on the Scene list', async () => {
     const { listScenes } = await import('@/api/scenes')
-    vi.mocked(listScenes).mockResolvedValue([{ ...JSON.parse(JSON.stringify(scene)), hotkey: 'F15' }])
+    vi.mocked(listScenes).mockResolvedValue([
+      {
+        ...JSON.parse(JSON.stringify(scene)),
+        hotkey: 'F15',
+      },
+    ])
     const wrapper = await mountScene()
     await router.push('/scenes')
     await flushPromises()
@@ -1832,7 +2108,14 @@ describe('sceneView — Music Mode control', () => {
     vi.mocked(saveScene).mockClear()
     vi.mocked(getScene).mockResolvedValue({
       ...JSON.parse(JSON.stringify(scene)),
-      music: [{ soundId: 'm1', soundName: 'Tavern Theme', volume: 80, loop: true }],
+      music: [
+        {
+          soundId: 'm1',
+          soundName: 'Tavern Theme',
+          volume: 80,
+          loop: true,
+        },
+      ],
     })
   })
 
@@ -1872,7 +2155,14 @@ describe('sceneView — accessible editor controls', () => {
     const { getScene } = await import('@/api/scenes')
     vi.mocked(getScene).mockResolvedValue({
       ...JSON.parse(JSON.stringify(scene)),
-      music: [{ soundId: 'm1', soundName: 'Tavern Theme', volume: 80, loop: true }],
+      music: [
+        {
+          soundId: 'm1',
+          soundName: 'Tavern Theme',
+          volume: 80,
+          loop: true,
+        },
+      ],
     })
   })
 

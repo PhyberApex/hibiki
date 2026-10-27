@@ -43,10 +43,14 @@ const isInitializing = ref(false)
 
 const activeTab = computed(() => tabs.value.find(t => t.id === activeTabId.value) ?? null)
 const isCurrentPageBookmarked = computed(() =>
-  activeTab.value ? bookmarks.value.some(b => b.url === activeTab.value!.url) : false,
+  activeTab.value
+    ? bookmarks.value.some(b => b.url === activeTab.value!.url)
+    : false,
 )
 const activeTabRouted = computed(() => activeTabId.value != null && routedTabs.isRouted(activeTabId.value))
-const activeTabVolume = computed(() => (activeTabId.value != null ? routedTabs.tabVolume(activeTabId.value) : 100))
+const activeTabVolume = computed(() => (activeTabId.value != null
+  ? routedTabs.tabVolume(activeTabId.value)
+  : 100))
 const routeLabel = computed(() => (player.isLocalActive ? 'Mix locally' : 'Stream'))
 const routeTitle = computed(() => {
   if (!player.canPlay)
@@ -127,7 +131,9 @@ function startEditing(bm: Bookmark) {
   editingBookmarkUrl.value = bm.url
   editingBookmarkName.value = bm.name
   nextTick(() => {
-    const el = Array.isArray(editingInputEl.value) ? editingInputEl.value[0] : editingInputEl.value
+    const el = Array.isArray(editingInputEl.value)
+      ? editingInputEl.value[0]
+      : editingInputEl.value
     ;(el as HTMLInputElement | undefined)?.focus()
   })
 }
@@ -153,7 +159,9 @@ function normalizeUrl(input: string): string {
 }
 
 async function openTab(url?: string) {
-  const target = url === undefined ? DEFAULT_BROWSER_URL : (url || 'about:blank')
+  const target = url === undefined
+    ? DEFAULT_BROWSER_URL
+    : (url || 'about:blank')
   const isDefaultTab = tabs.value.length === 0 && target === DEFAULT_BROWSER_URL
   try {
     const id = await createBrowserView(target)
@@ -184,7 +192,9 @@ async function closeTab(id: number) {
   await destroyBrowserView(id).catch(() => {})
   tabs.value = tabs.value.filter(t => t.id !== id)
   if (activeTabId.value === id) {
-    const next = tabs.value.length > 0 ? tabs.value[tabs.value.length - 1]! : null
+    const next = tabs.value.length > 0
+      ? tabs.value[tabs.value.length - 1]!
+      : null
     activeTabId.value = next?.id ?? null
     urlInput.value = next?.url ?? ''
   }
@@ -244,8 +254,12 @@ let resizeObserver: ResizeObserver | null = null
 onMounted(() => {
   loadBookmarks()
   function tabById(id: unknown): BrowserTab | undefined {
-    const n = typeof id === 'number' ? id : Number(id)
-    return Number.isNaN(n) ? undefined : tabs.value.find(t => t.id === n)
+    const n = typeof id === 'number'
+      ? id
+      : Number(id)
+    return Number.isNaN(n)
+      ? undefined
+      : tabs.value.find(t => t.id === n)
   }
   cleanups.push(onBrowserViewEvent('browserView:didNavigate', (id: unknown, url: unknown) => {
     const tab = tabById(id)
@@ -263,7 +277,9 @@ onMounted(() => {
   cleanups.push(onBrowserViewEvent('browserView:faviconUpdated', (id: unknown, faviconUrl: unknown) => {
     const tab = tabById(id)
     if (tab) {
-      tab.favicon = typeof faviconUrl === 'string' ? faviconUrl : null
+      tab.favicon = typeof faviconUrl === 'string'
+        ? faviconUrl
+        : null
     }
   }))
   cleanups.push(onBrowserViewEvent('browserView:mediaPlaying', (id: unknown, playing: unknown) => {

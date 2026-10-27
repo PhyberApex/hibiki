@@ -25,7 +25,12 @@ export interface RoutedTabLocalPlayback {
 }
 
 const defaultDeps: RoutedTabLocalPlaybackDeps = {
-  createContext: sinkId => new AudioContext({ latencyHint: 'interactive', ...(sinkId ? { sinkId } : {}) }) as unknown as GainContextLike,
+  createContext: sinkId => new AudioContext({
+    latencyHint: 'interactive',
+    ...(sinkId
+      ? { sinkId }
+      : {}),
+  }) as unknown as GainContextLike,
   getSinkId: () => outputDeviceRouter.sinkId,
   subscribeSinkId: listener => outputDeviceRouter.subscribe(listener),
 }

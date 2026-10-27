@@ -2,7 +2,15 @@ import type { SoundFile } from '../sound/sound.types'
 import { matchVibeLibrary, matchVibeTags } from './vibe-matching'
 
 function sound(id: string, tags: string[], createdAt = '2026-01-01T00:00:00.000Z', category: SoundFile['category'] = 'music'): SoundFile {
-  return { id, name: id, filename: `${id}.mp3`, size: 1, category, createdAt, tags }
+  return {
+    id,
+    name: id,
+    filename: `${id}.mp3`,
+    size: 1,
+    category,
+    createdAt,
+    tags,
+  }
 }
 
 describe('matchVibeTags', () => {
@@ -27,19 +35,29 @@ describe('matchVibeTags', () => {
   })
 
   it('excludes sounds with zero overlap instead of ranking them last', () => {
-    const sounds = [sound('hit', ['forest']), sound('miss', ['desert'])]
+    const sounds = [
+      sound('hit', ['forest']),
+      sound('miss', ['desert']),
+    ]
     const result = matchVibeTags(['forest'], sounds)
     expect(result.map(m => m.sound.id)).toEqual(['hit'])
   })
 
   it('never matches sounds with empty tags', () => {
-    const sounds = [sound('untagged', []), sound('blank', ['   '])]
+    const sounds = [
+      sound('untagged', []),
+      sound('blank', ['   ']),
+    ]
     expect(matchVibeTags(['forest', 'rain'], sounds)).toEqual([])
   })
 
   it('returns nothing when the vibe tags are empty', () => {
-    expect(matchVibeTags([], [sound('a', ['forest'])])).toEqual([])
-    expect(matchVibeTags(['', '  '], [sound('a', ['forest'])])).toEqual([])
+    expect(matchVibeTags([], [
+      sound('a', ['forest']),
+    ])).toEqual([])
+    expect(matchVibeTags(['', '  '], [
+      sound('a', ['forest']),
+    ])).toEqual([])
   })
 
   it('caps results at 5 by default', () => {
@@ -61,7 +79,9 @@ describe('matchVibeTags', () => {
   })
 
   it('counts each vibe tag at most once per sound', () => {
-    const sounds = [sound('multi', ['rain', 'rainy', 'raining'])]
+    const sounds = [
+      sound('multi', ['rain', 'rainy', 'raining']),
+    ]
     expect(matchVibeTags(['rain'], sounds)[0]!.score).toBe(1)
   })
 })
@@ -69,7 +89,10 @@ describe('matchVibeTags', () => {
 describe('matchVibeLibrary', () => {
   it('scores Music and Ambience independently with their own caps', () => {
     const music = Array.from({ length: 7 }, (_, i) => sound(`m${i}`, ['rain'], `2026-01-0${i + 1}T00:00:00.000Z`))
-    const ambience = [sound('a-hit', ['rain'], undefined, 'ambience'), sound('a-miss', ['desert'], undefined, 'ambience')]
+    const ambience = [
+      sound('a-hit', ['rain'], undefined, 'ambience'),
+      sound('a-miss', ['desert'], undefined, 'ambience'),
+    ]
     const result = matchVibeLibrary(['rain'], { music, ambience })
     expect(result.music).toHaveLength(5)
     expect(result.music.every(m => m.sound.category === 'music')).toBe(true)
@@ -77,7 +100,12 @@ describe('matchVibeLibrary', () => {
   })
 
   it('returns empty lists per category when nothing matches there', () => {
-    const result = matchVibeLibrary(['rain'], { music: [], ambience: [sound('a', ['rain'], undefined, 'ambience')] })
+    const result = matchVibeLibrary(['rain'], {
+      music: [],
+      ambience: [
+        sound('a', ['rain'], undefined, 'ambience'),
+      ],
+    })
     expect(result.music).toEqual([])
     expect(result.ambience).toHaveLength(1)
   })

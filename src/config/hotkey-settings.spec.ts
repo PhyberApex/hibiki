@@ -2,13 +2,25 @@ import type { Scene } from '../scenes/scene-store'
 import { createHotkeySettings } from './hotkey-settings'
 
 function scene(partial: Partial<Scene>): Scene {
-  return { id: 's', name: 'Tavern', ambience: [], music: [], effects: [], createdAt: '', updatedAt: '', ...partial }
+  return {
+    id: 's',
+    name: 'Tavern',
+    ambience: [],
+    music: [],
+    effects: [],
+    createdAt: '',
+    updatedAt: '',
+    ...partial,
+  }
 }
 
 function setup(scenes: Scene[] = [], initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial))
   const settings = createHotkeySettings(
-    { get: async k => data.get(k) ?? null, set: async (k, v) => { data.set(k, v) } },
+    {
+      get: async k => data.get(k) ?? null,
+      set: async (k, v) => { data.set(k, v) },
+    },
     async () => scenes,
   )
   return { data, settings }
@@ -38,13 +50,21 @@ describe('hotkey settings', () => {
   })
 
   it('rejects a Stop Hotkey held by a Scene, naming it', async () => {
-    const { settings, data } = setup([scene({ hotkey: 'F1' })])
+    const { settings, data } = setup([
+      scene({ hotkey: 'F1' }),
+    ])
     await expect(settings.set({ enabled: true, stopHotkey: 'f1' })).rejects.toThrow('Scene "Tavern"')
     expect(data.has('hotkeys')).toBe(false)
   })
 
   it('rejects a Stop Hotkey held by an Effect in any Scene', async () => {
-    const { settings } = setup([scene({ effects: [{ soundId: 'x', soundName: 'Boom', hotkey: 'F2' }] })])
+    const { settings } = setup([
+      scene({
+        effects: [
+          { soundId: 'x', soundName: 'Boom', hotkey: 'F2' },
+        ],
+      }),
+    ])
     await expect(settings.set({ enabled: true, stopHotkey: 'F2' })).rejects.toThrow('Effect "Boom" in Scene "Tavern"')
   })
 
@@ -80,7 +100,14 @@ describe('hotkey settings', () => {
   })
 
   it('rejects an Action Hotkey held by a Scene or Effect', async () => {
-    const { settings } = setup([scene({ hotkey: 'F1', effects: [{ soundId: 'x', soundName: 'Boom', hotkey: 'F2' }] })])
+    const { settings } = setup([
+      scene({
+        hotkey: 'F1',
+        effects: [
+          { soundId: 'x', soundName: 'Boom', hotkey: 'F2' },
+        ],
+      }),
+    ])
     await expect(settings.set({ enabled: true, nextSceneHotkey: 'F1' })).rejects.toThrow('Scene "Tavern"')
     await expect(settings.set({ enabled: true, volumeDownHotkey: 'F2' })).rejects.toThrow('Effect "Boom"')
   })

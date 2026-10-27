@@ -91,7 +91,9 @@ export function createHotkeyRegistrar(driver: ShortcutDriver, onFire: (accelerat
   /** Makes the registrations match `wanted` (empty when `isEnabled` is false). Accelerators that already hold are left alone. */
   function sync(wanted: Map<string, string[]>, isEnabled: boolean): void {
     enabled = isEnabled
-    const target = isEnabled ? wanted : new Map<string, string[]>()
+    const target = isEnabled
+      ? wanted
+      : new Map<string, string[]>()
     for (const accelerator of [...registered]) {
       if (!target.has(accelerator)) {
         release(accelerator, lastOwners.get(accelerator) ?? [])
@@ -114,7 +116,11 @@ export function createHotkeyRegistrar(driver: ShortcutDriver, onFire: (accelerat
   }
 
   function getStatus(): HotkeyStatus {
-    return { enabled, registered: [...registered], failures: failures.map(f => ({ ...f })) }
+    return {
+      enabled,
+      registered: [...registered],
+      failures: failures.map(f => ({ ...f })),
+    }
   }
 
   return { sync, releaseAll, getStatus }

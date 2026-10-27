@@ -92,7 +92,11 @@ describe('toast store', () => {
 
   it('carries a link for the toast to render', () => {
     const store = useToastStore()
-    store.show({ type: 'info', text: 'update', link: { label: 'View release', url: 'https://github.com/x' } })
+    store.show({
+      type: 'info',
+      text: 'update',
+      link: { label: 'View release', url: 'https://github.com/x' },
+    })
     expect(store.toasts[0].link).toEqual({ label: 'View release', url: 'https://github.com/x' })
   })
 
@@ -108,7 +112,12 @@ describe('toast store', () => {
     expect(onDismiss).not.toHaveBeenCalled()
     store.toasts.slice().forEach(t => store.dismiss(t.id))
 
-    const id = store.show({ type: 'info', text: 'by hand', durationMs: null, onDismiss })
+    const id = store.show({
+      type: 'info',
+      text: 'by hand',
+      durationMs: null,
+      onDismiss,
+    })
     store.dismissByUser(id)
     expect(onDismiss).toHaveBeenCalledTimes(1)
     expect(store.toasts.map(t => t.text)).not.toContain('by hand')

@@ -41,7 +41,9 @@ export class PcmResampler {
       const i = Math.floor(pos)
       const frac = pos - i
       for (let c = 0; c < channels.length; c++) {
-        const prev = i === 0 ? this.lastSamples[c] : channels[c][i - 1]
+        const prev = i === 0
+          ? this.lastSamples[c]
+          : channels[c][i - 1]
         const curr = channels[c][i]
         output.push(prev + (curr - prev) * frac)
       }
@@ -59,7 +61,9 @@ export class PcmResampler {
     const buffer = Buffer.alloc(frames * MIXER_CHANNELS * 2)
     for (let f = 0; f < frames; f++) {
       const left = samples[f * channels]
-      const right = channels >= 2 ? samples[f * channels + 1] : left
+      const right = channels >= 2
+        ? samples[f * channels + 1]
+        : left
       buffer.writeInt16LE(CLAMP_16(left * 32767), f * 4)
       buffer.writeInt16LE(CLAMP_16(right * 32767), f * 4 + 2)
     }

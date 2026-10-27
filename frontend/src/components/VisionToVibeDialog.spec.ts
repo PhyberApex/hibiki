@@ -10,21 +10,32 @@ vi.mock('@/api/config', () => ({
   openFileDialog: vi.fn(),
 }))
 
-vi.mock('@/api/usage-stats', () => ({ trackUsage: vi.fn() }))
+vi.mock('@/api/usage-stats', () => ({
+  trackUsage: vi.fn(),
+}))
 
 vi.mock('@/api/vision', () => ({
   analyzeImageVibe: vi.fn(),
   matchVibe: vi.fn(),
 }))
 
-const router = { push: vi.fn() }
+const router = {
+  push: vi.fn(),
+}
 vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>' },
   useRouter: () => router,
 }))
 
 function sound(id: string, category: 'music' | 'ambience', tags: string[] = []): SoundFile {
-  return { id, name: id.toUpperCase(), filename: `${id}.mp3`, category, createdAt: '2026-01-01T00:00:00Z', tags }
+  return {
+    id,
+    name: id.toUpperCase(),
+    filename: `${id}.mp3`,
+    category,
+    createdAt: '2026-01-01T00:00:00Z',
+    tags,
+  }
 }
 
 const tavern = sound('tavern', 'music', ['warm', 'tavern'])
@@ -65,14 +76,25 @@ describe('visionToVibeDialog', () => {
 
   it('analyzes the chosen image and shows description, tags, and matches', async () => {
     vi.mocked(openFileDialog).mockResolvedValue('/tmp/map.png')
-    vi.mocked(analyzeImageVibe).mockResolvedValue({ description: 'A cozy tavern.', tags: ['warm', 'tavern'] })
-    vi.mocked(matchVibe).mockResolvedValue({ music: [{ sound: tavern, score: 2 }], ambience: [] })
+    vi.mocked(analyzeImageVibe).mockResolvedValue({
+      description: 'A cozy tavern.',
+      tags: ['warm', 'tavern'],
+    })
+    vi.mocked(matchVibe).mockResolvedValue({
+      music: [
+        { sound: tavern, score: 2 },
+      ],
+      ambience: [],
+    })
     const wrapper = mountDialog()
     await wrapper.find('[data-testid="vibe-pick-image"]').trigger('click')
     await flushPromises()
     expect(analyzeImageVibe).toHaveBeenCalledWith('/tmp/map.png')
     expect(matchVibe).toHaveBeenCalledWith(['warm', 'tavern'])
-    expect(trackUsage).toHaveBeenCalledWith({ name: 'vision-analyze', data: { provider: 'claude' } })
+    expect(trackUsage).toHaveBeenCalledWith({
+      name: 'vision-analyze',
+      data: { provider: 'claude' },
+    })
     expect(wrapper.text()).toContain('A cozy tavern.')
     expect(wrapper.findAll('.vibe-tag').map(t => t.text())).toEqual(['warm', 'tavern'])
     expect(wrapper.find('[data-testid="vibe-music-matches"]').text()).toContain('TAVERN')
@@ -80,20 +102,40 @@ describe('visionToVibeDialog', () => {
 
   it('emits add for a single match without touching the others', async () => {
     vi.mocked(openFileDialog).mockResolvedValue('/tmp/map.png')
-    vi.mocked(analyzeImageVibe).mockResolvedValue({ description: 'Storm.', tags: ['storm'] })
-    vi.mocked(matchVibe).mockResolvedValue({ music: [], ambience: [{ sound: rain, score: 1 }] })
+    vi.mocked(analyzeImageVibe).mockResolvedValue({
+      description: 'Storm.',
+      tags: ['storm'],
+    })
+    vi.mocked(matchVibe).mockResolvedValue({
+      music: [],
+      ambience: [
+        { sound: rain, score: 1 },
+      ],
+    })
     const wrapper = mountDialog()
     await wrapper.find('[data-testid="vibe-pick-image"]').trigger('click')
     await flushPromises()
     await wrapper.find('[data-testid="vibe-ambience-matches"] .btn-add-match').trigger('click')
-    expect(wrapper.emitted('add')).toEqual([['ambience', rain]])
+    expect(wrapper.emitted('add')).toEqual([
+      ['ambience', rain],
+    ])
   })
 
   it('marks matches that are already in the scene', async () => {
     vi.mocked(openFileDialog).mockResolvedValue('/tmp/map.png')
-    vi.mocked(analyzeImageVibe).mockResolvedValue({ description: 'Storm.', tags: ['storm'] })
-    vi.mocked(matchVibe).mockResolvedValue({ music: [], ambience: [{ sound: rain, score: 1 }] })
-    const wrapper = mountDialog({ ambienceInScene: ['rain'] })
+    vi.mocked(analyzeImageVibe).mockResolvedValue({
+      description: 'Storm.',
+      tags: ['storm'],
+    })
+    vi.mocked(matchVibe).mockResolvedValue({
+      music: [],
+      ambience: [
+        { sound: rain, score: 1 },
+      ],
+    })
+    const wrapper = mountDialog({
+      ambienceInScene: ['rain'],
+    })
     await wrapper.find('[data-testid="vibe-pick-image"]').trigger('click')
     await flushPromises()
     const btn = wrapper.find<HTMLButtonElement>('[data-testid="vibe-ambience-matches"] .btn-add-match')
@@ -103,9 +145,17 @@ describe('visionToVibeDialog', () => {
 
   it('explains the tagging gap when a category has no tagged sounds', async () => {
     vi.mocked(openFileDialog).mockResolvedValue('/tmp/map.png')
-    vi.mocked(analyzeImageVibe).mockResolvedValue({ description: 'Storm.', tags: ['storm'] })
+    vi.mocked(analyzeImageVibe).mockResolvedValue({
+      description: 'Storm.',
+      tags: ['storm'],
+    })
     vi.mocked(matchVibe).mockResolvedValue({ music: [], ambience: [] })
-    const wrapper = mountDialog({ musicSounds: [sound('untagged', 'music')], ambienceSounds: [] })
+    const wrapper = mountDialog({
+      musicSounds: [
+        sound('untagged', 'music'),
+      ],
+      ambienceSounds: [],
+    })
     await wrapper.find('[data-testid="vibe-pick-image"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="vibe-music-empty"]').text()).toMatch(/tag your/i)
@@ -114,7 +164,10 @@ describe('visionToVibeDialog', () => {
 
   it('says when tagged sounds simply did not match', async () => {
     vi.mocked(openFileDialog).mockResolvedValue('/tmp/map.png')
-    vi.mocked(analyzeImageVibe).mockResolvedValue({ description: 'Storm.', tags: ['storm'] })
+    vi.mocked(analyzeImageVibe).mockResolvedValue({
+      description: 'Storm.',
+      tags: ['storm'],
+    })
     vi.mocked(matchVibe).mockResolvedValue({ music: [], ambience: [] })
     const wrapper = mountDialog()
     await wrapper.find('[data-testid="vibe-pick-image"]').trigger('click')

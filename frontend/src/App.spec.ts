@@ -41,10 +41,26 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: '/scenes' },
     { path: '/media', name: 'media', component: MediaManagementView },
-    { path: '/scenes', name: 'scenes', component: () => Promise.resolve({ template: '<div>Scenes</div>' }) },
-    { path: '/scenes/:id', name: 'scene', component: () => Promise.resolve({ template: '<div>Scene</div>' }) },
-    { path: '/browser', name: 'browser', component: () => Promise.resolve({ template: '<div>Browser</div>' }) },
-    { path: '/settings', name: 'settings', component: () => Promise.resolve({ template: '<div>Settings</div>' }) },
+    {
+      path: '/scenes',
+      name: 'scenes',
+      component: () => Promise.resolve({ template: '<div>Scenes</div>' }),
+    },
+    {
+      path: '/scenes/:id',
+      name: 'scene',
+      component: () => Promise.resolve({ template: '<div>Scene</div>' }),
+    },
+    {
+      path: '/browser',
+      name: 'browser',
+      component: () => Promise.resolve({ template: '<div>Browser</div>' }),
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => Promise.resolve({ template: '<div>Settings</div>' }),
+    },
     { path: '/about', name: 'about', component: AboutView },
   ],
 })
@@ -56,7 +72,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -70,7 +89,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     expect(wrapper.find('.layout').exists()).toBe(true)
@@ -83,7 +105,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     expect(wrapper.find('.brand-title').text()).toBe('Hibiki')
@@ -94,7 +119,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     const tabs = wrapper.findAll('.sidebar-tab')
@@ -114,7 +142,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     expect(wrapper.findComponent({ name: 'RouterView' }).exists()).toBe(true)
@@ -125,7 +156,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     const versionEl = wrapper.find('.version')
@@ -138,7 +172,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     const scenesTab = wrapper.findAll('.sidebar-tab').find(t => t.text().includes('Scenes'))
@@ -153,14 +190,19 @@ describe('app', () => {
         guildId: 'g1',
         guildName: 'Test Guild',
         iconUrl: null,
-        channels: [{ id: 'ch1', name: 'General' }],
+        channels: [
+          { id: 'ch1', name: 'General' },
+        ],
       },
     ])
     await router.push('/scenes')
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -171,7 +213,13 @@ describe('app', () => {
   it('shows disconnect button when connected', async () => {
     const { fetchPlayerState, fetchBotStatus, fetchGuildDirectory } = await import('@/api/player')
     vi.mocked(fetchPlayerState).mockResolvedValue([
-      { guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const },
+      {
+        guildId: 'g1',
+        connectedChannelId: 'ch1',
+        isIdle: true,
+        track: null,
+        source: 'live' as const,
+      },
     ])
     vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
     vi.mocked(fetchGuildDirectory).mockResolvedValue([
@@ -179,14 +227,19 @@ describe('app', () => {
         guildId: 'g1',
         guildName: 'Test Guild',
         iconUrl: null,
-        channels: [{ id: 'ch1', name: 'General' }],
+        channels: [
+          { id: 'ch1', name: 'General' },
+        ],
       },
     ])
     await router.push('/scenes')
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -199,15 +252,26 @@ describe('app', () => {
     const welcomeRouter = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/', name: 'welcome', component: () => Promise.resolve({ template: '<div>Welcome</div>' }) },
-        { path: '/scenes', name: 'scenes', component: () => Promise.resolve({ template: '<div>Scenes</div>' }) },
+        {
+          path: '/',
+          name: 'welcome',
+          component: () => Promise.resolve({ template: '<div>Welcome</div>' }),
+        },
+        {
+          path: '/scenes',
+          name: 'scenes',
+          component: () => Promise.resolve({ template: '<div>Scenes</div>' }),
+        },
       ],
     })
     await welcomeRouter.push('/')
     await welcomeRouter.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), welcomeRouter],
+        plugins: [
+          createPinia(),
+          welcomeRouter,
+        ],
       },
     })
     expect(wrapper.find('.welcome-layout').exists()).toBe(true)
@@ -221,7 +285,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -235,7 +302,10 @@ describe('app', () => {
     await router.isReady()
     mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -249,7 +319,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -266,7 +339,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -305,7 +381,13 @@ describe('app', () => {
   it('glows the connected channel dot and pulses a channel while joining', async () => {
     const { fetchPlayerState, fetchBotStatus, fetchGuildDirectory, joinChannel } = await import('@/api/player')
     vi.mocked(fetchPlayerState).mockResolvedValue([
-      { guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const },
+      {
+        guildId: 'g1',
+        connectedChannelId: 'ch1',
+        isIdle: true,
+        track: null,
+        source: 'live' as const,
+      },
     ])
     vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
     vi.mocked(fetchGuildDirectory).mockResolvedValue([
@@ -313,7 +395,10 @@ describe('app', () => {
         guildId: 'g1',
         guildName: 'Test Guild',
         iconUrl: null,
-        channels: [{ id: 'ch1', name: 'General' }, { id: 'ch2', name: 'Tavern' }],
+        channels: [
+          { id: 'ch1', name: 'General' },
+          { id: 'ch2', name: 'Tavern' },
+        ],
       },
     ])
     let releaseJoin: () => void = () => {}
@@ -324,7 +409,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -345,7 +433,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     const tabs = wrapper.findAll('.compact-tab')
@@ -363,7 +454,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -379,7 +473,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -389,7 +486,13 @@ describe('app', () => {
   it('names the connected channel in the compact connection indicator when joined', async () => {
     const { fetchPlayerState, fetchBotStatus, fetchGuildDirectory } = await import('@/api/player')
     vi.mocked(fetchPlayerState).mockResolvedValue([
-      { guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const },
+      {
+        guildId: 'g1',
+        connectedChannelId: 'ch1',
+        isIdle: true,
+        track: null,
+        source: 'live' as const,
+      },
     ])
     vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
     vi.mocked(fetchGuildDirectory).mockResolvedValue([
@@ -397,14 +500,19 @@ describe('app', () => {
         guildId: 'g1',
         guildName: 'Test Guild',
         iconUrl: null,
-        channels: [{ id: 'ch1', name: 'General' }],
+        channels: [
+          { id: 'ch1', name: 'General' },
+        ],
       },
     ])
     await router.push('/scenes')
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -414,7 +522,13 @@ describe('app', () => {
   it('shows "Connected" rather than a false "No channel" when joined but the directory has not resolved the channel name yet', async () => {
     const { fetchPlayerState, fetchBotStatus, fetchGuildDirectory } = await import('@/api/player')
     vi.mocked(fetchPlayerState).mockResolvedValue([
-      { guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const },
+      {
+        guildId: 'g1',
+        connectedChannelId: 'ch1',
+        isIdle: true,
+        track: null,
+        source: 'live' as const,
+      },
     ])
     vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
     vi.mocked(fetchGuildDirectory).mockResolvedValue([])
@@ -422,7 +536,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -458,7 +575,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()
@@ -477,7 +597,10 @@ describe('app', () => {
     await router.isReady()
     const wrapper = mount(App, {
       global: {
-        plugins: [createPinia(), router],
+        plugins: [
+          createPinia(),
+          router,
+        ],
       },
     })
     await flushPromises()

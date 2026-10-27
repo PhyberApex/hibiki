@@ -55,11 +55,17 @@ export class EffectPcmCache {
     const cached = this.cache.get(key)
     if (cached !== undefined) {
       this.bump(key, cached)
-      return { stream: NodeReadable.from(Buffer.from(cached)), durationMs: durationOf(cached) }
+      return {
+        stream: NodeReadable.from(Buffer.from(cached)),
+        durationMs: durationOf(cached),
+      }
     }
 
     const buffer = await this.decodeOnce(key, decode)
-    return { stream: NodeReadable.from(Buffer.from(buffer)), durationMs: durationOf(buffer) }
+    return {
+      stream: NodeReadable.from(Buffer.from(buffer)),
+      durationMs: durationOf(buffer),
+    }
   }
 
   private decodeOnce(key: string, decode: () => Readable | Promise<Readable>): Promise<Buffer> {

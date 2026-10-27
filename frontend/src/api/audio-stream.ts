@@ -31,14 +31,14 @@ export function stopAudioStream(guildId: string, streamId?: string): Promise<voi
 export function sendAudioChunk(guildId: string, chunk: ArrayBuffer, streamId?: string): void {
   const hibiki = requireBridge()
   if (typeof hibiki.send !== 'function')
-    throw new Error('Electron send not available')
+    throw new TypeError('Electron send not available')
   hibiki.send('audio:chunk', { guildId, chunk, streamId })
 }
 
 export function sendEffectChunk(guildId: string, chunk: ArrayBuffer, streamId?: string): void {
   const hibiki = requireBridge()
   if (typeof hibiki.send !== 'function')
-    throw new Error('Electron send not available')
+    throw new TypeError('Electron send not available')
   hibiki.send('audio:effectChunk', { guildId, streamId, chunk })
 }
 

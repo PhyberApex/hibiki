@@ -41,14 +41,20 @@ export function createUsageStatsSettings(store: UsageStatsSettingsStore) {
   async function setEnabled(enabled: boolean): Promise<UsageStatsSettings> {
     if (typeof enabled !== 'boolean')
       throw new TypeError('Usage Stats need an "enabled" boolean')
-    const next = { ...(await get()), enabled }
+    const next = {
+      ...(await get()),
+      enabled,
+    }
     await store.set(USAGE_STATS_KEY, JSON.stringify(next))
     log.info(`Usage Stats ${enabled ? 'enabled' : 'disabled'}`)
     return next
   }
 
   async function markPrompted(): Promise<UsageStatsSettings> {
-    const next = { ...(await get()), prompted: true }
+    const next = {
+      ...(await get()),
+      prompted: true,
+    }
     await store.set(USAGE_STATS_KEY, JSON.stringify(next))
     log.info('Usage Stats invitation answered; it will not be shown again')
     return next

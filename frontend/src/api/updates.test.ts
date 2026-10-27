@@ -13,10 +13,30 @@ describe('updates API', () => {
   })
 
   it.each([
-    ['fetchUpdateCheckSettings', () => fetchUpdateCheckSettings(), 'getSettings', []],
-    ['updateUpdateCheckEnabled', () => updateUpdateCheckEnabled(false), 'setEnabled', [false]],
-    ['checkForUpdate', () => checkForUpdate(), 'check', []],
-    ['dismissUpdate', () => dismissUpdate('1.7.0'), 'dismiss', ['1.7.0']],
+    [
+      'fetchUpdateCheckSettings',
+      () => fetchUpdateCheckSettings(),
+      'getSettings',
+      [],
+    ],
+    [
+      'updateUpdateCheckEnabled',
+      () => updateUpdateCheckEnabled(false),
+      'setEnabled',
+      [false],
+    ],
+    [
+      'checkForUpdate',
+      () => checkForUpdate(),
+      'check',
+      [],
+    ],
+    [
+      'dismissUpdate',
+      () => dismissUpdate('1.7.0'),
+      'dismiss',
+      ['1.7.0'],
+    ],
   ])('%s calls updates.%s', async (_name, call, method, args) => {
     mockInvoke.mockResolvedValue(undefined)
     await (call as () => Promise<unknown>)()

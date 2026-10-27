@@ -28,7 +28,9 @@ export function resolveRegistryIndexUrl(override: string | undefined): string {
 function getCachePath(config: Config): string {
   const base = process.env.HIBIKI_USER_DATA
   const dbPath = config.database.path
-  const dir = base ? join(base, 'data') : dirname(dbPath)
+  const dir = base
+    ? join(base, 'data')
+    : dirname(dbPath)
   return join(dir, CACHE_FILENAME)
 }
 
@@ -105,7 +107,11 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
         throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText} (${indexUrl})`)
 
       const data = await response.json() as RegistryIndex
-      await writeCache(cachePath, { fetchedAt: new Date().toISOString(), url: indexUrl, data })
+      await writeCache(cachePath, {
+        fetchedAt: new Date().toISOString(),
+        url: indexUrl,
+        data,
+      })
       log.info(`Registry index cached (${data.scenes.length} scenes)`)
       return data
     },

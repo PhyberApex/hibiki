@@ -127,7 +127,9 @@ export async function captureAudioFrom(
   let packets = 0
   let silenceFrames = 0
   let lastAudioAt: number | undefined
-  const opus = receiver.subscribe(userId, { end: { behavior: EndBehaviorType.Manual } })
+  const opus = receiver.subscribe(userId, {
+    end: { behavior: EndBehaviorType.Manual },
+  })
   opus.on('data', (packet: Buffer) => {
     packets += 1
     if (packet.equals(SILENCE_FRAME))

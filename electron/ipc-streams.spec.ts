@@ -48,15 +48,31 @@ describe('registerAudioStreamHandlers: Music lane', () => {
     const player = fakePlayer()
     registerAudioStreamHandlers(ipc, player)
 
-    await ipc.invoke('audio:startStream', { guildId: 'g1', streamId: 's1', metadata: { title: 'Song' } })
+    await ipc.invoke('audio:startStream', {
+      guildId: 'g1',
+      streamId: 's1',
+      metadata: { title: 'Song' },
+    })
     expect(player.startStream).toHaveBeenCalledWith('g1', expect.anything(), { title: 'Song' }, 's1')
     const stream: Readable = player.startStream.mock.calls[0][1]
     const chunks = collect(stream)
     const done = ended(stream)
 
-    ipc.send('audio:chunk', { guildId: 'g1', streamId: 's1', chunk: new Uint8Array([1, 2]) })
-    ipc.send('audio:chunk', { guildId: 'g1', streamId: 's1', chunk: new Uint8Array([]) })
-    ipc.send('audio:chunk', { guildId: 'g1', streamId: 's1', chunk: new Uint8Array([3]) })
+    ipc.send('audio:chunk', {
+      guildId: 'g1',
+      streamId: 's1',
+      chunk: new Uint8Array([1, 2]),
+    })
+    ipc.send('audio:chunk', {
+      guildId: 'g1',
+      streamId: 's1',
+      chunk: new Uint8Array([]),
+    })
+    ipc.send('audio:chunk', {
+      guildId: 'g1',
+      streamId: 's1',
+      chunk: new Uint8Array([3]),
+    })
     await ipc.invoke('audio:stopStream', { guildId: 'g1', streamId: 's1' })
     await done
 
@@ -78,7 +94,11 @@ describe('registerAudioStreamHandlers: Music lane', () => {
 
     const second: Readable = player.startStream.mock.calls[1][1]
     const chunks = collect(second)
-    ipc.send('audio:chunk', { guildId: 'g1', streamId: 's1', chunk: new Uint8Array([9]) })
+    ipc.send('audio:chunk', {
+      guildId: 'g1',
+      streamId: 's1',
+      chunk: new Uint8Array([9]),
+    })
     expect(Buffer.concat(chunks)).toEqual(Buffer.from([9]))
   })
 
@@ -86,10 +106,22 @@ describe('registerAudioStreamHandlers: Music lane', () => {
     const ipc = fakeIpcMain()
     registerAudioStreamHandlers(ipc, fakePlayer())
 
-    ipc.send('audio:chunk', { guildId: 'g1', streamId: 'ghost', chunk: new Uint8Array([1]) })
-    ipc.send('audio:chunk', { guildId: 'g1', streamId: 'ghost', chunk: new Uint8Array([2]) })
+    ipc.send('audio:chunk', {
+      guildId: 'g1',
+      streamId: 'ghost',
+      chunk: new Uint8Array([1]),
+    })
+    ipc.send('audio:chunk', {
+      guildId: 'g1',
+      streamId: 'ghost',
+      chunk: new Uint8Array([2]),
+    })
     await ipc.invoke('audio:startStream', { guildId: 'g1', streamId: 'other' })
-    ipc.send('audio:chunk', { guildId: 'g1', streamId: 'ghost', chunk: new Uint8Array([3]) })
+    ipc.send('audio:chunk', {
+      guildId: 'g1',
+      streamId: 'ghost',
+      chunk: new Uint8Array([3]),
+    })
 
     expect(spies.warn).toHaveBeenCalledTimes(1)
     expect(spies.warn).toHaveBeenCalledWith('[ipc]', expect.stringContaining('unknown stream ghost in guild g1'))
@@ -99,10 +131,18 @@ describe('registerAudioStreamHandlers: Music lane', () => {
     const ipc = fakeIpcMain()
     registerAudioStreamHandlers(ipc, fakePlayer())
 
-    ipc.send('audio:chunk', { guildId: 'g1', streamId: 's1', chunk: new Uint8Array([1]) })
+    ipc.send('audio:chunk', {
+      guildId: 'g1',
+      streamId: 's1',
+      chunk: new Uint8Array([1]),
+    })
     await ipc.invoke('audio:startStream', { guildId: 'g1', streamId: 's1' })
     await ipc.invoke('audio:stopStream', { guildId: 'g1', streamId: 's1' })
-    ipc.send('audio:chunk', { guildId: 'g1', streamId: 's1', chunk: new Uint8Array([2]) })
+    ipc.send('audio:chunk', {
+      guildId: 'g1',
+      streamId: 's1',
+      chunk: new Uint8Array([2]),
+    })
 
     expect(spies.warn).toHaveBeenCalledTimes(2)
   })
@@ -111,9 +151,18 @@ describe('registerAudioStreamHandlers: Music lane', () => {
     const ipc = fakeIpcMain()
     registerAudioStreamHandlers(ipc, fakePlayer())
 
-    for (let i = 0; i < 257; i++)
-      ipc.send('audio:chunk', { guildId: 'g1', streamId: `s${i}`, chunk: new Uint8Array([1]) })
-    ipc.send('audio:chunk', { guildId: 'g1', streamId: 's0', chunk: new Uint8Array([1]) })
+    for (let i = 0; i < 257; i++) {
+      ipc.send('audio:chunk', {
+        guildId: 'g1',
+        streamId: `s${i}`,
+        chunk: new Uint8Array([1]),
+      })
+    }
+    ipc.send('audio:chunk', {
+      guildId: 'g1',
+      streamId: 's0',
+      chunk: new Uint8Array([1]),
+    })
 
     expect(spies.warn).toHaveBeenCalledTimes(258)
   })
@@ -142,8 +191,16 @@ describe('registerAudioStreamHandlers: effect lane', () => {
     const chunks = collect(stream)
     const done = ended(stream)
 
-    ipc.send('audio:effectChunk', { guildId: 'g1', streamId: id, chunk: new Uint8Array([4]) })
-    ipc.send('audio:effectChunk', { guildId: 'g1', streamId: id, chunk: new Uint8Array([5]) })
+    ipc.send('audio:effectChunk', {
+      guildId: 'g1',
+      streamId: id,
+      chunk: new Uint8Array([4]),
+    })
+    ipc.send('audio:effectChunk', {
+      guildId: 'g1',
+      streamId: id,
+      chunk: new Uint8Array([5]),
+    })
     await ipc.invoke('audio:stopEffectStream', { guildId: 'g1', streamId: id })
     await done
 
@@ -186,7 +243,10 @@ describe('registerAudioStreamHandlers: effect lane', () => {
     const first = collect(player.startEffectStream.mock.calls[0][1])
     const second = collect(player.startEffectStream.mock.calls[1][1])
 
-    ipc.send('audio:effectChunk', { guildId: 'g1', chunk: new Uint8Array([7]) })
+    ipc.send('audio:effectChunk', {
+      guildId: 'g1',
+      chunk: new Uint8Array([7]),
+    })
 
     expect(Buffer.concat(first)).toEqual(Buffer.from([7]))
     expect(second).toHaveLength(0)
@@ -206,7 +266,11 @@ describe('registerAudioStreamHandlers: effect lane', () => {
     await ipc.invoke('audio:stopEffectStream', { guildId: 'g1' })
     await allEnded
 
-    ipc.send('audio:effectChunk', { guildId: 'g1', streamId: 'a', chunk: new Uint8Array([1]) })
+    ipc.send('audio:effectChunk', {
+      guildId: 'g1',
+      streamId: 'a',
+      chunk: new Uint8Array([1]),
+    })
     expect(spies.warn).toHaveBeenCalledWith('[ipc]', expect.stringContaining('unknown stream a in guild g1'))
   })
 
@@ -214,7 +278,11 @@ describe('registerAudioStreamHandlers: effect lane', () => {
     const ipc = fakeIpcMain()
     registerAudioStreamHandlers(ipc, fakePlayer())
 
-    ipc.send('audio:effectChunk', { guildId: 'g9', streamId: 'x', chunk: new Uint8Array([1]) })
+    ipc.send('audio:effectChunk', {
+      guildId: 'g9',
+      streamId: 'x',
+      chunk: new Uint8Array([1]),
+    })
     await expect(ipc.invoke('audio:stopEffectStream', { guildId: 'g9', streamId: 'x' })).resolves.toBeUndefined()
 
     expect(spies.warn).toHaveBeenCalledTimes(1)
@@ -224,10 +292,18 @@ describe('registerAudioStreamHandlers: effect lane', () => {
 describe('registerApiHandler', () => {
   it('dispatches to the domain method and returns its result', async () => {
     const ipc = fakeIpcMain()
-    const api = { player: { join: jest.fn().mockResolvedValue('ok') } }
+    const api = {
+      player: {
+        join: jest.fn().mockResolvedValue('ok'),
+      },
+    }
     registerApiHandler(ipc, api, () => null)
 
-    await expect(ipc.invoke('api', { domain: 'player', method: 'join', args: ['g1', 'c1'] })).resolves.toBe('ok')
+    await expect(ipc.invoke('api', {
+      domain: 'player',
+      method: 'join',
+      args: ['g1', 'c1'],
+    })).resolves.toBe('ok')
     expect(api.player.join).toHaveBeenCalledWith('g1', 'c1')
   })
 
@@ -243,7 +319,11 @@ describe('registerApiHandler', () => {
   it('logs and rethrows a failing call', async () => {
     const ipc = fakeIpcMain()
     const err = new Error('boom')
-    registerApiHandler(ipc, { sounds: { delete: jest.fn().mockRejectedValue(err) } }, () => null)
+    registerApiHandler(ipc, {
+      sounds: {
+        delete: jest.fn().mockRejectedValue(err),
+      },
+    }, () => null)
 
     await expect(ipc.invoke('api', { domain: 'sounds', method: 'delete', args: [] })).rejects.toBe(err)
     expect(spies.error).toHaveBeenCalledWith('[ipc]', 'sounds.delete failed:', err)
@@ -251,8 +331,17 @@ describe('registerApiHandler', () => {
 
   it('re-syncs hotkeys after a call that may change them, and only then', async () => {
     const ipc = fakeIpcMain()
-    const hotkeys = { sync: jest.fn().mockResolvedValue(undefined) }
-    const api = { scenes: { save: jest.fn() }, player: { stop: jest.fn() } }
+    const hotkeys = {
+      sync: jest.fn().mockResolvedValue(undefined),
+    }
+    const api = {
+      scenes: {
+        save: jest.fn(),
+      },
+      player: {
+        stop: jest.fn(),
+      },
+    }
     registerApiHandler(ipc, api, () => hotkeys)
 
     await ipc.invoke('api', { domain: 'player', method: 'stop', args: [] })
@@ -264,7 +353,12 @@ describe('registerApiHandler', () => {
 
 describe('createLocalSink', () => {
   function fakeWindow() {
-    return { isDestroyed: jest.fn(() => false), webContents: { send: jest.fn() } }
+    return {
+      isDestroyed: jest.fn(() => false),
+      webContents: {
+        send: jest.fn(),
+      },
+    }
   }
 
   it('forwards start, chunk and stop to webContents.send', () => {
@@ -277,7 +371,10 @@ describe('createLocalSink', () => {
 
     expect(win.webContents.send.mock.calls).toEqual([
       ['audio:localSinkStart'],
-      ['audio:localSinkChunk', Uint8Array.from([1, 2, 3])],
+      [
+        'audio:localSinkChunk',
+        Uint8Array.from([1, 2, 3]),
+      ],
       ['audio:localSinkStop'],
     ])
   })
@@ -295,7 +392,10 @@ describe('createLocalSink', () => {
   it('throws on start and write without a live window, but stop is a no-op', () => {
     const destroyed = fakeWindow()
     destroyed.isDestroyed.mockReturnValue(true)
-    for (const getWindow of [() => null, () => destroyed]) {
+    for (const getWindow of [
+      () => null,
+      () => destroyed,
+    ]) {
       const sink = createLocalSink(getWindow)
       expect(() => sink.start()).toThrow('No renderer to play local audio in')
       expect(() => sink.write(Buffer.from([1]))).toThrow('No renderer to play local audio in')

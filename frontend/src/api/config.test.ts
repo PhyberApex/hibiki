@@ -115,7 +115,16 @@ describe('config API', () => {
 
   it('saveFileDialog invokes dialog:saveFile', async () => {
     mockInvoke.mockResolvedValue('/save/path.zip')
-    const opts = { title: 'Save', defaultPath: 'file.zip', filters: [{ name: 'ZIP', extensions: ['zip'] }] }
+    const opts = {
+      title: 'Save',
+      defaultPath: 'file.zip',
+      filters: [
+        {
+          name: 'ZIP',
+          extensions: ['zip'],
+        },
+      ],
+    }
     const result = await saveFileDialog(opts)
     expect(mockInvoke).toHaveBeenCalledWith('dialog:saveFile', opts)
     expect(result).toBe('/save/path.zip')
@@ -129,7 +138,15 @@ describe('config API', () => {
 
   it('openFileDialog invokes dialog:openFile', async () => {
     mockInvoke.mockResolvedValue('/open/file.mp3')
-    const opts = { title: 'Open', filters: [{ name: 'Audio', extensions: ['mp3'] }] }
+    const opts = {
+      title: 'Open',
+      filters: [
+        {
+          name: 'Audio',
+          extensions: ['mp3'],
+        },
+      ],
+    }
     const result = await openFileDialog(opts)
     expect(mockInvoke).toHaveBeenCalledWith('dialog:openFile', opts)
     expect(result).toBe('/open/file.mp3')
@@ -142,7 +159,9 @@ describe('config API', () => {
   })
 
   it('listBookmarks uses apiCall', async () => {
-    const bookmarks = [{ name: 'Test', url: 'https://example.com' }]
+    const bookmarks = [
+      { name: 'Test', url: 'https://example.com' },
+    ]
     mockInvoke.mockResolvedValue(bookmarks)
     const result = await listBookmarks()
     expect(mockInvoke).toHaveBeenCalledWith('api', {
@@ -155,7 +174,9 @@ describe('config API', () => {
 
   it('saveBookmarks uses apiCall', async () => {
     mockInvoke.mockResolvedValue(undefined)
-    const bookmarks = [{ name: 'Test', url: 'https://example.com' }]
+    const bookmarks = [
+      { name: 'Test', url: 'https://example.com' },
+    ]
     await saveBookmarks(bookmarks)
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'config',
@@ -235,7 +256,11 @@ describe('config API', () => {
     expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'getActiveOutputTarget', args: [] })
     mockInvoke.mockResolvedValue(undefined)
     await updateActiveOutputTarget('discord')
-    expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'setActiveOutputTarget', args: ['discord'] })
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'setActiveOutputTarget',
+      args: ['discord'],
+    })
   })
 
   const visionConfig = {
@@ -243,7 +268,12 @@ describe('config API', () => {
     enabled: false,
     configured: true,
     claude: { keyConfigured: true, configured: true },
-    openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+    openaiCompatible: {
+      keyConfigured: false,
+      configured: false,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-6-astra',
+    },
   }
 
   it('fetchVisionConfig uses apiCall', async () => {
@@ -322,7 +352,13 @@ describe('config API', () => {
     expect(await fetchHotkeySettings()).toEqual({ enabled: true })
     expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'getHotkeySettings', args: [] })
     await updateHotkeySettings({ enabled: false, stopHotkey: 'F12' })
-    expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'setHotkeySettings', args: [{ enabled: false, stopHotkey: 'F12' }] })
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'setHotkeySettings',
+      args: [
+        { enabled: false, stopHotkey: 'F12' },
+      ],
+    })
   })
 
   it('reads and writes through the config domain', async () => {
@@ -330,6 +366,12 @@ describe('config API', () => {
     expect(await fetchLocalOutputDevice()).toBeNull()
     expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'getLocalOutputDevice', args: [] })
     await updateLocalOutputDevice({ deviceId: 'a', label: 'A' })
-    expect(mockInvoke).toHaveBeenCalledWith('api', { domain: 'config', method: 'setLocalOutputDevice', args: [{ deviceId: 'a', label: 'A' }] })
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'config',
+      method: 'setLocalOutputDevice',
+      args: [
+        { deviceId: 'a', label: 'A' },
+      ],
+    })
   })
 })

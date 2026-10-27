@@ -8,8 +8,15 @@ import { trackUsage } from '@/api/usage-stats'
 import { dispatchHotkey } from './dispatch'
 import { reportHotkeyRegistrationFailures, startHotkeyDispatch } from './index'
 
-const toast = { show: vi.fn() }
-const player = { playingSceneId: 'storm', targetId: 'local', canPlay: true, activeEffectCount: vi.fn(() => 0) }
+const toast = {
+  show: vi.fn(),
+}
+const player = {
+  playingSceneId: 'storm',
+  targetId: 'local',
+  canPlay: true,
+  activeEffectCount: vi.fn(() => 0),
+}
 const playback = {
   playScene: vi.fn(),
   crossfadeToScene: vi.fn(),
@@ -19,14 +26,31 @@ const playback = {
   playEffect: vi.fn(),
 }
 
-vi.mock('@/stores/toast', () => ({ useToastStore: () => toast }))
-vi.mock('@/stores/player', () => ({ usePlayerStore: () => player }))
-vi.mock('@/stores/scene-playback', () => ({ useScenePlaybackStore: () => playback }))
-vi.mock('@/api/hotkeys', () => ({ fetchHotkeyStatus: vi.fn(), onHotkeyFired: vi.fn() }))
-vi.mock('@/api/config', () => ({ fetchHotkeySettings: vi.fn() }))
-vi.mock('@/api/scenes', () => ({ listScenes: vi.fn() }))
-vi.mock('@/api/usage-stats', () => ({ trackUsage: vi.fn() }))
-vi.mock('./dispatch', () => ({ dispatchHotkey: vi.fn() }))
+vi.mock('@/stores/toast', () => ({
+  useToastStore: () => toast,
+}))
+vi.mock('@/stores/player', () => ({
+  usePlayerStore: () => player,
+}))
+vi.mock('@/stores/scene-playback', () => ({
+  useScenePlaybackStore: () => playback,
+}))
+vi.mock('@/api/hotkeys', () => ({
+  fetchHotkeyStatus: vi.fn(),
+  onHotkeyFired: vi.fn(),
+}))
+vi.mock('@/api/config', () => ({
+  fetchHotkeySettings: vi.fn(),
+}))
+vi.mock('@/api/scenes', () => ({
+  listScenes: vi.fn(),
+}))
+vi.mock('@/api/usage-stats', () => ({
+  trackUsage: vi.fn(),
+}))
+vi.mock('./dispatch', () => ({
+  dispatchHotkey: vi.fn(),
+}))
 
 /** Installs the dispatch and returns the `hotkey:fired` listener it registered plus its unsubscribe. */
 function install() {
@@ -96,7 +120,10 @@ describe('startHotkeyDispatch', () => {
     deps.refuse('No Scene is playing')
     expect(toast.show).toHaveBeenCalledWith({ type: 'warning', text: 'No Scene is playing' })
     deps.trackFired('scene')
-    expect(trackUsage).toHaveBeenCalledWith({ name: 'hotkey-fired', data: { kind: 'scene' } })
+    expect(trackUsage).toHaveBeenCalledWith({
+      name: 'hotkey-fired',
+      data: { kind: 'scene' },
+    })
   })
 })
 
@@ -104,7 +131,11 @@ describe('reportHotkeyRegistrationFailures', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('stays quiet when every key registered', async () => {
-    vi.mocked(fetchHotkeyStatus).mockResolvedValue({ enabled: true, registered: ['F13'], failures: [] })
+    vi.mocked(fetchHotkeyStatus).mockResolvedValue({
+      enabled: true,
+      registered: ['F13'],
+      failures: [],
+    })
     await reportHotkeyRegistrationFailures()
     expect(toast.show).not.toHaveBeenCalled()
   })

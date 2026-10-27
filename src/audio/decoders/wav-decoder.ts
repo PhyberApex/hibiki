@@ -48,7 +48,10 @@ async function readChunkHeader(handle: FileHandle, offset: number): Promise<{ id
   const { bytesRead } = await handle.read(header, 0, 8, offset)
   if (bytesRead < 8)
     return null
-  return { id: header.toString('ascii', 0, 4), size: header.readUInt32LE(4) }
+  return {
+    id: header.toString('ascii', 0, 4),
+    size: header.readUInt32LE(4),
+  }
 }
 
 async function parseWavFormat(handle: FileHandle): Promise<WavFormat> {

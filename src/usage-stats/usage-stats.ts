@@ -94,8 +94,12 @@ function quote(name: string): string {
  * reason it may not; the reason names the event and key, never a value.
  */
 function validate(event: UsageStatsEvent): { payload: Omit<UsageStatsPayload, 'hostname'> } | { reason: string } {
-  const name = typeof event?.name === 'string' ? event.name : ''
-  const rules = Object.hasOwn(USAGE_STATS_EVENTS, name) ? USAGE_STATS_EVENTS[name] : undefined
+  const name = typeof event?.name === 'string'
+    ? event.name
+    : ''
+  const rules = Object.hasOwn(USAGE_STATS_EVENTS, name)
+    ? USAGE_STATS_EVENTS[name]
+    : undefined
   if (!rules)
     return { reason: `unknown event ${quote(name)}` }
   const url = event.url ?? '/'
@@ -103,14 +107,18 @@ function validate(event: UsageStatsEvent): { payload: Omit<UsageStatsPayload, 'h
     return { reason: `event "${name}" has an unknown url` }
   const data: UsageStatsData = {}
   for (const [key, value] of Object.entries(event.data ?? {})) {
-    const rule = Object.hasOwn(rules, key) ? rules[key] : undefined
+    const rule = Object.hasOwn(rules, key)
+      ? rules[key]
+      : undefined
     if (!rule)
       return { reason: `event "${name}" has a key that is not allowed: ${quote(key)}` }
     if (!isAllowedValue(rule, value))
       return { reason: `event "${name}" has a value outside the allowlist for key "${key}"` }
     data[key] = value as string | number | boolean
   }
-  return { payload: { name, url, data } }
+  return {
+    payload: { name, url, data },
+  }
 }
 
 /**
@@ -128,7 +136,9 @@ export function createUsageStats(options: {
 }) {
   const { settings, sender, gate, environment } = options
   const timeoutMs = options.timeoutMs ?? DEFAULT_USAGE_STATS_TIMEOUT_MS
-  const gatedBecause = !gate.packaged ? 'this is not a packaged build' : gate.killSwitch ? 'HIBIKI_USAGE_STATS=off' : null
+  const gatedBecause = !gate.packaged
+    ? 'this is not a packaged build'
+    : gate.killSwitch ? 'HIBIKI_USAGE_STATS=off' : null
   let failedBefore = false
 
   if (gatedBecause)
@@ -141,7 +151,10 @@ export function createUsageStats(options: {
       timer = setTimeout(() => reject(new Error(`timed out after ${timeoutMs} ms`)), timeoutMs)
       timer.unref?.()
     })
-    Promise.race([Promise.resolve().then(() => sender.send(payload)), timeout])
+    Promise.race([
+      Promise.resolve().then(() => sender.send(payload)),
+      timeout,
+    ])
       .catch((err) => {
         if (!failedBefore) {
           failedBefore = true
@@ -176,7 +189,12 @@ export function createUsageStats(options: {
   /** Resolves once the event is dropped or handed to the sender; never waits for the network, never rejects. */
   async function track(event: UsageStatsEvent): Promise<void> {
     try {
-      const candidate = event?.name === 'app-start' ? { ...event, data: appStartData() } : event
+      const candidate = event?.name === 'app-start'
+        ? {
+            ...event,
+            data: appStartData(),
+          }
+        : event
       const result = validate(candidate)
       if ('reason' in result) {
         log.warn(`Dropped a Usage Stats event: ${result.reason}`)

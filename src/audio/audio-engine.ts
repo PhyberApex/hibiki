@@ -290,7 +290,9 @@ export class AudioEngine {
 
   /** Ends every music stream for this guild, regardless of id. */
   stopAllMusic() {
-    for (const id of [...this.musicStreams.keys()])
+    for (const id of [
+      ...this.musicStreams.keys(),
+    ])
       this.stopMusicStream(id)
   }
 
@@ -316,8 +318,17 @@ export class AudioEngine {
       volume,
     })
 
-    const active: ActiveStream = { source: stream, input, volume, feed: { stop: () => {} } }
-    active.feed = feedMixerInput(stream, input, { onEnded: () => onEnded(active) })
+    const active: ActiveStream = {
+      source: stream,
+      input,
+      volume,
+      feed: {
+        stop: () => {},
+      },
+    }
+    active.feed = feedMixerInput(stream, input, {
+      onEnded: () => onEnded(active),
+    })
     return active
   }
 

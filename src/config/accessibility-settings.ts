@@ -10,7 +10,9 @@ export const DEFAULT_ACCESSIBILITY_SETTINGS: AccessibilitySettings = {
 }
 
 export function normalizeAccessibilitySettings(input: Partial<AccessibilitySettings> | null | undefined): AccessibilitySettings {
-  const source = typeof input === 'object' && input !== null ? input : {}
+  const source = typeof input === 'object' && input !== null
+    ? input
+    : {}
   return {
     luminancePulses: typeof source.luminancePulses === 'boolean'
       ? source.luminancePulses

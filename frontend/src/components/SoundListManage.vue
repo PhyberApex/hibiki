@@ -48,7 +48,9 @@ function showToast(type: 'success' | 'error', text: string) {
 
 function fileExt(filename: string): string {
   const dot = filename.lastIndexOf('.')
-  return dot >= 0 ? filename.slice(dot + 1).toUpperCase() : ''
+  return dot >= 0
+    ? filename.slice(dot + 1).toUpperCase()
+    : ''
 }
 
 function formatSize(bytes: number): string {
@@ -62,7 +64,20 @@ function formatSize(bytes: number): string {
 function formatDate(iso: string): string {
   const d = new Date(iso)
   const now = new Date()
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ]
   if (d.getFullYear() === now.getFullYear())
     return `${months[d.getMonth()]} ${d.getDate()}`
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
@@ -79,7 +94,9 @@ async function loadSounds() {
         : await listEffects()
   }
   catch (err) {
-    error.value = err instanceof Error ? err.message : 'Couldn\'t load sounds. Try switching tabs and coming back.'
+    error.value = err instanceof Error
+      ? err.message
+      : 'Couldn\'t load sounds. Try switching tabs and coming back.'
   }
   finally {
     loading.value = false
@@ -101,7 +118,9 @@ const filteredItems = computed(() => {
 
 async function handleFiles(files: FileList | File[] | null) {
   const fileArray = files
-    ? (Array.isArray(files) ? files : Array.from(files))
+    ? (Array.isArray(files)
+        ? files
+        : Array.from(files))
     : []
   if (fileArray.length === 0)
     return
@@ -116,7 +135,9 @@ async function handleFiles(files: FileList | File[] | null) {
       showToast('success', `Added to ${props.type}.`)
     }
     catch (err) {
-      const msg = err instanceof Error ? err.message : 'Upload failed. Check that the file is a supported audio format and try again.'
+      const msg = err instanceof Error
+        ? err.message
+        : 'Upload failed. Check that the file is a supported audio format and try again.'
       error.value = msg
       showToast('error', msg)
     }
@@ -131,15 +152,24 @@ async function handleFiles(files: FileList | File[] | null) {
     const { success, failed } = await uploadSoundsBulk(props.type, fileArray)
     await loadSounds()
     emit('updated')
-    if (failed.length === 0)
-      showToast('success', `Added ${success.length} ${success.length === 1 ? 'file' : 'files'} to ${props.type}.`)
-    else if (success.length > 0)
-      showToast('success', `Added ${success.length} ${success.length === 1 ? 'file' : 'files'}, but ${failed.length} couldn't be uploaded. Check that all files are audio.`)
-    else
+    if (failed.length === 0) {
+      showToast('success', `Added ${success.length} ${success.length === 1
+        ? 'file'
+        : 'files'} to ${props.type}.`)
+    }
+    else if (success.length > 0) {
+      showToast('success', `Added ${success.length} ${success.length === 1
+        ? 'file'
+        : 'files'}, but ${failed.length} couldn't be uploaded. Check that all files are audio.`)
+    }
+    else {
       showToast('error', `None of the ${failed.length} files could be uploaded. Make sure they're audio files (MP3, WAV, OGG, etc).`)
+    }
   }
   catch (err) {
-    showToast('error', err instanceof Error ? err.message : 'Upload failed. Check that the files are supported audio formats and try again.')
+    showToast('error', err instanceof Error
+      ? err.message
+      : 'Upload failed. Check that the files are supported audio formats and try again.')
   }
   finally {
     uploading.value = false
@@ -223,7 +253,9 @@ async function confirmDelete(id: string) {
     showToast('success', 'Removed from library.')
   }
   catch (err) {
-    showToast('error', err instanceof Error ? err.message : 'Couldn\'t delete. The file may be in use — try again in a moment.')
+    showToast('error', err instanceof Error
+      ? err.message
+      : 'Couldn\'t delete. The file may be in use — try again in a moment.')
   }
 }
 
@@ -249,12 +281,16 @@ async function saveTags(sound: SoundFile) {
   savingTags.value = true
   try {
     const saved = await updateSoundTags(props.type, sound.id, parseTags(tagsDraft.value))
-    items.value = items.value.map(s => (s.id === sound.id ? { ...s, tags: saved } : s))
+    items.value = items.value.map(s => (s.id === sound.id
+      ? { ...s, tags: saved }
+      : s))
     cancelEditTags()
     emit('updated')
   }
   catch (err) {
-    showToast('error', err instanceof Error ? err.message : 'Couldn\'t save tags. Try again.')
+    showToast('error', err instanceof Error
+      ? err.message
+      : 'Couldn\'t save tags. Try again.')
   }
   finally {
     savingTags.value = false

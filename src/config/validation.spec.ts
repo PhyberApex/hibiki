@@ -35,7 +35,13 @@ describe('validationSchema', () => {
     'HIBIKI_WEB_DIST',
     'HIBIKI_DATA_PATH',
   ])('rejects a non-string or empty %s', (key) => {
-    for (const value of [42, true, {}, ['a'], '']) {
+    for (const value of [
+      42,
+      true,
+      {},
+      ['a'],
+      '',
+    ]) {
       const { error } = validationSchema.validate({ [key]: value })
       expect(error?.details[0]?.path).toEqual([key])
     }

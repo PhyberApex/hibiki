@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchLocalOutputDevice } from '@/api/config'
 import { listOutputDevices, OutputDeviceRouter, resolveOutputDevice } from './output-device'
 
-vi.mock('@/api/config', () => ({ fetchLocalOutputDevice: vi.fn() }))
+vi.mock('@/api/config', () => ({
+  fetchLocalOutputDevice: vi.fn(),
+}))
 
 const usb = { deviceId: 'usb', label: 'USB Speaker' }
 const builtin = { deviceId: 'builtin', label: 'Built-in Output' }
@@ -27,7 +29,9 @@ describe('listOutputDevices', () => {
       { kind: 'audiooutput', deviceId: 'default', label: 'Default' },
       { kind: 'audiooutput', deviceId: 'a', label: '' },
     ] as MediaDeviceInfo[]
-    expect(listOutputDevices(all)).toEqual([{ deviceId: 'a', label: 'Output device 1' }])
+    expect(listOutputDevices(all)).toEqual([
+      { deviceId: 'a', label: 'Output device 1' },
+    ])
   })
 })
 
@@ -59,7 +63,10 @@ describe('outputDeviceRouter', () => {
     router.setChoice(usb)
     router.setDevices([builtin])
     router.setDevices([builtin])
-    router.setDevices([builtin, { deviceId: 'x', label: 'x' }])
+    router.setDevices([
+      builtin,
+      { deviceId: 'x', label: 'x' },
+    ])
     expect(onMissing).toHaveBeenCalledTimes(1)
     expect(onMissing).toHaveBeenCalledWith('USB Speaker')
     router.setDevices([builtin, usb])
@@ -94,7 +101,9 @@ describe('installOutputDevice', () => {
   }
 
   beforeEach(() => {
-    devices = [output('builtin', 'Built-in Output')]
+    devices = [
+      output('builtin', 'Built-in Output'),
+    ]
     onDeviceChange = undefined
     vi.stubGlobal('navigator', { mediaDevices })
     vi.mocked(fetchLocalOutputDevice).mockResolvedValue(usb)
@@ -120,7 +129,10 @@ describe('installOutputDevice', () => {
     await flushPromises()
     expect(notify).toHaveBeenCalledExactlyOnceWith('USB Speaker')
     expect(outputDeviceRouter.sinkId).toBe('')
-    devices = [output('builtin', 'Built-in Output'), output('hdmi', 'HDMI')]
+    devices = [
+      output('builtin', 'Built-in Output'),
+      output('hdmi', 'HDMI'),
+    ]
     await onDeviceChange?.()
     expect(notify).toHaveBeenCalledOnce()
     expect(outputDeviceRouter.sinkId).toBe('')
@@ -133,17 +145,24 @@ describe('installOutputDevice', () => {
     expect(el.setSinkId).not.toHaveBeenCalled()
     installOutputDevice(vi.fn())
     await flushPromises()
-    devices = [output('builtin', 'Built-in Output'), output('usb', 'USB Speaker')]
+    devices = [
+      output('builtin', 'Built-in Output'),
+      output('usb', 'USB Speaker'),
+    ]
     await onDeviceChange?.()
     expect(outputDeviceRouter.sinkId).toBe('usb')
     expect(el.setSinkId).toHaveBeenCalledWith('usb')
-    devices = [output('builtin', 'Built-in Output')]
+    devices = [
+      output('builtin', 'Built-in Output'),
+    ]
     await onDeviceChange?.()
     expect(el.setSinkId).toHaveBeenLastCalledWith('')
   })
 
   it('routes an element bound after the device resolved straight away', async () => {
-    devices = [output('usb', 'USB Speaker')]
+    devices = [
+      output('usb', 'USB Speaker'),
+    ]
     const { bindAudioElement, installOutputDevice } = await load()
     installOutputDevice(vi.fn())
     await flushPromises()
@@ -153,7 +172,9 @@ describe('installOutputDevice', () => {
   })
 
   it('logs a setSinkId rejection instead of throwing', async () => {
-    devices = [output('usb', 'USB Speaker')]
+    devices = [
+      output('usb', 'USB Speaker'),
+    ]
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { bindAudioElement, installOutputDevice } = await load()
     const el = audioElement(vi.fn(async () => {
@@ -167,7 +188,9 @@ describe('installOutputDevice', () => {
   })
 
   it('skips elements without setSinkId', async () => {
-    devices = [output('usb', 'USB Speaker')]
+    devices = [
+      output('usb', 'USB Speaker'),
+    ]
     const { bindAudioElement, installOutputDevice } = await load()
     installOutputDevice(vi.fn())
     await flushPromises()
@@ -175,7 +198,9 @@ describe('installOutputDevice', () => {
   })
 
   it('falls back to the system default when the stored choice cannot be loaded', async () => {
-    devices = [output('usb', 'USB Speaker')]
+    devices = [
+      output('usb', 'USB Speaker'),
+    ]
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.mocked(fetchLocalOutputDevice).mockRejectedValue(new Error('ipc down'))
     const { installOutputDevice, outputDeviceRouter } = await load()

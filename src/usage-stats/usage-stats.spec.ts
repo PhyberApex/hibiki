@@ -6,7 +6,13 @@ import { createUsageStatsSettings } from '../config/usage-stats-settings'
 import { createAppConfig } from '../persistence'
 import { buildUserAgent, createUsageStats, resolveUsageStatsHost, USAGE_STATS_HOST } from './usage-stats'
 
-const ENVIRONMENT = { appVersion: '1.7.0', electronVersion: '41.0.0', platform: 'linux', arch: 'x64', locale: 'en-US' }
+const ENVIRONMENT = {
+  appVersion: '1.7.0',
+  electronVersion: '41.0.0',
+  platform: 'linux',
+  arch: 'x64',
+  locale: 'en-US',
+}
 
 function makeConfig() {
   const tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-usage-stats-'))
@@ -19,7 +25,9 @@ function makeConfig() {
       ambienceDir: join(tempRoot, 'ambience'),
       webDistDir: 'web-dist',
     },
-    database: { path: join(tempRoot, 'data', 'hibiki.json') },
+    database: {
+      path: join(tempRoot, 'data', 'hibiki.json'),
+    },
   }
 }
 
@@ -36,7 +44,10 @@ function setup(options: { gate?: UsageStatsGate, send?: (payload: UsageStatsPayl
     settings: createUsageStatsSettings(createAppConfig(config)),
     sender,
     gate: options.gate ?? { packaged: true, killSwitch: false },
-    environment: { ...ENVIRONMENT, ...options.environment },
+    environment: {
+      ...ENVIRONMENT,
+      ...options.environment,
+    },
     timeoutMs: options.timeoutMs,
   })
   const appConfigFile = join(config.audio.storageRoot, 'data', 'app-config.json')
@@ -53,7 +64,17 @@ function setup(options: { gate?: UsageStatsGate, send?: (payload: UsageStatsPayl
 
 const flush = () => new Promise(resolve => setImmediate(resolve))
 
-const SCENE_PLAY = { name: 'scene-play', url: '/scenes/:id', data: { musicMode: 'shuffle', music: 3, ambience: 2, effects: 5, target: 'local' } }
+const SCENE_PLAY = {
+  name: 'scene-play',
+  url: '/scenes/:id',
+  data: {
+    musicMode: 'shuffle',
+    music: 3,
+    ambience: 2,
+    effects: 5,
+    target: 'local',
+  },
+}
 
 describe('createUsageStats', () => {
   let warn: jest.SpyInstance
@@ -83,21 +104,36 @@ describe('createUsageStats', () => {
     await usageStats.setEnabled(true)
     await usageStats.setEnabled(true)
     await flush()
-    expect(sent).toEqual([{
-      name: 'app-start',
-      url: '/',
-      hostname: 'app.hibiki.phyberapex.de',
-      data: { platform: 'linux', arch: 'x64', version: '1.7.0', locale: 'en-US' },
-    }])
+    expect(sent).toEqual([
+      {
+        name: 'app-start',
+        url: '/',
+        hostname: 'app.hibiki.phyberapex.de',
+        data: {
+          platform: 'linux',
+          arch: 'x64',
+          version: '1.7.0',
+          locale: 'en-US',
+        },
+      },
+    ])
   })
 
   it('builds app-start from the environment, whatever the caller passes', async () => {
     const { usageStats, sent } = setup()
     await usageStats.setEnabled(true)
     sent.length = 0
-    await usageStats.track({ name: 'app-start', data: { platform: 'my-guild', guildId: '123' } })
+    await usageStats.track({
+      name: 'app-start',
+      data: { platform: 'my-guild', guildId: '123' },
+    })
     await flush()
-    expect(sent[0].data).toEqual({ platform: 'linux', arch: 'x64', version: '1.7.0', locale: 'en-US' })
+    expect(sent[0].data).toEqual({
+      platform: 'linux',
+      arch: 'x64',
+      version: '1.7.0',
+      locale: 'en-US',
+    })
   })
 
   it.each([
@@ -105,14 +141,18 @@ describe('createUsageStats', () => {
     ['es-419', 'es-419'],
     ['de', 'de'],
   ])('reduces locale %s to %s instead of losing app-start', async (locale, sentLocale) => {
-    const { usageStats, sent } = setup({ environment: { locale } })
+    const { usageStats, sent } = setup({
+      environment: { locale },
+    })
     await usageStats.setEnabled(true)
     await flush()
     expect(sent[0].data.locale).toBe(sentLocale)
   })
 
   it('leaves out an arch the allowlist does not know but still counts the launch', async () => {
-    const { usageStats, sent } = setup({ environment: { arch: 'riscv64' } })
+    const { usageStats, sent } = setup({
+      environment: { arch: 'riscv64' },
+    })
     await usageStats.setEnabled(true)
     await flush()
     expect(sent[0].data).toEqual({ platform: 'linux', version: '1.7.0', locale: 'en-US' })
@@ -139,8 +179,14 @@ describe('createUsageStats', () => {
   })
 
   it.each([
-    ['an unpackaged build', { packaged: false, killSwitch: false }],
-    ['the kill switch', { packaged: true, killSwitch: true }],
+    [
+      'an unpackaged build',
+      { packaged: false, killSwitch: false },
+    ],
+    [
+      'the kill switch',
+      { packaged: true, killSwitch: true },
+    ],
   ])('never sends under %s, even when enabled', async (_, gate) => {
     const { usageStats, sent } = setup({ gate })
     await usageStats.setEnabled(true)
@@ -155,22 +201,71 @@ describe('createUsageStats', () => {
     await usageStats.setEnabled(true)
     sent.length = 0
     await usageStats.track(SCENE_PLAY)
-    await usageStats.track({ name: 'routed-tab-toggle', url: '/browser', data: { routed: true, target: 'discord' } })
+    await usageStats.track({
+      name: 'routed-tab-toggle',
+      url: '/browser',
+      data: { routed: true, target: 'discord' },
+    })
     await flush()
     expect(sent).toEqual([
       { ...SCENE_PLAY, hostname: 'app.hibiki.phyberapex.de' },
-      { name: 'routed-tab-toggle', url: '/browser', hostname: 'app.hibiki.phyberapex.de', data: { routed: true, target: 'discord' } },
+      {
+        name: 'routed-tab-toggle',
+        url: '/browser',
+        hostname: 'app.hibiki.phyberapex.de',
+        data: { routed: true, target: 'discord' },
+      },
     ])
     expect(debug).toHaveBeenCalledWith('[usage-stats]', 'Sending scene-play (url /scenes/:id):', JSON.stringify(SCENE_PLAY.data))
   })
 
   it.each([
-    ['an unknown event name', { name: 'page-view' }, 'unknown event "page-view"'],
-    ['an unknown data key', { name: 'hotkey-fired', data: { kind: 'scene', extra: 1 } }, 'key that is not allowed: "extra"'],
-    ['a forbidden key', { name: 'scene-play', data: { guildId: '123456789' } }, 'key that is not allowed: "guildId"'],
-    ['an out-of-enum value', { name: 'target-switch', data: { target: 'my secret server' } }, 'outside the allowlist for key "target"'],
-    ['a non-integer count', { name: 'scene-play', data: { music: 1.5 } }, 'outside the allowlist for key "music"'],
-    ['a route that is not a view pattern', { name: 'target-switch', url: '/scenes/2f7c', data: { target: 'local' } }, 'unknown url'],
+    [
+      'an unknown event name',
+      { name: 'page-view' },
+      'unknown event "page-view"',
+    ],
+    [
+      'an unknown data key',
+      {
+        name: 'hotkey-fired',
+        data: { kind: 'scene', extra: 1 },
+      },
+      'key that is not allowed: "extra"',
+    ],
+    [
+      'a forbidden key',
+      {
+        name: 'scene-play',
+        data: { guildId: '123456789' },
+      },
+      'key that is not allowed: "guildId"',
+    ],
+    [
+      'an out-of-enum value',
+      {
+        name: 'target-switch',
+        data: { target: 'my secret server' },
+      },
+      'outside the allowlist for key "target"',
+    ],
+    [
+      'a non-integer count',
+      {
+        name: 'scene-play',
+        data: { music: 1.5 },
+      },
+      'outside the allowlist for key "music"',
+    ],
+    [
+      'a route that is not a view pattern',
+      {
+        name: 'target-switch',
+        url: '/scenes/2f7c',
+        data: { target: 'local' },
+      },
+      'unknown url',
+    ],
   ])('drops %s with a warn that never names the value', async (_, event, reason) => {
     const { usageStats, sent } = setup()
     await usageStats.setEnabled(true)
@@ -205,7 +300,10 @@ describe('createUsageStats', () => {
   it('gives up on a hanging send after the timeout, without retrying', async () => {
     jest.useFakeTimers()
     try {
-      const { usageStats, sender } = setup({ send: () => new Promise(() => {}), timeoutMs: 5000 })
+      const { usageStats, sender } = setup({
+        send: () => new Promise(() => {}),
+        timeoutMs: 5000,
+      })
       await usageStats.setEnabled(true)
       await jest.advanceTimersByTimeAsync(5000)
       expect(sender.send).toHaveBeenCalledTimes(1)

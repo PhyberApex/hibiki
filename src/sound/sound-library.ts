@@ -14,7 +14,9 @@ function resolvePath(config: Config, category: SoundCategory, filename?: string)
     : category === 'effects'
       ? config.audio.effectsDir
       : config.audio.ambienceDir
-  return filename ? join(base, filename) : base
+  return filename
+    ? join(base, filename)
+    : base
 }
 
 function humanize(filename: string): string {
@@ -95,7 +97,10 @@ export function createSoundLibrary(config: Config) {
     async getFile(category: SoundCategory, id: string): Promise<SoundFile & { path: string }> {
       const filename = await findFilename(config, category, id)
       const path = resolvePath(config, category, filename)
-      const [stats, tags] = await Promise.all([stat(path), tagsStore.get(category, id)])
+      const [stats, tags] = await Promise.all([
+        stat(path),
+        tagsStore.get(category, id),
+      ])
       return {
         id,
         name: humanize(filename),

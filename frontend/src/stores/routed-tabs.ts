@@ -41,7 +41,9 @@ export const useRoutedTabsStore = defineStore('routedTabs', () => {
   const sessions = new Map<number, RoutingSession>()
   const syncQueues = new Map<number, Promise<void>>()
 
-  const routedTabIds = computed(() => [...tabs.entries()].filter(([, t]) => t.routed).map(([id]) => id))
+  const routedTabIds = computed(() => [
+    ...tabs.entries(),
+  ].filter(([, t]) => t.routed).map(([id]) => id))
   const routedCount = computed(() => routedTabIds.value.length)
   /** Where a Routed Tab should be delivered right now; null while the active Target cannot play. */
   const desiredTarget = computed(() => (player.canPlay ? player.targetId : null))
@@ -147,7 +149,9 @@ export const useRoutedTabsStore = defineStore('routedTabs', () => {
   }
 
   async function reconcile(tabId: number): Promise<void> {
-    const wanted = isRouted(tabId) ? desiredTarget.value : null
+    const wanted = isRouted(tabId)
+      ? desiredTarget.value
+      : null
     const current = sessions.get(tabId)
     if (current?.targetId === wanted)
       return
@@ -185,7 +189,10 @@ export const useRoutedTabsStore = defineStore('routedTabs', () => {
   function setRouted(tabId: number, routed: boolean): Promise<void> {
     logInfo(`[browser] tab ${tabId} ${routed ? 'route' : 'un-route'} requested (active Target ${player.targetId}, can play: ${player.canPlay})`)
     stateOf(tabId).routed = routed
-    trackUsage({ name: 'routed-tab-toggle', data: { routed, target: player.activeTarget } })
+    trackUsage({
+      name: 'routed-tab-toggle',
+      data: { routed, target: player.activeTarget },
+    })
     return sync(tabId)
   }
 

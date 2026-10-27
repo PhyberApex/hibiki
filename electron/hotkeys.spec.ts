@@ -15,7 +15,14 @@ const settings = {
 }
 
 function scene(id: string, hotkey?: string, effects: { soundId: string, hotkey?: string }[] = []) {
-  return { id, name: `Scene ${id}`, hotkey, music: [], ambience: [], effects }
+  return {
+    id,
+    name: `Scene ${id}`,
+    hotkey,
+    music: [],
+    ambience: [],
+    effects,
+  }
 }
 
 function fakeGlobalShortcut(refused: string[] = []) {
@@ -34,13 +41,22 @@ function fakeGlobalShortcut(refused: string[] = []) {
 
 function fakeApi(scenes: unknown[], hotkeySettings: unknown = settings) {
   return {
-    scenes: { list: jest.fn().mockResolvedValue(scenes) },
-    config: { getHotkeySettings: jest.fn().mockResolvedValue(hotkeySettings) },
+    scenes: {
+      list: jest.fn().mockResolvedValue(scenes),
+    },
+    config: {
+      getHotkeySettings: jest.fn().mockResolvedValue(hotkeySettings),
+    },
   }
 }
 
 function fakeWindow() {
-  return { isDestroyed: jest.fn(() => false), webContents: { send: jest.fn() } }
+  return {
+    isDestroyed: jest.fn(() => false),
+    webContents: {
+      send: jest.fn(),
+    },
+  }
 }
 
 beforeAll(() => {
@@ -53,7 +69,15 @@ afterAll(() => jest.restoreAllMocks())
 describe('createHotkeys', () => {
   it('registers the wanted accelerators on the global shortcut', async () => {
     const globalShortcut = fakeGlobalShortcut()
-    const hotkeys = createHotkeys({ globalShortcut, getApi: () => fakeApi([scene('a', 'F1', [{ soundId: 'boom', hotkey: 'F2' }])]), getWindow: () => null })
+    const hotkeys = createHotkeys({
+      globalShortcut,
+      getApi: () => fakeApi([
+        scene('a', 'F1', [
+          { soundId: 'boom', hotkey: 'F2' },
+        ]),
+      ]),
+      getWindow: () => null,
+    })
 
     await hotkeys.sync()
 
@@ -63,12 +87,22 @@ describe('createHotkeys', () => {
 
   it('applies only the diff on the next sync', async () => {
     const globalShortcut = fakeGlobalShortcut()
-    let scenes = [scene('a', 'F1'), scene('b', 'F2')]
-    const hotkeys = createHotkeys({ globalShortcut, getApi: () => fakeApi(scenes), getWindow: () => null })
+    let scenes = [
+      scene('a', 'F1'),
+      scene('b', 'F2'),
+    ]
+    const hotkeys = createHotkeys({
+      globalShortcut,
+      getApi: () => fakeApi(scenes),
+      getWindow: () => null,
+    })
     await hotkeys.sync()
     globalShortcut.register.mockClear()
 
-    scenes = [scene('a', 'F1'), scene('b', 'F3')]
+    scenes = [
+      scene('a', 'F1'),
+      scene('b', 'F3'),
+    ]
     await hotkeys.sync()
 
     expect(globalShortcut.unregister).toHaveBeenCalledWith('F2')
@@ -78,7 +112,13 @@ describe('createHotkeys', () => {
 
   it('reports a refused registration through getStatus', async () => {
     const globalShortcut = fakeGlobalShortcut(['F1'])
-    const hotkeys = createHotkeys({ globalShortcut, getApi: () => fakeApi([scene('a', 'F1')]), getWindow: () => null })
+    const hotkeys = createHotkeys({
+      globalShortcut,
+      getApi: () => fakeApi([
+        scene('a', 'F1'),
+      ]),
+      getWindow: () => null,
+    })
 
     await hotkeys.sync()
 
@@ -91,7 +131,13 @@ describe('createHotkeys', () => {
   it('forwards a fired accelerator to the renderer', async () => {
     const globalShortcut = fakeGlobalShortcut()
     const win = fakeWindow()
-    const hotkeys = createHotkeys({ globalShortcut, getApi: () => fakeApi([scene('a', 'F1')]), getWindow: () => win })
+    const hotkeys = createHotkeys({
+      globalShortcut,
+      getApi: () => fakeApi([
+        scene('a', 'F1'),
+      ]),
+      getWindow: () => win,
+    })
     await hotkeys.sync()
 
     globalShortcut.callbacks.get('F1')!()
@@ -103,7 +149,13 @@ describe('createHotkeys', () => {
     const globalShortcut = fakeGlobalShortcut()
     const win = fakeWindow()
     win.isDestroyed.mockReturnValue(true)
-    const hotkeys = createHotkeys({ globalShortcut, getApi: () => fakeApi([scene('a', 'F1')]), getWindow: () => win })
+    const hotkeys = createHotkeys({
+      globalShortcut,
+      getApi: () => fakeApi([
+        scene('a', 'F1'),
+      ]),
+      getWindow: () => win,
+    })
     await hotkeys.sync()
 
     globalShortcut.callbacks.get('F1')!()
@@ -114,7 +166,11 @@ describe('createHotkeys', () => {
 
   it('does nothing before the API is up', async () => {
     const globalShortcut = fakeGlobalShortcut()
-    const hotkeys = createHotkeys({ globalShortcut, getApi: () => null, getWindow: () => null })
+    const hotkeys = createHotkeys({
+      globalShortcut,
+      getApi: () => null,
+      getWindow: () => null,
+    })
 
     await hotkeys.sync()
 
@@ -126,8 +182,14 @@ describe('createHotkeys', () => {
     const broken = fakeApi([])
     const err = new Error('scenes.json unreadable')
     broken.scenes.list.mockRejectedValueOnce(err)
-    broken.scenes.list.mockResolvedValue([scene('a', 'F1')])
-    const hotkeys = createHotkeys({ globalShortcut, getApi: () => broken, getWindow: () => null })
+    broken.scenes.list.mockResolvedValue([
+      scene('a', 'F1'),
+    ])
+    const hotkeys = createHotkeys({
+      globalShortcut,
+      getApi: () => broken,
+      getWindow: () => null,
+    })
 
     await hotkeys.sync()
     expect(console.error).toHaveBeenCalledWith('[hotkeys]', 'Could not sync global hotkeys:', err)
@@ -138,7 +200,13 @@ describe('createHotkeys', () => {
 
   it('releases every registration on releaseAll', async () => {
     const globalShortcut = fakeGlobalShortcut()
-    const hotkeys = createHotkeys({ globalShortcut, getApi: () => fakeApi([scene('a', 'F1')]), getWindow: () => null })
+    const hotkeys = createHotkeys({
+      globalShortcut,
+      getApi: () => fakeApi([
+        scene('a', 'F1'),
+      ]),
+      getWindow: () => null,
+    })
     await hotkeys.sync()
 
     hotkeys.releaseAll()

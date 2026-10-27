@@ -33,12 +33,21 @@ describe('sounds API', () => {
 
   it('uploadSound uses apiCall', async () => {
     const file = new File(['x'], 'test.mp3', { type: 'audio/mpeg' })
-    mockInvoke.mockResolvedValue({ id: 'x', name: 'test', filename: 'test.mp3', category: 'music' })
+    mockInvoke.mockResolvedValue({
+      id: 'x',
+      name: 'test',
+      filename: 'test.mp3',
+      category: 'music',
+    })
     await uploadSound('music', file)
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'sounds',
       method: 'uploadSound',
-      args: ['music', expect.any(ArrayBuffer), 'test.mp3'],
+      args: [
+        'music',
+        expect.any(ArrayBuffer),
+        'test.mp3',
+      ],
     })
   })
 
@@ -46,7 +55,12 @@ describe('sounds API', () => {
     const file1 = new File(['a'], 'a.mp3', { type: 'audio/mpeg' })
     const file2 = new File(['b'], 'b.mp3', { type: 'audio/mpeg' })
     mockInvoke
-      .mockResolvedValueOnce({ id: '1', name: 'a', filename: 'a.mp3', category: 'music' })
+      .mockResolvedValueOnce({
+        id: '1',
+        name: 'a',
+        filename: 'a.mp3',
+        category: 'music',
+      })
       .mockRejectedValueOnce(new Error('Network error'))
     const result = await uploadSoundsBulk('music', [file1, file2])
     expect(result.success).toHaveLength(1)
@@ -71,7 +85,11 @@ describe('sounds API', () => {
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'sounds',
       method: 'setTags',
-      args: ['music', 'id1', ['tavern', 'warm']],
+      args: [
+        'music',
+        'id1',
+        ['tavern', 'warm'],
+      ],
     })
     expect(result).toEqual(['tavern', 'warm'])
   })

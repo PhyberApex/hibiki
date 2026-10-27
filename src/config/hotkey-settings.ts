@@ -23,7 +23,11 @@ function parse(raw: string | null | undefined): HotkeySettings {
     return { ...DEFAULTS }
   try {
     const data = JSON.parse(raw) as Partial<HotkeySettings> | null
-    const settings: HotkeySettings = { enabled: typeof data?.enabled === 'boolean' ? data.enabled : DEFAULTS.enabled }
+    const settings: HotkeySettings = {
+      enabled: typeof data?.enabled === 'boolean'
+        ? data.enabled
+        : DEFAULTS.enabled,
+    }
     for (const { field } of ACTION_HOTKEYS) {
       const accelerator = normalizeOptionalAccelerator(data?.[field])
       if (accelerator)

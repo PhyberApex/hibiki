@@ -89,7 +89,9 @@ export class OutputDeviceRouter {
       this.warnedAbsent = false
     }
     if (next.sinkId !== previous.sinkId) {
-      logInfo(`[output-device] local output now ${next.sinkId === '' ? 'the system default' : `"${this.choice?.label}" (${next.sinkId})`}`)
+      logInfo(`[output-device] local output now ${next.sinkId === ''
+        ? 'the system default'
+        : `"${this.choice?.label}" (${next.sinkId})`}`)
       this.listeners.forEach(l => l(next.sinkId))
     }
   }
@@ -97,7 +99,9 @@ export class OutputDeviceRouter {
 
 let toastMissing: (label: string) => void = () => {}
 
-export const outputDeviceRouter = new OutputDeviceRouter({ onMissing: label => toastMissing(label) })
+export const outputDeviceRouter = new OutputDeviceRouter({
+  onMissing: label => toastMissing(label),
+})
 
 /** Routes `<audio>` elements through the router; weakly held so transient Effect elements do not leak. */
 const boundElements = new Set<WeakRef<HTMLAudioElement>>()

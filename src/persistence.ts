@@ -71,7 +71,10 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
             const reEncrypted = await encryptForStorage(decrypted.result)
             // Only replace the value we decrypted; a concurrent `set` wins.
             const written = await store.update(latest => latest[key] === raw
-              ? { next: { ...latest, [key]: reEncrypted }, result: true }
+              ? {
+                  next: { ...latest, [key]: reEncrypted },
+                  result: true,
+                }
               : { next: latest, result: false })
             if (written)
               log.info(`Re-encrypted secret "${key}" after an encryption key rotation`)
@@ -87,7 +90,10 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
       if (codec.available) {
         log.info(`Migrating plaintext secret "${key}" to encrypted storage`)
         const encrypted = await encryptForStorage(raw)
-        await store.update(latest => ({ next: { ...latest, [key]: encrypted }, result: undefined }))
+        await store.update(latest => ({
+          next: { ...latest, [key]: encrypted },
+          result: undefined,
+        }))
       }
       return raw
     },
@@ -95,8 +101,15 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
       const toStore = SECRET_KEYS.has(key) && codec.available
         ? await encryptForStorage(value)
         : value
-      log.info(SECRET_KEYS.has(key) ? `Set "${key}" (secret, ${value ? 'non-empty' : 'cleared'})` : `Set "${key}" = ${value.length > 120 ? `${value.slice(0, 117)}...` : value}`)
-      return store.update(data => ({ next: { ...data, [key]: toStore }, result: undefined }))
+      log.info(SECRET_KEYS.has(key)
+        ? `Set "${key}" (secret, ${value ? 'non-empty' : 'cleared'})`
+        : `Set "${key}" = ${value.length > 120
+          ? `${value.slice(0, 117)}...`
+          : value}`)
+      return store.update(data => ({
+        next: { ...data, [key]: toStore },
+        result: undefined,
+      }))
     },
     /** Removes the key entirely (absent afterwards, not empty). */
     async delete(key: string): Promise<void> {

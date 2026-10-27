@@ -15,7 +15,9 @@ describe('importScene', () => {
       ambienceDir: join(tempRoot, 'ambience'),
       webDistDir: 'web-dist',
     },
-    database: { path: join(tempRoot, 'data', 'hibiki.json') },
+    database: {
+      path: join(tempRoot, 'data', 'hibiki.json'),
+    },
   }
 
   beforeEach(() => {
@@ -84,12 +86,14 @@ describe('importScene', () => {
     const manifest = makeManifest({
       displayName: 'With Sources',
       scene: {
-        music: [{
-          soundName: 'Epic Theme',
-          volume: 70,
-          bundled: false,
-          source: { name: 'Some Track', url: 'https://example.com', note: 'Any epic track' },
-        }],
+        music: [
+          {
+            soundName: 'Epic Theme',
+            volume: 70,
+            bundled: false,
+            source: { name: 'Some Track', url: 'https://example.com', note: 'Any epic track' },
+          },
+        ],
         ambience: [],
         effects: [],
       },
@@ -106,7 +110,13 @@ describe('importScene', () => {
     const zipPath = createManifestZip(makeManifest({
       displayName: 'Hotkey Import',
       hotkey: 'F1',
-      scene: { music: [], ambience: [], effects: [{ ...pkg, soundName: 'Boom' }] },
+      scene: {
+        music: [],
+        ambience: [],
+        effects: [
+          { ...pkg, soundName: 'Boom' },
+        ],
+      },
     }))
     const scene = await importScene(config, zipPath)
     expect(scene).not.toHaveProperty('hotkey')
@@ -116,7 +126,12 @@ describe('importScene', () => {
   it('keeps the archive\'s Music Mode; an absent or invalid one reads as single', async () => {
     const shuffled = await importScene(config, createManifestZip(makeManifest({
       displayName: 'Mode Shuffle',
-      scene: { musicMode: 'shuffle', music: [], ambience: [], effects: [] },
+      scene: {
+        musicMode: 'shuffle',
+        music: [],
+        ambience: [],
+        effects: [],
+      },
     })))
     expect(shuffled.musicMode).toBe('shuffle')
 
@@ -125,7 +140,12 @@ describe('importScene', () => {
 
     const invalid = await importScene(config, createManifestZip(makeManifest({
       displayName: 'Mode Invalid',
-      scene: { musicMode: 'loop-forever', music: [], ambience: [], effects: [] },
+      scene: {
+        musicMode: 'loop-forever',
+        music: [],
+        ambience: [],
+        effects: [],
+      },
     })))
     expect(invalid).not.toHaveProperty('musicMode')
   })
@@ -156,9 +176,32 @@ describe('importScene', () => {
     const manifest = makeManifest({
       displayName: 'Bundled',
       scene: {
-        music: [{ soundName: 'Theme', volume: 80, loop: true, bundled: true, bundledPath: 'sounds/music/theme-1.mp3' }],
-        ambience: [{ soundName: 'Rain', volume: 40, enabled: false, bundled: true, bundledPath: 'sounds/ambience/rain-2.ogg' }],
-        effects: [{ soundName: 'Boom', volume: 100, bundled: true, bundledPath: 'sounds/effects/boom-3.wav' }],
+        music: [
+          {
+            soundName: 'Theme',
+            volume: 80,
+            loop: true,
+            bundled: true,
+            bundledPath: 'sounds/music/theme-1.mp3',
+          },
+        ],
+        ambience: [
+          {
+            soundName: 'Rain',
+            volume: 40,
+            enabled: false,
+            bundled: true,
+            bundledPath: 'sounds/ambience/rain-2.ogg',
+          },
+        ],
+        effects: [
+          {
+            soundName: 'Boom',
+            volume: 100,
+            bundled: true,
+            bundledPath: 'sounds/effects/boom-3.wav',
+          },
+        ],
       },
     })
     const zipPath = createManifestZip(manifest, {
@@ -174,16 +217,39 @@ describe('importScene', () => {
     expect(readFileSync(join(config.audio.ambienceDir, 'rain-2.ogg'), 'utf-8')).toBe('ambience-bytes')
     expect(readFileSync(join(config.audio.effectsDir, 'boom-3.wav'), 'utf-8')).toBe('effect-bytes')
     expect(existsSync(join(config.audio.effectsDir, '.DS_Store'))).toBe(false)
-    expect(scene.music).toEqual([{ soundId: 'theme-1', soundName: 'Theme', volume: 80, loop: true }])
-    expect(scene.ambience).toEqual([{ soundId: 'rain-2', soundName: 'Rain', volume: 40, enabled: false }])
-    expect(scene.effects).toEqual([{ soundId: 'boom-3', soundName: 'Boom', volume: 100 }])
+    expect(scene.music).toEqual([
+      {
+        soundId: 'theme-1',
+        soundName: 'Theme',
+        volume: 80,
+        loop: true,
+      },
+    ])
+    expect(scene.ambience).toEqual([
+      {
+        soundId: 'rain-2',
+        soundName: 'Rain',
+        volume: 40,
+        enabled: false,
+      },
+    ])
+    expect(scene.effects).toEqual([
+      { soundId: 'boom-3', soundName: 'Boom', volume: 100 },
+    ])
   })
 
   it('falls back to the sound name when a bundled file is missing from the archive', async () => {
     const manifest = makeManifest({
       displayName: 'Missing Bundle',
       scene: {
-        music: [{ soundName: 'Lost Theme', volume: 50, bundled: true, bundledPath: 'sounds/music/lost.mp3' }],
+        music: [
+          {
+            soundName: 'Lost Theme',
+            volume: 50,
+            bundled: true,
+            bundledPath: 'sounds/music/lost.mp3',
+          },
+        ],
         ambience: [],
         effects: [],
       },
@@ -196,7 +262,12 @@ describe('importScene', () => {
     const existing = await importScene(config, createManifestZip(makeManifest({ displayName: 'Original' })))
     const clash = await importScene(config, createManifestZip(makeManifest({
       displayName: 'Clash',
-      scene: { id: existing.id, music: [], ambience: [], effects: [] },
+      scene: {
+        id: existing.id,
+        music: [],
+        ambience: [],
+        effects: [],
+      },
     })))
     expect(clash.id).not.toBe(existing.id)
     const { createSceneStore } = await import('./scene-store')

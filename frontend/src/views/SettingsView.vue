@@ -79,7 +79,12 @@ const DEFAULT_VISION_CONFIG: VisionConfig = {
   enabled: false,
   configured: false,
   claude: { keyConfigured: false, configured: false, encrypted: true },
-  openaiCompatible: { keyConfigured: false, configured: false, baseUrl: '', model: '' },
+  openaiCompatible: {
+    keyConfigured: false,
+    configured: false,
+    baseUrl: '',
+    model: '',
+  },
 }
 
 const visionConfig = ref<VisionConfig | null>(null)
@@ -99,7 +104,9 @@ const outputDeviceMessage = ref<{ type: 'success' | 'error', text: string } | nu
 /** The stored device stays selected (and listed as absent) while it is unplugged. */
 const absentOutputDevice = computed(() => {
   const choice = outputDeviceChoice.value
-  return choice && !outputDevices.value.some(d => d.deviceId === choice.deviceId) ? choice : null
+  return choice && !outputDevices.value.some(d => d.deviceId === choice.deviceId)
+    ? choice
+    : null
 })
 
 async function refreshOutputDevices() {
@@ -126,7 +133,12 @@ async function changeOutputDevice(event: Event) {
   }
   catch (e) {
     console.warn('[settings] Output Device rejected:', e)
-    outputDeviceMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t save the Output Device.' }
+    outputDeviceMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Couldn\'t save the Output Device.',
+    }
   }
 }
 
@@ -180,7 +192,12 @@ async function load() {
     syncVisionAdvancedInputs()
   }
   catch (e) {
-    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t load settings. Try again.' }
+    message.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Couldn\'t load settings. Try again.',
+    }
   }
 }
 
@@ -203,7 +220,12 @@ async function saveToken() {
       message.value = { type: 'success', text: 'Token saved. Bot didn\'t connect — click Connect below to try again.' }
   }
   catch (e) {
-    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t save token. Copy the full token from the Discord Developer Portal and try again.' }
+    message.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Couldn\'t save token. Copy the full token from the Discord Developer Portal and try again.',
+    }
   }
   finally {
     saving.value = false
@@ -227,7 +249,12 @@ async function removeToken() {
   }
   catch (e) {
     console.error('[settings] Could not remove the Discord token:', e)
-    message.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t remove the token. Try again.' }
+    message.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Couldn\'t remove the token. Try again.',
+    }
   }
   finally {
     removing.value = false
@@ -255,7 +282,12 @@ async function browseStorageFolder() {
     }
   }
   catch (e) {
-    storageMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not set storage folder.' }
+    storageMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Could not set storage folder.',
+    }
   }
   finally {
     savingStorage.value = false
@@ -271,7 +303,12 @@ async function clearStoragePath() {
     storageMessage.value = { type: 'success', text: 'Reverted to default storage. Restart Hibiki to apply.' }
   }
   catch (e) {
-    storageMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not reset storage folder.' }
+    storageMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Could not reset storage folder.',
+    }
   }
   finally {
     savingStorage.value = false
@@ -284,7 +321,12 @@ async function persistAccessibility(update: () => Promise<void>) {
     await update()
   }
   catch (e) {
-    accessibilityMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not save accessibility settings.' }
+    accessibilityMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Could not save accessibility settings.',
+    }
   }
 }
 
@@ -311,7 +353,12 @@ async function onSceneFadeLengthChange(event: Event) {
     await updateSceneFadeLength(seconds)
   }
   catch (e) {
-    fadeLengthMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t save fade length.' }
+    fadeLengthMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Couldn\'t save fade length.',
+    }
   }
   finally {
     savingFadeLength.value = false
@@ -327,7 +374,12 @@ async function changeVisionProvider(event: Event) {
     syncVisionAdvancedInputs()
   }
   catch (e) {
-    visionMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t switch the Vision Provider.' }
+    visionMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Couldn\'t switch the Vision Provider.',
+    }
   }
   finally {
     savingVisionProvider.value = false
@@ -348,7 +400,12 @@ async function saveVisionKey() {
     visionMessage.value = { type: 'success', text: 'Key saved. Switch Vision to Vibe on below to start using it.' }
   }
   catch (e) {
-    visionMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t save the API key.' }
+    visionMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Couldn\'t save the API key.',
+    }
   }
   finally {
     savingVisionKey.value = false
@@ -359,22 +416,34 @@ async function clearVisionKey() {
   if (!visionConfig.value)
     return
   const provider = visionConfig.value.provider
-  const envVar = provider === 'openai-compatible' ? 'HIBIKI_VISION_OPENAI_API_KEY' : 'HIBIKI_VISION_API_KEY'
+  const envVar = provider === 'openai-compatible'
+    ? 'HIBIKI_VISION_OPENAI_API_KEY'
+    : 'HIBIKI_VISION_API_KEY'
   savingVisionKey.value = true
   visionMessage.value = null
   try {
     visionConfig.value = await updateVisionApiKey(provider, '')
-    const status = provider === 'openai-compatible' ? visionConfig.value.openaiCompatible : visionConfig.value.claude
+    const status = provider === 'openai-compatible'
+      ? visionConfig.value.openaiCompatible
+      : visionConfig.value.claude
     if (status.keyConfigured) {
       visionMessage.value = { type: 'success', text: `Stored key removed. The key from the ${envVar} environment variable is still in use.` }
       return
     }
     if (!visionConfig.value.configured && visionConfig.value.enabled)
       visionConfig.value = await updateVisionEnabled(false)
-    visionMessage.value = { type: 'success', text: visionConfig.value.enabled ? 'Key removed.' : 'Key removed. Vision to Vibe is off.' }
+    visionMessage.value = {
+      type: 'success',
+      text: visionConfig.value.enabled ? 'Key removed.' : 'Key removed. Vision to Vibe is off.',
+    }
   }
   catch (e) {
-    visionMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t remove the API key.' }
+    visionMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Couldn\'t remove the API key.',
+    }
   }
   finally {
     savingVisionKey.value = false
@@ -391,11 +460,21 @@ async function saveVisionAdvancedField(
   try {
     visionConfig.value = await update(value)
     syncVisionAdvancedInputs()
-    visionMessage.value = { type: 'success', text: value ? `${label} saved.` : `${label} reset to the default.` }
+    visionMessage.value = {
+      type: 'success',
+      text: value
+        ? `${label} saved.`
+        : `${label} reset to the default.`,
+    }
   }
   catch (e) {
     const action = value ? 'save' : 'reset'
-    visionMessage.value = { type: 'error', text: e instanceof Error ? e.message : `Couldn't ${action} the ${label}.` }
+    visionMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : `Couldn't ${action} the ${label}.`,
+    }
   }
   finally {
     savingVisionAdvanced.value = false
@@ -419,7 +498,12 @@ async function toggleVision(event: Event) {
     }
   }
   catch (e) {
-    visionMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Couldn\'t update Vision to Vibe.' }
+    visionMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Couldn\'t update Vision to Vibe.',
+    }
   }
   finally {
     savingVisionToggle.value = false
@@ -437,7 +521,9 @@ async function saveHotkeySettings(next: HotkeySettings) {
   }
   catch (e) {
     console.warn('[settings] Hotkey settings rejected:', e)
-    const text = e instanceof Error ? e.message : 'Couldn\'t save hotkey settings.'
+    const text = e instanceof Error
+      ? e.message
+      : 'Couldn\'t save hotkey settings.'
     const changed = actionHotkeyRows.find(row => next[row.field] !== hotkeySettings.value[row.field])
     if (changed)
       actionHotkeyErrors.value = { [changed.field]: text }
@@ -464,7 +550,12 @@ async function toggleUpdateCheck(event: Event) {
   }
   catch (e) {
     input.checked = updateCheckEnabled.value
-    updateCheckMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not save the update check setting.' }
+    updateCheckMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Could not save the update check setting.',
+    }
   }
   finally {
     savingUpdateCheck.value = false
@@ -481,7 +572,12 @@ async function toggleUsageStats(event: Event) {
   }
   catch (e) {
     input.checked = usageStatsEnabled.value
-    usageStatsMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Could not save the Usage Stats setting.' }
+    usageStatsMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Could not save the Usage Stats setting.',
+    }
   }
   finally {
     savingUsageStats.value = false
@@ -490,7 +586,9 @@ async function toggleUsageStats(event: Event) {
 
 function setActionHotkey(field: ActionHotkeyField, value: string | undefined) {
   const { [field]: _previous, ...rest } = hotkeySettings.value
-  return saveHotkeySettings(value ? { ...rest, [field]: value } : rest)
+  return saveHotkeySettings(value
+    ? { ...rest, [field]: value }
+    : rest)
 }
 
 onMounted(() => {

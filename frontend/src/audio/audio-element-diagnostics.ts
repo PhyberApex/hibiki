@@ -53,7 +53,9 @@ export function waitForPlayable(el: HTMLAudioElement, label: string): Promise<vo
     const done = () => clearTimeout(timer)
     el.addEventListener('canplaythrough', () => {
       done()
-      logInfo(`[audio] ${label} playable after ${Date.now() - startedAt} ms (duration ${Number.isFinite(el.duration) ? el.duration.toFixed(1) : '?'} s)`)
+      logInfo(`[audio] ${label} playable after ${Date.now() - startedAt} ms (duration ${Number.isFinite(el.duration)
+        ? el.duration.toFixed(1)
+        : '?'} s)`)
       resolve()
     }, { once: true })
     el.addEventListener('error', () => {

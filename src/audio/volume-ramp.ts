@@ -22,7 +22,9 @@ export function rampVolume(options: RampOptions): RampHandle {
   if (options.durationMs <= 0) {
     options.onVolume(options.to)
     options.onDone?.()
-    return { cancel: () => {} }
+    return {
+      cancel: () => {},
+    }
   }
 
   const startedAt = Date.now()

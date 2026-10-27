@@ -3,10 +3,16 @@ import { defineConfig } from '@playwright/test'
 import { config } from 'dotenv'
 
 // Load root .env first (contains DISCORD_TOKEN)
-config({ path: resolve(process.cwd(), '../.env') })
+config({
+  path: resolve(process.cwd(), '../.env'),
+})
 // Then load .env.e2e for E2E-specific variables (guild ID, channel ID)
-config({ path: resolve(process.cwd(), '.env.e2e') })
-config({ path: resolve(process.cwd(), '../.env.e2e') })
+config({
+  path: resolve(process.cwd(), '.env.e2e'),
+})
+config({
+  path: resolve(process.cwd(), '../.env.e2e'),
+})
 
 export default defineConfig({
   testDir: './tests',
@@ -21,5 +27,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   // No browser projects - tests use Electron via custom fixture
-  projects: [{ name: 'electron' }],
+  projects: [
+    { name: 'electron' },
+  ],
 })

@@ -10,9 +10,16 @@ import { usePlayerStore } from '@/stores/player'
 import { useScenePlaybackStore } from '@/stores/scene-playback'
 import { useRoutedTabsStore } from './routed-tabs'
 
-vi.mock('@/api/scenes', () => ({ getScene: vi.fn() }))
-vi.mock('@/api/usage-stats', () => ({ trackUsage: vi.fn() }))
-vi.mock('@/api/sounds', () => ({ soundStreamUrl: vi.fn(), canDecode: vi.fn().mockResolvedValue(true) }))
+vi.mock('@/api/scenes', () => ({
+  getScene: vi.fn(),
+}))
+vi.mock('@/api/usage-stats', () => ({
+  trackUsage: vi.fn(),
+}))
+vi.mock('@/api/sounds', () => ({
+  soundStreamUrl: vi.fn(),
+  canDecode: vi.fn().mockResolvedValue(true),
+}))
 vi.mock('@/api/player', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/player')>()
   return {
@@ -56,7 +63,9 @@ function joinDiscord(guildId = 'g1') {
   const player = usePlayerStore()
   player.activeTarget = 'discord'
   player.guildId = guildId
-  player.playerState = [{ guildId, connectedChannelId: 'c1' } as never]
+  player.playerState = [
+    { guildId, connectedChannelId: 'c1' } as never,
+  ]
 }
 
 function flush() {
@@ -67,8 +76,12 @@ describe('routed tabs store', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setActivePinia(createPinia())
-    const track = { stop: vi.fn() }
-    vi.mocked(captureTabStream).mockResolvedValue({ getTracks: () => [track] } as unknown as MediaStream)
+    const track = {
+      stop: vi.fn(),
+    }
+    vi.mocked(captureTabStream).mockResolvedValue({
+      getTracks: () => [track],
+    } as unknown as MediaStream)
     vi.mocked(captureFromMediaStream).mockResolvedValue({ stop: captureStop })
     vi.mocked(createRoutedTabLocalPlayback).mockResolvedValue({ stop: localStop, setLevel: localSetLevel })
     useScenePlaybackStore().masterVolume = 50
@@ -155,7 +168,9 @@ describe('routed tabs store', () => {
       await store.setRouted(1, true)
       vi.mocked(startEffectStream).mockClear()
 
-      usePlayerStore().playerState = [{ guildId: 'g1', connectedChannelId: undefined } as never]
+      usePlayerStore().playerState = [
+        { guildId: 'g1', connectedChannelId: undefined } as never,
+      ]
       await nextTick()
       await flush()
 
@@ -311,7 +326,10 @@ describe('routed tabs store', () => {
     joinDiscord()
     const store = useRoutedTabsStore()
 
-    await Promise.all([store.toggleRouting(5), store.toggleRouting(5)])
+    await Promise.all([
+      store.toggleRouting(5),
+      store.toggleRouting(5),
+    ])
 
     expect(startEffectStream).not.toHaveBeenCalled()
     expect(store.isRouted(5)).toBe(false)
@@ -324,8 +342,18 @@ describe('routed tabs store', () => {
       await store.toggleRouting(1)
       await store.toggleRouting(1)
       expect(vi.mocked(trackUsage).mock.calls).toEqual([
-        [{ name: 'routed-tab-toggle', data: { routed: true, target: 'discord' } }],
-        [{ name: 'routed-tab-toggle', data: { routed: false, target: 'discord' } }],
+        [
+          {
+            name: 'routed-tab-toggle',
+            data: { routed: true, target: 'discord' },
+          },
+        ],
+        [
+          {
+            name: 'routed-tab-toggle',
+            data: { routed: false, target: 'discord' },
+          },
+        ],
       ])
     })
 

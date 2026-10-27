@@ -17,7 +17,9 @@ describe('createSoundTagsStore', () => {
         effectsDir: join(root, 'effects'),
         webDistDir: 'web-dist',
       },
-      database: { path: join(root, 'data', 'hibiki.json') },
+      database: {
+        path: join(root, 'data', 'hibiki.json'),
+      },
     }
   }
 

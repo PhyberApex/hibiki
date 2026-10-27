@@ -3,7 +3,13 @@ import os from 'node:os'
 import path from 'node:path'
 import { createLogger, setupFileLogging } from './logger'
 
-const LEVELS = ['log', 'info', 'warn', 'error', 'debug'] as const
+const LEVELS = [
+  'log',
+  'info',
+  'warn',
+  'error',
+  'debug',
+] as const
 const MAX_LOG_BYTES = 5 * 1024 * 1024
 
 describe('setupFileLogging', () => {

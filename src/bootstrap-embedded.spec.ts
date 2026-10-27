@@ -27,28 +27,63 @@ import { createVisionService } from './vision/vision.service'
 // getEmbeddedApp wires real services together; every one of them is replaced
 // here so these tests exercise only the EmbeddedApi glue: argument guards,
 // normalisation and the routing of each call to the right service.
-jest.mock('node:fs/promises', () => ({ mkdir: jest.fn() }))
-jest.mock('@discordjs/voice', () => ({ generateDependencyReport: jest.fn(() => 'report') }))
+jest.mock('node:fs/promises', () => ({
+  mkdir: jest.fn(),
+}))
+jest.mock('@discordjs/voice', () => ({
+  generateDependencyReport: jest.fn(() => 'report'),
+}))
 jest.mock('@snazzah/davey', () => ({}))
-jest.mock('./config', () => ({ getConfig: jest.fn() }))
-jest.mock('./config/discord-token-settings', () => ({ createDiscordTokenSettings: jest.fn(), isDiscordTokenConfigured: jest.fn(() => false) }))
-jest.mock('./config/hotkey-settings', () => ({ createHotkeySettings: jest.fn() }))
-jest.mock('./config/local-output-device-settings', () => ({ createLocalOutputDeviceSettings: jest.fn() }))
-jest.mock('./config/output-target-settings', () => ({ createOutputTargetSettings: jest.fn() }))
-jest.mock('./config/usage-stats-settings', () => ({ createUsageStatsSettings: jest.fn(() => ({})) }))
-jest.mock('./discord/discord-client', () => ({ createDiscordClient: jest.fn() }))
-jest.mock('./json-file', () => ({ getStorageWarnings: jest.fn() }))
-jest.mock('./persistence', () => ({ createAppConfig: jest.fn() }))
-jest.mock('./player/player', () => ({ createPlayer: jest.fn() }))
-jest.mock('./scenes/scene-export', () => ({ exportScene: jest.fn() }))
-jest.mock('./scenes/scene-import', () => ({ importScene: jest.fn() }))
+jest.mock('./config', () => ({
+  getConfig: jest.fn(),
+}))
+jest.mock('./config/discord-token-settings', () => ({
+  createDiscordTokenSettings: jest.fn(),
+  isDiscordTokenConfigured: jest.fn(() => false),
+}))
+jest.mock('./config/hotkey-settings', () => ({
+  createHotkeySettings: jest.fn(),
+}))
+jest.mock('./config/local-output-device-settings', () => ({
+  createLocalOutputDeviceSettings: jest.fn(),
+}))
+jest.mock('./config/output-target-settings', () => ({
+  createOutputTargetSettings: jest.fn(),
+}))
+jest.mock('./config/usage-stats-settings', () => ({
+  createUsageStatsSettings: jest.fn(() => ({})),
+}))
+jest.mock('./discord/discord-client', () => ({
+  createDiscordClient: jest.fn(),
+}))
+jest.mock('./json-file', () => ({
+  getStorageWarnings: jest.fn(),
+}))
+jest.mock('./persistence', () => ({
+  createAppConfig: jest.fn(),
+}))
+jest.mock('./player/player', () => ({
+  createPlayer: jest.fn(),
+}))
+jest.mock('./scenes/scene-export', () => ({
+  exportScene: jest.fn(),
+}))
+jest.mock('./scenes/scene-import', () => ({
+  importScene: jest.fn(),
+}))
 jest.mock('./scenes/scene-registry', () => ({
   ...jest.requireActual('./scenes/scene-registry'),
   createSceneRegistry: jest.fn(),
 }))
-jest.mock('./scenes/scene-store', () => ({ createSceneStore: jest.fn() }))
-jest.mock('./sound/sound-library', () => ({ createSoundLibrary: jest.fn() }))
-jest.mock('./updates/update-check', () => ({ createUpdateCheck: jest.fn() }))
+jest.mock('./scenes/scene-store', () => ({
+  createSceneStore: jest.fn(),
+}))
+jest.mock('./sound/sound-library', () => ({
+  createSoundLibrary: jest.fn(),
+}))
+jest.mock('./updates/update-check', () => ({
+  createUpdateCheck: jest.fn(),
+}))
 jest.mock('./usage-stats/usage-stats', () => ({
   buildUserAgent: jest.fn(() => 'ua'),
   createUmamiSender: jest.fn(() => ({})),
@@ -57,8 +92,12 @@ jest.mock('./usage-stats/usage-stats', () => ({
   USAGE_STATS_HOST: 'https://stats.example',
   USAGE_STATS_WEBSITE_ID: 'site',
 }))
-jest.mock('./vision/vision-settings', () => ({ createVisionSettings: jest.fn() }))
-jest.mock('./vision/vision.service', () => ({ createVisionService: jest.fn() }))
+jest.mock('./vision/vision-settings', () => ({
+  createVisionSettings: jest.fn(),
+}))
+jest.mock('./vision/vision.service', () => ({
+  createVisionService: jest.fn(),
+}))
 
 const spies = {
   debug: jest.spyOn(console, 'debug').mockImplementation(() => {}),
@@ -102,7 +141,10 @@ describe('createShutdownHandler', () => {
     const discord = createFakeDiscord()
     const close = createShutdownHandler(player, discord)
 
-    const [first, second] = await Promise.all([close(), close()])
+    const [first, second] = await Promise.all([
+      close(),
+      close(),
+    ])
     await close()
 
     expect(first).toBeUndefined()
@@ -114,12 +156,20 @@ describe('createShutdownHandler', () => {
 
 const config = {
   database: { path: '/data/db/scenes.json' },
-  audio: { storageRoot: '/data', musicDir: '/data/music', effectsDir: '/data/effects', ambienceDir: '/data/ambience' },
+  audio: {
+    storageRoot: '/data',
+    musicDir: '/data/music',
+    effectsDir: '/data/effects',
+    ambienceDir: '/data/ambience',
+  },
   discord: { token: undefined },
 }
 
 function voiceChannel(id: string) {
-  return { id, isVoiceBased: () => true }
+  return {
+    id,
+    isVoiceBased: () => true,
+  }
 }
 
 function fakeServices() {
@@ -127,8 +177,17 @@ function fakeServices() {
   const guild = {
     channels: {
       cache: new Map<string, unknown>([
-        ['voice-1', voiceChannel('voice-1')],
-        ['text-1', { id: 'text-1', isVoiceBased: () => false }],
+        [
+          'voice-1',
+          voiceChannel('voice-1'),
+        ],
+        [
+          'text-1',
+          {
+            id: 'text-1',
+            isVoiceBased: () => false,
+          },
+        ],
       ]),
     },
   }
@@ -141,7 +200,13 @@ function fakeServices() {
       }),
     },
     discord: {
-      getClient: () => ({ guilds: { cache: new Map([['guild-1', guild]]) } }),
+      getClient: () => ({
+        guilds: {
+          cache: new Map([
+            ['guild-1', guild],
+          ]),
+        },
+      }),
       getBotStatus: jest.fn(() => ({ ready: true })),
       listGuildDirectory: jest.fn(() => []),
       login: jest.fn().mockResolvedValue(undefined),
@@ -171,7 +236,13 @@ function fakeServices() {
       onStateChanged: jest.fn(),
     },
     sounds: {
-      list: jest.fn(async (category: string) => [{ id: `${category}-1`, name: `${category} one`, tags: ['forest'] }]),
+      list: jest.fn(async (category: string) => [
+        {
+          id: `${category}-1`,
+          name: `${category} one`,
+          tags: ['forest'],
+        },
+      ]),
       save: jest.fn(async () => ({ id: 'new' })),
       remove: jest.fn().mockResolvedValue(undefined),
       getFilePath: jest.fn(async () => '/data/music/m.mp3'),
@@ -218,7 +289,9 @@ function fakeServices() {
       setEnabled: jest.fn().mockResolvedValue({}),
     },
     vision: {
-      analyzeImageVibe: jest.fn().mockResolvedValue({ vibeTags: ['forest'] }),
+      analyzeImageVibe: jest.fn().mockResolvedValue({
+        vibeTags: ['forest'],
+      }),
     },
     updateCheck: {
       getSettings: jest.fn().mockResolvedValue({ enabled: true }),
@@ -368,7 +441,12 @@ describe('getEmbeddedApp', () => {
 
     it('forwards every playback call to the player with its arguments', async () => {
       const stream = {} as NodeJS.ReadableStream
-      const metadata = { id: 'm', name: 'M', filename: 'm.m4a', category: 'music' }
+      const metadata = {
+        id: 'm',
+        name: 'M',
+        filename: 'm.m4a',
+        category: 'music',
+      }
 
       api.player.getState()
       api.player.getBotStatus()
@@ -427,7 +505,9 @@ describe('getEmbeddedApp', () => {
     it('round-trips bookmarks and treats missing or corrupt ones as none', async () => {
       await expect(api.config.getBookmarks()).resolves.toEqual([])
 
-      const bookmarks = [{ name: 'Tabletop Audio', url: 'https://tabletopaudio.com' }]
+      const bookmarks = [
+        { name: 'Tabletop Audio', url: 'https://tabletopaudio.com' },
+      ]
       await api.config.setBookmarks(bookmarks)
       await expect(api.config.getBookmarks()).resolves.toEqual(bookmarks)
 
@@ -473,8 +553,12 @@ describe('getEmbeddedApp', () => {
       await api.config.getUsageStats()
       await api.config.setUsageStatsEnabled(true)
       await api.config.markUsageStatsPrompted()
-      jest.mocked(getStorageWarnings).mockReturnValue([{ file: 'scenes.json' }] as any)
-      await expect(api.config.getStorageWarnings()).resolves.toEqual([{ file: 'scenes.json' }])
+      jest.mocked(getStorageWarnings).mockReturnValue([
+        { file: 'scenes.json' },
+      ] as any)
+      await expect(api.config.getStorageWarnings()).resolves.toEqual([
+        { file: 'scenes.json' },
+      ])
 
       expect(services.discordToken.getStatus).toHaveBeenCalled()
       expect(services.discordToken.setToken).toHaveBeenCalledWith('t')
@@ -502,7 +586,11 @@ describe('getEmbeddedApp', () => {
       await api.sounds.listEffects()
       await api.sounds.listAmbience()
 
-      expect(services.sounds.list.mock.calls).toEqual([['music'], ['effects'], ['ambience']])
+      expect(services.sounds.list.mock.calls).toEqual([
+        ['music'],
+        ['effects'],
+        ['ambience'],
+      ])
     })
 
     it('passes a Buffer through on upload', async () => {
@@ -575,7 +663,9 @@ describe('getEmbeddedApp', () => {
 
   describe('vision', () => {
     it('analyzes an image when Vision to Vibe is on and configured', async () => {
-      await expect(api.vision.analyzeImageVibe('/tmp/map.png')).resolves.toEqual({ vibeTags: ['forest'] })
+      await expect(api.vision.analyzeImageVibe('/tmp/map.png')).resolves.toEqual({
+        vibeTags: ['forest'],
+      })
       expect(services.vision.analyzeImageVibe).toHaveBeenCalledWith('/tmp/map.png')
     })
 
@@ -596,7 +686,10 @@ describe('getEmbeddedApp', () => {
     it('matches Vibe Tags against the Music and Ambience libraries only', async () => {
       const matches = await api.vision.matchVibe(['forest'])
 
-      expect(services.sounds.list.mock.calls).toEqual([['music'], ['ambience']])
+      expect(services.sounds.list.mock.calls).toEqual([
+        ['music'],
+        ['ambience'],
+      ])
       expect(matches.music.map(m => m.sound.id)).toEqual(['music-1'])
       expect(matches.ambience.map(m => m.sound.id)).toEqual(['ambience-1'])
     })
@@ -631,16 +724,42 @@ describe('getEmbeddedApp', () => {
   // driving the real EmbeddedApi through it pins which of its calls re-sync.
   describe('through the generic api IPC handler', () => {
     const hotkeyMutations: [string, string, unknown[]][] = [
-      ['scenes', 'save', [{ name: 'Tavern' }]],
-      ['scenes', 'remove', ['s1']],
-      ['scenes', 'importScene', ['/tmp/tavern.hibiki.zip']],
-      ['registry', 'installFromRegistry', ['tavern']],
-      ['config', 'setHotkeySettings', [{ enabled: false }]],
+      [
+        'scenes',
+        'save',
+        [
+          { name: 'Tavern' },
+        ],
+      ],
+      [
+        'scenes',
+        'remove',
+        ['s1'],
+      ],
+      [
+        'scenes',
+        'importScene',
+        ['/tmp/tavern.hibiki.zip'],
+      ],
+      [
+        'registry',
+        'installFromRegistry',
+        ['tavern'],
+      ],
+      [
+        'config',
+        'setHotkeySettings',
+        [
+          { enabled: false },
+        ],
+      ],
     ]
 
     function registerThroughIpc() {
       const ipc = fakeIpcMain()
-      const hotkeys = { sync: jest.fn().mockResolvedValue(undefined) }
+      const hotkeys = {
+        sync: jest.fn().mockResolvedValue(undefined),
+      }
       registerApiHandler(ipc, api, () => hotkeys)
       return { ipc, hotkeys }
     }
@@ -656,9 +775,21 @@ describe('getEmbeddedApp', () => {
     it('does not re-sync hotkeys after a call outside scenes, registry and the hotkey settings', async () => {
       const { ipc, hotkeys } = registerThroughIpc()
 
-      await ipc.invoke('api', { domain: 'player', method: 'stop', args: ['g'] })
-      await ipc.invoke('api', { domain: 'config', method: 'setVisionEnabled', args: [true] })
-      await ipc.invoke('api', { domain: 'sounds', method: 'deleteSound', args: ['music', 'm1'] })
+      await ipc.invoke('api', {
+        domain: 'player',
+        method: 'stop',
+        args: ['g'],
+      })
+      await ipc.invoke('api', {
+        domain: 'config',
+        method: 'setVisionEnabled',
+        args: [true],
+      })
+      await ipc.invoke('api', {
+        domain: 'sounds',
+        method: 'deleteSound',
+        args: ['music', 'm1'],
+      })
 
       expect(hotkeys.sync).not.toHaveBeenCalled()
     })
@@ -666,7 +797,13 @@ describe('getEmbeddedApp', () => {
     it('logs a failing call with its domain and method', async () => {
       const { ipc } = registerThroughIpc()
 
-      await expect(ipc.invoke('api', { domain: 'player', method: 'join', args: [{ guildId: 'ghost', channelId: 'voice-1' }] }))
+      await expect(ipc.invoke('api', {
+        domain: 'player',
+        method: 'join',
+        args: [
+          { guildId: 'ghost', channelId: 'voice-1' },
+        ],
+      }))
         .rejects
         .toThrow('Guild not available on bot')
       expect(spies.error).toHaveBeenCalledWith('[ipc]', 'player.join failed:', expect.objectContaining({ message: 'Guild not available on bot' }))

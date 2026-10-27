@@ -64,7 +64,9 @@ const VIBE_SCHEMA = {
 
 function normalizeAnalysis(raw: unknown): VibeAnalysis {
   const candidate = raw as Partial<VibeAnalysis> | null
-  const description = typeof candidate?.description === 'string' ? candidate.description.trim() : ''
+  const description = typeof candidate?.description === 'string'
+    ? candidate.description.trim()
+    : ''
   const tags = Array.isArray(candidate?.tags)
     ? candidate.tags.filter((t): t is string => typeof t === 'string').map(t => t.trim()).filter(t => t.length > 0)
     : []
@@ -78,14 +80,26 @@ export function createClaudeVisionProvider(apiKey: string): VisionProvider {
       const response = await client.messages.create({
         model: CLAUDE_MODEL,
         max_tokens: 1024,
-        output_config: { effort: 'low', format: { type: 'json_schema', schema: VIBE_SCHEMA } },
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data.toString('base64') } },
-            { type: 'text', text: VIBE_PROMPT },
-          ],
-        }],
+        output_config: {
+          effort: 'low',
+          format: { type: 'json_schema', schema: VIBE_SCHEMA },
+        },
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: image.mediaType,
+                  data: image.data.toString('base64'),
+                },
+              },
+              { type: 'text', text: VIBE_PROMPT },
+            ],
+          },
+        ],
       })
       if (response.stop_reason === 'refusal')
         throw new Error('The vision model declined to analyze this image.')
@@ -118,13 +132,18 @@ export function createOpenAICompatibleVisionProvider(options: OpenAICompatiblePr
 
       const requestBody = {
         model: options.model,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: VIBE_PROMPT },
-            { type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.data.toString('base64')}` } },
-          ],
-        }],
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: VIBE_PROMPT },
+              {
+                type: 'image_url',
+                image_url: { url: `data:${image.mediaType};base64,${image.data.toString('base64')}` },
+              },
+            ],
+          },
+        ],
         response_format: {
           type: 'json_schema',
           json_schema: { name: 'vibe_analysis', schema: VIBE_SCHEMA, strict: true },
@@ -133,7 +152,11 @@ export function createOpenAICompatibleVisionProvider(options: OpenAICompatiblePr
 
       let response: Response
       try {
-        response = await fetchImpl(endpoint, { method: 'POST', headers, body: JSON.stringify(requestBody) })
+        response = await fetchImpl(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestBody),
+        })
       }
       catch {
         throw new Error(`Couldn't reach the vision endpoint at ${options.baseUrl}. Check the Base URL and that the server is running.`)
@@ -141,7 +164,9 @@ export function createOpenAICompatibleVisionProvider(options: OpenAICompatiblePr
 
       if (!response.ok) {
         const detail = await response.text().catch(() => '')
-        throw new Error(`The vision endpoint returned an error (HTTP ${response.status}).${detail ? ` ${detail.slice(0, 200)}` : ''}`)
+        throw new Error(`The vision endpoint returned an error (HTTP ${response.status}).${detail
+          ? ` ${detail.slice(0, 200)}`
+          : ''}`)
       }
 
       const unreadable = new Error('The vision endpoint returned a response Hibiki couldn\'t understand.')
@@ -205,7 +230,9 @@ export function createVisionService(options: VisionServiceOptions) {
       if (!mediaType)
         throw new Error('Unsupported image format. Use a PNG, JPEG, GIF, or WebP image.')
       const data = await readFile(imagePath)
-      const target = providerConfig.provider === 'openai-compatible' ? `${providerConfig.baseUrl ?? ''} (${providerConfig.model ?? 'default model'})` : 'claude'
+      const target = providerConfig.provider === 'openai-compatible'
+        ? `${providerConfig.baseUrl ?? ''} (${providerConfig.model ?? 'default model'})`
+        : 'claude'
       log.info(`Analyzing ${mediaType} image (${data.length} bytes) with ${target}`)
       try {
         const result = await createProvider(providerConfig).analyzeImage({ data, mediaType })

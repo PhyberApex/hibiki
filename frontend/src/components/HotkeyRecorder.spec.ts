@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import HotkeyRecorder from './HotkeyRecorder.vue'
 
 function mountRecorder(props: { modelValue?: string, error?: string | null } = {}) {
-  return mount(HotkeyRecorder, { props: { label: 'Scene Hotkey', ...props } })
+  return mount(HotkeyRecorder, {
+    props: { label: 'Scene Hotkey', ...props },
+  })
 }
 
 const button = (w: ReturnType<typeof mountRecorder>) => w.find('[data-testid="hotkey-recorder-button"]')
@@ -14,7 +16,9 @@ describe('hotkeyRecorder', () => {
     await button(wrapper).trigger('click')
     expect(button(wrapper).text()).toContain('Press a key')
     await button(wrapper).trigger('keydown', { code: 'KeyK', ctrlKey: true, shiftKey: true })
-    expect(wrapper.emitted('update:modelValue')).toEqual([['Ctrl+Shift+K']])
+    expect(wrapper.emitted('update:modelValue')).toEqual([
+      ['Ctrl+Shift+K'],
+    ])
     expect(button(wrapper).text()).not.toContain('Press a key')
   })
 
@@ -22,7 +26,9 @@ describe('hotkeyRecorder', () => {
     const wrapper = mountRecorder()
     await button(wrapper).trigger('click')
     await button(wrapper).trigger('keydown', { code: 'F13' })
-    expect(wrapper.emitted('update:modelValue')).toEqual([['F13']])
+    expect(wrapper.emitted('update:modelValue')).toEqual([
+      ['F13'],
+    ])
   })
 
   it('keeps waiting while only a modifier is held', async () => {
@@ -50,7 +56,9 @@ describe('hotkeyRecorder', () => {
   it('clears the binding with the clear button', async () => {
     const wrapper = mountRecorder({ modelValue: 'F14' })
     await wrapper.find('[data-testid="hotkey-recorder-clear"]').trigger('click')
-    expect(wrapper.emitted('update:modelValue')).toEqual([[undefined]])
+    expect(wrapper.emitted('update:modelValue')).toEqual([
+      [undefined],
+    ])
   })
 
   it('has no clear button when unbound', () => {

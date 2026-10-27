@@ -94,7 +94,9 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
    * for the next `login`/`reconnect`.
    */
   async function logout(): Promise<void> {
-    log.info(`Logging out (client ${client.isReady() ? 'ready' : 'not ready'})`)
+    log.info(`Logging out (client ${client.isReady()
+      ? 'ready'
+      : 'not ready'})`)
     const old = client
     client = attachClientLogging(new Client(CLIENT_OPTIONS))
     await old.destroy()

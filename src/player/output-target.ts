@@ -8,5 +8,7 @@ export function isLocalTarget(targetId: string): boolean {
 }
 
 export function targetKind(targetId: string): OutputTargetKind {
-  return isLocalTarget(targetId) ? 'local' : 'discord'
+  return isLocalTarget(targetId)
+    ? 'local'
+    : 'discord'
 }

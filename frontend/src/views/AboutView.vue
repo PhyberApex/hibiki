@@ -1,6 +1,8 @@
 <script setup lang="ts">
 declare const __APP_VERSION__: string
-const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
+const appVersion = typeof __APP_VERSION__ !== 'undefined'
+  ? __APP_VERSION__
+  : '0.0.0'
 
 const repoUrl = 'https://github.com/PhyberApex/hibiki'
 </script>

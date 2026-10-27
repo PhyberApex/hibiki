@@ -15,7 +15,15 @@ const MODIFIER_ALIASES: Record<string, string> = {
   meta: 'Super',
 }
 
-const MODIFIER_ORDER = ['CmdOrCtrl', 'Cmd', 'Ctrl', 'Alt', 'AltGr', 'Shift', 'Super']
+const MODIFIER_ORDER = [
+  'CmdOrCtrl',
+  'Cmd',
+  'Ctrl',
+  'Alt',
+  'AltGr',
+  'Shift',
+  'Super',
+]
 
 const KEY_ALIASES: Record<string, string> = {
   esc: 'Escape',
@@ -26,8 +34,25 @@ const KEY_ALIASES: Record<string, string> = {
 }
 
 /** Multi-word Electron key codes whose canonical spelling is camel-cased. */
-const CAMEL_KEYS = ['PageUp', 'PageDown', 'PrintScreen', 'NumLock', 'ScrollLock', 'CapsLock', 'MediaNextTrack', 'MediaPreviousTrack', 'MediaStop', 'MediaPlayPause', 'VolumeUp', 'VolumeDown', 'VolumeMute']
-const CAMEL_KEY_LOOKUP = new Map(CAMEL_KEYS.map(k => [k.toLowerCase(), k]))
+const CAMEL_KEYS = [
+  'PageUp',
+  'PageDown',
+  'PrintScreen',
+  'NumLock',
+  'ScrollLock',
+  'CapsLock',
+  'MediaNextTrack',
+  'MediaPreviousTrack',
+  'MediaStop',
+  'MediaPlayPause',
+  'VolumeUp',
+  'VolumeDown',
+  'VolumeMute',
+]
+const CAMEL_KEY_LOOKUP = new Map(CAMEL_KEYS.map(k => [
+  k.toLowerCase(),
+  k,
+]))
 
 function normalizeKey(key: string): string {
   if (key.length === 1)
@@ -44,7 +69,12 @@ export function normalizeAccelerator(input: string): string {
   const parts = input.split('+').map(p => p.trim())
   // A literal "+" key is written "Ctrl++": the split leaves two empty tails.
   const plusKey = parts.length >= 2 && parts[parts.length - 1] === '' && parts[parts.length - 2] === ''
-  const tokens = plusKey ? [...parts.slice(0, -2), '+'] : parts
+  const tokens = plusKey
+    ? [
+        ...parts.slice(0, -2),
+        '+',
+      ]
+    : parts
   if (tokens.length === 0 || tokens.includes(''))
     throw new Error(`Invalid hotkey "${input}"`)
 
@@ -60,7 +90,10 @@ export function normalizeAccelerator(input: string): string {
     modifiers.add(modifier)
   }
   const ordered = MODIFIER_ORDER.filter(m => modifiers.has(m))
-  return [...ordered, normalizeKey(key)].join('+')
+  return [
+    ...ordered,
+    normalizeKey(key),
+  ].join('+')
 }
 
 /** Empty or missing means "no hotkey". */
@@ -68,7 +101,7 @@ export function normalizeOptionalAccelerator(input: unknown): string | undefined
   if (input === undefined || input === null)
     return undefined
   if (typeof input !== 'string')
-    throw new Error('Hotkey must be a string')
+    throw new TypeError('Hotkey must be a string')
   if (input.trim() === '')
     return undefined
   return normalizeAccelerator(input)

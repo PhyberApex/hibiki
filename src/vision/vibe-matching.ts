@@ -37,7 +37,10 @@ export function matchVibeTags(vibeTags: string[], sounds: SoundFile[], limit = D
   if (normalizedVibeTags.length === 0)
     return []
   return sounds
-    .map(sound => ({ sound, score: scoreSound(normalizedVibeTags, sound) }))
+    .map(sound => ({
+      sound,
+      score: scoreSound(normalizedVibeTags, sound),
+    }))
     .filter(match => match.score > 0)
     .sort((a, b) => b.score - a.score || b.sound.createdAt.localeCompare(a.sound.createdAt))
     .slice(0, limit)

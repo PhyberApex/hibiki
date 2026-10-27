@@ -61,12 +61,16 @@ export function fetchBotStatus(): Promise<BotStatus> {
 
 export function joinChannel(guildId: string, channelId: string) {
   requireElectron()
-  return apiCall('player', 'join', [{ guildId, channelId }])
+  return apiCall('player', 'join', [
+    { guildId, channelId },
+  ])
 }
 
 export function leaveGuild(guildId: string) {
   requireElectron()
-  return apiCall('player', 'leave', [{ guildId }])
+  return apiCall('player', 'leave', [
+    { guildId },
+  ])
 }
 
 export function stopPlayback(guildId: string) {

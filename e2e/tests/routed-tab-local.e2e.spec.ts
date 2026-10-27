@@ -49,7 +49,9 @@ test.beforeAll(async () => {
   })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   const address = server.address()
-  pageUrl = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/`
+  pageUrl = `http://127.0.0.1:${typeof address === 'object' && address
+    ? address.port
+    : 0}/`
 
   userDataDir = mkdtempSync(join(tmpdir(), 'hibiki-e2e-routed-tab-'))
   mkdirSync(join(userDataDir, 'data'), { recursive: true })

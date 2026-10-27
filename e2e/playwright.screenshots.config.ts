@@ -12,5 +12,7 @@ export default defineConfig({
   reporter: 'list',
   timeout: 120_000,
   expect: { timeout: 15_000 },
-  projects: [{ name: 'electron' }],
+  projects: [
+    { name: 'electron' },
+  ],
 })

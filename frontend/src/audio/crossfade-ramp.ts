@@ -43,7 +43,10 @@ export class CrossfadeRamp {
       return
     }
 
-    this.fades.set(key, { ...options, startedAt: Date.now() })
+    this.fades.set(key, {
+      ...options,
+      startedAt: Date.now(),
+    })
     this.ensureTicking()
   }
 

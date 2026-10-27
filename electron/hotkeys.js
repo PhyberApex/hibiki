@@ -35,7 +35,10 @@ function createHotkeys({ globalShortcut, getApi, getWindow }) {
       const api = getApi()
       if (!api)
         return
-      const [scenes, settings] = await Promise.all([api.scenes.list(), api.config.getHotkeySettings()])
+      const [scenes, settings] = await Promise.all([
+        api.scenes.list(),
+        api.config.getHotkeySettings(),
+      ])
       registrar.sync(computeAccelerators(scenes, settings), settings.enabled)
     }).catch(err => log.error('Could not sync global hotkeys:', err))
     return chain

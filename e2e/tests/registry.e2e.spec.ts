@@ -33,27 +33,45 @@ const source = (name: string) => ({ name, url: 'https://example.invalid/sound', 
 const INDEX = {
   version: 1,
   updatedAt: '2026-10-01T00:00:00Z',
-  scenes: [{
-    name: SCENE_NAME,
-    slug: SLUG,
-    description: 'Cold stone, slow drips and something stirring in the dark.',
-    author: 'e2e',
-    version: '1.0.0',
-    tags: ['horror', 'dungeon'],
-    category: 'dungeon',
-    license: 'CC0-1.0',
-    audioBundled: false,
-    createdAt: '2026-10-01T00:00:00Z',
-    updatedAt: '2026-10-01T00:00:00Z',
-    // A Hotkey is machine-local: the install must not carry it over.
-    hotkey: 'F13',
-    scene: {
-      musicMode: 'shuffle',
-      music: [{ ...MUSIC, source: source('Crypt Drone') }],
-      ambience: [{ ...AMBIENCE, source: source('Dripping Water') }],
-      effects: [{ ...EFFECT, hotkey: 'F14', source: source('Coffin Creak') }],
+  scenes: [
+    {
+      name: SCENE_NAME,
+      slug: SLUG,
+      description: 'Cold stone, slow drips and something stirring in the dark.',
+      author: 'e2e',
+      version: '1.0.0',
+      tags: ['horror', 'dungeon'],
+      category: 'dungeon',
+      license: 'CC0-1.0',
+      audioBundled: false,
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z',
+      // A Hotkey is machine-local: the install must not carry it over.
+      hotkey: 'F13',
+      scene: {
+        musicMode: 'shuffle',
+        music: [
+          {
+            ...MUSIC,
+            source: source('Crypt Drone'),
+          },
+        ],
+        ambience: [
+          {
+            ...AMBIENCE,
+            source: source('Dripping Water'),
+          },
+        ],
+        effects: [
+          {
+            ...EFFECT,
+            hotkey: 'F14',
+            source: source('Coffin Creak'),
+          },
+        ],
+      },
     },
-  }],
+  ],
 }
 
 interface SceneItem {
@@ -98,7 +116,9 @@ function seed(): string {
   writeMinimalWav(join(dir, 'storage', 'effects', `${LIBRARY_EFFECT_ID}.wav`), 1)
   writeFileSync(join(dir, 'data', 'scenes.json'), JSON.stringify([]))
   // The launch update check would GET GitHub; keep the run off the network.
-  writeFileSync(join(dir, 'data', 'app-config.json'), JSON.stringify({ updates: JSON.stringify({ enabled: false }) }))
+  writeFileSync(join(dir, 'data', 'app-config.json'), JSON.stringify({
+    updates: JSON.stringify({ enabled: false }),
+  }))
   return dir
 }
 
@@ -168,15 +188,40 @@ test('a Scene installed from the Registry browser lands in the Scenes view, its 
     expect(installed.name).toBe(SCENE_NAME)
     expect(installed.musicMode).toBe('shuffle')
     expect(installed.hotkey).toBeUndefined()
-    expect(installed.music).toEqual([{ soundId: MUSIC.soundName, ...MUSIC, source: source('Crypt Drone') }])
-    expect(installed.ambience).toEqual([{ soundId: AMBIENCE.soundName, ...AMBIENCE, source: source('Dripping Water') }])
-    expect(installed.effects).toEqual([{ soundId: EFFECT.soundName, ...EFFECT, source: source('Coffin Creak') }])
+    expect(installed.music).toEqual([
+      {
+        soundId: MUSIC.soundName,
+        ...MUSIC,
+        source: source('Crypt Drone'),
+      },
+    ])
+    expect(installed.ambience).toEqual([
+      {
+        soundId: AMBIENCE.soundName,
+        ...AMBIENCE,
+        source: source('Dripping Water'),
+      },
+    ])
+    expect(installed.effects).toEqual([
+      {
+        soundId: EFFECT.soundName,
+        ...EFFECT,
+        source: source('Coffin Creak'),
+      },
+    ])
     expect((await invokeApi<Scene[]>(page, 'scenes', 'list')).map(s => s.name)).toEqual([SCENE_NAME])
 
     // The browser already had the index: installing read it from the cache, no second fetch.
     expect(requests).toEqual(['/registry/index.json'])
     const cache = JSON.parse(readFileSync(join(profile, 'data', 'registry-cache.json'), 'utf8'))
-    expect(cache).toMatchObject({ url: indexUrl, data: { scenes: [{ slug: SLUG }] } })
+    expect(cache).toMatchObject({
+      url: indexUrl,
+      data: {
+        scenes: [
+          { slug: SLUG },
+        ],
+      },
+    })
     await expect.poll(logText).toContain(`Installed "${SCENE_NAME}" from registry (${installed.id})`)
 
     await page.goto('hibiki://app/scenes')
@@ -197,7 +242,14 @@ test('a Scene installed from the Registry browser lands in the Scenes view, its 
     await expect(dialog).toBeHidden()
 
     await expect.poll(async () => (await invokeApi<Scene>(page, 'scenes', 'get', [installed.id])).effects)
-      .toEqual([{ soundId: LIBRARY_EFFECT_ID, soundName: LIBRARY_EFFECT_NAME, volume: EFFECT.volume, source: source('Coffin Creak') }])
+      .toEqual([
+        {
+          soundId: LIBRARY_EFFECT_ID,
+          soundName: LIBRARY_EFFECT_NAME,
+          volume: EFFECT.volume,
+          source: source('Coffin Creak'),
+        },
+      ])
     await expect(page.getByText('missing', { exact: true })).toHaveCount(2)
     await expect(page.getByTitle(`Play ${LIBRARY_EFFECT_NAME}`)).toBeEnabled()
   })

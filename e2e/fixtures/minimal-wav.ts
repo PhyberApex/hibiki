@@ -19,7 +19,9 @@ export function writeMinimalWav(path: string, durationSec?: number): void {
   const bitsPerSample = 16
   const blockAlign = numChannels * (bitsPerSample / 8)
   const byteRate = sampleRate * blockAlign
-  const dataSize = durationSec ? Math.round(durationSec * byteRate / blockAlign) * blockAlign : 4096
+  const dataSize = durationSec
+    ? Math.round(durationSec * byteRate / blockAlign) * blockAlign
+    : 4096
   const chunkSize = 36 + dataSize
 
   const buffer = Buffer.alloc(44 + dataSize)

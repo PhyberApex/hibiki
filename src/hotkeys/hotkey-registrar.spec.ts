@@ -2,7 +2,16 @@ import type { Scene } from '../scenes/scene-store'
 import { computeAccelerators, createHotkeyRegistrar } from './hotkey-registrar'
 
 function scene(id: string, hotkey: string | undefined, effects: { soundId: string, hotkey?: string }[] = []): Scene {
-  return { id, name: id, hotkey, ambience: [], music: [], effects, createdAt: '', updatedAt: '' }
+  return {
+    id,
+    name: id,
+    hotkey,
+    ambience: [],
+    music: [],
+    effects,
+    createdAt: '',
+    updatedAt: '',
+  }
 }
 
 function fakeDriver(refuse: string[] = [], throwFor: string[] = []) {
@@ -24,18 +33,27 @@ function fakeDriver(refuse: string[] = [], throwFor: string[] = []) {
 describe('computeAccelerators', () => {
   it('collects Scene, Effect and Stop hotkeys, sharing an accelerator reused across Scenes', () => {
     const scenes = [
-      scene('a', 'F13', [{ soundId: 'x', hotkey: 'F14' }]),
-      scene('b', undefined, [{ soundId: 'y', hotkey: 'F14' }]),
+      scene('a', 'F13', [
+        { soundId: 'x', hotkey: 'F14' },
+      ]),
+      scene('b', undefined, [
+        { soundId: 'y', hotkey: 'F14' },
+      ]),
     ]
     const wanted = computeAccelerators(scenes, { enabled: true, stopHotkey: 'F16' })
-    expect([...wanted.keys()].sort()).toEqual(['F13', 'F14', 'F16'])
+    expect([
+      ...wanted.keys(),
+    ].sort()).toEqual(['F13', 'F14', 'F16'])
     expect(wanted.get('F14')).toHaveLength(2)
     expect(wanted.get('F16')).toEqual(['Stop Hotkey'])
   })
 })
 
 describe('hotkey registrar', () => {
-  const wanted = (...keys: string[]) => new Map(keys.map(k => [k, [`owner ${k}`]]))
+  const wanted = (...keys: string[]) => new Map(keys.map(k => [
+    k,
+    [`owner ${k}`],
+  ]))
 
   it('registers added keys, releases removed ones and leaves unchanged ones alone', () => {
     const driver = fakeDriver()
@@ -55,7 +73,9 @@ describe('hotkey registrar', () => {
     expect(driver.held.size).toBe(0)
     expect(registrar.getStatus().enabled).toBe(false)
     registrar.sync(wanted('F13', 'F14'), true)
-    expect([...driver.held.keys()].sort()).toEqual(['F13', 'F14'])
+    expect([
+      ...driver.held.keys(),
+    ].sort()).toEqual(['F13', 'F14'])
   })
 
   it('forwards a fire with its accelerator', () => {

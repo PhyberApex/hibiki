@@ -18,7 +18,9 @@ describe('exportScene', () => {
       ambienceDir,
       webDistDir: 'web-dist',
     },
-    database: { path: join(tempRoot, 'data', 'hibiki.json') },
+    database: {
+      path: join(tempRoot, 'data', 'hibiki.json'),
+    },
   }
 
   beforeEach(() => {
@@ -41,7 +43,9 @@ describe('exportScene', () => {
     const store = createSceneStore(config)
     const saved = await store.save({
       name: 'Export Test',
-      ambience: [{ soundId: 'missing-ambience' }],
+      ambience: [
+        { soundId: 'missing-ambience' },
+      ],
       music: [],
       effects: [],
     })
@@ -64,7 +68,9 @@ describe('exportScene', () => {
     const saved = await createSceneStore(config).save({
       name: 'Hot',
       hotkey: 'F1',
-      effects: [{ soundId: 'missing', soundName: 'Boom', hotkey: 'F2' }],
+      effects: [
+        { soundId: 'missing', soundName: 'Boom', hotkey: 'F2' },
+      ],
     })
     const targetZip = join(tempRoot, 'hot.zip')
     await exportScene(config, saved.id, targetZip)
@@ -111,11 +117,25 @@ describe('exportScene', () => {
     const saved = await createSceneStore(config).save({
       name: 'Bundled',
       music: [
-        { soundId: 'theme-1', soundName: 'Theme', volume: 80, loop: true },
+        {
+          soundId: 'theme-1',
+          soundName: 'Theme',
+          volume: 80,
+          loop: true,
+        },
         { soundId: 'theme-1', soundName: 'Theme again', volume: 60 },
       ],
-      ambience: [{ soundId: 'rain-2', volume: 40, enabled: false, source: { name: 'Rain pack' } }],
-      effects: [{ soundId: 'boom-3', soundName: 'Boom' }],
+      ambience: [
+        {
+          soundId: 'rain-2',
+          volume: 40,
+          enabled: false,
+          source: { name: 'Rain pack' },
+        },
+      ],
+      effects: [
+        { soundId: 'boom-3', soundName: 'Boom' },
+      ],
     })
     const targetZip = join(tempRoot, 'bundled.zip')
     await exportScene(config, saved.id, targetZip)
@@ -131,11 +151,29 @@ describe('exportScene', () => {
 
     const { scene } = readManifest(targetZip)
     expect(scene.music).toEqual([
-      { soundName: 'Theme', volume: 80, bundled: true, bundledPath: 'sounds/music/theme-1.mp3', loop: true },
-      { soundName: 'Theme again', volume: 60, bundled: true, bundledPath: 'sounds/music/theme-1.mp3' },
+      {
+        soundName: 'Theme',
+        volume: 80,
+        bundled: true,
+        bundledPath: 'sounds/music/theme-1.mp3',
+        loop: true,
+      },
+      {
+        soundName: 'Theme again',
+        volume: 60,
+        bundled: true,
+        bundledPath: 'sounds/music/theme-1.mp3',
+      },
     ])
     expect(scene.ambience).toEqual([
-      { soundName: 'rain-2', volume: 40, bundled: true, bundledPath: 'sounds/ambience/rain-2.ogg', enabled: false, source: { name: 'Rain pack' } },
+      {
+        soundName: 'rain-2',
+        volume: 40,
+        bundled: true,
+        bundledPath: 'sounds/ambience/rain-2.ogg',
+        enabled: false,
+        source: { name: 'Rain pack' },
+      },
     ])
     expect(scene.effects).toEqual([
       { soundName: 'Boom', bundled: true, bundledPath: 'sounds/effects/boom-3.wav' },
@@ -147,7 +185,10 @@ describe('exportScene', () => {
     const { createSceneStore } = await import('./scene-store')
     const saved = await createSceneStore(config).save({
       name: 'Partly Missing',
-      effects: [{ soundId: 'present-4', soundName: 'Present' }, { soundId: 'gone-5', soundName: 'Gone' }],
+      effects: [
+        { soundId: 'present-4', soundName: 'Present' },
+        { soundId: 'gone-5', soundName: 'Gone' },
+      ],
     })
     const targetZip = join(tempRoot, 'partly-missing.zip')
     await exportScene(config, saved.id, targetZip)

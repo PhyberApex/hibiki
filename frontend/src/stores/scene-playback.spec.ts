@@ -9,8 +9,12 @@ import { trackUsage } from '@/api/usage-stats'
 import { usePlayerStore } from '@/stores/player'
 import { useScenePlaybackStore } from './scene-playback'
 
-vi.mock('@/api/scenes', () => ({ getScene: vi.fn() }))
-vi.mock('@/api/usage-stats', () => ({ trackUsage: vi.fn() }))
+vi.mock('@/api/scenes', () => ({
+  getScene: vi.fn(),
+}))
+vi.mock('@/api/usage-stats', () => ({
+  trackUsage: vi.fn(),
+}))
 vi.mock('@/api/sounds', () => ({
   soundStreamUrl: vi.fn((type: string, id: string) => `hibiki://sound/${type}/${id}`),
   canDecode: vi.fn().mockResolvedValue(true),
@@ -50,9 +54,25 @@ vi.mock('@/api/config', () => ({
 const scene = {
   id: 's1',
   name: 'Storm',
-  ambience: [{ soundId: 'amb-1', soundName: 'Rain', volume: 80, enabled: true }],
-  music: [{ soundId: 'mus-1', soundName: 'Theme', volume: 100, loop: true }],
-  effects: [{ soundId: 'fx-1', soundName: 'Thunder', volume: 100 }],
+  ambience: [
+    {
+      soundId: 'amb-1',
+      soundName: 'Rain',
+      volume: 80,
+      enabled: true,
+    },
+  ],
+  music: [
+    {
+      soundId: 'mus-1',
+      soundName: 'Theme',
+      volume: 100,
+      loop: true,
+    },
+  ],
+  effects: [
+    { soundId: 'fx-1', soundName: 'Thunder', volume: 100 },
+  ],
 }
 
 describe('scene playback store', () => {
@@ -66,7 +86,9 @@ describe('scene playback store', () => {
   it('plays a Scene on the active Target with the master volume applied, without any view', async () => {
     const store = useScenePlaybackStore()
     store.masterVolume = 50
-    store.musicSounds = [{ id: 'mus-1', name: 'Theme', filename: 'theme.mp3' } as never]
+    store.musicSounds = [
+      { id: 'mus-1', name: 'Theme', filename: 'theme.mp3' } as never,
+    ]
 
     await store.playScene(scene)
 
@@ -80,7 +102,9 @@ describe('scene playback store', () => {
 
   it('stops the Playing Scene: ambience, music, effects and the Playing Scene marker', async () => {
     const store = useScenePlaybackStore()
-    store.musicSounds = [{ id: 'mus-1', name: 'Theme', filename: 'theme.mp3' } as never]
+    store.musicSounds = [
+      { id: 'mus-1', name: 'Theme', filename: 'theme.mp3' } as never,
+    ]
     await store.playScene(scene)
 
     store.stopScene()
@@ -120,7 +144,12 @@ describe('scene playback store', () => {
 })
 
 describe('scene playback store: Music Mode', () => {
-  const track = (id: string) => ({ soundId: id, soundName: id, volume: 100, loop: true })
+  const track = (id: string) => ({
+    soundId: id,
+    soundName: id,
+    volume: 100,
+    loop: true,
+  })
   const musicScene = (mode: Scene['musicMode'], ids = ['m1', 'm2', 'm3'], id = 'sm'): Scene => ({
     id,
     name: `Scene ${id}`,
@@ -146,14 +175,23 @@ describe('scene playback store: Music Mode', () => {
 
   // The backend's state push for the Local Target, as `player:stateChanged` would deliver it.
   async function backendTrack(id: string | null) {
-    usePlayerStore().playerState = [{
-      targetId: 'local',
-      kind: 'local',
-      guildId: 'local',
-      isIdle: id === null,
-      track: id ? { id, name: id, filename: `${id}.mp3`, category: 'music' } : null,
-      source: 'live',
-    }] as never
+    usePlayerStore().playerState = [
+      {
+        targetId: 'local',
+        kind: 'local',
+        guildId: 'local',
+        isIdle: id === null,
+        track: id
+          ? {
+              id,
+              name: id,
+              filename: `${id}.mp3`,
+              category: 'music',
+            }
+          : null,
+        source: 'live',
+      },
+    ] as never
     await flushPromises()
   }
 
@@ -184,7 +222,10 @@ describe('scene playback store: Music Mode', () => {
         return Promise.resolve()
       },
     })
-    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: vi.fn() })
+    Object.defineProperty(mediaProto, 'pause', {
+      configurable: true,
+      value: vi.fn(),
+    })
   })
 
   afterEach(() => {
@@ -346,7 +387,13 @@ describe('scene playback store: Music Mode', () => {
   it('follows the source Scene from the store when it is not the open Scene', async () => {
     const scene = musicScene('sequential')
     const { getScene } = await import('@/api/scenes')
-    vi.mocked(getScene).mockResolvedValue({ ...scene, music: [track('m1'), track('m4')] })
+    vi.mocked(getScene).mockResolvedValue({
+      ...scene,
+      music: [
+        track('m1'),
+        track('m4'),
+      ],
+    })
     const store = setup(scene)
     await store.playScene(scene)
     store.openScene = null
@@ -420,9 +467,33 @@ describe('scene playback store: Usage Stats', () => {
   const statsScene: Scene = {
     id: 'st',
     name: 'Tavern',
-    ambience: [{ soundId: 'amb-1', soundName: 'Rain', volume: 80, enabled: true }, { soundId: 'amb-2', soundName: 'Fire', volume: 80, enabled: false }],
-    music: [{ soundId: 'mus-1', soundName: 'Theme', volume: 100, loop: true }],
-    effects: [{ soundId: 'fx-1', soundName: 'Thunder', volume: 100 }, { soundId: 'fx-2', soundName: 'Door', volume: 100 }, { soundId: 'fx-3', soundName: 'Bell', volume: 100 }],
+    ambience: [
+      {
+        soundId: 'amb-1',
+        soundName: 'Rain',
+        volume: 80,
+        enabled: true,
+      },
+      {
+        soundId: 'amb-2',
+        soundName: 'Fire',
+        volume: 80,
+        enabled: false,
+      },
+    ],
+    music: [
+      {
+        soundId: 'mus-1',
+        soundName: 'Theme',
+        volume: 100,
+        loop: true,
+      },
+    ],
+    effects: [
+      { soundId: 'fx-1', soundName: 'Thunder', volume: 100 },
+      { soundId: 'fx-2', soundName: 'Door', volume: 100 },
+      { soundId: 'fx-3', soundName: 'Bell', volume: 100 },
+    ],
     musicMode: 'shuffle',
     createdAt: '',
     updatedAt: '',
@@ -431,7 +502,9 @@ describe('scene playback store: Usage Stats', () => {
   function joinDiscord() {
     const player = usePlayerStore()
     player.guildId = 'g1'
-    player.playerState = [{ guildId: 'g1', connectedChannelId: 'c1' }] as never
+    player.playerState = [
+      { guildId: 'g1', connectedChannelId: 'c1' },
+    ] as never
   }
 
   const events = (name: string) => vi.mocked(trackUsage).mock.calls.map(([event]) => event).filter(event => event.name === name)
@@ -444,12 +517,23 @@ describe('scene playback store: Usage Stats', () => {
 
   it('emits one scene-play per Scene start with the mode, item counts and Target kind, never names', async () => {
     const store = useScenePlaybackStore()
-    store.musicSounds = [{ id: 'mus-1', name: 'Theme', filename: 'theme.mp3' } as never]
+    store.musicSounds = [
+      { id: 'mus-1', name: 'Theme', filename: 'theme.mp3' } as never,
+    ]
 
     await store.playScene(statsScene)
 
     expect(events('scene-play')).toEqual([
-      { name: 'scene-play', data: { musicMode: 'shuffle', music: 1, ambience: 2, effects: 3, target: 'local' } },
+      {
+        name: 'scene-play',
+        data: {
+          musicMode: 'shuffle',
+          music: 1,
+          ambience: 2,
+          effects: 3,
+          target: 'local',
+        },
+      },
     ])
   })
 
@@ -461,7 +545,16 @@ describe('scene playback store: Usage Stats', () => {
     await store.crossfadeToScene('st')
 
     expect(events('scene-play')).toEqual([
-      { name: 'scene-play', data: { musicMode: 'single', music: 1, ambience: 2, effects: 3, target: 'local' } },
+      {
+        name: 'scene-play',
+        data: {
+          musicMode: 'single',
+          music: 1,
+          ambience: 2,
+          effects: 3,
+          target: 'local',
+        },
+      },
     ])
   })
 
@@ -485,7 +578,12 @@ describe('scene playback store: Usage Stats', () => {
     expect(usePlayerStore().playingSceneMode).toBe('local')
     expect(events('scene-play')).toHaveLength(1)
     expect(events('scene-play')[0].data).toEqual(expect.objectContaining({ target: 'discord' }))
-    expect(events('target-switch')).toEqual([{ name: 'target-switch', data: { target: 'local' } }])
+    expect(events('target-switch')).toEqual([
+      {
+        name: 'target-switch',
+        data: { target: 'local' },
+      },
+    ])
   })
 
   it('switching to the Target already active emits nothing', async () => {

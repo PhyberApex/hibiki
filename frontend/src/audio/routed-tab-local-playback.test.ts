@@ -3,8 +3,15 @@ import { describe, expect, it, vi } from 'vitest'
 import { createRoutedTabLocalPlayback } from './routed-tab-local-playback'
 
 function fakeContext(sinkId: string) {
-  const source = { connect: vi.fn(), disconnect: vi.fn() }
-  const gain = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() }
+  const source = {
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  }
+  const gain = {
+    gain: { value: 1 },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  }
   const ctx = {
     sinkId,
     state: 'suspended' as AudioContextState,
@@ -19,8 +26,15 @@ function fakeContext(sinkId: string) {
 }
 
 function fakeStream() {
-  const track = { stop: vi.fn() }
-  return { stream: { getTracks: () => [track] } as unknown as MediaStream, track }
+  const track = {
+    stop: vi.fn(),
+  }
+  return {
+    stream: {
+      getTracks: () => [track],
+    } as unknown as MediaStream,
+    track,
+  }
 }
 
 function setup(sinkId = '') {
@@ -35,7 +49,12 @@ function setup(sinkId = '') {
       return unsubscribe
     }),
   }
-  return { ...fake, deps, listeners, unsubscribe }
+  return {
+    ...fake,
+    deps,
+    listeners,
+    unsubscribe,
+  }
 }
 
 describe('createRoutedTabLocalPlayback', () => {

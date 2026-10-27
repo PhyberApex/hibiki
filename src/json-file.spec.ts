@@ -34,7 +34,10 @@ describe('createJsonFileStore', () => {
     const filePath = join(tempRoot, 'data.json')
     const store = createJsonFileStore<string[]>(filePath, { defaultValue: [], isValid: isStringArray })
 
-    await store.update(data => ({ next: [...data, 'a'], result: undefined }))
+    await store.update(data => ({
+      next: [...data, 'a'],
+      result: undefined,
+    }))
 
     const raw = await readFile(filePath, 'utf-8')
     expect(JSON.parse(raw)).toEqual(['a'])
@@ -88,7 +91,10 @@ describe('createJsonFileStore', () => {
     writeFileSync(filePath, '{not valid json')
     const store = createJsonFileStore<string[]>(filePath, { defaultValue: [], isValid: isStringArray })
 
-    await store.update(data => ({ next: [...data, 'new'], result: undefined }))
+    await store.update(data => ({
+      next: [...data, 'new'],
+      result: undefined,
+    }))
 
     const warnings = getStorageWarnings()
     expect(readFileSync(warnings[0]!.backupPath, 'utf-8')).toBe('{not valid json')
@@ -107,13 +113,19 @@ describe('createJsonFileStore', () => {
 
   it('queues overlapping update calls so they cannot interleave', async () => {
     const filePath = join(tempRoot, 'counter.json')
-    const store = createJsonFileStore<{ count: number }>(filePath, { defaultValue: { count: 0 }, isValid: isRecord })
+    const store = createJsonFileStore<{ count: number }>(filePath, {
+      defaultValue: { count: 0 },
+      isValid: isRecord,
+    })
 
     await Promise.all(
       Array.from({ length: 20 }, () =>
         store.update((data) => {
           const current = (data as { count: number }).count ?? 0
-          return { next: { count: current + 1 }, result: undefined }
+          return {
+            next: { count: current + 1 },
+            result: undefined,
+          }
         })),
     )
 

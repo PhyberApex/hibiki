@@ -120,7 +120,9 @@ export class LocalSink {
     if (!ctx?.setSinkId)
       return
     ctx.setSinkId(sinkId).then(
-      () => logInfo(`[local-sink] switched to ${sinkId === '' ? 'the system default' : sinkId}`),
+      () => logInfo(`[local-sink] switched to ${sinkId === ''
+        ? 'the system default'
+        : sinkId}`),
       (err) => {
         if (ctx === this.ctx)
           console.warn(`[local-sink] could not switch output device: ${describe(err)}`)
@@ -165,7 +167,9 @@ export class LocalSink {
     ctx.onstatechange = () => this.onStateChange(ctx)
     ctx.onerror = ev => this.onError(ev)
     this.reportTimer = setInterval(() => this.flushUnderruns(), this.deps.underrunReportMs ?? DEFAULT_UNDERRUN_REPORT_MS)
-    logInfo(`[local-sink] opened on ${sinkId ? `device ${sinkId}` : 'the system default'}`)
+    logInfo(`[local-sink] opened on ${sinkId
+      ? `device ${sinkId}`
+      : 'the system default'}`)
     this.deps.report({ type: 'started', sampleRate: ctx.sampleRate })
     if (ctx.state === 'suspended') {
       this.deps.report({ type: 'suspended' })
@@ -202,7 +206,10 @@ export class LocalSink {
 
   private onError(ev: unknown): void {
     this.failed = true
-    this.deps.report({ type: 'deviceLost', message: describe(ev) })
+    this.deps.report({
+      type: 'deviceLost',
+      message: describe(ev),
+    })
     this.close()
   }
 
@@ -287,11 +294,22 @@ export function installLocalSink(): () => void {
     return () => {}
   const sink = new LocalSink({
     getSinkId: () => outputDeviceRouter.sinkId,
-    createContext: sinkId => new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive', ...(sinkId ? { sinkId } : {}) }) as unknown as SinkAudioContextLike,
+    createContext: sinkId => new AudioContext({
+      sampleRate: SAMPLE_RATE,
+      latencyHint: 'interactive',
+      ...(sinkId
+        ? { sinkId }
+        : {}),
+    }) as unknown as SinkAudioContextLike,
     report: (event) => {
       if (event.type === 'failed' || event.type === 'deviceLost') {
-        console.error(`[local-sink] ${event.type}${event.message ? `: ${event.message}` : ''}`)
-        useToastStore().show({ type: 'error', text: sinkDeathToast(event) })
+        console.error(`[local-sink] ${event.type}${event.message
+          ? `: ${event.message}`
+          : ''}`)
+        useToastStore().show({
+          type: 'error',
+          text: sinkDeathToast(event),
+        })
       }
       reportLocalSinkHealth(event).catch((err) => {
         console.warn('[local-sink] could not report sink health:', err)

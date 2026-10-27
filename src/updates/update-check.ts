@@ -39,7 +39,14 @@ function parseVersion(version: string): { core: number[], prerelease: string | n
   const match = VERSION_PATTERN.exec(version.trim())
   if (!match)
     return null
-  return { core: [Number(match[1]), Number(match[2]), Number(match[3])], prerelease: match[4] ?? null }
+  return {
+    core: [
+      Number(match[1]),
+      Number(match[2]),
+      Number(match[3]),
+    ],
+    prerelease: match[4] ?? null,
+  }
 }
 
 /** Whether `candidate` is a later release than `current`; a prerelease sorts before its release. */
@@ -67,8 +74,12 @@ function parseSettings(raw: string | null | undefined): StoredSettings {
   try {
     const data = JSON.parse(raw) as Partial<StoredSettings> | null
     return {
-      enabled: typeof data?.enabled === 'boolean' ? data.enabled : true,
-      ...(typeof data?.dismissedVersion === 'string' ? { dismissedVersion: data.dismissedVersion } : {}),
+      enabled: typeof data?.enabled === 'boolean'
+        ? data.enabled
+        : true,
+      ...(typeof data?.dismissedVersion === 'string'
+        ? { dismissedVersion: data.dismissedVersion }
+        : {}),
     }
   }
   catch (e) {
@@ -83,7 +94,10 @@ function parseRelease(body: unknown): AvailableUpdate | null {
   const { tag_name: tag, html_url: url } = body as { tag_name?: unknown, html_url?: unknown }
   if (typeof tag !== 'string' || typeof url !== 'string' || !url.startsWith(RELEASE_PAGE_PREFIX) || !parseVersion(tag))
     return null
-  return { version: tag.trim().replace(/^v/, ''), url }
+  return {
+    version: tag.trim().replace(/^v/, ''),
+    url,
+  }
 }
 
 /**
@@ -143,13 +157,19 @@ export function createUpdateCheck({ store, currentVersion, fetch, timeoutMs = DE
 
     async setEnabled(enabled: boolean): Promise<void> {
       log.info(`Update check on launch turned ${enabled ? 'on' : 'off'}`)
-      await write({ ...await read(), enabled: Boolean(enabled) })
+      await write({
+        ...await read(),
+        enabled: Boolean(enabled),
+      })
     },
 
     /** Remembers `version` so its notice is not shown on later launches; a newer release still is. */
     async dismiss(version: string): Promise<void> {
       log.info(`Update notice for ${version} dismissed`)
-      await write({ ...await read(), dismissedVersion: version })
+      await write({
+        ...await read(),
+        dismissedVersion: version,
+      })
     },
 
     /** The newer release to tell the GM about, or `null` (turned off, up to date, dismissed, offline). */

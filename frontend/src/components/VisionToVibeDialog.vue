@@ -83,7 +83,10 @@ async function analyze(imagePath: string) {
   stage.value = 'analyzing'
   error.value = null
   imageName.value = fileNameOf(imagePath)
-  trackUsage({ name: 'vision-analyze', data: { provider: props.provider } })
+  trackUsage({
+    name: 'vision-analyze',
+    data: { provider: props.provider },
+  })
   try {
     const result = await analyzeImageVibe(imagePath)
     analysis.value = result
@@ -91,7 +94,9 @@ async function analyze(imagePath: string) {
     stage.value = 'results'
   }
   catch (err) {
-    error.value = err instanceof Error ? err.message : 'Couldn\'t analyze this image. Try another one.'
+    error.value = err instanceof Error
+      ? err.message
+      : 'Couldn\'t analyze this image. Try another one.'
     stage.value = 'pick'
   }
 }
@@ -99,7 +104,9 @@ async function analyze(imagePath: string) {
 async function pickImage() {
   const path = await openFileDialog({
     title: 'Choose an image for Vision to Vibe',
-    filters: [{ name: 'Images', extensions: IMAGE_EXTENSIONS }],
+    filters: [
+      { name: 'Images', extensions: IMAGE_EXTENSIONS },
+    ],
   })
   if (path)
     await analyze(path)
@@ -141,7 +148,9 @@ function reset() {
 }
 
 function scoreLabel(match: VibeMatch): string {
-  return `${match.score} ${match.score === 1 ? 'tag' : 'tags'} in common`
+  return `${match.score} ${match.score === 1
+    ? 'tag'
+    : 'tags'} in common`
 }
 
 function onKeydown(e: KeyboardEvent) {

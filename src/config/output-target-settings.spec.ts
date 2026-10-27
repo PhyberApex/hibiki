@@ -3,7 +3,10 @@ import { createOutputTargetSettings } from './output-target-settings'
 function setup(token = false, initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial))
   const settings = createOutputTargetSettings(
-    { get: async k => data.get(k) ?? null, set: async (k, v) => { data.set(k, v) } },
+    {
+      get: async k => data.get(k) ?? null,
+      set: async (k, v) => { data.set(k, v) },
+    },
     async () => token,
   )
   return { data, settings }

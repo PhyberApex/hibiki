@@ -8,11 +8,15 @@ const TOKEN = 'secret-token-abc.123'
 
 class FakeCollection<V> extends Map<string, V> {
   map<T>(fn: (value: V) => T): T[] {
-    return [...this.values()].map(fn)
+    return [
+      ...this.values(),
+    ].map(fn)
   }
 
   filter(fn: (value: V) => boolean): FakeCollection<V> {
-    return new FakeCollection([...this.entries()].filter(([, v]) => fn(v)))
+    return new FakeCollection([
+      ...this.entries(),
+    ].filter(([, v]) => fn(v)))
   }
 }
 
@@ -36,7 +40,10 @@ jest.mock('discord.js', () => {
   class Client extends Emitter {
     ready = false
     user: { tag: string, id: string } | null = null
-    guilds = { cache: new Map() }
+    guilds = {
+      cache: new Map(),
+    }
+
     login = jest.fn(async () => 'ok')
     destroy = jest.fn(async () => {
       this.ready = false
@@ -56,11 +63,16 @@ jest.mock('discord.js', () => {
 })
 
 function makeConfig(token = ''): Config {
-  return { discord: { token } } as unknown as Config
+  return {
+    discord: { token },
+  } as unknown as Config
 }
 
 function makeAppConfig(stored: string | null = null): AppConfig & { get: jest.Mock } {
-  return { get: jest.fn(async () => stored), set: jest.fn(async () => {}) }
+  return {
+    get: jest.fn(async () => stored),
+    set: jest.fn(async () => {}),
+  }
 }
 
 /** The client most recently constructed by the module under test (a logout/reconnect replaces it). */
@@ -85,7 +97,11 @@ function loginBecomesReady(client: FakeClient, guilds: unknown[] = []) {
 }
 
 function channel(id: string, name: string | null, voice: boolean) {
-  return { id, name, isVoiceBased: () => voice }
+  return {
+    id,
+    name,
+    isVoiceBased: () => voice,
+  }
 }
 
 function guild(id: string, name: string, channels: unknown[], voice?: unknown) {
@@ -93,8 +109,14 @@ function guild(id: string, name: string, channels: unknown[], voice?: unknown) {
     id,
     name,
     iconURL: jest.fn(({ size }: { size: number }) => `https://cdn/${id}.png?size=${size}`),
-    channels: { cache: new FakeCollection(channels.map(c => [(c as { id: string }).id, c])) },
-    members: { me: voice === undefined ? null : { voice } },
+    channels: {
+      cache: new FakeCollection(channels.map(c => [(c as { id: string }).id, c])),
+    },
+    members: {
+      me: voice === undefined
+        ? null
+        : { voice },
+    },
   }
 }
 
@@ -125,7 +147,9 @@ describe('createDiscordClient', () => {
   it('creates a client with the Guilds and GuildVoiceStates intents', () => {
     const { GatewayIntentBits } = jest.requireActual('discord.js')
     createDiscordClient(makeConfig(), makeAppConfig())
-    expect(latestClient().options).toEqual({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] })
+    expect(latestClient().options).toEqual({
+      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+    })
   })
 
   describe('login token resolution', () => {
@@ -269,16 +293,27 @@ describe('createDiscordClient', () => {
         channel('t1', 'general', false),
         channel('s1', null, true),
       ])
-      becomeReady(latestClient(), [tavern, guild('g2', 'Dungeon', [])])
+      becomeReady(latestClient(), [
+        tavern,
+        guild('g2', 'Dungeon', []),
+      ])
 
       expect(discord.listGuildDirectory()).toEqual([
         {
           guildId: 'g1',
           guildName: 'Tavern',
           iconUrl: 'https://cdn/g1.png?size=32',
-          channels: [{ id: 'v1', name: 'Voice' }, { id: 's1', name: 's1' }],
+          channels: [
+            { id: 'v1', name: 'Voice' },
+            { id: 's1', name: 's1' },
+          ],
         },
-        { guildId: 'g2', guildName: 'Dungeon', iconUrl: 'https://cdn/g2.png?size=32', channels: [] },
+        {
+          guildId: 'g2',
+          guildName: 'Dungeon',
+          iconUrl: 'https://cdn/g2.png?size=32',
+          channels: [],
+        },
       ])
     })
   })
@@ -354,7 +389,9 @@ describe('createDiscordClient', () => {
 
     it('returns false for an unknown guild or when the bot is not in voice', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      becomeReady(latestClient(), [guild('g1', 'Tavern', [], { channelId: null })])
+      becomeReady(latestClient(), [
+        guild('g1', 'Tavern', [], { channelId: null }),
+      ])
 
       await expect(discord.leaveVoiceChannel('nope')).resolves.toBe(false)
       await expect(discord.leaveVoiceChannel('g1')).resolves.toBe(false)
@@ -362,8 +399,13 @@ describe('createDiscordClient', () => {
 
     it('leaves through the gateway and logs it', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
-      const voice = { channelId: 'v1', setChannel: jest.fn(async () => {}) }
-      becomeReady(latestClient(), [guild('g1', 'Tavern', [], voice)])
+      const voice = {
+        channelId: 'v1',
+        setChannel: jest.fn(async () => {}),
+      }
+      becomeReady(latestClient(), [
+        guild('g1', 'Tavern', [], voice),
+      ])
 
       await expect(discord.leaveVoiceChannel('g1')).resolves.toBe(true)
 
@@ -374,10 +416,15 @@ describe('createDiscordClient', () => {
     it('warns and returns false when the gateway leave fails', async () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
       const failure = new Error('missing permissions')
-      const voice = { channelId: 'v1', setChannel: jest.fn(async () => {
-        throw failure
-      }) }
-      becomeReady(latestClient(), [guild('g1', 'Tavern', [], voice)])
+      const voice = {
+        channelId: 'v1',
+        setChannel: jest.fn(async () => {
+          throw failure
+        }),
+      }
+      becomeReady(latestClient(), [
+        guild('g1', 'Tavern', [], voice),
+      ])
 
       await expect(discord.leaveVoiceChannel('g1')).resolves.toBe(false)
 
@@ -396,8 +443,14 @@ describe('createDiscordClient', () => {
     it('reports the bot\'s current voice channel', () => {
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
       becomeReady(latestClient(), [
-        guild('g1', 'Tavern', [], { channelId: 'v1', channel: { id: 'v1', name: 'Voice' } }),
-        guild('g2', 'Dungeon', [], { channelId: null, channel: { id: 'v2', name: 'Crypt' } }),
+        guild('g1', 'Tavern', [], {
+          channelId: 'v1',
+          channel: { id: 'v1', name: 'Voice' },
+        }),
+        guild('g2', 'Dungeon', [], {
+          channelId: null,
+          channel: { id: 'v2', name: 'Crypt' },
+        }),
       ])
 
       expect(discord.getBotVoiceStateForGuild('g1')).toEqual({ channelId: 'v1', channelName: 'Voice' })
@@ -411,7 +464,10 @@ describe('createDiscordClient', () => {
       const client = latestClient()
       const clientError = new Error('boom')
 
-      becomeReady(client, [guild('g1', 'Tavern', []), guild('g2', 'Dungeon', [])])
+      becomeReady(client, [
+        guild('g1', 'Tavern', []),
+        guild('g2', 'Dungeon', []),
+      ])
       client.emit(Events.Error, clientError)
       client.emit(Events.Warn, 'rate limited')
       client.emit(Events.ShardDisconnect, { code: 4004 }, 0)
@@ -439,7 +495,9 @@ describe('createDiscordClient', () => {
 
     it('never writes the token into a log line', async () => {
       const discord = createDiscordClient(makeConfig(''), makeAppConfig(TOKEN))
-      loginBecomesReady(latestClient(), [guild('g1', 'Tavern', [])])
+      loginBecomesReady(latestClient(), [
+        guild('g1', 'Tavern', []),
+      ])
       await discord.login()
       latestClient().emit(Events.ShardDisconnect, { code: 1000 }, 0)
       latestClient().emit(Events.Error, new Error('boom'))

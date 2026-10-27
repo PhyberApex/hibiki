@@ -69,7 +69,21 @@ function setMusicMode(mode: MusicMode) {
   saveScene(scene.value).catch(e => console.warn(`[scenes] Saving Music Mode ${mode} for scene ${scene.value?.id} failed:`, e))
 }
 
-const INTERVAL_OPTIONS = [0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300, 600]
+const INTERVAL_OPTIONS = [
+  0,
+  5,
+  10,
+  15,
+  20,
+  30,
+  45,
+  60,
+  90,
+  120,
+  180,
+  300,
+  600,
+]
 
 function formatInterval(seconds: number): string {
   if (seconds === 0)
@@ -78,7 +92,9 @@ function formatInterval(seconds: number): string {
     return `${seconds}s`
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
-  return s > 0 ? `${m}m ${s}s` : `${m}m`
+  return s > 0
+    ? `${m}m ${s}s`
+    : `${m}m`
 }
 
 /** `m:ss` for an elapsed/total timer label (whole seconds, per #509's acceptance criteria). */
@@ -105,7 +121,10 @@ function effectProgressPercent(status: EffectSoundStatus): number {
 const effectCards = computed(() => {
   if (!scene.value)
     return []
-  return scene.value.effects.map(item => ({ item, status: player.effectStatus(item.soundId) }))
+  return scene.value.effects.map(item => ({
+    item,
+    status: player.effectStatus(item.soundId),
+  }))
 })
 
 // Hotkey bindings are validated when the Scene is saved (uniqueness, Stop Hotkey), so a rejection
@@ -119,7 +138,9 @@ async function bindHotkey(errorKey: string, target: { hotkey?: string }, value: 
   if (!scene.value)
     return
   const previous = target.hotkey
-  logInfo(`[scenes] ${value ? `Binding hotkey ${value}` : 'Clearing hotkey'} on ${errorKey} in scene ${scene.value.id}`)
+  logInfo(`[scenes] ${value
+    ? `Binding hotkey ${value}`
+    : 'Clearing hotkey'} on ${errorKey} in scene ${scene.value.id}`)
   if (value)
     target.hotkey = value
   else
@@ -137,7 +158,12 @@ async function bindHotkey(errorKey: string, target: { hotkey?: string }, value: 
     else
       delete target.hotkey
     console.warn(`[scenes] Hotkey ${value ?? '(cleared)'} rejected for ${errorKey} in scene ${scene.value.id}:`, e)
-    hotkeyErrors.value = { ...hotkeyErrors.value, [errorKey]: e instanceof Error ? e.message : 'Couldn\'t bind that hotkey.' }
+    hotkeyErrors.value = {
+      ...hotkeyErrors.value,
+      [errorKey]: e instanceof Error
+        ? e.message
+        : 'Couldn\'t bind that hotkey.',
+    }
   }
 }
 
@@ -165,9 +191,17 @@ const hasSounds = computed(() =>
 const hasAnySoundMissing = computed(() => {
   if (!scene.value)
     return false
-  return [...scene.value.ambience, ...scene.value.music, ...scene.value.effects]
+  return [
+    ...scene.value.ambience,
+    ...scene.value.music,
+    ...scene.value.effects,
+  ]
     .some(item => isSoundMissing(
-      scene.value!.ambience.includes(item) ? 'ambience' : scene.value!.music.includes(item) ? 'music' : 'effects',
+      scene.value!.ambience.includes(item)
+        ? 'ambience'
+        : scene.value!.music.includes(item)
+          ? 'music'
+          : 'effects',
       item.soundId,
     ))
 })
@@ -197,7 +231,9 @@ const nowPlayingLabel = computed(() => {
   }
   if (playingAmbienceIds.value.size > 0)
     parts.push(`${playingAmbienceIds.value.size} ambience`)
-  return parts.length > 0 ? parts.join(' · ') : 'Scene playing'
+  return parts.length > 0
+    ? parts.join(' · ')
+    : 'Scene playing'
 })
 
 function sceneSoundCount(s: Scene): number {
@@ -207,14 +243,31 @@ function sceneSoundCount(s: Scene): number {
 function formatDate(iso: string): string {
   const d = new Date(iso)
   const now = new Date()
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ]
   if (d.getFullYear() === now.getFullYear())
     return `${months[d.getMonth()]} ${d.getDate()}`
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
 }
 
 function resolveSoundName(category: 'ambience' | 'music' | 'effects', soundId: string): string {
-  const list = category === 'ambience' ? ambienceSounds.value : category === 'music' ? musicSounds.value : effectsSounds.value
+  const list = category === 'ambience'
+    ? ambienceSounds.value
+    : category === 'music'
+      ? musicSounds.value
+      : effectsSounds.value
   return list.find(s => s.id === soundId)?.name ?? soundId
 }
 
@@ -226,7 +279,9 @@ async function loadScenes() {
     scenes.value = await listScenes()
   }
   catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'Couldn\'t load scenes. Try again.'
+    loadError.value = err instanceof Error
+      ? err.message
+      : 'Couldn\'t load scenes. Try again.'
   }
 }
 
@@ -239,7 +294,9 @@ async function loadScene() {
     scene.value = await getScene(sceneId.value)
   }
   catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'Couldn\'t load this scene. Try again.'
+    loadError.value = err instanceof Error
+      ? err.message
+      : 'Couldn\'t load this scene. Try again.'
   }
 }
 
@@ -267,7 +324,9 @@ async function loadSounds() {
     effectsSounds.value = effects
   }
   catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'Couldn\'t load sounds. Try again.'
+    loadError.value = err instanceof Error
+      ? err.message
+      : 'Couldn\'t load sounds. Try again.'
   }
 }
 
@@ -335,14 +394,24 @@ async function submitCreateScene() {
   createSceneBusy.value = true
   exportImportMessage.value = null
   try {
-    const newScene = await saveScene({ name, ambience: [], music: [], effects: [] })
+    const newScene = await saveScene({
+      name,
+      ambience: [],
+      music: [],
+      effects: [],
+    })
     scenes.value = await listScenes()
     showCreateInput.value = false
     newSceneName.value = ''
     await router.push(`/scenes/${newScene.id}`)
   }
   catch (err) {
-    exportImportMessage.value = { type: 'error', text: err instanceof Error ? err.message : 'Couldn\'t create the scene. Try again.' }
+    exportImportMessage.value = {
+      type: 'error',
+      text: err instanceof Error
+        ? err.message
+        : 'Couldn\'t create the scene. Try again.',
+    }
   }
   finally {
     createSceneBusy.value = false
@@ -373,7 +442,12 @@ async function doExportScene() {
   const targetPath = await saveFileDialog({
     title: 'Export scene as zip',
     defaultPath: `${sanitizeFileName(scene.value.name)}.zip`,
-    filters: [{ name: 'Zip Archives', extensions: ['zip'] }],
+    filters: [
+      {
+        name: 'Zip Archives',
+        extensions: ['zip'],
+      },
+    ],
   })
   if (!targetPath)
     return
@@ -383,7 +457,12 @@ async function doExportScene() {
     exportImportMessage.value = { type: 'success', text: `Exported to ${targetPath}` }
   }
   catch (e) {
-    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Export failed. Check that the folder is writable and try again.' }
+    exportImportMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Export failed. Check that the folder is writable and try again.',
+    }
   }
   finally {
     exportBusy.value = false
@@ -394,20 +473,33 @@ async function doImportScene() {
   exportImportMessage.value = null
   const sourcePath = await openFileDialog({
     title: 'Import scene from zip',
-    filters: [{ name: 'Zip Archives', extensions: ['zip'] }],
+    filters: [
+      {
+        name: 'Zip Archives',
+        extensions: ['zip'],
+      },
+    ],
   })
   if (!sourcePath)
     return
   importBusy.value = true
   try {
     const imported = await importScene(sourcePath)
-    const [sceneList] = await Promise.all([listScenes(), loadSounds()])
+    const [sceneList] = await Promise.all([
+      listScenes(),
+      loadSounds(),
+    ])
     scenes.value = sceneList
     await router.push(`/scenes/${imported.id}`)
     exportImportMessage.value = { type: 'success', text: `Imported "${imported.name}"` }
   }
   catch (e) {
-    exportImportMessage.value = { type: 'error', text: e instanceof Error ? e.message : 'Import failed. Make sure the file is a valid Hibiki scene (.zip) and try again.' }
+    exportImportMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Import failed. Make sure the file is a valid Hibiki scene (.zip) and try again.',
+    }
   }
   finally {
     importBusy.value = false
@@ -415,7 +507,11 @@ async function doImportScene() {
 }
 
 function isSoundMissing(category: 'ambience' | 'music' | 'effects', soundId: string): boolean {
-  const list = category === 'ambience' ? ambienceSounds.value : category === 'music' ? musicSounds.value : effectsSounds.value
+  const list = category === 'ambience'
+    ? ambienceSounds.value
+    : category === 'music'
+      ? musicSounds.value
+      : effectsSounds.value
   return !list.some(s => s.id === soundId)
 }
 

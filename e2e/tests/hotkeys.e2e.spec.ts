@@ -40,25 +40,39 @@ function seed(): string {
   const root = mkdtempSync(join(tmpdir(), 'hibiki-e2e-hotkeys-'))
   const dataDir = join(root, 'data')
   mkdirSync(dataDir, { recursive: true })
-  const files: [string, string, number][] = [['music', MUSIC_ID, 10], ['effects', EFFECT_ID, EFFECT_SECONDS]]
+  const files: [string, string, number][] = [
+    ['music', MUSIC_ID, 10],
+    ['effects', EFFECT_ID, EFFECT_SECONDS],
+  ]
   for (const [category, id, seconds] of files) {
     mkdirSync(join(root, 'storage', category), { recursive: true })
     writeMinimalWav(join(root, 'storage', category, `${id}.wav`), seconds)
   }
-  const item = (soundId: string, extra = {}) => ({ soundId, soundName: soundId, volume: 50, ...extra })
+  const item = (soundId: string, extra = {}) => ({
+    soundId,
+    soundName: soundId,
+    volume: 50,
+    ...extra,
+  })
   const scene = {
     id: SCENE_ID,
     name: 'E2E Hotkeys Scene',
     hotkey: 'F13',
-    music: [item(MUSIC_ID, { loop: true })],
+    music: [
+      item(MUSIC_ID, { loop: true }),
+    ],
     ambience: [],
-    effects: [item(EFFECT_ID, { hotkey: 'F14' })],
+    effects: [
+      item(EFFECT_ID, { hotkey: 'F14' }),
+    ],
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
   writeFileSync(join(dataDir, 'scenes.json'), JSON.stringify([scene]))
   // app-config.json holds string values; the hotkey settings are stored as JSON.
-  writeFileSync(join(dataDir, 'app-config.json'), JSON.stringify({ hotkeys: JSON.stringify({ enabled: true }) }))
+  writeFileSync(join(dataDir, 'app-config.json'), JSON.stringify({
+    hotkeys: JSON.stringify({ enabled: true }),
+  }))
   return root
 }
 
@@ -73,7 +87,12 @@ function hotkeyStatus(): Promise<HotkeyStatus> {
 
 /** Every accelerator Hibiki asked the OS for, whether the OS granted it or refused it. */
 function requestedKeys({ registered, failures }: HotkeyStatus): string[] {
-  return [...new Set([...registered, ...failures.map(f => f.accelerator)])].sort()
+  return [
+    ...new Set([
+      ...registered,
+      ...failures.map(f => f.accelerator),
+    ]),
+  ].sort()
 }
 
 /** What `electron/hotkeys.js` sends to the main window when the OS reports `accelerator`. */

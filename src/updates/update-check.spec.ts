@@ -6,7 +6,11 @@ function release(tag: string, url = `https://github.com/PhyberApex/hibiki/releas
 }
 
 function respond(body: unknown, status = 200): FetchLike {
-  return jest.fn(async () => ({ ok: status >= 200 && status < 300, status, json: async () => body }))
+  return jest.fn(async () => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  }))
 }
 
 function setup({ currentVersion = '1.6.0', fetch = respond(release('v1.7.0')), initial = {} as Record<string, string>, timeoutMs = 5000 } = {}) {
@@ -57,7 +61,9 @@ describe('update check', () => {
   })
 
   it('reports nothing when already on the latest release', async () => {
-    expect(await setup({ fetch: respond(release('v1.6.0')) }).updates.check()).toBeNull()
+    expect(await setup({
+      fetch: respond(release('v1.6.0')),
+    }).updates.check()).toBeNull()
   })
 
   it('makes no request at all when turned off', async () => {
@@ -73,7 +79,10 @@ describe('update check', () => {
     await first.updates.dismiss('1.7.0')
     expect(await first.updates.check()).toBeNull()
 
-    const later = setup({ initial: Object.fromEntries(first.data), fetch: respond(release('v1.8.0')) })
+    const later = setup({
+      initial: Object.fromEntries(first.data),
+      fetch: respond(release('v1.8.0')),
+    })
     expect(await later.updates.check()).toEqual(expect.objectContaining({ version: '1.8.0' }))
   })
 
@@ -90,8 +99,12 @@ describe('update check', () => {
       throw new Error('offline')
     })
     expect(await setup({ fetch: failing }).updates.check()).toBeNull()
-    expect(await setup({ fetch: respond({ message: 'rate limited' }, 403) }).updates.check()).toBeNull()
-    expect(await setup({ fetch: respond({ nope: true }) }).updates.check()).toBeNull()
+    expect(await setup({
+      fetch: respond({ message: 'rate limited' }, 403),
+    }).updates.check()).toBeNull()
+    expect(await setup({
+      fetch: respond({ nope: true }),
+    }).updates.check()).toBeNull()
   })
 
   it('never links anywhere but GitHub', async () => {
@@ -108,6 +121,8 @@ describe('update check', () => {
   })
 
   it('falls back to the default on a malformed stored setting', async () => {
-    expect(await setup({ initial: { updates: '{nope' } }).updates.getSettings()).toEqual({ enabled: true })
+    expect(await setup({
+      initial: { updates: '{nope' },
+    }).updates.getSettings()).toEqual({ enabled: true })
   })
 })

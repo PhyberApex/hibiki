@@ -19,7 +19,11 @@ const tabs: { key: 'music' | 'ambience' | 'effects', label: string }[] = [
 
 async function loadCounts() {
   try {
-    const [m, a, e] = await Promise.all([listMusic(), listAmbience(), listEffects()])
+    const [m, a, e] = await Promise.all([
+      listMusic(),
+      listAmbience(),
+      listEffects(),
+    ])
     counts.value = { music: m.length, ambience: a.length, effects: e.length }
   }
   catch {

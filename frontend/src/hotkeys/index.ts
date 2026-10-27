@@ -15,7 +15,9 @@ export async function reportHotkeyRegistrationFailures(): Promise<void> {
     const { failures } = await fetchHotkeyStatus()
     if (failures.length === 0)
       return
-    const keys = [...new Set(failures.map(f => f.accelerator))]
+    const keys = [
+      ...new Set(failures.map(f => f.accelerator)),
+    ]
     toast.show({
       type: 'warning',
       text: `Global hotkeys could not be registered: ${keys.join(', ')}. Another app may hold them, or this system does not support global hotkeys.`,
@@ -58,7 +60,10 @@ export function startHotkeyDispatch(): () => void {
       logInfo,
       // Renderer debug output never reaches hibiki.log, and this is the line that explains "nothing happened".
       logDebug: logInfo,
-      trackFired: kind => trackUsage({ name: 'hotkey-fired', data: { kind } }),
+      trackFired: kind => trackUsage({
+        name: 'hotkey-fired',
+        data: { kind },
+      }),
     }))
   })
 }
