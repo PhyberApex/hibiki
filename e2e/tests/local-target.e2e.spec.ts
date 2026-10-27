@@ -33,18 +33,33 @@ function seed(): string {
   const root = mkdtempSync(join(tmpdir(), 'hibiki-e2e-local-'))
   const dataDir = join(root, 'data')
   mkdirSync(dataDir, { recursive: true })
-  const files: [string, string, number][] = [['music', MUSIC_ID, 10], ['ambience', AMBIENCE_ID, 10], ['effects', EFFECT_ID, EFFECT_SECONDS]]
+  const files: [string, string, number][] = [
+    ['music', MUSIC_ID, 10],
+    ['ambience', AMBIENCE_ID, 10],
+    ['effects', EFFECT_ID, EFFECT_SECONDS],
+  ]
   for (const [category, id, seconds] of files) {
     mkdirSync(join(root, 'storage', category), { recursive: true })
     writeMinimalWav(join(root, 'storage', category, `${id}.wav`), seconds)
   }
-  const item = (soundId: string, extra = {}) => ({ soundId, soundName: soundId, volume: 50, ...extra })
+  const item = (soundId: string, extra = {}) => ({
+    soundId,
+    soundName: soundId,
+    volume: 50,
+    ...extra,
+  })
   const scene = {
     id: 'e2e-local-scene',
     name: 'E2E Local Scene',
-    music: [item(MUSIC_ID, { loop: true })],
-    ambience: [item(AMBIENCE_ID, { enabled: true, repeatMin: 0, repeatMax: 0 })],
-    effects: [item(EFFECT_ID)],
+    music: [
+      item(MUSIC_ID, { loop: true }),
+    ],
+    ambience: [
+      item(AMBIENCE_ID, { enabled: true, repeatMin: 0, repeatMax: 0 }),
+    ],
+    effects: [
+      item(EFFECT_ID),
+    ],
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
@@ -99,13 +114,25 @@ test('plays a Scene through the Local Target without Discord', async () => {
 
   const music = scene.music[0]
   const ambience = scene.ambience[0]
-  await invokeApi(page, 'player', 'playMusic', [LOCAL, music.soundId, { volume: music.volume, loop: true }])
-  await invokeApi(page, 'player', 'playAmbience', [LOCAL, ambience.soundId, { volume: ambience.volume, repeatMin: 0, repeatMax: 0 }])
+  await invokeApi(page, 'player', 'playMusic', [
+    LOCAL,
+    music.soundId,
+    { volume: music.volume, loop: true },
+  ])
+  await invokeApi(page, 'player', 'playAmbience', [
+    LOCAL,
+    ambience.soundId,
+    { volume: ambience.volume, repeatMin: 0, repeatMax: 0 },
+  ])
 
   await expect.poll(async () => (await localState())?.track?.id).toBe(MUSIC_ID)
   await expect.poll(async () => (await localState())?.ambience).toContain(AMBIENCE_ID)
 
-  const instance = await invokeApi<{ instanceId: string, soundId: string } | undefined>(page, 'player', 'playEffect', [LOCAL, EFFECT_ID, { volume: 50 }])
+  const instance = await invokeApi<{ instanceId: string, soundId: string } | undefined>(page, 'player', 'playEffect', [
+    LOCAL,
+    EFFECT_ID,
+    { volume: 50 },
+  ])
   expect(instance?.soundId).toBe(EFFECT_ID)
   await expect.poll(async () => (await localState())?.effects?.map(e => e.instanceId)).toContain(instance!.instanceId)
   // The Effect ends on its own once the sound finishes; Music and Ambience keep playing.

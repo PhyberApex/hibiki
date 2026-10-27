@@ -275,7 +275,9 @@ export class GuildAudioManager extends EventEmitter {
 
   /** Current encryption summary for playback logs, or a placeholder when not connected. */
   private get encryptionSummary(): string {
-    return this.connection ? describeEncryption(this.connection) : 'no connection'
+    return this.connection
+      ? describeEncryption(this.connection)
+      : 'no connection'
   }
 
   /**
@@ -440,7 +442,9 @@ export class GuildAudioManager extends EventEmitter {
 
       log.info(`Music "${metadata.name}" starting as ${streamId}: volume ${options.volume}, loop ${loop}, fadeIn ${startFadeMs} ms; ${this.encryptionSummary}`)
       this.musicStreams.set(streamId, { metadata, seq, loop })
-      this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0 ? 0 : options.volume, onEnded)
+      this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0
+        ? 0
+        : options.volume, onEnded)
       if (startFadeMs > 0)
         this.engine.rampStreamVolume(streamId, options.volume, startFadeMs)
     }
@@ -590,9 +594,13 @@ export class GuildAudioManager extends EventEmitter {
         }
       }
 
-      log.info(`Ambience ${soundId} starting as ${streamId}: volume ${entry.volume}, ${entry.loop ? 'seamless loop' : `repeat every ${entry.repeatMin}-${entry.repeatMax} s`}, fadeIn ${startFadeMs} ms; ${this.encryptionSummary}`)
+      log.info(`Ambience ${soundId} starting as ${streamId}: volume ${entry.volume}, ${entry.loop
+        ? 'seamless loop'
+        : `repeat every ${entry.repeatMin}-${entry.repeatMax} s`}, fadeIn ${startFadeMs} ms; ${this.encryptionSummary}`)
       this.ambienceEntries.set(soundId, entry)
-      this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0 ? 0 : entry.volume, onEnded)
+      this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0
+        ? 0
+        : entry.volume, onEnded)
       if (startFadeMs > 0)
         this.engine.rampStreamVolume(streamId, entry.volume, startFadeMs)
     }
@@ -651,7 +659,9 @@ export class GuildAudioManager extends EventEmitter {
 
   /** soundIds of every Ambience sound currently active (playing or waiting out its repeat gap) for this guild. */
   get activeAmbience(): string[] {
-    return [...this.ambienceEntries.keys()]
+    return [
+      ...this.ambienceEntries.keys(),
+    ]
   }
 
   private clearAmbienceRepeatTimer(entry: AmbienceEntry): void {
@@ -740,7 +750,12 @@ export class GuildAudioManager extends EventEmitter {
       // here ever touches the engine for a slot that was reserved but
       // never decoded.
       stream.destroy?.()
-      return { instanceId: streamId, soundId, startedAt: new Date().toISOString(), durationMs }
+      return {
+        instanceId: streamId,
+        soundId,
+        startedAt: new Date().toISOString(),
+        durationMs,
+      }
     }
 
     const startedAt = new Date().toISOString()
@@ -753,7 +768,12 @@ export class GuildAudioManager extends EventEmitter {
       this.emit('effectsChanged')
     })
     this.emit('effectsChanged')
-    return { instanceId: streamId, soundId, startedAt, durationMs }
+    return {
+      instanceId: streamId,
+      soundId,
+      startedAt,
+      durationMs,
+    }
   }
 
   /** Ends one backend-decoded Effect Instance by id, leaving every other instance (of this or any other sound) untouched. A missing/already-ended id is a no-op, logged at debug. */
@@ -782,7 +802,9 @@ export class GuildAudioManager extends EventEmitter {
 
   /** Active backend-decoded Effect Instances for this guild (#509), for `getState()` reporting. */
   get activeEffects(): EffectInstanceInfo[] {
-    return [...this.effectInstances.entries()].map(([instanceId, entry]) => ({ instanceId, ...entry }))
+    return [
+      ...this.effectInstances.entries(),
+    ].map(([instanceId, entry]) => ({ instanceId, ...entry }))
   }
 
   /** FIFO-evicts the oldest backend-decoded Effect instance(s) until there's room for one more, under `EFFECT_INSTANCE_CAP`. */

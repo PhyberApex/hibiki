@@ -16,7 +16,9 @@ describe('createAppConfig', () => {
       effectsDir: join(tempRoot, 'effects'),
       webDistDir: 'web-dist',
     },
-    database: { path: join(tempRoot, 'data', 'hibiki.json') },
+    database: {
+      path: join(tempRoot, 'data', 'hibiki.json'),
+    },
   }
 
   beforeEach(() => {
@@ -79,7 +81,9 @@ describe('createAppConfig with a corrupt store', () => {
         effectsDir: join(root, 'effects'),
         webDistDir: 'web-dist',
       },
-      database: { path: join(root, 'data', 'hibiki.json') },
+      database: {
+        path: join(root, 'data', 'hibiki.json'),
+      },
     }
   }
 
@@ -133,7 +137,9 @@ describe('createAppConfig with a secret codec', () => {
         effectsDir: join(root, 'effects'),
         webDistDir: 'web-dist',
       },
-      database: { path: join(root, 'data', 'hibiki.json') },
+      database: {
+        path: join(root, 'data', 'hibiki.json'),
+      },
     }
   }
 

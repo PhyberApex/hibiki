@@ -12,7 +12,10 @@ describe('vision API', () => {
   })
 
   it('analyzeImageVibe uses apiCall with the image path', async () => {
-    const analysis = { description: 'A stormy coast', tags: ['stormy', 'coast'] }
+    const analysis = {
+      description: 'A stormy coast',
+      tags: ['stormy', 'coast'],
+    }
     mockInvoke.mockResolvedValue(analysis)
     const result = await analyzeImageVibe('/tmp/map.png')
     expect(mockInvoke).toHaveBeenCalledWith('api', {
@@ -30,7 +33,9 @@ describe('vision API', () => {
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'vision',
       method: 'matchVibe',
-      args: [['stormy']],
+      args: [
+        ['stormy'],
+      ],
     })
     expect(result).toEqual(matches)
   })

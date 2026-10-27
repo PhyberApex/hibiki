@@ -40,7 +40,11 @@ export function createDiscordTokenSettings(deps: DiscordTokenSettingsDeps) {
   const { store, envToken, encrypted, outputTargets, discord, player } = deps
 
   async function getStatus(): Promise<DiscordStatus> {
-    return { tokenConfigured: await isDiscordTokenConfigured(store, envToken), encrypted, fromEnvironment: Boolean(envToken) }
+    return {
+      tokenConfigured: await isDiscordTokenConfigured(store, envToken),
+      encrypted,
+      fromEnvironment: Boolean(envToken),
+    }
   }
 
   /** Stores a token; an empty or blank one is ignored, so a blank field never removes a token (that is `clearToken`). */
@@ -80,7 +84,9 @@ export function createDiscordTokenSettings(deps: DiscordTokenSettingsDeps) {
     await store.delete(TOKEN_KEY)
     if (wasActive === 'discord')
       await outputTargets.setActive('local')
-    log.info(`Discord token removed${wasActive === 'discord' ? '; Local is now the active Output Target' : ''}`)
+    log.info(`Discord token removed${wasActive === 'discord'
+      ? '; Local is now the active Output Target'
+      : ''}`)
     return getStatus()
   }
 

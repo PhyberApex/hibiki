@@ -32,7 +32,9 @@ describe('effectPcmCache', () => {
 
   it('reports the duration of the decoded PCM, derived from its byte length', async () => {
     const cache = createEffectPcmCache()
-    const decode = jest.fn().mockReturnValue(NodeReadable.from([pcmChunkOfMs(250)]))
+    const decode = jest.fn().mockReturnValue(NodeReadable.from([
+      pcmChunkOfMs(250),
+    ]))
 
     const { durationMs } = await cache.get('/effects/thunder.mp3', decode)
 
@@ -41,7 +43,9 @@ describe('effectPcmCache', () => {
 
   it('reports the same duration on a cache hit as on the original miss', async () => {
     const cache = createEffectPcmCache()
-    const decode = jest.fn().mockReturnValue(NodeReadable.from([pcmChunkOfMs(400)]))
+    const decode = jest.fn().mockReturnValue(NodeReadable.from([
+      pcmChunkOfMs(400),
+    ]))
     await cache.get('door', decode)
 
     const { durationMs } = await cache.get('door', decode)

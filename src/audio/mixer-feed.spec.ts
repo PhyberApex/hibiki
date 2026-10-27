@@ -37,7 +37,9 @@ const flush = () => new Promise(resolve => setImmediate(resolve))
 
 describe('feedMixerInput', () => {
   describe('bounded lead', () => {
-    beforeEach(() => jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] }))
+    beforeEach(() => jest.useFakeTimers({
+      doNotFake: ['setImmediate', 'nextTick'],
+    }))
     afterEach(() => jest.useRealTimers())
 
     it('never queues more than leadBytes inside the input', async () => {
@@ -124,7 +126,9 @@ describe('feedMixerInput', () => {
   })
 
   describe('onEnded', () => {
-    beforeEach(() => jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] }))
+    beforeEach(() => jest.useFakeTimers({
+      doNotFake: ['setImmediate', 'nextTick'],
+    }))
     afterEach(() => jest.useRealTimers())
 
     it('fires once the source has ended and the input has drained, ending the input first', async () => {
@@ -230,15 +234,29 @@ describe('feedMixerInput', () => {
 
   describe('against the real mixer', () => {
     it('drains a file that is not a whole number of packets and reports its end', async () => {
-      const mixer = new AudioMixer({ sampleRate: 48000, channels: 2, bitDepth: 16, generateSilence: false, autoClose: false, highWaterMark: MIXER_PACKET_BYTES })
+      const mixer = new AudioMixer({
+        sampleRate: 48000,
+        channels: 2,
+        bitDepth: 16,
+        generateSilence: false,
+        autoClose: false,
+        highWaterMark: MIXER_PACKET_BYTES,
+      })
       const sink = new PassThrough()
       let outBytes = 0
       sink.on('data', (chunk: Buffer) => {
         outBytes += chunk.length
       })
       mixer.pipe(sink)
-      const input = mixer.createAudioInput({ sampleRate: 48000, channels: 2, bitDepth: 16, volume: 100 })
-      const source = Readable.from([Buffer.alloc(MIXER_PACKET_BYTES * 2 + 1000, 1)])
+      const input = mixer.createAudioInput({
+        sampleRate: 48000,
+        channels: 2,
+        bitDepth: 16,
+        volume: 100,
+      })
+      const source = Readable.from([
+        Buffer.alloc(MIXER_PACKET_BYTES * 2 + 1000, 1),
+      ])
 
       try {
         await new Promise<void>((resolve) => {
@@ -255,14 +273,26 @@ describe('feedMixerInput', () => {
     })
 
     it('streams a whole file through at bounded lead and reports the end after playout', async () => {
-      const mixer = new AudioMixer({ sampleRate: 48000, channels: 2, bitDepth: 16, generateSilence: false, autoClose: false, highWaterMark: MIXER_PACKET_BYTES })
+      const mixer = new AudioMixer({
+        sampleRate: 48000,
+        channels: 2,
+        bitDepth: 16,
+        generateSilence: false,
+        autoClose: false,
+        highWaterMark: MIXER_PACKET_BYTES,
+      })
       const sink = new PassThrough()
       let outBytes = 0
       sink.on('data', (chunk: Buffer) => {
         outBytes += chunk.length
       })
       mixer.pipe(sink)
-      const input = mixer.createAudioInput({ sampleRate: 48000, channels: 2, bitDepth: 16, volume: 100 })
+      const input = mixer.createAudioInput({
+        sampleRate: 48000,
+        channels: 2,
+        bitDepth: 16,
+        volume: 100,
+      })
 
       const totalBytes = 10 * DEFAULT_LEAD_BYTES
       const source = Readable.from(Array.from({ length: 10 }, () => Buffer.alloc(DEFAULT_LEAD_BYTES, 1)))

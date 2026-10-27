@@ -45,7 +45,9 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
 
   function getOrCreateManager(guildId: string): GuildAudioManager {
     if (!managers.has(guildId)) {
-      const manager = new GuildAudioManager(guildId, isLocalTarget(guildId) ? options.localSink : undefined)
+      const manager = new GuildAudioManager(guildId, isLocalTarget(guildId)
+        ? options.localSink
+        : undefined)
       manager.on('disconnected', () => {
         managers.delete(guildId)
         stateEvents.emit('stateChanged')
@@ -84,7 +86,9 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
   function reportLocalSinkHealth(event: LocalSinkHealth): void {
     switch (event.type) {
       case 'started':
-        log.info(`Local sink started in the renderer${event.sampleRate ? ` (AudioContext ${event.sampleRate} Hz)` : ''}`)
+        log.info(`Local sink started in the renderer${event.sampleRate
+          ? ` (AudioContext ${event.sampleRate} Hz)`
+          : ''}`)
         break
       case 'suspended':
         log.warn('Local sink AudioContext suspended: local audio is silent until it resumes')
@@ -93,13 +97,20 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
         log.info('Local sink AudioContext resumed')
         break
       case 'underruns':
-        log.warn(`Local sink underran ${event.count} time${event.count === 1 ? '' : 's'} in the last report interval`)
+        log.warn(`Local sink underran ${event.count} time${event.count === 1
+          ? ''
+          : 's'} in the last report interval`)
         break
       case 'deviceLost':
       case 'failed':
-        managers.get(LOCAL_TARGET_ID)?.handleSinkDead(`${event.type}${event.message ? `: ${event.message}` : ''}`)
-        if (!managers.has(LOCAL_TARGET_ID))
-          log.error(`Local sink ${event.type}${event.message ? `: ${event.message}` : ''} (nothing was playing)`)
+        managers.get(LOCAL_TARGET_ID)?.handleSinkDead(`${event.type}${event.message
+          ? `: ${event.message}`
+          : ''}`)
+        if (!managers.has(LOCAL_TARGET_ID)) {
+          log.error(`Local sink ${event.type}${event.message
+            ? `: ${event.message}`
+            : ''} (nothing was playing)`)
+        }
         break
     }
   }
@@ -161,7 +172,9 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
       log.warn(`startStream refused for guild ${guildId}: not connected`)
       throw new Error('Not connected to a voice channel. Join first.')
     }
-    log.info(`Renderer music stream ${streamId ?? '(default)'} started in guild ${guildId}${metadata ? ` for "${metadata.name}"` : ''}`)
+    log.info(`Renderer music stream ${streamId ?? '(default)'} started in guild ${guildId}${metadata
+      ? ` for "${metadata.name}"`
+      : ''}`)
     manager.playMusicFromStream(stream, metadata, streamId)
   }
 
@@ -180,7 +193,9 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
       log.warn(`startEffectStream refused for guild ${guildId}: not connected`)
       throw new Error('Not connected to a voice channel. Join first.')
     }
-    log.info(`Renderer effect stream ${streamId ?? '(anonymous)'} started in guild ${guildId}${volume !== undefined ? ` at volume ${volume}` : ''}`)
+    log.info(`Renderer effect stream ${streamId ?? '(anonymous)'} started in guild ${guildId}${volume !== undefined
+      ? ` at volume ${volume}`
+      : ''}`)
     manager.playEffectFromStream(stream, streamId, volume)
   }
 
@@ -215,7 +230,12 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
     log.info(`playMusic "${file.name}" (${file.filename}) in guild ${guildId}: volume ${options.volume}, loop ${options.loop ?? false}, fadeIn ${options.fadeInMs ?? 0} ms`)
     await manager.playMusic(
       () => createPcmStream(file.path),
-      { id: file.id, name: file.name, filename: file.filename, category: file.category },
+      {
+        id: file.id,
+        name: file.name,
+        filename: file.filename,
+        category: file.category,
+      },
       options,
     )
   }
@@ -328,7 +348,10 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
         })
       }
     }
-    return [...live, ...discordFallbacks]
+    return [
+      ...live,
+      ...discordFallbacks,
+    ]
   }
 
   function onStateChanged(listener: () => void): () => void {
@@ -345,7 +368,9 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
    * race. One manager throwing during teardown must not stop the rest.
    */
   async function destroyAll(): Promise<void> {
-    const toDestroy = [...managers.values()]
+    const toDestroy = [
+      ...managers.values(),
+    ]
     managers.clear()
     await Promise.all(toDestroy.map(async (manager) => {
       try {
@@ -359,7 +384,9 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
 
   /** Leaves voice in every Discord guild (the Discord token was removed); the Local Target keeps playing. */
   async function disconnectAllVoice(): Promise<void> {
-    const guildIds = [...managers.keys()].filter(id => !isLocalTarget(id))
+    const guildIds = [
+      ...managers.keys(),
+    ].filter(id => !isLocalTarget(id))
     log.info(`Leaving voice in ${guildIds.length} guild(s)`)
     for (const guildId of guildIds) {
       try {

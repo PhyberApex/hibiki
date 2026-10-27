@@ -1,12 +1,30 @@
 const RELEASES_API = 'https://api.github.com/repos/PhyberApex/hibiki/releases/latest'
 
 const platformMatchers = [
-  { id: 'mac', test: name => /\.dmg$/i.test(name) },
-  { id: 'mac-zip', test: name => /darwin.*\.zip$/i.test(name) },
-  { id: 'win', test: name => /\.exe$/i.test(name) },
-  { id: 'win-zip', test: name => /win32.*\.zip$/i.test(name) },
-  { id: 'deb', test: name => /\.deb$/i.test(name) },
-  { id: 'linux-zip', test: name => /linux.*\.zip$/i.test(name) },
+  {
+    id: 'mac',
+    test: name => /\.dmg$/i.test(name),
+  },
+  {
+    id: 'mac-zip',
+    test: name => /darwin.*\.zip$/i.test(name),
+  },
+  {
+    id: 'win',
+    test: name => /\.exe$/i.test(name),
+  },
+  {
+    id: 'win-zip',
+    test: name => /win32.*\.zip$/i.test(name),
+  },
+  {
+    id: 'deb',
+    test: name => /\.deb$/i.test(name),
+  },
+  {
+    id: 'linux-zip',
+    test: name => /linux.*\.zip$/i.test(name),
+  },
 ]
 
 function fillDownloads(release) {
@@ -26,8 +44,12 @@ function fillDownloads(release) {
 }
 
 if (document.querySelector('[data-asset]') && window.fetch) {
-  fetch(RELEASES_API, { headers: { Accept: 'application/vnd.github+json' } })
-    .then(r => (r.ok ? r.json() : null))
+  fetch(RELEASES_API, {
+    headers: { Accept: 'application/vnd.github+json' },
+  })
+    .then(r => (r.ok
+      ? r.json()
+      : null))
     .then((release) => {
       if (release)
         fillDownloads(release)
@@ -37,7 +59,10 @@ if (document.querySelector('[data-asset]') && window.fetch) {
 
 const tocLinks = Array.from(document.querySelectorAll('.toc a[href^="#"]'))
 if (tocLinks.length && 'IntersectionObserver' in window) {
-  const byId = Object.fromEntries(tocLinks.map(a => [a.getAttribute('href').slice(1), a]))
+  const byId = Object.fromEntries(tocLinks.map(a => [
+    a.getAttribute('href').slice(1),
+    a,
+  ]))
   const headings = Object.keys(byId).map(id => document.getElementById(id)).filter(Boolean)
   let current = null
   const observer = new IntersectionObserver((entries) => {

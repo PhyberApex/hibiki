@@ -6,7 +6,9 @@ export default defineConfig({
     testTimeout: 60_000,
     hookTimeout: 30_000,
     setupFiles: ['./setup.ts'],
-    env: process.env.CI ? {} : undefined,
+    env: process.env.CI
+      ? {}
+      : undefined,
     exclude: ['**/node_modules/**', '**/dist/**', 'tests/**'],
   },
   resolve: {

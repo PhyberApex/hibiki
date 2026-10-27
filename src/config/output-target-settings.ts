@@ -14,7 +14,9 @@ export interface OutputTargetStore {
 }
 
 export function normalizeOutputTargetKind(input: unknown): OutputTargetKind | null {
-  return input === 'local' || input === 'discord' ? input : null
+  return input === 'local' || input === 'discord'
+    ? input
+    : null
 }
 
 /** Master volume is stored per Target kind: every Discord guild shares the Discord Target's value. */
@@ -35,7 +37,9 @@ export function createOutputTargetSettings(store: OutputTargetStore, hasDiscordT
         // fall through to the default
       }
     }
-    return (await hasDiscordToken()) ? 'discord' : 'local'
+    return (await hasDiscordToken())
+      ? 'discord'
+      : 'local'
   }
 
   async function setActive(kind: unknown): Promise<void> {
@@ -68,5 +72,10 @@ export function createOutputTargetSettings(store: OutputTargetStore, hasDiscordT
     log.info(`Master volume for ${kind} output target set to ${normalized}`)
   }
 
-  return { getActive, setActive, getMasterVolume, setMasterVolume }
+  return {
+    getActive,
+    setActive,
+    getMasterVolume,
+    setMasterVolume,
+  }
 }

@@ -44,30 +44,40 @@ const log = createLogger('vision-settings')
 export function createVisionSettings(config: Config, appConfig: ReturnType<typeof createAppConfig>) {
   async function getProvider(): Promise<VisionProviderId> {
     const stored = await appConfig.get(PROVIDER_CONFIG_KEY)
-    return isVisionProviderId(stored) ? stored : 'claude'
+    return isVisionProviderId(stored)
+      ? stored
+      : 'claude'
   }
 
   async function getClaudeApiKey(): Promise<string | null> {
     if (config.vision.apiKey)
       return config.vision.apiKey
     const stored = await appConfig.get(CLAUDE_API_KEY_CONFIG_KEY)
-    return stored?.trim() ? stored : null
+    return stored?.trim()
+      ? stored
+      : null
   }
 
   async function getOpenAiApiKey(): Promise<string | null> {
     if (config.vision.openaiApiKey)
       return config.vision.openaiApiKey
     const stored = await appConfig.get(OPENAI_API_KEY_CONFIG_KEY)
-    return stored?.trim() ? stored : null
+    return stored?.trim()
+      ? stored
+      : null
   }
 
   async function getStoredOrDefault(key: string, defaultValue: string): Promise<string> {
     const stored = await appConfig.get(key)
-    return stored?.trim() ? stored.trim() : defaultValue
+    return stored?.trim()
+      ? stored.trim()
+      : defaultValue
   }
 
   function setStored(key: string, value: string): Promise<void> {
-    return appConfig.set(key, typeof value === 'string' ? value.trim() : '')
+    return appConfig.set(key, typeof value === 'string'
+      ? value.trim()
+      : '')
   }
 
   function getOpenAiBaseUrl(): Promise<string> {
@@ -81,7 +91,11 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
   async function getProviderConfig(): Promise<VisionProviderConfig> {
     const provider = await getProvider()
     if (provider === 'openai-compatible') {
-      const [apiKey, baseUrl, model] = await Promise.all([getOpenAiApiKey(), getOpenAiBaseUrl(), getOpenAiModel()])
+      const [apiKey, baseUrl, model] = await Promise.all([
+        getOpenAiApiKey(),
+        getOpenAiBaseUrl(),
+        getOpenAiModel(),
+      ])
       return { provider, apiKey, baseUrl, model }
     }
     return { provider: 'claude', apiKey: await getClaudeApiKey() }
@@ -112,7 +126,9 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
     return {
       provider,
       enabled: enabledValue === 'true',
-      configured: provider === 'openai-compatible' ? openaiCompatible.configured : claude.configured,
+      configured: provider === 'openai-compatible'
+        ? openaiCompatible.configured
+        : claude.configured,
       claude,
       openaiCompatible,
     }
@@ -127,8 +143,12 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
       return get()
     },
     async setApiKey(provider: VisionProviderId, apiKey: string): Promise<VisionSettingsState> {
-      const key = provider === 'openai-compatible' ? OPENAI_API_KEY_CONFIG_KEY : CLAUDE_API_KEY_CONFIG_KEY
-      log.info(`${provider} API key ${apiKey.trim() ? 'updated' : 'cleared'}`)
+      const key = provider === 'openai-compatible'
+        ? OPENAI_API_KEY_CONFIG_KEY
+        : CLAUDE_API_KEY_CONFIG_KEY
+      log.info(`${provider} API key ${apiKey.trim()
+        ? 'updated'
+        : 'cleared'}`)
       await setStored(key, apiKey)
       return get()
     },

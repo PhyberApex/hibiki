@@ -12,7 +12,9 @@ import { useScenePlaybackStore } from '@/stores/scene-playback'
 import { showUpdateNotice } from '@/updates/update-notice'
 
 declare const __APP_VERSION__: string
-const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
+const appVersion = typeof __APP_VERSION__ !== 'undefined'
+  ? __APP_VERSION__
+  : '0.0.0'
 
 const route = useRoute()
 const player = usePlayerStore()

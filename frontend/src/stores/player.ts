@@ -70,7 +70,9 @@ export const usePlayerStore = defineStore('player', () => {
   )
   const isJoined = computed(() => !!selectedGuildState.value?.connectedChannelId)
   /** The id playback calls are addressed to: `LOCAL_TARGET_ID` while Local is active, else the selected guild. */
-  const targetId = computed(() => (activeTarget.value === 'local' ? LOCAL_TARGET_ID : guildId.value))
+  const targetId = computed(() => (activeTarget.value === 'local'
+    ? LOCAL_TARGET_ID
+    : guildId.value))
   const activeTargetState = computed(() => playerState.value.find(g => g.guildId === targetId.value))
   /** Local plays with no voice connection; Discord needs a joined channel. */
   const canPlay = computed(() => activeTarget.value === 'local' || isJoined.value)
@@ -126,7 +128,9 @@ export const usePlayerStore = defineStore('player', () => {
 
   /** Registers a new renderer-tracked (Discord-fallback or local-preview) Effect Instance, evicting the oldest renderer-tracked one first if already at the renderer-side cap — the backend enforces its own cap independently (overlap parity, #408). Returns the new instance's id. */
   function registerRendererEffectInstance(soundId: string, stop: () => void): string {
-    const rendererIds = [...effectInstances.value.entries()]
+    const rendererIds = [
+      ...effectInstances.value.entries(),
+    ]
       .filter(([, e]) => e.origin === 'renderer')
       .map(([id]) => id)
     while (rendererIds.length >= RENDERER_EFFECT_CAP) {
@@ -137,7 +141,13 @@ export const usePlayerStore = defineStore('player', () => {
     }
 
     const id = `effect-${++rendererEffectSeq}`
-    effectInstances.value.set(id, { soundId, startedAt: Date.now(), durationMs: 0, origin: 'renderer', stop })
+    effectInstances.value.set(id, {
+      soundId,
+      startedAt: Date.now(),
+      durationMs: 0,
+      origin: 'renderer',
+      stop,
+    })
     ensureEffectTicking()
     return id
   }
@@ -314,7 +324,9 @@ export const usePlayerStore = defineStore('player', () => {
     }
     catch (err) {
       directoryError.value
-        = err instanceof Error ? err.message : 'Failed to load guilds'
+        = err instanceof Error
+          ? err.message
+          : 'Failed to load guilds'
     }
   }
 

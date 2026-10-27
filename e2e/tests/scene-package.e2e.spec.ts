@@ -25,7 +25,11 @@ const EFFECT = { id: 'e2e-pkg-effect', name: 'Door Slam', volume: 80 }
 const SPARE_EFFECT_ID = 'e2e-pkg-spare'
 const SPARE_EFFECT_NAME = 'E2e Pkg Spare'
 
-const SOUNDS = [['music', MUSIC], ['ambience', AMBIENCE], ['effects', EFFECT]] as const
+const SOUNDS = [
+  ['music', MUSIC],
+  ['ambience', AMBIENCE],
+  ['effects', EFFECT],
+] as const
 
 interface SceneItem {
   soundId: string
@@ -86,7 +90,10 @@ async function close(): Promise<void> {
 /** Makes every "Open file" dialog from now on pick `path`, as the GM would in the OS file picker. */
 async function stubOpenDialog(path: string): Promise<void> {
   await app!.evaluate(({ dialog }, picked) => {
-    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [picked] })) as typeof dialog.showOpenDialog
+    dialog.showOpenDialog = (async () => ({
+      canceled: false,
+      filePaths: [picked],
+    })) as typeof dialog.showOpenDialog
   }, path)
 }
 
@@ -104,7 +111,10 @@ function storedFiles(profile: string): Record<string, Record<string, string>> {
   const files: Record<string, Record<string, string>> = {}
   for (const category of ['music', 'ambience', 'effects']) {
     const dir = join(profile, 'storage', category)
-    files[category] = Object.fromEntries(readdirSync(dir).sort().map(f => [f, readFileSync(join(dir, f)).toString('base64')]))
+    files[category] = Object.fromEntries(readdirSync(dir).sort().map(f => [
+      f,
+      readFileSync(join(dir, f)).toString('base64'),
+    ]))
   }
   return files
 }
@@ -124,19 +134,32 @@ test('a .hibiki.zip exported by one profile imports into another, duplicates and
   const archive = join(root, 'pkg-scene.hibiki.zip')
   const trimmedArchive = join(root, 'pkg-scene-without-effect.hibiki.zip')
   const item = (sound: { id: string, name: string, volume: number }, extra = {}) =>
-    ({ soundId: sound.id, soundName: sound.name, volume: sound.volume, ...extra })
+    ({
+      soundId: sound.id,
+      soundName: sound.name,
+      volume: sound.volume,
+      ...extra,
+    })
 
   await test.step('profile A exports a Scene without its Hotkeys', async () => {
-    const profileA = seedProfile('profile-a', [{
-      id: 'e2e-pkg-scene',
-      name: SCENE_NAME,
-      hotkey: 'F13',
-      music: [item(MUSIC, { loop: true })],
-      ambience: [item(AMBIENCE, { enabled: true })],
-      effects: [item(EFFECT, { hotkey: 'F14' })],
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    }], SOUNDS.map(([category, sound]) => [category, sound.id]))
+    const profileA = seedProfile('profile-a', [
+      {
+        id: 'e2e-pkg-scene',
+        name: SCENE_NAME,
+        hotkey: 'F13',
+        music: [
+          item(MUSIC, { loop: true }),
+        ],
+        ambience: [
+          item(AMBIENCE, { enabled: true }),
+        ],
+        effects: [
+          item(EFFECT, { hotkey: 'F14' }),
+        ],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ], SOUNDS.map(([category, sound]) => [category, sound.id]))
     await launch(profileA)
     // The save dialog is OS-native, so the export is asked for directly with a path.
     await invokeApi(page, 'scenes', 'exportScene', ['e2e-pkg-scene', archive])
@@ -151,8 +174,18 @@ test('a .hibiki.zip exported by one profile imports into another, duplicates and
     expect(manifestText).not.toContain('hotkey')
     const manifest = JSON.parse(manifestText)
     expect(manifest.displayName).toBe(SCENE_NAME)
-    expect(manifest.scene.music[0]).toMatchObject({ soundName: MUSIC.name, volume: MUSIC.volume, loop: true, bundled: true })
-    expect(manifest.scene.ambience[0]).toMatchObject({ soundName: AMBIENCE.name, volume: AMBIENCE.volume, enabled: true, bundled: true })
+    expect(manifest.scene.music[0]).toMatchObject({
+      soundName: MUSIC.name,
+      volume: MUSIC.volume,
+      loop: true,
+      bundled: true,
+    })
+    expect(manifest.scene.ambience[0]).toMatchObject({
+      soundName: AMBIENCE.name,
+      volume: AMBIENCE.volume,
+      enabled: true,
+      bundled: true,
+    })
     expect(manifest.scene.effects[0]).toMatchObject({ soundName: EFFECT.name, volume: EFFECT.volume, bundled: true })
 
     // What an export writes when the Effect's file is gone from the library: no file, not bundled.
@@ -162,7 +195,9 @@ test('a .hibiki.zip exported by one profile imports into another, duplicates and
     zip.writeZip(trimmedArchive)
   })
 
-  const profileB = seedProfile('profile-b', [], [['effects', SPARE_EFFECT_ID]])
+  const profileB = seedProfile('profile-b', [], [
+    ['effects', SPARE_EFFECT_ID],
+  ])
   await launch(profileB)
   let first!: Scene
 
@@ -173,9 +208,15 @@ test('a .hibiki.zip exported by one profile imports into another, duplicates and
 
     expect(first.name).toBe(SCENE_NAME)
     expect(first.hotkey).toBeUndefined()
-    expect(first.music).toEqual([item(MUSIC, { loop: true })])
-    expect(first.ambience).toEqual([item(AMBIENCE, { enabled: true })])
-    expect(first.effects).toEqual([item(EFFECT)])
+    expect(first.music).toEqual([
+      item(MUSIC, { loop: true }),
+    ])
+    expect(first.ambience).toEqual([
+      item(AMBIENCE, { enabled: true }),
+    ])
+    expect(first.effects).toEqual([
+      item(EFFECT),
+    ])
 
     await expect(page.getByLabel(`Volume for ${MUSIC.name}`)).toHaveValue(String(MUSIC.volume))
     await expect(page.getByLabel(`Volume for ${AMBIENCE.name}`)).toHaveValue(String(AMBIENCE.volume))
@@ -185,7 +226,9 @@ test('a .hibiki.zip exported by one profile imports into another, duplicates and
     await expect(page.getByTitle(`Play ${EFFECT.name}`)).toBeEnabled()
     await expect(page.getByText('missing', { exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /^Scene Hotkey: not set\./ })).toBeVisible()
-    await expect(page.getByRole('button', { name: new RegExp(`^Effect Hotkey for ${EFFECT.name}: not set\\.`) })).toBeVisible()
+    await expect(page.getByRole('button', {
+      name: new RegExp(`^Effect Hotkey for ${EFFECT.name}: not set\\.`),
+    })).toBeVisible()
 
     const files = storedFiles(profileB)
     for (const [category, sound] of SOUNDS)
@@ -203,7 +246,12 @@ test('a .hibiki.zip exported by one profile imports into another, duplicates and
     expect(second.music).toEqual(first.music)
     expect(second.ambience).toEqual(first.ambience)
     expect(second.effects).toEqual(first.effects)
-    expect(await invokeApi<Scene>(page, 'scenes', 'get', [first.id])).toMatchObject({ name: SCENE_NAME, music: first.music, ambience: first.ambience, effects: first.effects })
+    expect(await invokeApi<Scene>(page, 'scenes', 'get', [first.id])).toMatchObject({
+      name: SCENE_NAME,
+      music: first.music,
+      ambience: first.ambience,
+      effects: first.effects,
+    })
     expect((await invokeApi<Scene[]>(page, 'scenes', 'list')).map(s => s.name).sort()).toEqual([SCENE_NAME, copyName])
     // The bundled sounds keep their ids: the import rewrites the same files with the same bytes, adding none.
     expect(storedFiles(profileB)).toEqual(before)
@@ -212,7 +260,9 @@ test('a .hibiki.zip exported by one profile imports into another, duplicates and
   await test.step('an archive missing a sound file asks for it, and the mapped sound is saved', async () => {
     const third = await importThroughUi(trimmedArchive)
     await expect(page.getByText(`Imported "${third.name}"`)).toBeVisible()
-    expect(third.effects).toEqual([{ soundId: EFFECT.name, soundName: EFFECT.name, volume: EFFECT.volume }])
+    expect(third.effects).toEqual([
+      { soundId: EFFECT.name, soundName: EFFECT.name, volume: EFFECT.volume },
+    ])
     expect(third.music).toEqual(first.music)
 
     await expect(page.getByText('missing', { exact: true })).toHaveCount(1)
@@ -223,7 +273,9 @@ test('a .hibiki.zip exported by one profile imports into another, duplicates and
     await expect(dialog).toBeHidden()
 
     await expect.poll(async () => (await invokeApi<Scene>(page, 'scenes', 'get', [third.id])).effects)
-      .toEqual([{ soundId: SPARE_EFFECT_ID, soundName: SPARE_EFFECT_NAME, volume: EFFECT.volume }])
+      .toEqual([
+        { soundId: SPARE_EFFECT_ID, soundName: SPARE_EFFECT_NAME, volume: EFFECT.volume },
+      ])
     await expect(page.getByText('missing', { exact: true })).toHaveCount(0)
   })
 })

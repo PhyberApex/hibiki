@@ -14,9 +14,24 @@ describe('usage stats API', () => {
   })
 
   it.each([
-    ['fetchUsageStats', () => fetchUsageStats(), 'getUsageStats', []],
-    ['updateUsageStatsEnabled', () => updateUsageStatsEnabled(true), 'setUsageStatsEnabled', [true]],
-    ['markUsageStatsPrompted', () => markUsageStatsPrompted(), 'markUsageStatsPrompted', []],
+    [
+      'fetchUsageStats',
+      () => fetchUsageStats(),
+      'getUsageStats',
+      [],
+    ],
+    [
+      'updateUsageStatsEnabled',
+      () => updateUsageStatsEnabled(true),
+      'setUsageStatsEnabled',
+      [true],
+    ],
+    [
+      'markUsageStatsPrompted',
+      () => markUsageStatsPrompted(),
+      'markUsageStatsPrompted',
+      [],
+    ],
   ])('%s calls config.%s', async (_name, call, method, args) => {
     mockInvoke.mockResolvedValue({ enabled: false, prompted: false })
     await (call as () => Promise<unknown>)()
@@ -27,24 +42,39 @@ describe('usage stats API', () => {
     mockInvoke.mockResolvedValue(undefined)
     bindUsageStatsRouter(router)
     await router.push('/scenes/2f7c-scene-id')
-    trackUsage({ name: 'target-switch', data: { target: 'local' } })
+    trackUsage({
+      name: 'target-switch',
+      data: { target: 'local' },
+    })
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'usageStats',
       method: 'track',
-      args: [{ name: 'target-switch', data: { target: 'local' }, url: '/scenes/:id' }],
+      args: [
+        {
+          name: 'target-switch',
+          data: { target: 'local' },
+          url: '/scenes/:id',
+        },
+      ],
     })
   })
 
   it('never throws when the backend rejects', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     mockInvoke.mockRejectedValue(new Error('gone'))
-    expect(() => trackUsage({ name: 'hotkey-fired', data: { kind: 'scene' } })).not.toThrow()
+    expect(() => trackUsage({
+      name: 'hotkey-fired',
+      data: { kind: 'scene' },
+    })).not.toThrow()
     await vi.waitFor(() => expect(warn).toHaveBeenCalled())
     warn.mockRestore()
   })
 
   it('is a no-op outside Electron', () => {
     delete (window as any).hibiki
-    expect(() => trackUsage({ name: 'hotkey-fired', data: { kind: 'scene' } })).not.toThrow()
+    expect(() => trackUsage({
+      name: 'hotkey-fired',
+      data: { kind: 'scene' },
+    })).not.toThrow()
   })
 })

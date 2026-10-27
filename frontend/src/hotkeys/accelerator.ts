@@ -1,4 +1,14 @@
-const MODIFIER_CODES = new Set(['ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight', 'AltGraph'])
+const MODIFIER_CODES = new Set([
+  'ControlLeft',
+  'ControlRight',
+  'ShiftLeft',
+  'ShiftRight',
+  'AltLeft',
+  'AltRight',
+  'MetaLeft',
+  'MetaRight',
+  'AltGraph',
+])
 
 const NAMED_CODES: Record<string, string> = {
   Space: 'Space',

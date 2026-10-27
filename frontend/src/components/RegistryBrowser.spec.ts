@@ -11,7 +11,9 @@ vi.mock('@/api/registry', () => ({
   installFromRegistry: vi.fn(),
 }))
 
-vi.mock('@/api/usage-stats', () => ({ trackUsage: vi.fn() }))
+vi.mock('@/api/usage-stats', () => ({
+  trackUsage: vi.fn(),
+}))
 
 function entry(slug: string, overrides: Partial<RegistryEntry> = {}): RegistryEntry {
   return {
@@ -35,11 +37,29 @@ function index(scenes: RegistryEntry[]): RegistryIndex {
 }
 
 function scene(id: string, name: string): Scene {
-  return { id, name, ambience: [], music: [], effects: [], createdAt: '', updatedAt: '' }
+  return {
+    id,
+    name,
+    ambience: [],
+    music: [],
+    effects: [],
+    createdAt: '',
+    updatedAt: '',
+  }
 }
 
-const tavern = entry('tavern', { name: 'Cozy Tavern', author: 'Bard', description: 'Fireplace and lute.', tags: ['town', 'calm'] })
-const dungeon = entry('dungeon', { name: 'Dark Dungeon', author: 'Lich', description: 'Dripping water.', tags: ['underground'] })
+const tavern = entry('tavern', {
+  name: 'Cozy Tavern',
+  author: 'Bard',
+  description: 'Fireplace and lute.',
+  tags: ['town', 'calm'],
+})
+const dungeon = entry('dungeon', {
+  name: 'Dark Dungeon',
+  author: 'Lich',
+  description: 'Dripping water.',
+  tags: ['underground'],
+})
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -111,7 +131,9 @@ describe('registryBrowser', () => {
   })
 
   it('omits the tag row for an entry without tags', async () => {
-    const wrapper = await mountLoaded([entry('bare')])
+    const wrapper = await mountLoaded([
+      entry('bare'),
+    ])
     expect(wrapper.find('.registry-entry-tags').exists()).toBe(false)
   })
 
@@ -123,10 +145,26 @@ describe('registryBrowser', () => {
 
   describe('search', () => {
     it.each([
-      ['name', 'tavern', ['Cozy Tavern']],
-      ['author', 'LICH', ['Dark Dungeon']],
-      ['description', 'lute', ['Cozy Tavern']],
-      ['tag', 'undergr', ['Dark Dungeon']],
+      [
+        'name',
+        'tavern',
+        ['Cozy Tavern'],
+      ],
+      [
+        'author',
+        'LICH',
+        ['Dark Dungeon'],
+      ],
+      [
+        'description',
+        'lute',
+        ['Cozy Tavern'],
+      ],
+      [
+        'tag',
+        'undergr',
+        ['Dark Dungeon'],
+      ],
     ])('filters by %s, case-insensitively', async (_field, query, expected) => {
       const wrapper = await mountLoaded()
       await wrapper.find('.registry-search').setValue(query)
@@ -203,11 +241,16 @@ describe('registryBrowser', () => {
       await installButton(wrapper, 'Cozy Tavern').trigger('click')
       await flushPromises()
       expect(installFromRegistry).toHaveBeenCalledWith('tavern')
-      expect(trackUsage).toHaveBeenCalledWith({ name: 'registry-install', data: { entryId: 'tavern' } })
+      expect(trackUsage).toHaveBeenCalledWith({
+        name: 'registry-install',
+        data: { entryId: 'tavern' },
+      })
       const message = wrapper.find('.status-message')
       expect(message.text()).toBe('Installed "Cozy Tavern"')
       expect(message.classes()).toContain('status-message-success')
-      expect(wrapper.emitted('installed')).toEqual([['scene-1']])
+      expect(wrapper.emitted('installed')).toEqual([
+        ['scene-1'],
+      ])
     })
 
     it('disables only the pending entry\'s button until the install settles', async () => {

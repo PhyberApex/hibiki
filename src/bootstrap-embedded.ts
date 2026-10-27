@@ -197,7 +197,9 @@ function describeDaveBackend(): string {
     require('@snazzah/davey')
   }
   catch (err) {
-    return `failed to load: ${err instanceof Error ? err.message : String(err)}`
+    return `failed to load: ${err instanceof Error
+      ? err.message
+      : String(err)}`
   }
   const loaded = Object.keys(require.cache).filter(file => /[\\/]@snazzah[\\/]davey/.test(file))
   const native = loaded.find(file => file.endsWith('.node'))
@@ -279,12 +281,21 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
   const vision = createVisionService({ getProviderConfig: visionSettings.getProviderConfig })
   const usageStatsEnvironment: UsageStatsEnvironment = {
     appVersion: options.appVersion ?? getVersion(),
-    ...(options.usageStats?.environment ?? { electronVersion: process.versions.electron ?? 'none', platform: process.platform, arch: process.arch, locale: 'en' }),
+    ...(options.usageStats?.environment ?? {
+      electronVersion: process.versions.electron ?? 'none',
+      platform: process.platform,
+      arch: process.arch,
+      locale: 'en',
+    }),
   }
   const usageStatsHost = resolveUsageStatsHost(process.env.HIBIKI_USAGE_STATS_HOST)
   const usageStats = createUsageStats({
     settings: createUsageStatsSettings(appConfig),
-    sender: createUmamiSender({ host: usageStatsHost, websiteId: USAGE_STATS_WEBSITE_ID, userAgent: buildUserAgent(usageStatsEnvironment) }),
+    sender: createUmamiSender({
+      host: usageStatsHost,
+      websiteId: USAGE_STATS_WEBSITE_ID,
+      userAgent: buildUserAgent(usageStatsEnvironment),
+    }),
     gate: options.usageStats?.gate ?? { packaged: false, killSwitch: false },
     environment: usageStatsEnvironment,
   })
@@ -354,7 +365,11 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       clearDiscordToken: () => discordToken.clearToken(),
       getStoragePath: async () => {
         const p = await appConfig.get('storage.path')
-        return { path: p && p.trim() ? p.trim() : null }
+        return {
+          path: p && p.trim()
+            ? p.trim()
+            : null,
+        }
       },
       setStoragePath: async (path: string) => {
         const value = path.trim() || ''
@@ -407,7 +422,9 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       listAmbience: () => sounds.list('ambience'),
       uploadSound: (type, bufferOrArrayBuffer: Buffer | ArrayBuffer, originalname: string) =>
         sounds.save(type, {
-          buffer: Buffer.isBuffer(bufferOrArrayBuffer) ? bufferOrArrayBuffer : Buffer.from(bufferOrArrayBuffer),
+          buffer: Buffer.isBuffer(bufferOrArrayBuffer)
+            ? bufferOrArrayBuffer
+            : Buffer.from(bufferOrArrayBuffer),
           originalname,
         }),
       deleteSound: async (type, id) => {
@@ -415,7 +432,9 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
         await scenes.removeSoundFromAll(type, id)
       },
       getFilePath: (type, id) => sounds.getFilePath(type, id),
-      setTags: (type, id, tags) => sounds.setTags(type, id, Array.isArray(tags) ? tags : []),
+      setTags: (type, id, tags) => sounds.setTags(type, id, Array.isArray(tags)
+        ? tags
+        : []),
       canDecode: (type, id) => sounds.canDecode(type, id),
     },
     scenes: {
@@ -440,7 +459,10 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
         return vision.analyzeImageVibe(imagePath)
       },
       matchVibe: async (vibeTags) => {
-        const [music, ambience] = await Promise.all([sounds.list('music'), sounds.list('ambience')])
+        const [music, ambience] = await Promise.all([
+          sounds.list('music'),
+          sounds.list('ambience'),
+        ])
         return matchVibeLibrary(vibeTags, { music, ambience })
       },
     },

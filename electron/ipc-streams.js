@@ -134,7 +134,9 @@ function registerAudioStreamHandlers(ipcMain, player) {
     const id = streamId || `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const stream = replace(streamsFor(effectStreams, guildId), id)
     warnedUnknown.delete(unknownKey('audio:effectChunk', guildId, id))
-    ipcLog.info(`audio:startEffectStream ${id} for guild ${guildId}${volume !== undefined ? ` at volume ${volume}` : ''}`)
+    ipcLog.info(`audio:startEffectStream ${id} for guild ${guildId}${volume !== undefined
+      ? ` at volume ${volume}`
+      : ''}`)
     player.startEffectStream(guildId, stream, id, volume)
     return id
   })
@@ -146,7 +148,9 @@ function registerAudioStreamHandlers(ipcMain, player) {
 
   ipcMain.on('audio:effectChunk', (_, { guildId, streamId, chunk }) => {
     const streams = effectStreams.get(guildId)
-    const stream = streamId ? streams?.get(streamId) : streams?.values().next().value
+    const stream = streamId
+      ? streams?.get(streamId)
+      : streams?.values().next().value
     write('audio:effectChunk', stream, guildId, streamId, chunk)
   })
 

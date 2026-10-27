@@ -22,7 +22,9 @@ describe('createSceneRegistry', () => {
         ambienceDir: join(tempRoot, 'ambience'),
         webDistDir: 'web-dist',
       },
-      database: { path: join(tempRoot, 'data', 'hibiki.json') },
+      database: {
+        path: join(tempRoot, 'data', 'hibiki.json'),
+      },
     }
     delete process.env.HIBIKI_USER_DATA
     mkdirSync(join(tempRoot, 'data'), { recursive: true })
@@ -161,18 +163,64 @@ describe('createSceneRegistry', () => {
       createdAt: '',
       updatedAt: '',
       scene: {
-        music: [{ soundName: 'Lute', volume: 70, loop: true, source: { name: 'Lute song' } }],
-        ambience: [{ soundName: 'Crowd', volume: 30, enabled: false, source: { name: 'Crowd noise' } }],
-        effects: [{ soundName: 'Mug', volume: 90, source: { name: 'Mug clink' } }],
+        music: [
+          {
+            soundName: 'Lute',
+            volume: 70,
+            loop: true,
+            source: { name: 'Lute song' },
+          },
+        ],
+        ambience: [
+          {
+            soundName: 'Crowd',
+            volume: 30,
+            enabled: false,
+            source: { name: 'Crowd noise' },
+          },
+        ],
+        effects: [
+          {
+            soundName: 'Mug',
+            volume: 90,
+            source: { name: 'Mug clink' },
+          },
+        ],
       },
     }
-    writeCache({ ...remoteIndex, scenes: [entry] })
+    writeCache({
+      ...remoteIndex,
+      scenes: [entry],
+    })
     const registry = createSceneRegistry(config)
     const first = await registry.installFromRegistry('tavern')
     expect(first.name).toBe('Tavern')
-    expect(first.music).toEqual([{ soundId: 'Lute', soundName: 'Lute', volume: 70, loop: true, source: { name: 'Lute song' } }])
-    expect(first.ambience).toEqual([{ soundId: 'Crowd', soundName: 'Crowd', volume: 30, enabled: false, source: { name: 'Crowd noise' } }])
-    expect(first.effects).toEqual([{ soundId: 'Mug', soundName: 'Mug', volume: 90, source: { name: 'Mug clink' } }])
+    expect(first.music).toEqual([
+      {
+        soundId: 'Lute',
+        soundName: 'Lute',
+        volume: 70,
+        loop: true,
+        source: { name: 'Lute song' },
+      },
+    ])
+    expect(first.ambience).toEqual([
+      {
+        soundId: 'Crowd',
+        soundName: 'Crowd',
+        volume: 30,
+        enabled: false,
+        source: { name: 'Crowd noise' },
+      },
+    ])
+    expect(first.effects).toEqual([
+      {
+        soundId: 'Mug',
+        soundName: 'Mug',
+        volume: 90,
+        source: { name: 'Mug clink' },
+      },
+    ])
     expect((await registry.installFromRegistry('tavern')).name).toBe('Tavern (imported)')
   })
 
@@ -192,11 +240,24 @@ describe('createSceneRegistry', () => {
       scene: {
         music: [],
         ambience: [],
-        effects: [{ soundName: 'Boom', hotkey: 'F2', source: { name: 'x' } }],
+        effects: [
+          {
+            soundName: 'Boom',
+            hotkey: 'F2',
+            source: { name: 'x' },
+          },
+        ],
       },
     }
-    const index = { version: 1, updatedAt: '', scenes: [entry] }
-    writeFileSync(join(tempRoot, 'data', 'registry-cache.json'), JSON.stringify({ fetchedAt: new Date().toISOString(), data: index }))
+    const index = {
+      version: 1,
+      updatedAt: '',
+      scenes: [entry],
+    }
+    writeFileSync(join(tempRoot, 'data', 'registry-cache.json'), JSON.stringify({
+      fetchedAt: new Date().toISOString(),
+      data: index,
+    }))
     const scene = await createSceneRegistry(config).installFromRegistry('hot')
     expect(scene).not.toHaveProperty('hotkey')
     expect(scene.effects[0]).not.toHaveProperty('hotkey')
@@ -217,11 +278,34 @@ describe('createSceneRegistry', () => {
       version: 1,
       updatedAt: '',
       scenes: [
-        { ...base, name: 'Seq', slug: 'seq', scene: { musicMode: 'sequential', music: [], ambience: [], effects: [] } },
-        { ...base, name: 'Odd', slug: 'odd', scene: { musicMode: 'nope', music: [], ambience: [], effects: [] } },
+        {
+          ...base,
+          name: 'Seq',
+          slug: 'seq',
+          scene: {
+            musicMode: 'sequential',
+            music: [],
+            ambience: [],
+            effects: [],
+          },
+        },
+        {
+          ...base,
+          name: 'Odd',
+          slug: 'odd',
+          scene: {
+            musicMode: 'nope',
+            music: [],
+            ambience: [],
+            effects: [],
+          },
+        },
       ],
     }
-    writeFileSync(join(tempRoot, 'data', 'registry-cache.json'), JSON.stringify({ fetchedAt: new Date().toISOString(), data: index }))
+    writeFileSync(join(tempRoot, 'data', 'registry-cache.json'), JSON.stringify({
+      fetchedAt: new Date().toISOString(),
+      data: index,
+    }))
     const registry = createSceneRegistry(config)
     expect((await registry.installFromRegistry('seq')).musicMode).toBe('sequential')
     expect(await registry.installFromRegistry('odd')).not.toHaveProperty('musicMode')

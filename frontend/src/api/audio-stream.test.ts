@@ -22,10 +22,20 @@ describe('audio-stream API', () => {
 
   it('startAudioStream uses invoke', async () => {
     mockInvoke.mockResolvedValue(undefined)
-    await startAudioStream('g1', { id: 'x', name: 'test', filename: 'x.mp3', category: 'music' })
+    await startAudioStream('g1', {
+      id: 'x',
+      name: 'test',
+      filename: 'x.mp3',
+      category: 'music',
+    })
     expect(mockInvoke).toHaveBeenCalledWith('audio:startStream', {
       guildId: 'g1',
-      metadata: { id: 'x', name: 'test', filename: 'x.mp3', category: 'music' },
+      metadata: {
+        id: 'x',
+        name: 'test',
+        filename: 'x.mp3',
+        category: 'music',
+      },
     })
   })
 
@@ -136,11 +146,31 @@ describe('audio-stream API', () => {
   })
 
   it.each([
-    ['startAudioStream', 'audio:startStream', () => startAudioStream('g1', undefined, 'music-1')],
-    ['stopAudioStream', 'audio:stopStream', () => stopAudioStream('g1', 'music-1')],
-    ['startEffectStream', 'audio:startEffectStream', () => startEffectStream('g1', 'music-1')],
-    ['stopEffectStream', 'audio:stopEffectStream', () => stopEffectStream('g1', 'music-1')],
-    ['setEffectStreamVolume', 'audio:setEffectStreamVolume', () => setEffectStreamVolume('g1', 'music-1', 50)],
+    [
+      'startAudioStream',
+      'audio:startStream',
+      () => startAudioStream('g1', undefined, 'music-1'),
+    ],
+    [
+      'stopAudioStream',
+      'audio:stopStream',
+      () => stopAudioStream('g1', 'music-1'),
+    ],
+    [
+      'startEffectStream',
+      'audio:startEffectStream',
+      () => startEffectStream('g1', 'music-1'),
+    ],
+    [
+      'stopEffectStream',
+      'audio:stopEffectStream',
+      () => stopEffectStream('g1', 'music-1'),
+    ],
+    [
+      'setEffectStreamVolume',
+      'audio:setEffectStreamVolume',
+      () => setEffectStreamVolume('g1', 'music-1', 50),
+    ],
   ])('%s propagates the rejection of the call for its stream', async (_name, channel, call) => {
     const error = new Error('no such stream')
     mockInvoke.mockRejectedValue(error)
@@ -159,8 +189,14 @@ describe('audio-stream API', () => {
   })
 
   it.each([
-    ['sendAudioChunk', () => sendAudioChunk('g1', new ArrayBuffer(8))],
-    ['sendEffectChunk', () => sendEffectChunk('g1', new ArrayBuffer(8))],
+    [
+      'sendAudioChunk',
+      () => sendAudioChunk('g1', new ArrayBuffer(8)),
+    ],
+    [
+      'sendEffectChunk',
+      () => sendEffectChunk('g1', new ArrayBuffer(8)),
+    ],
   ])('%s throws when the bridge has no send', (_name, call) => {
     ;(window as any).hibiki = { invoke: mockInvoke }
     expect(call).toThrow('Electron send not available')

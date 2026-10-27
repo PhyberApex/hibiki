@@ -50,7 +50,12 @@ export async function uploadSoundsBulk(
       success.push(result)
     }
     catch (err) {
-      failed.push({ file, error: err instanceof Error ? err : new Error(String(err)) })
+      failed.push({
+        file,
+        error: err instanceof Error
+          ? err
+          : new Error(String(err)),
+      })
     }
   }
   return { success, failed }

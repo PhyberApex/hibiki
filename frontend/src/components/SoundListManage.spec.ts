@@ -34,8 +34,20 @@ describe('soundListManage', () => {
   it('shows sort select only with 2+ items', async () => {
     const { listMusic } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([
-      { id: 's1', name: 'Alpha', filename: 'a.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
-      { id: 's2', name: 'Beta', filename: 'b.mp3', category: 'music', createdAt: '2024-06-01T00:00:00Z' },
+      {
+        id: 's1',
+        name: 'Alpha',
+        filename: 'a.mp3',
+        category: 'music',
+        createdAt: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 's2',
+        name: 'Beta',
+        filename: 'b.mp3',
+        category: 'music',
+        createdAt: '2024-06-01T00:00:00Z',
+      },
     ])
 
     const wrapper = mount(SoundListManage, {
@@ -94,7 +106,12 @@ describe('soundListManage', () => {
   it('single file upload shows success toast', async () => {
     const { listMusic, uploadSound } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([])
-    vi.mocked(uploadSound).mockResolvedValue({ id: 's1', name: 'test.mp3', filename: 'test.mp3', category: 'music' })
+    vi.mocked(uploadSound).mockResolvedValue({
+      id: 's1',
+      name: 'test.mp3',
+      filename: 'test.mp3',
+      category: 'music',
+    })
 
     const wrapper = mount(SoundListManage, {
       props: { type: 'music' },
@@ -103,7 +120,10 @@ describe('soundListManage', () => {
 
     const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
     const input = wrapper.find('input[type="file"]')
-    Object.defineProperty(input.element, 'files', { value: [file], writable: false })
+    Object.defineProperty(input.element, 'files', {
+      value: [file],
+      writable: false,
+    })
     await input.trigger('change')
     await flushPromises()
 
@@ -115,8 +135,18 @@ describe('soundListManage', () => {
     vi.mocked(listMusic).mockResolvedValue([])
     vi.mocked(uploadSoundsBulk).mockResolvedValue({
       success: [
-        { id: 's1', name: 'a.mp3', filename: 'a.mp3', category: 'music' },
-        { id: 's2', name: 'b.mp3', filename: 'b.mp3', category: 'music' },
+        {
+          id: 's1',
+          name: 'a.mp3',
+          filename: 'a.mp3',
+          category: 'music',
+        },
+        {
+          id: 's2',
+          name: 'b.mp3',
+          filename: 'b.mp3',
+          category: 'music',
+        },
       ],
       failed: [],
     })
@@ -129,7 +159,10 @@ describe('soundListManage', () => {
     const file1 = new File(['audio'], 'a.mp3', { type: 'audio/mpeg' })
     const file2 = new File(['audio'], 'b.mp3', { type: 'audio/mpeg' })
     const input = wrapper.find('input[type="file"]')
-    Object.defineProperty(input.element, 'files', { value: [file1, file2], writable: false })
+    Object.defineProperty(input.element, 'files', {
+      value: [file1, file2],
+      writable: false,
+    })
     await input.trigger('change')
     await flushPromises()
 
@@ -140,8 +173,20 @@ describe('soundListManage', () => {
     const { listMusic, uploadSoundsBulk } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([])
     vi.mocked(uploadSoundsBulk).mockResolvedValue({
-      success: [{ id: 's1', name: 'a.mp3', filename: 'a.mp3', category: 'music' }],
-      failed: [{ file: new File([], 'b.mp3'), error: new Error('fail') }],
+      success: [
+        {
+          id: 's1',
+          name: 'a.mp3',
+          filename: 'a.mp3',
+          category: 'music',
+        },
+      ],
+      failed: [
+        {
+          file: new File([], 'b.mp3'),
+          error: new Error('fail'),
+        },
+      ],
     })
 
     const wrapper = mount(SoundListManage, {
@@ -152,7 +197,10 @@ describe('soundListManage', () => {
     const file1 = new File(['audio'], 'a.mp3', { type: 'audio/mpeg' })
     const file2 = new File(['audio'], 'b.mp3', { type: 'audio/mpeg' })
     const input = wrapper.find('input[type="file"]')
-    Object.defineProperty(input.element, 'files', { value: [file1, file2], writable: false })
+    Object.defineProperty(input.element, 'files', {
+      value: [file1, file2],
+      writable: false,
+    })
     await input.trigger('change')
     await flushPromises()
 
@@ -162,7 +210,13 @@ describe('soundListManage', () => {
   it('delete flow shows confirm and deletes', async () => {
     const { listMusic, deleteSound } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([
-      { id: 's1', name: 'Track One', filename: 't1.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
+      {
+        id: 's1',
+        name: 'Track One',
+        filename: 't1.mp3',
+        category: 'music',
+        createdAt: '2024-01-01T00:00:00Z',
+      },
     ])
     vi.mocked(deleteSound).mockResolvedValue(undefined)
 
@@ -187,7 +241,13 @@ describe('soundListManage', () => {
   it('delete cancel hides confirm buttons', async () => {
     const { listMusic } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([
-      { id: 's1', name: 'Track One', filename: 't1.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
+      {
+        id: 's1',
+        name: 'Track One',
+        filename: 't1.mp3',
+        category: 'music',
+        createdAt: '2024-01-01T00:00:00Z',
+      },
     ])
 
     const wrapper = mount(SoundListManage, {
@@ -207,7 +267,13 @@ describe('soundListManage', () => {
   it('delete error shows error toast', async () => {
     const { listMusic, deleteSound } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([
-      { id: 's1', name: 'Track One', filename: 't1.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
+      {
+        id: 's1',
+        name: 'Track One',
+        filename: 't1.mp3',
+        category: 'music',
+        createdAt: '2024-01-01T00:00:00Z',
+      },
     ])
     vi.mocked(deleteSound).mockRejectedValue(new Error('Delete failed'))
 
@@ -227,8 +293,20 @@ describe('soundListManage', () => {
   it('sort by date reorders items', async () => {
     const { listMusic } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([
-      { id: 's1', name: 'Alpha', filename: 'a.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
-      { id: 's2', name: 'Beta', filename: 'b.mp3', category: 'music', createdAt: '2024-06-01T00:00:00Z' },
+      {
+        id: 's1',
+        name: 'Alpha',
+        filename: 'a.mp3',
+        category: 'music',
+        createdAt: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 's2',
+        name: 'Beta',
+        filename: 'b.mp3',
+        category: 'music',
+        createdAt: '2024-06-01T00:00:00Z',
+      },
     ])
 
     const wrapper = mount(SoundListManage, {
@@ -249,8 +327,20 @@ describe('soundListManage', () => {
   it('search filters items by name', async () => {
     const { listMusic } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([
-      { id: 's1', name: 'Alpha', filename: 'a.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
-      { id: 's2', name: 'Beta', filename: 'b.mp3', category: 'music', createdAt: '2024-06-01T00:00:00Z' },
+      {
+        id: 's1',
+        name: 'Alpha',
+        filename: 'a.mp3',
+        category: 'music',
+        createdAt: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 's2',
+        name: 'Beta',
+        filename: 'b.mp3',
+        category: 'music',
+        createdAt: '2024-06-01T00:00:00Z',
+      },
     ])
 
     const wrapper = mount(SoundListManage, {
@@ -270,7 +360,13 @@ describe('soundListManage', () => {
   it('shows no-match message when search finds nothing', async () => {
     const { listMusic } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([
-      { id: 's1', name: 'Alpha', filename: 'a.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
+      {
+        id: 's1',
+        name: 'Alpha',
+        filename: 'a.mp3',
+        category: 'music',
+        createdAt: '2024-01-01T00:00:00Z',
+      },
     ])
 
     const wrapper = mount(SoundListManage, {
@@ -287,7 +383,13 @@ describe('soundListManage', () => {
   it('displays file extension badge', async () => {
     const { listMusic } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([
-      { id: 's1', name: 'Track', filename: 'track.ogg', category: 'music', createdAt: '2024-01-01T00:00:00Z' },
+      {
+        id: 's1',
+        name: 'Track',
+        filename: 'track.ogg',
+        category: 'music',
+        createdAt: '2024-01-01T00:00:00Z',
+      },
     ])
 
     const wrapper = mount(SoundListManage, {
@@ -301,7 +403,14 @@ describe('soundListManage', () => {
   it('displays formatted file size', async () => {
     const { listMusic } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([
-      { id: 's1', name: 'Track', filename: 'track.mp3', category: 'music', size: 2_500_000, createdAt: '2024-01-01T00:00:00Z' },
+      {
+        id: 's1',
+        name: 'Track',
+        filename: 'track.mp3',
+        category: 'music',
+        size: 2_500_000,
+        createdAt: '2024-01-01T00:00:00Z',
+      },
     ])
 
     const wrapper = mount(SoundListManage, {
@@ -316,7 +425,12 @@ describe('soundListManage', () => {
     vi.useFakeTimers()
     const { listMusic, uploadSound } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValue([])
-    vi.mocked(uploadSound).mockResolvedValue({ id: 's1', name: 'test.mp3', filename: 'test.mp3', category: 'music' })
+    vi.mocked(uploadSound).mockResolvedValue({
+      id: 's1',
+      name: 'test.mp3',
+      filename: 'test.mp3',
+      category: 'music',
+    })
 
     const wrapper = mount(SoundListManage, {
       props: { type: 'music' },
@@ -325,7 +439,10 @@ describe('soundListManage', () => {
 
     const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
     const input = wrapper.find('input[type="file"]')
-    Object.defineProperty(input.element, 'files', { value: [file], writable: false })
+    Object.defineProperty(input.element, 'files', {
+      value: [file],
+      writable: false,
+    })
     await input.trigger('change')
     await flushPromises()
 
@@ -342,9 +459,18 @@ describe('soundListManage', () => {
     it('shows existing tags as chips for music', async () => {
       const { listMusic } = await import('@/api/sounds')
       vi.mocked(listMusic).mockResolvedValue([
-        { id: 's1', name: 'Tavern', filename: 't.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z', tags: ['warm', 'candlelit'] },
+        {
+          id: 's1',
+          name: 'Tavern',
+          filename: 't.mp3',
+          category: 'music',
+          createdAt: '2024-01-01T00:00:00Z',
+          tags: ['warm', 'candlelit'],
+        },
       ])
-      const wrapper = mount(SoundListManage, { props: { type: 'music' } })
+      const wrapper = mount(SoundListManage, {
+        props: { type: 'music' },
+      })
       await flushPromises()
       const chips = wrapper.findAll('.tag-chip')
       expect(chips.map(c => c.text())).toEqual(['warm', 'candlelit'])
@@ -353,9 +479,18 @@ describe('soundListManage', () => {
     it('does not offer tag editing for effects', async () => {
       const { listEffects } = await import('@/api/sounds')
       vi.mocked(listEffects).mockResolvedValue([
-        { id: 'e1', name: 'Boom', filename: 'b.wav', category: 'effects', createdAt: '2024-01-01T00:00:00Z', tags: [] },
+        {
+          id: 'e1',
+          name: 'Boom',
+          filename: 'b.wav',
+          category: 'effects',
+          createdAt: '2024-01-01T00:00:00Z',
+          tags: [],
+        },
       ])
-      const wrapper = mount(SoundListManage, { props: { type: 'effects' } })
+      const wrapper = mount(SoundListManage, {
+        props: { type: 'effects' },
+      })
       await flushPromises()
       expect(wrapper.find('.btn-edit-tags').exists()).toBe(false)
     })
@@ -363,9 +498,18 @@ describe('soundListManage', () => {
     it('edits tags inline and saves them comma-separated', async () => {
       const { listAmbience, updateSoundTags } = await import('@/api/sounds')
       vi.mocked(listAmbience).mockResolvedValue([
-        { id: 'a1', name: 'Rain', filename: 'r.mp3', category: 'ambience', createdAt: '2024-01-01T00:00:00Z', tags: [] },
+        {
+          id: 'a1',
+          name: 'Rain',
+          filename: 'r.mp3',
+          category: 'ambience',
+          createdAt: '2024-01-01T00:00:00Z',
+          tags: [],
+        },
       ])
-      const wrapper = mount(SoundListManage, { props: { type: 'ambience' } })
+      const wrapper = mount(SoundListManage, {
+        props: { type: 'ambience' },
+      })
       await flushPromises()
       await wrapper.find('.btn-edit-tags').trigger('click')
       const input = wrapper.find('input.tags-input')
@@ -382,9 +526,18 @@ describe('soundListManage', () => {
       const { listAmbience, updateSoundTags } = await import('@/api/sounds')
       vi.mocked(updateSoundTags).mockClear()
       vi.mocked(listAmbience).mockResolvedValue([
-        { id: 'a1', name: 'Rain', filename: 'r.mp3', category: 'ambience', createdAt: '2024-01-01T00:00:00Z', tags: ['old'] },
+        {
+          id: 'a1',
+          name: 'Rain',
+          filename: 'r.mp3',
+          category: 'ambience',
+          createdAt: '2024-01-01T00:00:00Z',
+          tags: ['old'],
+        },
       ])
-      const wrapper = mount(SoundListManage, { props: { type: 'ambience' } })
+      const wrapper = mount(SoundListManage, {
+        props: { type: 'ambience' },
+      })
       await flushPromises()
       await wrapper.find('.btn-edit-tags').trigger('click')
       const input = wrapper.find('input.tags-input')
@@ -398,10 +551,19 @@ describe('soundListManage', () => {
     it('shows an error toast when saving tags fails', async () => {
       const { listMusic, updateSoundTags } = await import('@/api/sounds')
       vi.mocked(listMusic).mockResolvedValue([
-        { id: 's1', name: 'Tavern', filename: 't.mp3', category: 'music', createdAt: '2024-01-01T00:00:00Z', tags: [] },
+        {
+          id: 's1',
+          name: 'Tavern',
+          filename: 't.mp3',
+          category: 'music',
+          createdAt: '2024-01-01T00:00:00Z',
+          tags: [],
+        },
       ])
       vi.mocked(updateSoundTags).mockRejectedValueOnce(new Error('disk full'))
-      const wrapper = mount(SoundListManage, { props: { type: 'music' } })
+      const wrapper = mount(SoundListManage, {
+        props: { type: 'music' },
+      })
       await flushPromises()
       await wrapper.find('.btn-edit-tags').trigger('click')
       await wrapper.find('input.tags-input').setValue('x')

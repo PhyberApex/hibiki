@@ -9,7 +9,9 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 const appPkg = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf-8'),
 ) as { version?: string }
-const appVersion = typeof appPkg.version === 'string' ? appPkg.version : '0.0.0'
+const appVersion = typeof appPkg.version === 'string'
+  ? appPkg.version
+  : '0.0.0'
 
 export default defineConfig(({ mode }) => ({
   build: {
@@ -21,7 +23,11 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     vue(),
-    ...(mode === 'development' ? [vueDevTools()] : []),
+    ...(mode === 'development'
+      ? [
+          vueDevTools(),
+        ]
+      : []),
   ],
   resolve: {
     alias: {

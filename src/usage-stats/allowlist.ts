@@ -17,17 +17,29 @@ export type UsageStatsValueRule
     | { type: 'boolean' }
     | { type: 'pattern', pattern: RegExp }
 
-const TARGET: UsageStatsValueRule = { type: 'enum', values: ['discord', 'local'] }
+const TARGET: UsageStatsValueRule = {
+  type: 'enum',
+  values: ['discord', 'local'],
+}
 
 export const USAGE_STATS_EVENTS: Readonly<Record<string, Readonly<Record<string, UsageStatsValueRule>>>> = {
   'app-start': {
-    platform: { type: 'enum', values: ['darwin', 'win32', 'linux'] },
-    arch: { type: 'enum', values: ['x64', 'arm64', 'ia32', 'arm'] },
+    platform: {
+      type: 'enum',
+      values: ['darwin', 'win32', 'linux'],
+    },
+    arch: {
+      type: 'enum',
+      values: ['x64', 'arm64', 'ia32', 'arm'],
+    },
     version: { type: 'pattern', pattern: /^\d+\.\d+\.\d+(?:-[\w.]+)?$/ },
     locale: { type: 'pattern', pattern: /^[a-z]{2,3}(?:-[A-Z0-9]{2,4})?$/i },
   },
   'scene-play': {
-    musicMode: { type: 'enum', values: ['single', 'sequential', 'shuffle'] },
+    musicMode: {
+      type: 'enum',
+      values: ['single', 'sequential', 'shuffle'],
+    },
     music: { type: 'count' },
     ambience: { type: 'count' },
     effects: { type: 'count' },
@@ -41,10 +53,16 @@ export const USAGE_STATS_EVENTS: Readonly<Record<string, Readonly<Record<string,
     target: TARGET,
   },
   'hotkey-fired': {
-    kind: { type: 'enum', values: ['scene', 'effect', 'action'] },
+    kind: {
+      type: 'enum',
+      values: ['scene', 'effect', 'action'],
+    },
   },
   'vision-analyze': {
-    provider: { type: 'enum', values: ['claude', 'openai-compatible'] },
+    provider: {
+      type: 'enum',
+      values: ['claude', 'openai-compatible'],
+    },
   },
   'registry-install': {
     // The Registry's slug pattern (`registry/schema/scene-entry.schema.json`).
@@ -56,7 +74,15 @@ export const USAGE_STATS_EVENTS: Readonly<Record<string, Readonly<Record<string,
  * The route paths sent as Umami's `url`: the router's own patterns, so a
  * Scene id never leaves the machine (`/scenes/:id`, not `/scenes/<uuid>`).
  */
-export const USAGE_STATS_URLS: readonly string[] = ['/', '/media', '/scenes', '/scenes/:id', '/browser', '/settings', '/about']
+export const USAGE_STATS_URLS: readonly string[] = [
+  '/',
+  '/media',
+  '/scenes',
+  '/scenes/:id',
+  '/browser',
+  '/settings',
+  '/about',
+]
 
 /** Sent as Umami's `hostname` with every event; the Umami website's "domain" is the same. */
 export const USAGE_STATS_HOSTNAME = 'app.hibiki.phyberapex.de'

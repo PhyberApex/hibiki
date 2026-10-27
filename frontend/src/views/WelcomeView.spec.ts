@@ -9,7 +9,9 @@ import WelcomeView from './WelcomeView.vue'
 
 const replace = vi.fn()
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ replace }) }))
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ replace }),
+}))
 vi.mock('@/api/config', () => ({
   LOCAL_TARGET_ID: 'local',
   fetchActiveOutputTarget: vi.fn().mockResolvedValue('local'),
@@ -26,7 +28,9 @@ vi.mock('@/api/player', () => ({
   reconnectBot: vi.fn(),
   stopEffect: vi.fn(),
 }))
-vi.mock('@/audio/audio-element-diagnostics', () => ({ logInfo: vi.fn() }))
+vi.mock('@/audio/audio-element-diagnostics', () => ({
+  logInfo: vi.fn(),
+}))
 vi.mock('@/api/usage-stats', () => ({
   fetchUsageStats: vi.fn(),
   markUsageStatsPrompted: vi.fn(),

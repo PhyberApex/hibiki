@@ -32,7 +32,9 @@ function chunk(id: string, body: Buffer, declaredSize = body.length): Buffer {
   const header = Buffer.alloc(8)
   header.write(id, 0, 'ascii')
   header.writeUInt32LE(declaredSize, 4)
-  const pad = body.length % 2 ? Buffer.alloc(1) : Buffer.alloc(0)
+  const pad = body.length % 2
+    ? Buffer.alloc(1)
+    : Buffer.alloc(0)
   return Buffer.concat([header, body, pad])
 }
 
@@ -59,9 +61,17 @@ function buildWav(spec: WavSpec): Buffer {
 
   const body = Buffer.concat([
     Buffer.from('WAVE', 'ascii'),
-    ...(spec.omitFmt ? [] : [chunk('fmt ', fmt)]),
+    ...(spec.omitFmt
+      ? []
+      : [
+          chunk('fmt ', fmt),
+        ]),
     ...(spec.chunksBeforeData ?? []),
-    ...(spec.omitData ? [] : [chunk('data', spec.data, spec.declaredDataSize)]),
+    ...(spec.omitData
+      ? []
+      : [
+          chunk('data', spec.data, spec.declaredDataSize),
+        ]),
   ])
   const riff = Buffer.alloc(8)
   riff.write('RIFF', 0, 'ascii')
@@ -87,7 +97,12 @@ async function decode(bytes: Buffer): Promise<Buffer> {
 /** Interleaved stereo Int16LE output as [left, right] pairs. */
 function frames(pcm: Buffer): [number, number][] {
   const out: [number, number][] = []
-  for (let o = 0; o < pcm.length; o += 4) out.push([pcm.readInt16LE(o), pcm.readInt16LE(o + 2)])
+  for (let o = 0; o < pcm.length; o += 4) {
+    out.push([
+      pcm.readInt16LE(o),
+      pcm.readInt16LE(o + 2),
+    ])
+  }
   return out
 }
 
@@ -108,7 +123,9 @@ const N = 8
 
 describe('probeWav', () => {
   it('accepts a RIFF/WAVE header', async () => {
-    await expect(probeWav(writeTemp(buildWav({ data: Buffer.alloc(4) })))).resolves.toBe(true)
+    await expect(probeWav(writeTemp(buildWav({
+      data: Buffer.alloc(4),
+    })))).resolves.toBe(true)
   })
 
   it('rejects a file shorter than the 12-byte header', async () => {
@@ -129,7 +146,12 @@ describe('probeWav', () => {
     ['32-bit float', IEEE_FLOAT, 32, false],
     ['extensible 24-bit PCM', PCM, 24, true],
   ])('accepts %s', async (_label, formatTag, bitsPerSample, extensible) => {
-    await expect(probeWav(writeTemp(buildWav({ formatTag, bitsPerSample, extensible, data: Buffer.alloc(8) })))).resolves.toBe(true)
+    await expect(probeWav(writeTemp(buildWav({
+      formatTag,
+      bitsPerSample,
+      extensible,
+      data: Buffer.alloc(8),
+    })))).resolves.toBe(true)
   })
 
   it.each([
@@ -139,25 +161,58 @@ describe('probeWav', () => {
     ['12-bit PCM', PCM, 12, false],
     ['64-bit float', IEEE_FLOAT, 64, false],
   ])('rejects %s so the renderer fallback plays it', async (_label, formatTag, bitsPerSample, extensible) => {
-    await expect(probeWav(writeTemp(buildWav({ formatTag, bitsPerSample, extensible, data: Buffer.alloc(8) })))).resolves.toBe(false)
+    await expect(probeWav(writeTemp(buildWav({
+      formatTag,
+      bitsPerSample,
+      extensible,
+      data: Buffer.alloc(8),
+    })))).resolves.toBe(false)
   })
 
   it('rejects a file with no data chunk', async () => {
-    await expect(probeWav(writeTemp(buildWav({ data: Buffer.alloc(0), omitData: true })))).resolves.toBe(false)
+    await expect(probeWav(writeTemp(buildWav({
+      data: Buffer.alloc(0),
+      omitData: true,
+    })))).resolves.toBe(false)
   })
 })
 
 describe('createWavPcmStream', () => {
   it.each([
-    ['8-bit unsigned', 8, PCM, repeat(Buffer.from([192]), N * 2)],
-    ['16-bit', 16, PCM, repeat(Buffer.from([0x00, 0x40]), N * 2)],
-    ['24-bit', 24, PCM, repeat(int24(0x400000), N * 2)],
-    ['32-bit integer', 32, PCM, repeat(Buffer.from([0, 0, 0, 0x40]), N * 2)],
-    ['32-bit float', 32, IEEE_FLOAT, (() => {
-      const b = Buffer.alloc(4)
-      b.writeFloatLE(0.5)
-      return repeat(b, N * 2)
-    })()],
+    [
+      '8-bit unsigned',
+      8,
+      PCM,
+      repeat(Buffer.from([192]), N * 2),
+    ],
+    [
+      '16-bit',
+      16,
+      PCM,
+      repeat(Buffer.from([0x00, 0x40]), N * 2),
+    ],
+    [
+      '24-bit',
+      24,
+      PCM,
+      repeat(int24(0x400000), N * 2),
+    ],
+    [
+      '32-bit integer',
+      32,
+      PCM,
+      repeat(Buffer.from([0, 0, 0, 0x40]), N * 2),
+    ],
+    [
+      '32-bit float',
+      32,
+      IEEE_FLOAT,
+      (() => {
+        const b = Buffer.alloc(4)
+        b.writeFloatLE(0.5)
+        return repeat(b, N * 2)
+      })(),
+    ],
   ])('decodes %s samples to the expected level', async (_label, bitsPerSample, formatTag, data) => {
     const out = frames(await decode(buildWav({ bitsPerSample, formatTag, data })))
     expect(out).toHaveLength(N)
@@ -168,7 +223,10 @@ describe('createWavPcmStream', () => {
   })
 
   it('sign-extends negative 24-bit samples', async () => {
-    const out = frames(await decode(buildWav({ bitsPerSample: 24, data: repeat(int24(-0x400000), N * 2) })))
+    const out = frames(await decode(buildWav({
+      bitsPerSample: 24,
+      data: repeat(int24(-0x400000), N * 2),
+    })))
     expect(out[0]).toEqual([NEG_HALF, NEG_HALF])
   })
 
@@ -187,42 +245,62 @@ describe('createWavPcmStream', () => {
 
   it('duplicates a mono channel into both stereo channels', async () => {
     const left = Buffer.from([0x00, 0x40])
-    const out = frames(await decode(buildWav({ channels: 1, data: repeat(left, N) })))
+    const out = frames(await decode(buildWav({
+      channels: 1,
+      data: repeat(left, N),
+    })))
     expect(out).toHaveLength(N)
     expect(out.every(([l, r]) => l === HALF && r === HALF)).toBe(true)
   })
 
   it('keeps stereo channels apart', async () => {
     const frame = Buffer.from([0x00, 0x40, 0x00, 0xC0]) // +0.5, -0.5
-    const out = frames(await decode(buildWav({ data: repeat(frame, N) })))
+    const out = frames(await decode(buildWav({
+      data: repeat(frame, N),
+    })))
     expect(out[0]).toEqual([HALF, NEG_HALF])
   })
 
   it('resamples non-48 kHz input through the PcmResampler', async () => {
-    const out = frames(await decode(buildWav({ sampleRate: 24000, data: repeat(Buffer.from([0x00, 0x40]), 2 * 100) })))
+    const out = frames(await decode(buildWav({
+      sampleRate: 24000,
+      data: repeat(Buffer.from([0x00, 0x40]), 2 * 100),
+    })))
     expect(out).toHaveLength(200)
   })
 
   it('skips unknown and odd-sized chunks before data', async () => {
     const out = frames(await decode(buildWav({
-      chunksBeforeData: [chunk('LIST', Buffer.from('INFOabc')), chunk('fact', Buffer.alloc(4))],
+      chunksBeforeData: [
+        chunk('LIST', Buffer.from('INFOabc')),
+        chunk('fact', Buffer.alloc(4)),
+      ],
       data: repeat(Buffer.from([0x00, 0x40]), N * 2),
     })))
     expect(out).toHaveLength(N)
   })
 
   it('stops at the end of the file when data is truncated, dropping a trailing partial frame', async () => {
-    const data = Buffer.concat([repeat(Buffer.from([0x00, 0x40]), N * 2), Buffer.from([0x00])])
+    const data = Buffer.concat([
+      repeat(Buffer.from([0x00, 0x40]), N * 2),
+      Buffer.from([0x00]),
+    ])
     const out = frames(await decode(buildWav({ data, declaredDataSize: 1000 })))
     expect(out).toHaveLength(N)
   })
 
   it('rejects a file with no data chunk', async () => {
-    await expect(decode(buildWav({ data: Buffer.alloc(0), omitData: true }))).rejects.toThrow('WAV file has no data chunk')
+    await expect(decode(buildWav({
+      data: Buffer.alloc(0),
+      omitData: true,
+    }))).rejects.toThrow('WAV file has no data chunk')
   })
 
   it('rejects a data chunk that comes before fmt', async () => {
-    await expect(decode(buildWav({ data: Buffer.alloc(4), omitFmt: true }))).rejects.toThrow('WAV data chunk appeared before fmt chunk')
+    await expect(decode(buildWav({
+      data: Buffer.alloc(4),
+      omitFmt: true,
+    }))).rejects.toThrow('WAV data chunk appeared before fmt chunk')
   })
 
   it.each([
@@ -231,7 +309,12 @@ describe('createWavPcmStream', () => {
     ['extensible ADPCM', ADPCM, 16, true],
     ['12-bit PCM', PCM, 12, false],
   ])('rejects %s, which probeWav would also refuse', async (_label, formatTag, bitsPerSample, extensible) => {
-    await expect(decode(buildWav({ formatTag, extensible, bitsPerSample, data: Buffer.alloc(24) })))
+    await expect(decode(buildWav({
+      formatTag,
+      extensible,
+      bitsPerSample,
+      data: Buffer.alloc(24),
+    })))
       .rejects
       .toThrow(`Unsupported WAV format: tag ${formatTag}, ${bitsPerSample}-bit`)
   })

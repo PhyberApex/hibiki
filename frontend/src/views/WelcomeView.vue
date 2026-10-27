@@ -7,7 +7,9 @@ import { logInfo } from '@/audio/audio-element-diagnostics'
 import { usePlayerStore } from '@/stores/player'
 
 declare const __APP_VERSION__: string
-const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
+const appVersion = typeof __APP_VERSION__ !== 'undefined'
+  ? __APP_VERSION__
+  : '0.0.0'
 const router = useRouter()
 const player = usePlayerStore()
 

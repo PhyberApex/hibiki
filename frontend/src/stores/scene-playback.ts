@@ -153,8 +153,22 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   const pendingBackendAmbienceCalls = new Set<string>()
 
   const musicChannels: MusicChannel[] = [
-    { el: createAudioEl(), streamId: 'music-a', soundId: null, source: null, token: 0, backendTarget: null },
-    { el: createAudioEl(), streamId: 'music-b', soundId: null, source: null, token: 0, backendTarget: null },
+    {
+      el: createAudioEl(),
+      streamId: 'music-a',
+      soundId: null,
+      source: null,
+      token: 0,
+      backendTarget: null,
+    },
+    {
+      el: createAudioEl(),
+      streamId: 'music-b',
+      soundId: null,
+      source: null,
+      token: 0,
+      backendTarget: null,
+    },
   ]
   let primaryMusicChannel = musicChannels[0]
   const crossfadeRamp = new CrossfadeRamp()
@@ -317,7 +331,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       // down here — GuildAudioManager owns the fade and the stream.
       if (targetId.value) {
         pendingBackendAmbienceCalls.add(soundId)
-        stopBackendAmbience(targetId.value, soundId, fadeOutMs > 0 ? { fadeOutMs } : {})
+        stopBackendAmbience(targetId.value, soundId, fadeOutMs > 0
+          ? { fadeOutMs }
+          : {})
           .catch(() => {})
           .finally(() => pendingBackendAmbienceCalls.delete(soundId))
       }
@@ -464,8 +480,11 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   function stopMusicChannel(channel: MusicChannel, mode: 'renderer' | 'backend', fadeOutMs = 0) {
     crossfadeRamp.cancel(musicFadeKey(channel))
     if (mode === 'backend') {
-      if (targetId.value)
-        stopBackendMusic(targetId.value, fadeOutMs > 0 ? { fadeOutMs } : {}).catch(() => {})
+      if (targetId.value) {
+        stopBackendMusic(targetId.value, fadeOutMs > 0
+          ? { fadeOutMs }
+          : {}).catch(() => {})
+      }
       clearMusicChannel(channel)
       return
     }
@@ -609,7 +628,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
 
   // Outside single, the per-track Loop toggle is ignored (its stored value stays).
   function trackForMode(item: SceneItem, mode: MusicMode): SceneItem {
-    return mode === 'single' ? item : { ...item, loop: false }
+    return mode === 'single'
+      ? item
+      : { ...item, loop: false }
   }
 
   // A plain start on the primary channel (Play, a track's Play with nothing of
@@ -640,14 +661,27 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         console.warn(`[scene] Music Mode ${mode}: track ${next.soundId} is no longer in Scene ${scene.id}, Music stops`)
         return
       }
-      musicCursor = { sceneId: scene.id, current: next.soundId, index: next.index, bag: next.bag, pass: next.pass }
+      musicCursor = {
+        sceneId: scene.id,
+        current: next.soundId,
+        index: next.index,
+        bag: next.bag,
+        pass: next.pass,
+      }
       musicSceneId.value = scene.id
       if (await start(trackForMode(item, mode)))
         return
       if (intent !== musicIntent || mode === 'single')
         return
       console.warn(`[scene] Music Mode ${mode}: skipping track ${next.soundId} of Scene ${scene.id}, it could not start`)
-      next = selectNextTrack({ mode, list: scene.music.map(m => m.soundId), current: next.soundId, currentIndex: next.index, bag: next.bag, pass: next.pass })
+      next = selectNextTrack({
+        mode,
+        list: scene.music.map(m => m.soundId),
+        current: next.soundId,
+        currentIndex: next.index,
+        bag: next.bag,
+        pass: next.pass,
+      })
     }
     if (intent !== musicIntent || mode === 'single')
       return
@@ -693,7 +727,14 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     const mode = normalizeMusicMode(scene.musicMode)
     if (mode === 'single')
       return
-    const next = selectNextTrack({ mode, list: scene.music.map(m => m.soundId), current: cursor.current, currentIndex: cursor.index, bag: cursor.bag, pass: cursor.pass })
+    const next = selectNextTrack({
+      mode,
+      list: scene.music.map(m => m.soundId),
+      current: cursor.current,
+      currentIndex: cursor.index,
+      bag: cursor.bag,
+      pass: cursor.pass,
+    })
     if (!next) {
       logInfo(`[scene] Music Mode ${mode}: Scene ${scene.id} has no Music left after ${outgoing}, Music ends`)
       musicCursor = null
@@ -715,7 +756,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // track, so it is never read as an end.
   watch(() => {
     const state = player.activeTargetState
-    return state?.source === 'live' ? (state.track?.id ?? null) : undefined
+    return state?.source === 'live'
+      ? (state.track?.id ?? null)
+      : undefined
   }, (trackId) => {
     const channel = primaryMusicChannel
     if (trackId === undefined || channel.source !== 'backend' || channel.soundId === null || channel.backendTarget === null)
@@ -733,7 +776,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
    */
   async function playMusicTrack(item: SceneItem) {
     const scene = openScene.value
-    const index = scene ? scene.music.findIndex(m => m.soundId === item.soundId) : -1
+    const index = scene
+      ? scene.music.findIndex(m => m.soundId === item.soundId)
+      : -1
     if (!scene || index < 0) {
       releaseMusicMode('replaced')
       await playMusic(item)
@@ -745,7 +790,14 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     releaseMusicMode(isJump ? 'jumped' : 'replaced')
     const intent = musicIntent
     const list = scene.music.map(m => m.soundId)
-    const pick: SelectedTrack = { soundId: item.soundId, index, bag: mode === 'shuffle' ? shuffleBagWithout(list, item.soundId) : [], pass: list }
+    const pick: SelectedTrack = {
+      soundId: item.soundId,
+      index,
+      bag: mode === 'shuffle'
+        ? shuffleBagWithout(list, item.soundId)
+        : [],
+      pass: list,
+    }
     if (!isJump) {
       await startMusicFrom(scene, mode, pick, startMusicDirect, intent)
       return
@@ -885,7 +937,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // the Playing Scene from the top on the new one — no cross-Target fade.
   async function restartHandoverScene(sceneToRestart: string) {
     try {
-      const target = openScene.value?.id === sceneToRestart ? openScene.value : await getScene(sceneToRestart)
+      const target = openScene.value?.id === sceneToRestart
+        ? openScene.value
+        : await getScene(sceneToRestart)
       if (target)
         await startScene(target)
     }
@@ -898,8 +952,13 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     if (kind === player.activeTarget)
       return
     const playingId = player.playingSceneId
-    logInfo(`[scene] switching Output Target ${player.activeTarget} -> ${kind}${playingId ? `, restarting Scene ${playingId}` : ''}`)
-    trackUsage({ name: 'target-switch', data: { target: kind } })
+    logInfo(`[scene] switching Output Target ${player.activeTarget} -> ${kind}${playingId
+      ? `, restarting Scene ${playingId}`
+      : ''}`)
+    trackUsage({
+      name: 'target-switch',
+      data: { target: kind },
+    })
     stopScene()
     await player.setActiveTarget(kind)
     await loadGlobalVolume()
@@ -937,8 +996,11 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       if (source === 'backend') {
         // GuildAudioManager owns this sound's fade-out and stop (ADR-0003);
         // bookkeeping drops right away so a later switch never reconsiders it.
-        if (targetId.value)
-          stopBackendAmbience(targetId.value, soundId, durationMs > 0 ? { fadeOutMs: durationMs } : {}).catch(() => {})
+        if (targetId.value) {
+          stopBackendAmbience(targetId.value, soundId, durationMs > 0
+            ? { fadeOutMs: durationMs }
+            : {}).catch(() => {})
+        }
         playingAmbienceIds.value.delete(soundId)
         ambienceSource.delete(soundId)
         continue
@@ -968,8 +1030,11 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         if (source === 'backend') {
           // The shared-sound rule (CONTEXT.md): never restarted, just glided
           // to the new Scene's volume.
-          if (targetId.value)
-            setBackendAmbienceVolume(targetId.value, item.soundId, to * 100, durationMs > 0 ? { rampMs: durationMs } : {}).catch(() => {})
+          if (targetId.value) {
+            setBackendAmbienceVolume(targetId.value, item.soundId, to * 100, durationMs > 0
+              ? { rampMs: durationMs }
+              : {}).catch(() => {})
+          }
           continue
         }
         const el = ambienceAudioEls.get(item.soundId)
@@ -1018,7 +1083,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     const outgoingChannel = primaryMusicChannel
     const outgoingHadTrack = outgoingChannel.soundId != null
     const outgoingWasBackend = outgoingChannel.source === 'backend'
-    const incomingChannel = targetTrack ? (musicChannels.find(c => c !== outgoingChannel) ?? musicChannels[1]) : null
+    const incomingChannel = targetTrack
+      ? (musicChannels.find(c => c !== outgoingChannel) ?? musicChannels[1])
+      : null
     let started: Promise<boolean> = Promise.resolve(false)
 
     if (incomingChannel) {
@@ -1141,7 +1208,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // switching the sidebar selection to a different, not-yet-joined guild (which
   // also flips `isJoined` false but shouldn't stop another guild's playback).
   // The Local Target has no voice connection, so it never reacts to this.
-  watch([() => player.guildId, () => player.isJoined], ([newGuildId, joined], [oldGuildId, wasJoined]) => {
+  watch([
+    () => player.guildId,
+    () => player.isJoined,
+  ], ([newGuildId, joined], [oldGuildId, wasJoined]) => {
     if (!player.isLocalActive && newGuildId === oldGuildId && wasJoined && !joined)
       stopScene()
   })

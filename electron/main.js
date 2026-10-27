@@ -18,7 +18,16 @@ protocol.registerSchemesAsPrivileged([
   // to capture them into Web Audio for Discord streaming) load hibiki://sound
   // URLs; without it Chromium rejects the request before it reaches the
   // handler. `stream` marks media responses as streamable.
-  { scheme: 'hibiki', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
+  {
+    scheme: 'hibiki',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
 ])
 
 if (process.env.HIBIKI_USER_DATA_DIR) {
@@ -92,12 +101,17 @@ function createWindow(loadUrl) {
   })
   win.loadURL(loadUrl)
   win.webContents.on('console-message', (details) => {
-    if (details.level === 'error' || details.level === 'warning')
-      rendererLog[details.level === 'error' ? 'error' : 'warn'](`${details.message} (${details.sourceId}:${details.lineNumber})`)
-    else if (details.level === 'info' && details.message.startsWith('['))
+    if (details.level === 'error' || details.level === 'warning') {
+      rendererLog[details.level === 'error'
+        ? 'error'
+        : 'warn'](`${details.message} (${details.sourceId}:${details.lineNumber})`)
+    }
+    else if (details.level === 'info' && details.message.startsWith('[')) {
       rendererLog.info(details.message)
-    else if (details.level === 'debug' && details.message.startsWith('['))
+    }
+    else if (details.level === 'debug' && details.message.startsWith('[')) {
       rendererLog.debug(details.message)
+    }
   })
   win.webContents.on('render-process-gone', (_, details) => {
     windowLog.error(`Renderer process gone: ${details.reason} (exit code ${details.exitCode})`)
@@ -265,14 +279,22 @@ function serveSoundFile(request, filePath) {
   const stats = fs.statSync(filePath)
   const totalSize = stats.size
   const ext = path.extname(filePath).toLowerCase()
-  const mime = { '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.flac': 'audio/flac' }[ext] || 'application/octet-stream'
+  const mime = {
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.ogg': 'audio/ogg',
+    '.m4a': 'audio/mp4',
+    '.flac': 'audio/flac',
+  }[ext] || 'application/octet-stream'
 
   const rangeHeader = request.headers.get('range')
   if (rangeHeader) {
     const match = rangeHeader.match(/bytes=(\d+)-(\d*)/)
     if (match) {
       const start = Number.parseInt(match[1], 10)
-      const end = match[2] ? Number.parseInt(match[2], 10) : totalSize - 1
+      const end = match[2]
+        ? Number.parseInt(match[2], 10)
+        : totalSize - 1
       const chunkSize = end - start + 1
       protocolLog.debug(`${path.basename(filePath)} 206 bytes ${start}-${end}/${totalSize}`)
       return fileResponse(filePath, {
@@ -288,7 +310,9 @@ function serveSoundFile(request, filePath) {
     }
   }
 
-  protocolLog.debug(`${path.basename(filePath)} 200 full ${totalSize} bytes${rangeHeader ? ` (unparsed range "${rangeHeader}")` : ''}`)
+  protocolLog.debug(`${path.basename(filePath)} 200 full ${totalSize} bytes${rangeHeader
+    ? ` (unparsed range "${rangeHeader}")`
+    : ''}`)
   return fileResponse(filePath, {
     headers: {
       'Content-Type': mime,
@@ -323,13 +347,26 @@ function registerHibikiProtocol(api, webDistDir) {
     }
 
     if (host === 'app') {
-      let filePath = pathname === '/' ? path.join(webDistDir, 'index.html') : path.join(webDistDir, pathname)
+      let filePath = pathname === '/'
+        ? path.join(webDistDir, 'index.html')
+        : path.join(webDistDir, pathname)
       // SPA fallback: serve index.html for routes that don't match a static file
       if (!fs.existsSync(filePath))
         filePath = path.join(webDistDir, 'index.html')
       const ext = path.extname(filePath).toLowerCase()
-      const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.ico': 'image/x-icon', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2' }[ext] || 'application/octet-stream'
-      return fileResponse(filePath, { headers: { 'Content-Type': mime } })
+      const mime = {
+        '.html': 'text/html',
+        '.js': 'application/javascript',
+        '.css': 'text/css',
+        '.json': 'application/json',
+        '.ico': 'image/x-icon',
+        '.svg': 'image/svg+xml',
+        '.png': 'image/png',
+        '.woff2': 'font/woff2',
+      }[ext] || 'application/octet-stream'
+      return fileResponse(filePath, {
+        headers: { 'Content-Type': mime },
+      })
     }
 
     return new Response('Not Found', { status: 404 })
@@ -364,7 +401,12 @@ app.whenReady().then(async () => {
       appVersion: app.getVersion(),
       usageStats: {
         gate: { packaged: app.isPackaged, killSwitch: process.env.HIBIKI_USAGE_STATS === 'off' },
-        environment: { electronVersion: process.versions.electron, platform: process.platform, arch: process.arch, locale: app.getLocale() },
+        environment: {
+          electronVersion: process.versions.electron,
+          platform: process.platform,
+          arch: process.arch,
+          locale: app.getLocale(),
+        },
       },
     })
     handle = embedded
@@ -389,14 +431,20 @@ app.whenReady().then(async () => {
   }
 
   registerIpcHandlers(api)
-  hotkeys = createHotkeys({ globalShortcut, getApi: () => api, getWindow: () => mainWindow })
+  hotkeys = createHotkeys({
+    globalShortcut,
+    getApi: () => api,
+    getWindow: () => mainWindow,
+  })
   ipcMain.handle('hotkeys:getStatus', () => hotkeys.getStatus())
   await hotkeys.sync()
   registerBrowserViewHandlers()
   registerHibikiProtocol(api, webDistDir)
 
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    desktopCapturer.getSources({ types: ['screen', 'window'] })
+    desktopCapturer.getSources({
+      types: ['screen', 'window'],
+    })
       .then((sources) => {
         if (sources.length === 0) {
           callback({})

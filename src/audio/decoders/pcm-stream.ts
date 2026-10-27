@@ -32,7 +32,9 @@ export function createProducerStream(produce: (push: (chunk: Buffer) => Promise<
 
   produce(push).then(
     () => stream.push(null),
-    (err: unknown) => stream.destroy(err instanceof Error ? err : new Error(String(err))),
+    (err: unknown) => stream.destroy(err instanceof Error
+      ? err
+      : new Error(String(err))),
   )
 
   return stream

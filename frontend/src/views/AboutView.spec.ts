@@ -6,7 +6,10 @@ import AboutView from './AboutView.vue'
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
-    { path: '/', component: { template: '<div>Home</div>' } },
+    {
+      path: '/',
+      component: { template: '<div>Home</div>' },
+    },
     { path: '/about', component: AboutView },
   ],
 })
@@ -14,14 +17,18 @@ const router = createRouter({
 describe('aboutView', () => {
   it('renders about page heading', () => {
     const wrapper = mount(AboutView, {
-      global: { plugins: [router] },
+      global: {
+        plugins: [router],
+      },
     })
     expect(wrapper.find('h1').text()).toBe('Hibiki')
   })
 
   it('has about class on root', () => {
     const wrapper = mount(AboutView, {
-      global: { plugins: [router] },
+      global: {
+        plugins: [router],
+      },
     })
     expect(wrapper.find('.about').exists()).toBe(true)
   })

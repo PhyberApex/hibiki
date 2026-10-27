@@ -34,7 +34,9 @@ describe('electron API', () => {
 
   it('getPathForFile delegates to the bridge', () => {
     const file = new File(['x'], 'map.png')
-    ;(window as any).hibiki = { getPathForFile: (f: File) => `/abs/${f.name}` }
+    ;(window as any).hibiki = {
+      getPathForFile: (f: File) => `/abs/${f.name}`,
+    }
     expect(getPathForFile(file)).toBe('/abs/map.png')
   })
 })

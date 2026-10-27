@@ -42,5 +42,7 @@ export function openExternal(url: string): void {
 
 export function getPathForFile(file: File): string | null {
   const resolved = window.hibiki?.getPathForFile?.(file)
-  return typeof resolved === 'string' && resolved.length > 0 ? resolved : null
+  return typeof resolved === 'string' && resolved.length > 0
+    ? resolved
+    : null
 }

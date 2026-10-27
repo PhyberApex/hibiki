@@ -21,7 +21,11 @@ jest.mock('@discordjs/voice', () => ({
 }))
 jest.mock('./audio-engine', () => ({
   AudioEngine: jest.fn().mockImplementation(() => ({
-    audioPlayer: { on: jest.fn(), play: jest.fn(), state: { status: 'idle' } },
+    audioPlayer: {
+      on: jest.fn(),
+      play: jest.fn(),
+      state: { status: 'idle' },
+    },
     playMusicFromStream: jest.fn((stream: EventEmitter, _streamId?: string, _volume?: number, onEnded?: () => void) => {
       if (!onEnded)
         return
@@ -115,7 +119,14 @@ function createFakeConnection(channelId = 'channel-1'): FakeConnection {
   return connection
 }
 
-const fakeChannel = { id: 'channel-1', name: 'General', guild: { id: 'guild-1', voiceAdapterCreator: jest.fn() } } as unknown as VoiceBasedChannel
+const fakeChannel = {
+  id: 'channel-1',
+  name: 'General',
+  guild: {
+    id: 'guild-1',
+    voiceAdapterCreator: jest.fn(),
+  },
+} as unknown as VoiceBasedChannel
 
 /**
  * Flushes the microtask queue so async handlers triggered synchronously by
@@ -253,8 +264,18 @@ describe('guildAudioManager', () => {
   })
 
   describe('music stream ids', () => {
-    const metaA = { id: 'a', name: 'Track A', filename: 'a.mp3', category: 'music' as const }
-    const metaB = { id: 'b', name: 'Track B', filename: 'b.mp3', category: 'music' as const }
+    const metaA = {
+      id: 'a',
+      name: 'Track A',
+      filename: 'a.mp3',
+      category: 'music' as const,
+    }
+    const metaB = {
+      id: 'b',
+      name: 'Track B',
+      filename: 'b.mp3',
+      category: 'music' as const,
+    }
 
     it('forwards the stream id to the engine on start and stop', () => {
       const stream = createFakeStream()
@@ -340,8 +361,18 @@ describe('guildAudioManager', () => {
   })
 
   describe('playMusic (backend-decoded track)', () => {
-    const meta = { id: 'a', name: 'Track A', filename: 'a.mp3', category: 'music' as const }
-    const metaB = { id: 'b', name: 'Track B', filename: 'b.mp3', category: 'music' as const }
+    const meta = {
+      id: 'a',
+      name: 'Track A',
+      filename: 'a.mp3',
+      category: 'music' as const,
+    }
+    const metaB = {
+      id: 'b',
+      name: 'Track B',
+      filename: 'b.mp3',
+      category: 'music' as const,
+    }
 
     it('decodes via the factory and reports the track through getState()\'s track field', async () => {
       const stream = createFakeStream()
@@ -758,7 +789,12 @@ describe('guildAudioManager', () => {
     it('fadeInMs starts the sound silent and ramps up to its target volume', async () => {
       const stream = createFakeStream()
 
-      await manager.playAmbience(jest.fn().mockReturnValue(stream), 'rain', { volume: 70, repeatMin: 0, repeatMax: 0, fadeInMs: 400 })
+      await manager.playAmbience(jest.fn().mockReturnValue(stream), 'rain', {
+        volume: 70,
+        repeatMin: 0,
+        repeatMax: 0,
+        fadeInMs: 400,
+      })
       const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
 
       expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, streamId, 0, expect.any(Function))
@@ -771,7 +807,12 @@ describe('guildAudioManager', () => {
       const idA = getEngineMock().playMusicFromStream.mock.calls[0][1]
 
       const streamB = createFakeStream()
-      await manager.playAmbience(jest.fn().mockReturnValue(streamB), 'rain', { volume: 40, repeatMin: 0, repeatMax: 0, fadeInMs: 300 })
+      await manager.playAmbience(jest.fn().mockReturnValue(streamB), 'rain', {
+        volume: 40,
+        repeatMin: 0,
+        repeatMax: 0,
+        fadeInMs: 300,
+      })
       const idB = getEngineMock().playMusicFromStream.mock.calls[1][1]
 
       // Incoming sound starts silent and ramps up to its target volume.
@@ -1197,8 +1238,18 @@ describe('guildAudioManager', () => {
 
       expect(manager.activeEffects).toEqual(
         expect.arrayContaining([
-          { instanceId: a.instanceId, soundId: 'thunder', startedAt: a.startedAt, durationMs: 1500 },
-          { instanceId: b.instanceId, soundId: 'door', startedAt: b.startedAt, durationMs: 800 },
+          {
+            instanceId: a.instanceId,
+            soundId: 'thunder',
+            startedAt: a.startedAt,
+            durationMs: 1500,
+          },
+          {
+            instanceId: b.instanceId,
+            soundId: 'door',
+            startedAt: b.startedAt,
+            durationMs: 800,
+          },
         ]),
       )
     })

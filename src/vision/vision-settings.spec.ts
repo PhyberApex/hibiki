@@ -17,7 +17,9 @@ function makeConfig(env: { claudeKey?: string, openaiKey?: string } = {}) {
       ambienceDir: join(tempRoot, 'ambience'),
       webDistDir: 'web-dist',
     },
-    database: { path: join(tempRoot, 'data', 'hibiki.json') },
+    database: {
+      path: join(tempRoot, 'data', 'hibiki.json'),
+    },
   }
 }
 
@@ -30,7 +32,12 @@ describe('createVisionSettings', () => {
       enabled: false,
       configured: false,
       claude: { keyConfigured: false, configured: false, encrypted: false },
-      openaiCompatible: { keyConfigured: false, configured: false, baseUrl: OPENAI_COMPATIBLE_DEFAULT_BASE_URL, model: OPENAI_COMPATIBLE_DEFAULT_MODEL },
+      openaiCompatible: {
+        keyConfigured: false,
+        configured: false,
+        baseUrl: OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
+        model: OPENAI_COMPATIBLE_DEFAULT_MODEL,
+      },
     })
   })
 

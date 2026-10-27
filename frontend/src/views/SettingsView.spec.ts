@@ -27,7 +27,12 @@ const UNCONFIGURED_VISION = {
   enabled: false,
   configured: false,
   claude: { keyConfigured: false, configured: false },
-  openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+  openaiCompatible: {
+    keyConfigured: false,
+    configured: false,
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-6-astra',
+  },
 }
 
 const CLAUDE_CONFIGURED_VISION = {
@@ -44,7 +49,12 @@ vi.mock('@/api/config', () => ({
     enabled: false,
     configured: false,
     claude: { keyConfigured: false, configured: false },
-    openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+    openaiCompatible: {
+      keyConfigured: false,
+      configured: false,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-6-astra',
+    },
   }),
   selectStorageFolder: vi.fn(),
   updateDiscordToken: vi.fn().mockResolvedValue({ tokenConfigured: true }),
@@ -83,13 +93,19 @@ vi.mock('@/api/hotkeys', () => ({
   fetchHotkeyStatus: vi.fn().mockResolvedValue({
     enabled: true,
     registered: [],
-    failures: [{ accelerator: 'F13', owner: 'Scene "Tavern"', reason: 'Global hotkeys are not supported under Wayland' }],
+    failures: [
+      { accelerator: 'F13', owner: 'Scene "Tavern"', reason: 'Global hotkeys are not supported under Wayland' },
+    ],
   }),
 }))
 
 function mountSettings() {
   return mount(SettingsView, {
-    global: { plugins: [createPinia()] },
+    global: {
+      plugins: [
+        createPinia(),
+      ],
+    },
   })
 }
 
@@ -104,7 +120,11 @@ function stubMatchMedia(matches: boolean) {
 describe('settingsView', () => {
   it('renders Settings heading', async () => {
     const wrapper = mount(SettingsView, {
-      global: { plugins: [createPinia()] },
+      global: {
+        plugins: [
+          createPinia(),
+        ],
+      },
     })
     await flushPromises()
     expect(wrapper.find('h1').text()).toBe('Settings')
@@ -112,7 +132,11 @@ describe('settingsView', () => {
 
   it('renders Discord bot section', async () => {
     const wrapper = mount(SettingsView, {
-      global: { plugins: [createPinia()] },
+      global: {
+        plugins: [
+          createPinia(),
+        ],
+      },
     })
     await flushPromises()
     expect(wrapper.find('h2').text()).toBe('Discord bot (optional)')
@@ -157,7 +181,11 @@ describe('settingsView', () => {
       vi.stubGlobal('confirm', vi.fn().mockReturnValue(true))
       vi.mocked(fetchDiscordConfig).mockResolvedValueOnce({ tokenConfigured: true, encrypted: true })
       const pinia = createPinia()
-      const wrapper = mount(SettingsView, { global: { plugins: [pinia] } })
+      const wrapper = mount(SettingsView, {
+        global: {
+          plugins: [pinia],
+        },
+      })
       await flushPromises()
       const player = usePlayerStore(pinia)
       player.activeTarget = 'local'
@@ -174,7 +202,11 @@ describe('settingsView', () => {
 
   it('renders Storage location section', async () => {
     const wrapper = mount(SettingsView, {
-      global: { plugins: [createPinia()] },
+      global: {
+        plugins: [
+          createPinia(),
+        ],
+      },
     })
     await flushPromises()
     const headings = wrapper.findAll('h2')
@@ -279,7 +311,14 @@ describe('settingsView', () => {
       const wrapper = mountSettings()
       await flushPromises()
       const labels = wrapper.findAll('[data-testid="hotkeys-section"] .field-label').map(l => l.text())
-      expect(labels).toEqual(['Stop Scene', 'Stop all Effects', 'Previous Scene', 'Next Scene', 'Volume Down', 'Volume Up'])
+      expect(labels).toEqual([
+        'Stop Scene',
+        'Stop all Effects',
+        'Previous Scene',
+        'Next Scene',
+        'Volume Down',
+        'Volume Up',
+      ])
       const buttons = wrapper.findAll('[data-testid="hotkeys-section"] [data-testid="hotkey-recorder-button"]')
       await buttons[5].trigger('click')
       await buttons[5].trigger('keydown', { code: 'F14' })
@@ -308,7 +347,11 @@ describe('settingsView', () => {
     it('renders the Accessibility section with both toggles on their defaults', async () => {
       stubMatchMedia(false)
       const wrapper = mount(SettingsView, {
-        global: { plugins: [createPinia()] },
+        global: {
+          plugins: [
+            createPinia(),
+          ],
+        },
       })
       await flushPromises()
       const headings = wrapper.findAll('h2')
@@ -324,7 +367,11 @@ describe('settingsView', () => {
     it('reduce motion defaults to the OS preference', async () => {
       stubMatchMedia(true)
       const wrapper = mount(SettingsView, {
-        global: { plugins: [createPinia()] },
+        global: {
+          plugins: [
+            createPinia(),
+          ],
+        },
       })
       await flushPromises()
       expect(wrapper.find<HTMLInputElement>('#reduce-motion').element.checked).toBe(true)
@@ -334,7 +381,11 @@ describe('settingsView', () => {
       stubMatchMedia(false)
       const { updateAccessibilitySettings } = await import('@/api/config')
       const wrapper = mount(SettingsView, {
-        global: { plugins: [createPinia()] },
+        global: {
+          plugins: [
+            createPinia(),
+          ],
+        },
       })
       await flushPromises()
       await wrapper.find('#luminance-pulses').setValue(false)
@@ -347,7 +398,9 @@ describe('settingsView', () => {
       const { updateAccessibilitySettings } = await import('@/api/config')
       const pinia = createPinia()
       const wrapper = mount(SettingsView, {
-        global: { plugins: [pinia] },
+        global: {
+          plugins: [pinia],
+        },
       })
       await flushPromises()
       const store = useAccessibilityStore(pinia)
@@ -478,7 +531,12 @@ describe('settingsView', () => {
         ...UNCONFIGURED_VISION,
         provider: 'openai-compatible',
         configured: true,
-        openaiCompatible: { keyConfigured: false, configured: true, baseUrl: 'http://localhost:11434/v1', model: 'gpt-6-astra' },
+        openaiCompatible: {
+          keyConfigured: false,
+          configured: true,
+          baseUrl: 'http://localhost:11434/v1',
+          model: 'gpt-6-astra',
+        },
       })
       const wrapper = mountSettings()
       await flushPromises()
@@ -493,12 +551,22 @@ describe('settingsView', () => {
       vi.mocked(fetchVisionConfig).mockResolvedValue({
         ...UNCONFIGURED_VISION,
         provider: 'openai-compatible',
-        openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'llava' },
+        openaiCompatible: {
+          keyConfigured: false,
+          configured: false,
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'llava',
+        },
       })
       vi.mocked(updateVisionOpenAiModel).mockResolvedValue({
         ...UNCONFIGURED_VISION,
         provider: 'openai-compatible',
-        openaiCompatible: { keyConfigured: false, configured: false, baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+        openaiCompatible: {
+          keyConfigured: false,
+          configured: false,
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-6-astra',
+        },
       })
       const wrapper = mountSettings()
       await flushPromises()
@@ -534,7 +602,11 @@ describe('settingsView Local playback', () => {
   }
 
   it('lists System default first, then device labels, numbering empty ones', async () => {
-    stubDevices([{ deviceId: 'a', label: 'USB Speaker' }, { deviceId: 'b', label: '' }, { deviceId: 'default', label: 'Default' }])
+    stubDevices([
+      { deviceId: 'a', label: 'USB Speaker' },
+      { deviceId: 'b', label: '' },
+      { deviceId: 'default', label: 'Default' },
+    ])
     const wrapper = mountSettings()
     await flushPromises()
     expect(options(wrapper)).toEqual(['System default', 'USB Speaker', 'Output device 2'])
@@ -542,7 +614,9 @@ describe('settingsView Local playback', () => {
   })
 
   it('keeps an absent stored device selected as "(not connected)"', async () => {
-    stubDevices([{ deviceId: 'a', label: 'Built-in Output' }])
+    stubDevices([
+      { deviceId: 'a', label: 'Built-in Output' },
+    ])
     vi.mocked(fetchLocalOutputDevice).mockResolvedValueOnce({ deviceId: 'gone', label: 'USB Speaker' })
     const wrapper = mountSettings()
     await flushPromises()
@@ -551,7 +625,9 @@ describe('settingsView Local playback', () => {
   })
 
   it('saves the selection with its label, and clears it for System default', async () => {
-    stubDevices([{ deviceId: 'a', label: 'USB Speaker' }])
+    stubDevices([
+      { deviceId: 'a', label: 'USB Speaker' },
+    ])
     const wrapper = mountSettings()
     await flushPromises()
     await wrapper.find('#output-device').setValue('a')
@@ -561,10 +637,15 @@ describe('settingsView Local playback', () => {
   })
 
   it('re-lists devices on devicechange', async () => {
-    const enumerate = stubDevices([{ deviceId: 'a', label: 'USB Speaker' }])
+    const enumerate = stubDevices([
+      { deviceId: 'a', label: 'USB Speaker' },
+    ])
     const wrapper = mountSettings()
     await flushPromises()
-    enumerate.mockResolvedValue([{ kind: 'audiooutput', deviceId: 'a', label: 'USB Speaker' }, { kind: 'audiooutput', deviceId: 'c', label: 'HDMI' }] as never)
+    enumerate.mockResolvedValue([
+      { kind: 'audiooutput', deviceId: 'a', label: 'USB Speaker' },
+      { kind: 'audiooutput', deviceId: 'c', label: 'HDMI' },
+    ] as never)
     handlers.forEach(h => h())
     await flushPromises()
     expect(options(wrapper)).toEqual(['System default', 'USB Speaker', 'HDMI'])

@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { acceleratorFromEvent, isBareTypingKey } from './accelerator'
 
 function key(code: string, mods: Partial<{ ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean }> = {}) {
-  return { code, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...mods }
+  return {
+    code,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    metaKey: false,
+    ...mods,
+  }
 }
 
 describe('acceleratorFromEvent', () => {
@@ -31,7 +38,12 @@ describe('acceleratorFromEvent', () => {
   })
 
   it('orders modifiers Ctrl, Alt, Shift, Super before the key', () => {
-    expect(acceleratorFromEvent(key('KeyK', { metaKey: true, shiftKey: true, altKey: true, ctrlKey: true })))
+    expect(acceleratorFromEvent(key('KeyK', {
+      metaKey: true,
+      shiftKey: true,
+      altKey: true,
+      ctrlKey: true,
+    })))
       .toBe('Ctrl+Alt+Shift+Super+K')
   })
 
@@ -45,7 +57,14 @@ describe('isBareTypingKey', () => {
     expect(isBareTypingKey(accelerator)).toBe(true)
   })
 
-  it.each(['Ctrl+A', 'Alt+Shift+1', 'F13', 'Space', 'num5', 'Super+Q'])('allows %s', (accelerator) => {
+  it.each([
+    'Ctrl+A',
+    'Alt+Shift+1',
+    'F13',
+    'Space',
+    'num5',
+    'Super+Q',
+  ])('allows %s', (accelerator) => {
     expect(isBareTypingKey(accelerator)).toBe(false)
   })
 })

@@ -22,7 +22,12 @@ export function normalizeLocalOutputDevice(input: unknown): LocalOutputDevice | 
   const { deviceId, label } = input as Record<string, unknown>
   if (typeof deviceId !== 'string' || deviceId === '' || deviceId === 'default')
     return null
-  return { deviceId, label: typeof label === 'string' ? label : '' }
+  return {
+    deviceId,
+    label: typeof label === 'string'
+      ? label
+      : '',
+  }
 }
 
 export function createLocalOutputDeviceSettings(store: LocalOutputDeviceStore) {
@@ -42,7 +47,9 @@ export function createLocalOutputDeviceSettings(store: LocalOutputDeviceStore) {
   async function set(device: unknown): Promise<void> {
     const normalized = normalizeLocalOutputDevice(device)
     // Store has no delete: an empty string is read back as absence.
-    await store.set(LOCAL_OUTPUT_DEVICE_KEY, normalized ? JSON.stringify(normalized) : '')
+    await store.set(LOCAL_OUTPUT_DEVICE_KEY, normalized
+      ? JSON.stringify(normalized)
+      : '')
     log.info(normalized
       ? `Local output device set to "${normalized.label}" (${normalized.deviceId})`
       : 'Local output device cleared (system default)')

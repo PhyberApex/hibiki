@@ -45,7 +45,14 @@ describe('player store', () => {
 
   describe('loadState', () => {
     it('fetches player state and bot status', async () => {
-      const state = [{ guildId: 'g1', isIdle: true, track: null, source: 'live' as const }]
+      const state = [
+        {
+          guildId: 'g1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
+      ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true, userTag: 'Bot#0' })
 
@@ -79,7 +86,16 @@ describe('player store', () => {
 
   describe('loadDirectory', () => {
     it('sets directory on success', async () => {
-      const dir = [{ guildId: 'g1', guildName: 'Guild', iconUrl: null, channels: [{ id: 'ch1', name: 'General' }] }]
+      const dir = [
+        {
+          guildId: 'g1',
+          guildName: 'Guild',
+          iconUrl: null,
+          channels: [
+            { id: 'ch1', name: 'General' },
+          ],
+        },
+      ]
       fetchGuildDirectory.mockResolvedValue(dir)
 
       const store = usePlayerStore()
@@ -111,8 +127,22 @@ describe('player store', () => {
   describe('computed properties', () => {
     it('channels returns channels for selected guild', async () => {
       const dir = [
-        { guildId: 'g1', guildName: 'Guild1', iconUrl: null, channels: [{ id: 'ch1', name: 'General' }] },
-        { guildId: 'g2', guildName: 'Guild2', iconUrl: null, channels: [{ id: 'ch2', name: 'Music' }] },
+        {
+          guildId: 'g1',
+          guildName: 'Guild1',
+          iconUrl: null,
+          channels: [
+            { id: 'ch1', name: 'General' },
+          ],
+        },
+        {
+          guildId: 'g2',
+          guildName: 'Guild2',
+          iconUrl: null,
+          channels: [
+            { id: 'ch2', name: 'Music' },
+          ],
+        },
       ]
       fetchGuildDirectory.mockResolvedValue(dir)
 
@@ -120,7 +150,9 @@ describe('player store', () => {
       await store.loadDirectory()
       store.guildId = 'g1'
 
-      expect(store.channels).toEqual([{ id: 'ch1', name: 'General' }])
+      expect(store.channels).toEqual([
+        { id: 'ch1', name: 'General' },
+      ])
     })
 
     it('channels returns empty array when no guild selected', () => {
@@ -129,7 +161,14 @@ describe('player store', () => {
     })
 
     it('selectedGuildState returns matching state', async () => {
-      const state = [{ guildId: 'g1', isIdle: true, track: null, source: 'live' as const }]
+      const state = [
+        {
+          guildId: 'g1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
+      ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
 
@@ -141,7 +180,15 @@ describe('player store', () => {
     })
 
     it('isJoined returns true when connected', async () => {
-      const state = [{ guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const }]
+      const state = [
+        {
+          guildId: 'g1',
+          connectedChannelId: 'ch1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
+      ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
 
@@ -159,8 +206,19 @@ describe('player store', () => {
 
     it('connectedGuildId returns first connected guild', async () => {
       const state = [
-        { guildId: 'g1', isIdle: true, track: null, source: 'live' as const },
-        { guildId: 'g2', connectedChannelId: 'ch2', isIdle: false, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
+        {
+          guildId: 'g2',
+          connectedChannelId: 'ch2',
+          isIdle: false,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
@@ -230,7 +288,16 @@ describe('player store', () => {
   describe('resetAfterDiscordTokenRemoved', () => {
     it('falls back to Local, forgets the guild selection and reloads the bot status', async () => {
       const store = usePlayerStore()
-      fetchGuildDirectory.mockResolvedValue([{ guildId: 'g1', guildName: 'G', iconUrl: null, channels: [{ id: 'c1', name: 'General' }] }])
+      fetchGuildDirectory.mockResolvedValue([
+        {
+          guildId: 'g1',
+          guildName: 'G',
+          iconUrl: null,
+          channels: [
+            { id: 'c1', name: 'General' },
+          ],
+        },
+      ])
       store.botStatus = { ready: true, userTag: 'Bot#0' }
       await vi.waitFor(() => expect(store.directory).toHaveLength(1))
       store.activeTarget = 'discord'
@@ -251,9 +318,26 @@ describe('player store', () => {
 
   describe('selectChannel', () => {
     it('joins channel and loads state', async () => {
-      const dir = [{ guildId: 'g1', guildName: 'Guild', iconUrl: null, channels: [{ id: 'ch1', name: 'General' }] }]
+      const dir = [
+        {
+          guildId: 'g1',
+          guildName: 'Guild',
+          iconUrl: null,
+          channels: [
+            { id: 'ch1', name: 'General' },
+          ],
+        },
+      ]
       fetchGuildDirectory.mockResolvedValue(dir)
-      fetchPlayerState.mockResolvedValue([{ guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const }])
+      fetchPlayerState.mockResolvedValue([
+        {
+          guildId: 'g1',
+          connectedChannelId: 'ch1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
+      ])
       fetchBotStatus.mockResolvedValue({ ready: true })
 
       const store = usePlayerStore()
@@ -266,7 +350,15 @@ describe('player store', () => {
     })
 
     it('skips join when already connected to same channel', async () => {
-      const state = [{ guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const }]
+      const state = [
+        {
+          guildId: 'g1',
+          connectedChannelId: 'ch1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
+      ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
 
@@ -305,8 +397,19 @@ describe('player store', () => {
   describe('doLeave', () => {
     it('calls leaveGuild and filters playerState', async () => {
       const state = [
-        { guildId: 'g1', connectedChannelId: 'ch1', isIdle: true, track: null, source: 'live' as const },
-        { guildId: 'g2', isIdle: true, track: null, source: 'live' as const },
+        {
+          guildId: 'g1',
+          connectedChannelId: 'ch1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
+        {
+          guildId: 'g2',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
       ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
@@ -364,7 +467,9 @@ describe('player store', () => {
       let callCount = 0
       fetchBotStatus.mockImplementation(() => {
         callCount++
-        return Promise.resolve(callCount >= 2 ? { ready: true } : { ready: false })
+        return Promise.resolve(callCount >= 2
+          ? { ready: true }
+          : { ready: false })
       })
       fetchPlayerState.mockResolvedValue([])
       fetchGuildDirectory.mockResolvedValue([])
@@ -394,7 +499,14 @@ describe('player store', () => {
       const pushListener = onPlayerStateChanged.mock.calls[0][0] as () => void
 
       fetchPlayerState.mockClear()
-      const newState = [{ guildId: 'g1', isIdle: true, track: null, source: 'live' as const }]
+      const newState = [
+        {
+          guildId: 'g1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
+      ]
       fetchPlayerState.mockResolvedValue(newState)
 
       pushListener()
@@ -404,8 +516,25 @@ describe('player store', () => {
 
   describe('syncSelectionFromConnectedState', () => {
     it('syncs guild and channel from connected state', async () => {
-      const state = [{ guildId: 'g1', connectedChannelId: 'ch1', isIdle: false, track: null, source: 'live' as const }]
-      const dir = [{ guildId: 'g1', guildName: 'Guild1', iconUrl: null, channels: [{ id: 'ch1', name: 'General' }] }]
+      const state = [
+        {
+          guildId: 'g1',
+          connectedChannelId: 'ch1',
+          isIdle: false,
+          track: null,
+          source: 'live' as const,
+        },
+      ]
+      const dir = [
+        {
+          guildId: 'g1',
+          guildName: 'Guild1',
+          iconUrl: null,
+          channels: [
+            { id: 'ch1', name: 'General' },
+          ],
+        },
+      ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
       fetchGuildDirectory.mockResolvedValue(dir)
@@ -422,7 +551,14 @@ describe('player store', () => {
 
   describe('ensureChannelSelection', () => {
     it('clears channelId when no channels available', async () => {
-      fetchGuildDirectory.mockResolvedValue([{ guildId: 'g1', guildName: 'Guild1', iconUrl: null, channels: [] }])
+      fetchGuildDirectory.mockResolvedValue([
+        {
+          guildId: 'g1',
+          guildName: 'Guild1',
+          iconUrl: null,
+          channels: [],
+        },
+      ])
 
       const store = usePlayerStore()
       store.guildId = 'g1'
@@ -433,8 +569,26 @@ describe('player store', () => {
     })
 
     it('prefers connected channel id', async () => {
-      const state = [{ guildId: 'g1', connectedChannelId: 'ch2', isIdle: true, track: null, source: 'live' as const }]
-      const dir = [{ guildId: 'g1', guildName: 'Guild1', iconUrl: null, channels: [{ id: 'ch1', name: 'A' }, { id: 'ch2', name: 'B' }] }]
+      const state = [
+        {
+          guildId: 'g1',
+          connectedChannelId: 'ch2',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+        },
+      ]
+      const dir = [
+        {
+          guildId: 'g1',
+          guildName: 'Guild1',
+          iconUrl: null,
+          channels: [
+            { id: 'ch1', name: 'A' },
+            { id: 'ch2', name: 'B' },
+          ],
+        },
+      ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
       fetchGuildDirectory.mockResolvedValue(dir)
@@ -448,7 +602,16 @@ describe('player store', () => {
     })
 
     it('clears channelId when selected channel not in list', async () => {
-      const dir = [{ guildId: 'g1', guildName: 'Guild1', iconUrl: null, channels: [{ id: 'ch1', name: 'General' }] }]
+      const dir = [
+        {
+          guildId: 'g1',
+          guildName: 'Guild1',
+          iconUrl: null,
+          channels: [
+            { id: 'ch1', name: 'General' },
+          ],
+        },
+      ]
       fetchGuildDirectory.mockResolvedValue(dir)
 
       const store = usePlayerStore()
@@ -555,13 +718,22 @@ describe('player store', () => {
     })
 
     it('syncs backend-reported Effect Instances from playerState for the selected guild', async () => {
-      const state = [{
-        guildId: 'g1',
-        isIdle: false,
-        track: null,
-        source: 'live' as const,
-        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date(1000).toISOString(), durationMs: 2000 }],
-      }]
+      const state = [
+        {
+          guildId: 'g1',
+          isIdle: false,
+          track: null,
+          source: 'live' as const,
+          effects: [
+            {
+              instanceId: 'backend-effect:1',
+              soundId: 'fx1',
+              startedAt: new Date(1000).toISOString(),
+              durationMs: 2000,
+            },
+          ],
+        },
+      ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
       const store = usePlayerStore()
@@ -569,17 +741,30 @@ describe('player store', () => {
 
       await store.loadState()
 
-      expect(store.effectStatus('fx1')).toEqual({ count: 1, elapsedMs: expect.any(Number), totalMs: 2000 })
+      expect(store.effectStatus('fx1')).toEqual({
+        count: 1,
+        elapsedMs: expect.any(Number),
+        totalMs: 2000,
+      })
     })
 
     it('drops a backend-reported instance once it no longer appears in playerState (played out, evicted, or stopped)', async () => {
-      const withEffect = [{
-        guildId: 'g1',
-        isIdle: false,
-        track: null,
-        source: 'live' as const,
-        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date().toISOString(), durationMs: 2000 }],
-      }]
+      const withEffect = [
+        {
+          guildId: 'g1',
+          isIdle: false,
+          track: null,
+          source: 'live' as const,
+          effects: [
+            {
+              instanceId: 'backend-effect:1',
+              soundId: 'fx1',
+              startedAt: new Date().toISOString(),
+              durationMs: 2000,
+            },
+          ],
+        },
+      ]
       fetchPlayerState.mockResolvedValue(withEffect)
       fetchBotStatus.mockResolvedValue({ ready: true })
       const store = usePlayerStore()
@@ -587,20 +772,37 @@ describe('player store', () => {
       await store.loadState()
       expect(store.effectStatus('fx1')).not.toBeNull()
 
-      fetchPlayerState.mockResolvedValue([{ guildId: 'g1', isIdle: true, track: null, source: 'live' as const, effects: [] }])
+      fetchPlayerState.mockResolvedValue([
+        {
+          guildId: 'g1',
+          isIdle: true,
+          track: null,
+          source: 'live' as const,
+          effects: [],
+        },
+      ])
       await store.loadState()
 
       expect(store.effectStatus('fx1')).toBeNull()
     })
 
     it('never syncs backend instances from a guild other than the selected one', async () => {
-      const state = [{
-        guildId: 'g2',
-        isIdle: false,
-        track: null,
-        source: 'live' as const,
-        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date().toISOString(), durationMs: 2000 }],
-      }]
+      const state = [
+        {
+          guildId: 'g2',
+          isIdle: false,
+          track: null,
+          source: 'live' as const,
+          effects: [
+            {
+              instanceId: 'backend-effect:1',
+              soundId: 'fx1',
+              startedAt: new Date().toISOString(),
+              durationMs: 2000,
+            },
+          ],
+        },
+      ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
       const store = usePlayerStore()
@@ -612,13 +814,22 @@ describe('player store', () => {
     })
 
     it('stopEffectSound stops every instance of a sound across both origins, leaving other sounds untouched', async () => {
-      const state = [{
-        guildId: 'g1',
-        isIdle: false,
-        track: null,
-        source: 'live' as const,
-        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date().toISOString(), durationMs: 2000 }],
-      }]
+      const state = [
+        {
+          guildId: 'g1',
+          isIdle: false,
+          track: null,
+          source: 'live' as const,
+          effects: [
+            {
+              instanceId: 'backend-effect:1',
+              soundId: 'fx1',
+              startedAt: new Date().toISOString(),
+              durationMs: 2000,
+            },
+          ],
+        },
+      ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
       const store = usePlayerStore()
@@ -643,13 +854,22 @@ describe('player store', () => {
       stopEffect.mockImplementation(() => new Promise<void>((resolve) => {
         resolveStop = resolve
       }))
-      const state = [{
-        guildId: 'g1',
-        isIdle: false,
-        track: null,
-        source: 'live' as const,
-        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date().toISOString(), durationMs: 2000 }],
-      }]
+      const state = [
+        {
+          guildId: 'g1',
+          isIdle: false,
+          track: null,
+          source: 'live' as const,
+          effects: [
+            {
+              instanceId: 'backend-effect:1',
+              soundId: 'fx1',
+              startedAt: new Date().toISOString(),
+              durationMs: 2000,
+            },
+          ],
+        },
+      ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
       const store = usePlayerStore()
@@ -669,13 +889,22 @@ describe('player store', () => {
       stopEffect.mockImplementation(() => new Promise<void>((resolve) => {
         resolveStop = resolve
       }))
-      const state = [{
-        guildId: 'g1',
-        isIdle: false,
-        track: null,
-        source: 'live' as const,
-        effects: [{ instanceId: 'backend-effect:1', soundId: 'fx1', startedAt: new Date().toISOString(), durationMs: 2000 }],
-      }]
+      const state = [
+        {
+          guildId: 'g1',
+          isIdle: false,
+          track: null,
+          source: 'live' as const,
+          effects: [
+            {
+              instanceId: 'backend-effect:1',
+              soundId: 'fx1',
+              startedAt: new Date().toISOString(),
+              durationMs: 2000,
+            },
+          ],
+        },
+      ]
       fetchPlayerState.mockResolvedValue(state)
       fetchBotStatus.mockResolvedValue({ ready: true })
       const store = usePlayerStore()

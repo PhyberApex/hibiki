@@ -59,7 +59,9 @@ function openDropdown() {
   const idx = props.modelValue
     ? filteredOptions.value.findIndex(o => o.id === props.modelValue)
     : 0
-  highlightedIndex.value = idx >= 0 ? idx : 0
+  highlightedIndex.value = idx >= 0
+    ? idx
+    : 0
   nextTick(() => {
     scrollHighlightedIntoView()
   })

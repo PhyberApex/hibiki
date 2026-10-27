@@ -17,7 +17,9 @@ describe('browser-audio-capture', () => {
         const int16 = new Int16Array(len)
         for (let i = 0; i < len; i++) {
           const s = Math.max(-1, Math.min(1, float32[i]))
-          int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
+          int16[i] = s < 0
+            ? s * 0x8000
+            : s * 0x7FFF
         }
         return int16
       }
@@ -112,7 +114,9 @@ describe('browser-audio-capture', () => {
         close: vi.fn().mockResolvedValue(undefined),
         createMediaElementSource: vi.fn().mockReturnValue(mockSource),
         createMediaStreamSource: vi.fn(),
-        audioWorklet: { addModule: vi.fn().mockResolvedValue(undefined) },
+        audioWorklet: {
+          addModule: vi.fn().mockResolvedValue(undefined),
+        },
         destination: mockDestination,
       }
 
@@ -178,7 +182,9 @@ describe('browser-audio-capture', () => {
         close: vi.fn().mockResolvedValue(undefined),
         createMediaElementSource: vi.fn().mockReturnValue(mockSource),
         createMediaStreamSource: vi.fn(),
-        audioWorklet: { addModule: vi.fn().mockResolvedValue(undefined) },
+        audioWorklet: {
+          addModule: vi.fn().mockResolvedValue(undefined),
+        },
         destination: mockDestination,
       }
 
@@ -219,7 +225,9 @@ describe('browser-audio-capture', () => {
 
   describe('captureFromMediaStream', () => {
     it('creates context with stream source and returns stop that closes context', async () => {
-      const mockTrack = { stop: vi.fn() }
+      const mockTrack = {
+        stop: vi.fn(),
+      }
       const mockStream = {
         getTracks: vi.fn().mockReturnValue([mockTrack]),
       } as unknown as MediaStream
@@ -241,7 +249,9 @@ describe('browser-audio-capture', () => {
         close: vi.fn().mockResolvedValue(undefined),
         createMediaElementSource: vi.fn(),
         createMediaStreamSource: vi.fn().mockReturnValue(mockSource),
-        audioWorklet: { addModule: vi.fn().mockResolvedValue(undefined) },
+        audioWorklet: {
+          addModule: vi.fn().mockResolvedValue(undefined),
+        },
         destination: mockDestination,
       }
 
@@ -305,7 +315,10 @@ describe('browser-audio-capture', () => {
   describe('failure and lifecycle paths', () => {
     function stubAudio(state = 'running') {
       const worklets: Array<{ port: { onmessage: ((e: MessageEvent) => void) | null }, connect: ReturnType<typeof vi.fn>, disconnect: ReturnType<typeof vi.fn> }> = []
-      const source = { connect: vi.fn(), disconnect: vi.fn() }
+      const source = {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }
       const ctx = {
         state,
         resume: vi.fn(async () => {
@@ -316,7 +329,9 @@ describe('browser-audio-capture', () => {
         }),
         createMediaElementSource: vi.fn(() => source),
         createMediaStreamSource: vi.fn(() => source),
-        audioWorklet: { addModule: vi.fn(async (_url: string) => {}) },
+        audioWorklet: {
+          addModule: vi.fn(async (_url: string) => {}),
+        },
         destination: {},
       }
       vi.stubGlobal('AudioContext', class {
@@ -324,7 +339,11 @@ describe('browser-audio-capture', () => {
       })
       vi.stubGlobal('AudioWorkletNode', class {
         constructor() {
-          const node = { port: { onmessage: null }, connect: vi.fn(), disconnect: vi.fn() }
+          const node = {
+            port: { onmessage: null },
+            connect: vi.fn(),
+            disconnect: vi.fn(),
+          }
           worklets.push(node)
           return node as any
         }
@@ -348,7 +367,9 @@ describe('browser-audio-capture', () => {
       const { ctx } = stubAudio()
       ctx.audioWorklet.addModule.mockRejectedValue(new Error('worklet blocked'))
       const { captureFromMediaStream } = await load()
-      const stream = { getTracks: () => [] } as unknown as MediaStream
+      const stream = {
+        getTracks: () => [],
+      } as unknown as MediaStream
       await expect(captureFromMediaStream(stream, vi.fn())).rejects.toThrow('worklet blocked')
       expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:worklet')
       expect(ctx.close).toHaveBeenCalledOnce()
@@ -371,14 +392,18 @@ describe('browser-audio-capture', () => {
       const { ctx } = stubAudio('suspended')
       ctx.resume.mockRejectedValue(new Error('no user gesture'))
       const { captureFromMediaStream } = await load()
-      await expect(captureFromMediaStream({ getTracks: () => [] } as unknown as MediaStream, vi.fn())).rejects.toThrow('no user gesture')
+      await expect(captureFromMediaStream({
+        getTracks: () => [],
+      } as unknown as MediaStream, vi.fn())).rejects.toThrow('no user gesture')
       expect(ctx.close).toHaveBeenCalledOnce()
     })
 
     it('resumes a suspended context before capturing', async () => {
       const { ctx } = stubAudio('suspended')
       const { captureFromMediaStream } = await load()
-      await captureFromMediaStream({ getTracks: () => [] } as unknown as MediaStream, vi.fn())
+      await captureFromMediaStream({
+        getTracks: () => [],
+      } as unknown as MediaStream, vi.fn())
       expect(ctx.resume).toHaveBeenCalledOnce()
     })
 
@@ -386,9 +411,21 @@ describe('browser-audio-capture', () => {
       const { worklets } = stubAudio()
       const { captureFromMediaStream } = await load()
       const onChunk = vi.fn()
-      await captureFromMediaStream({ getTracks: () => [] } as unknown as MediaStream, onChunk)
-      worklets[0].port.onmessage?.({ data: { left: new Float32Array([1, -1]), right: new Float32Array([0, 0.5]) } } as MessageEvent)
-      expect(Array.from(new Int16Array(onChunk.mock.calls[0][0]))).toEqual([0x7FFF, 0, -0x8000, Math.floor(0.5 * 0x7FFF)])
+      await captureFromMediaStream({
+        getTracks: () => [],
+      } as unknown as MediaStream, onChunk)
+      worklets[0].port.onmessage?.({
+        data: {
+          left: new Float32Array([1, -1]),
+          right: new Float32Array([0, 0.5]),
+        },
+      } as MessageEvent)
+      expect(Array.from(new Int16Array(onChunk.mock.calls[0][0]))).toEqual([
+        0x7FFF,
+        0,
+        -0x8000,
+        Math.floor(0.5 * 0x7FFF),
+      ])
     })
 
     it('reuses the element context, registers the worklet once, and replaces a still-active capture', async () => {
@@ -430,19 +467,30 @@ describe('browser-audio-capture', () => {
     it('captureTabStream asks for the tab by its media source id, audio only', async () => {
       const stream = {}
       const getUserMedia = vi.fn(async () => stream)
-      vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } })
+      vi.stubGlobal('navigator', {
+        mediaDevices: { getUserMedia },
+      })
       const { captureTabStream } = await load()
       await expect(captureTabStream('tab:42')).resolves.toBe(stream)
       expect(getUserMedia).toHaveBeenCalledWith({
-        audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: 'tab:42' } },
+        audio: {
+          mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: 'tab:42' },
+        },
         video: false,
       })
     })
 
     it('captureDisplayMedia captures a picked source that has audio', async () => {
       const { ctx } = stubAudio()
-      const stream = { getAudioTracks: () => [{}], getTracks: () => [] }
-      vi.stubGlobal('navigator', { mediaDevices: { getDisplayMedia: vi.fn(async () => stream) } })
+      const stream = {
+        getAudioTracks: () => [{}],
+        getTracks: () => [],
+      }
+      vi.stubGlobal('navigator', {
+        mediaDevices: {
+          getDisplayMedia: vi.fn(async () => stream),
+        },
+      })
       const { captureDisplayMedia } = await load()
       await expect(captureDisplayMedia(vi.fn())).resolves.toHaveProperty('stop')
       expect(ctx.createMediaStreamSource).toHaveBeenCalledWith(stream)

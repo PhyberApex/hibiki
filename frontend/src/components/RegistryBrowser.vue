@@ -36,7 +36,9 @@ async function load(forceRefresh = false) {
     entries.value = index.scenes
   }
   catch (err) {
-    loadError.value = err instanceof Error ? err.message : 'Failed to load registry'
+    loadError.value = err instanceof Error
+      ? err.message
+      : 'Failed to load registry'
   }
   finally {
     loading.value = false
@@ -48,12 +50,20 @@ async function install(entry: RegistryEntry) {
   installMessage.value = null
   try {
     const scene = await installFromRegistry(entry.slug)
-    trackUsage({ name: 'registry-install', data: { entryId: entry.slug } })
+    trackUsage({
+      name: 'registry-install',
+      data: { entryId: entry.slug },
+    })
     installMessage.value = { type: 'success', text: `Installed "${scene.name}"` }
     emit('installed', scene.id)
   }
   catch (err) {
-    installMessage.value = { type: 'error', text: err instanceof Error ? err.message : 'Install failed' }
+    installMessage.value = {
+      type: 'error',
+      text: err instanceof Error
+        ? err.message
+        : 'Install failed',
+    }
   }
   finally {
     installingSlug.value = null

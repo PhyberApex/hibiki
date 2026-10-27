@@ -5,7 +5,9 @@ import { _electron as electron } from '@playwright/test'
 // When running from repo root: pnpm run test:e2e, cwd is repo root
 // When running from e2e: pnpm --filter e2e run test:playwright, cwd is e2e
 // After project flattening, all code is at repo root (no app/ subdirectory)
-const APP_ROOT = process.cwd().endsWith('e2e') ? join(process.cwd(), '..') : process.cwd()
+const APP_ROOT = process.cwd().endsWith('e2e')
+  ? join(process.cwd(), '..')
+  : process.cwd()
 
 /**
  * Launch the Hibiki Electron app for e2e tests.
@@ -40,11 +42,16 @@ export async function launchElectronApp(options: LaunchOptions = {}): Promise<El
   // CI runners (GitHub Actions) can't use the SUID sandbox — chrome-sandbox
   // must be root-owned with mode 4755, which isn't possible in containers.
   const isCI = !!process.env.CI
-  const args = isCI ? ['--no-sandbox', mainPath] : [mainPath]
+  const args = isCI
+    ? ['--no-sandbox', mainPath]
+    : [mainPath]
 
   // ELECTRON_RUN_AS_NODE (set by some editors and agent shells) would turn the
   // Electron binary into a plain Node process that rejects Chromium flags.
-  const stripEnv = new Set(['ELECTRON_RUN_AS_NODE', ...(options.stripEnv ?? [])])
+  const stripEnv = new Set([
+    'ELECTRON_RUN_AS_NODE',
+    ...(options.stripEnv ?? []),
+  ])
   const inheritedEnv = Object.fromEntries(
     Object.entries(process.env).filter(([key]) => !stripEnv.has(key)),
   )

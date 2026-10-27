@@ -4,7 +4,13 @@ const path = require('node:path')
 const LOG_FILE_NAME = 'hibiki.log'
 const ROTATED_FILE_NAME = 'hibiki.old.log'
 const MAX_LOG_BYTES = 5 * 1024 * 1024
-const LEVELS = ['log', 'info', 'warn', 'error', 'debug']
+const LEVELS = [
+  'log',
+  'info',
+  'warn',
+  'error',
+  'debug',
+]
 
 function formatArg(arg) {
   if (arg instanceof Error)

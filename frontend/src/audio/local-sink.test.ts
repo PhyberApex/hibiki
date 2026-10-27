@@ -6,10 +6,16 @@ import { useToastStore } from '../stores/toast'
 import { installLocalSink, LocalSink, sinkDeathToast } from './local-sink'
 import { outputDeviceRouter } from './output-device'
 
-vi.mock('../api/player', () => ({ reportLocalSinkHealth: vi.fn() }))
+vi.mock('../api/player', () => ({
+  reportLocalSinkHealth: vi.fn(),
+}))
 vi.mock('../stores/toast', () => {
-  const toast = { show: vi.fn() }
-  return { useToastStore: () => toast }
+  const toast = {
+    show: vi.fn(),
+  }
+  return {
+    useToastStore: () => toast,
+  }
 })
 
 function packet(sample: number, frames = 960): Uint8Array {
@@ -34,7 +40,13 @@ function fakeContext() {
     createBuffer: (_c: number, length: number) => {
       const left = new Float32Array(length)
       const right = new Float32Array(length)
-      return { left, right, getChannelData: (c: number) => (c === 0 ? left : right) }
+      return {
+        left,
+        right,
+        getChannelData: (c: number) => (c === 0
+          ? left
+          : right),
+      }
     },
     createBufferSource: () => {
       const source = {
@@ -54,7 +66,11 @@ function setup() {
   const fake = fakeContext()
   const events: LocalSinkHealth[] = []
   const createContext = vi.fn(() => fake.ctx)
-  const sink = new LocalSink({ createContext, report: e => events.push(e), underrunReportMs: 1000 })
+  const sink = new LocalSink({
+    createContext,
+    report: e => events.push(e),
+    underrunReportMs: 1000,
+  })
   return { ...fake, events, sink, createContext }
 }
 
@@ -66,7 +82,9 @@ describe('localSink', () => {
     const { sink, events, started, createContext } = setup()
     expect(createContext).not.toHaveBeenCalled()
     sink.handleChunk(packet(16384))
-    expect(events).toEqual([{ type: 'started', sampleRate: 48000 }])
+    expect(events).toEqual([
+      { type: 'started', sampleRate: 48000 },
+    ])
     expect(started).toHaveLength(1)
     expect(started[0].when).toBeCloseTo(0.1)
     expect(started[0].buffer.left[0]).toBeCloseTo(0.5)
@@ -92,7 +110,9 @@ describe('localSink', () => {
     sink.handleChunk(packet(1))
     expect(events.filter(e => e.type === 'underruns')).toHaveLength(0)
     vi.advanceTimersByTime(1000)
-    expect(events.filter(e => e.type === 'underruns')).toEqual([{ type: 'underruns', count: 2 }])
+    expect(events.filter(e => e.type === 'underruns')).toEqual([
+      { type: 'underruns', count: 2 },
+    ])
     vi.advanceTimersByTime(5000)
     expect(events.filter(e => e.type === 'underruns')).toHaveLength(1)
   })
@@ -173,11 +193,16 @@ describe('localSink', () => {
 
   it('reports failure when the AudioContext cannot be created', () => {
     const events: LocalSinkHealth[] = []
-    const sink = new LocalSink({ createContext: () => {
-      throw new Error('no audio device')
-    }, report: e => events.push(e) })
+    const sink = new LocalSink({
+      createContext: () => {
+        throw new Error('no audio device')
+      },
+      report: e => events.push(e),
+    })
     sink.handleChunk(packet(1))
-    expect(events).toEqual([{ type: 'failed', message: 'could not create AudioContext: no audio device' }])
+    expect(events).toEqual([
+      { type: 'failed', message: 'could not create AudioContext: no audio device' },
+    ])
   })
 
   it('drains on stop: closes the context only after the queued audio has played', () => {
@@ -213,7 +238,11 @@ describe('localSink', () => {
   it('opens the context with the resolved sink id', () => {
     const fake = fakeContext()
     const createContext = vi.fn((_sinkId: string) => fake.ctx)
-    const sink = new LocalSink({ createContext, getSinkId: () => 'usb-speaker', report: () => {} })
+    const sink = new LocalSink({
+      createContext,
+      getSinkId: () => 'usb-speaker',
+      report: () => {},
+    })
     sink.handleChunk(packet(1))
     expect(createContext).toHaveBeenCalledWith('usb-speaker')
   })
@@ -304,7 +333,9 @@ describe('installLocalSink', () => {
     emit('audio:localSinkStart')
     emit('audio:localSinkChunk', packet(1))
     expect(fake.started).toHaveLength(1)
-    expect(contextOptions).toEqual([{ sampleRate: 48000, latencyHint: 'interactive' }])
+    expect(contextOptions).toEqual([
+      { sampleRate: 48000, latencyHint: 'interactive' },
+    ])
     expect(reportLocalSinkHealth).toHaveBeenCalledWith({ type: 'started', sampleRate: 48000 })
   })
 
@@ -315,7 +346,10 @@ describe('installLocalSink', () => {
     fake.ctx.onerror?.({ message: 'device unplugged' })
     expect(reportLocalSinkHealth).toHaveBeenLastCalledWith({ type: 'deviceLost', message: 'device unplugged' })
     expect(error).toHaveBeenCalledWith('[local-sink] deviceLost: device unplugged')
-    expect(useToastStore().show).toHaveBeenCalledWith({ type: 'error', text: sinkDeathToast({ type: 'deviceLost', message: 'device unplugged' }) })
+    expect(useToastStore().show).toHaveBeenCalledWith({
+      type: 'error',
+      text: sinkDeathToast({ type: 'deviceLost', message: 'device unplugged' }),
+    })
     expect(fake.ctx.close).toHaveBeenCalled()
     emit('audio:localSinkChunk', packet(1))
     expect(fake.started).toHaveLength(1)
@@ -350,7 +384,9 @@ describe('installLocalSink', () => {
     const subscribe = vi.spyOn(outputDeviceRouter, 'subscribe')
     install()
     emit('audio:localSinkChunk', packet(1))
-    expect(contextOptions).toEqual([{ sampleRate: 48000, latencyHint: 'interactive', sinkId: 'usb' }])
+    expect(contextOptions).toEqual([
+      { sampleRate: 48000, latencyHint: 'interactive', sinkId: 'usb' },
+    ])
     subscribe.mock.calls[0][0]('builtin')
     expect(setSinkId).toHaveBeenCalledWith('builtin')
   })

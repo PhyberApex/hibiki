@@ -19,7 +19,9 @@ describe('createSceneStore', () => {
         ambienceDir: join(root, 'ambience'),
         webDistDir: 'web-dist',
       },
-      database: { path: join(root, 'data', 'hibiki.json') },
+      database: {
+        path: join(root, 'data', 'hibiki.json'),
+      },
     }
   }
 
@@ -49,7 +51,12 @@ describe('createSceneStore', () => {
 
   it('save persists and list returns it', async () => {
     const store = createSceneStore(config)
-    const saved = await store.save({ name: 'My Scene', ambience: [{ soundId: 'rain', volume: 80 }] })
+    const saved = await store.save({
+      name: 'My Scene',
+      ambience: [
+        { soundId: 'rain', volume: 80 },
+      ],
+    })
     const scenes = await store.list()
     expect(scenes).toHaveLength(1)
     expect(scenes[0]!.id).toBe(saved.id)
@@ -132,7 +139,13 @@ describe('createSceneStore', () => {
 
     it('stores normalised Scene and Effect Hotkeys', async () => {
       const store = createSceneStore(config)
-      const saved = await store.save({ name: 'A', hotkey: 'shift+ctrl+1', effects: [fx('boom', 'f13')] })
+      const saved = await store.save({
+        name: 'A',
+        hotkey: 'shift+ctrl+1',
+        effects: [
+          fx('boom', 'f13'),
+        ],
+      })
       expect(saved.hotkey).toBe('Ctrl+Shift+1')
       expect(saved.effects[0].hotkey).toBe('F13')
       expect((await store.get(saved.id))?.hotkey).toBe('Ctrl+Shift+1')
@@ -143,9 +156,15 @@ describe('createSceneStore', () => {
       const saved = await store.save({
         name: 'A',
         hotkey: '',
-        effects: [fx('boom', ' ')],
-        music: [{ soundId: 'm', hotkey: 'F1' }],
-        ambience: [{ soundId: 'a', hotkey: 'F2' }],
+        effects: [
+          fx('boom', ' '),
+        ],
+        music: [
+          { soundId: 'm', hotkey: 'F1' },
+        ],
+        ambience: [
+          { soundId: 'a', hotkey: 'F2' },
+        ],
       })
       expect(saved).not.toHaveProperty('hotkey')
       expect(saved.effects[0]).not.toHaveProperty('hotkey')
@@ -173,40 +192,86 @@ describe('createSceneStore', () => {
 
     it('rejects the same key on two Effects of one Scene', async () => {
       const store = createSceneStore(config)
-      await expect(store.save({ name: 'A', effects: [fx('boom', 'F1'), fx('bang', 'f1')] }))
+      await expect(store.save({
+        name: 'A',
+        effects: [
+          fx('boom', 'F1'),
+          fx('bang', 'f1'),
+        ],
+      }))
         .rejects
         .toThrow('already used by Effect "boom" in Scene "A"')
     })
 
     it('allows the same Effect key in different Scenes', async () => {
       const store = createSceneStore(config)
-      await store.save({ name: 'A', effects: [fx('boom', 'F1')] })
-      await expect(store.save({ name: 'B', effects: [fx('bang', 'F1')] })).resolves.toBeDefined()
+      await store.save({
+        name: 'A',
+        effects: [
+          fx('boom', 'F1'),
+        ],
+      })
+      await expect(store.save({
+        name: 'B',
+        effects: [
+          fx('bang', 'F1'),
+        ],
+      })).resolves.toBeDefined()
     })
 
     it('rejects an Effect key held by a Scene Hotkey, in another Scene or its own', async () => {
       const store = createSceneStore(config)
       await store.save({ name: 'A', hotkey: 'F5' })
-      await expect(store.save({ name: 'B', effects: [fx('boom', 'F5')] })).rejects.toThrow('Scene "A"')
-      await expect(store.save({ name: 'C', hotkey: 'F6', effects: [fx('boom', 'F6')] })).rejects.toThrow('Scene "C"')
+      await expect(store.save({
+        name: 'B',
+        effects: [
+          fx('boom', 'F5'),
+        ],
+      })).rejects.toThrow('Scene "A"')
+      await expect(store.save({
+        name: 'C',
+        hotkey: 'F6',
+        effects: [
+          fx('boom', 'F6'),
+        ],
+      })).rejects.toThrow('Scene "C"')
     })
 
     it('rejects a Scene key held by an Effect of another Scene', async () => {
       const store = createSceneStore(config)
-      await store.save({ name: 'A', effects: [fx('boom', 'F5')] })
+      await store.save({
+        name: 'A',
+        effects: [
+          fx('boom', 'F5'),
+        ],
+      })
       await expect(store.save({ name: 'B', hotkey: 'F5' })).rejects.toThrow('Effect "boom" in Scene "A"')
     })
 
     it('rejects Scene and Effect keys that equal the Stop Hotkey', async () => {
-      const store = createSceneStore(config, { getActionHotkeys: async () => ({ stopHotkey: 'Ctrl+S' }) })
+      const store = createSceneStore(config, {
+        getActionHotkeys: async () => ({ stopHotkey: 'Ctrl+S' }),
+      })
       await expect(store.save({ name: 'A', hotkey: 'ctrl+s' })).rejects.toThrow('the Stop Hotkey')
-      await expect(store.save({ name: 'A', effects: [fx('boom', 'Ctrl+S')] })).rejects.toThrow('the Stop Hotkey')
+      await expect(store.save({
+        name: 'A',
+        effects: [
+          fx('boom', 'Ctrl+S'),
+        ],
+      })).rejects.toThrow('the Stop Hotkey')
     })
 
     it('rejects Scene and Effect keys that equal any other Action Hotkey', async () => {
-      const store = createSceneStore(config, { getActionHotkeys: async () => ({ volumeUpHotkey: 'F9', nextSceneHotkey: 'F10' }) })
+      const store = createSceneStore(config, {
+        getActionHotkeys: async () => ({ volumeUpHotkey: 'F9', nextSceneHotkey: 'F10' }),
+      })
       await expect(store.save({ name: 'A', hotkey: 'F9' })).rejects.toThrow('the Volume Up Hotkey')
-      await expect(store.save({ name: 'A', effects: [fx('boom', 'F10')] })).rejects.toThrow('the Next Scene Hotkey')
+      await expect(store.save({
+        name: 'A',
+        effects: [
+          fx('boom', 'F10'),
+        ],
+      })).rejects.toThrow('the Next Scene Hotkey')
     })
   })
 
@@ -225,7 +290,13 @@ describe('createSceneStore', () => {
 
   it('leaves each Music item\'s loop untouched whatever the Music Mode', async () => {
     const store = createSceneStore(config)
-    const saved = await store.save({ name: 'Seq', musicMode: 'sequential', music: [{ soundId: 'a', loop: true }] })
+    const saved = await store.save({
+      name: 'Seq',
+      musicMode: 'sequential',
+      music: [
+        { soundId: 'a', loop: true },
+      ],
+    })
     expect(saved.music[0]!.loop).toBe(true)
   })
 })

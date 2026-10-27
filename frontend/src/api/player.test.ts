@@ -29,7 +29,14 @@ describe('player API', () => {
   })
 
   it('fetchPlayerState uses apiCall', async () => {
-    const state = [{ guildId: 'g1', isIdle: true, track: null, source: 'live' as const }]
+    const state = [
+      {
+        guildId: 'g1',
+        isIdle: true,
+        track: null,
+        source: 'live' as const,
+      },
+    ]
     mockInvoke.mockResolvedValue(state)
     const result = await fetchPlayerState()
     expect(result).toEqual(state)
@@ -48,7 +55,9 @@ describe('player API', () => {
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'player',
       method: 'join',
-      args: [{ guildId: 'guild-1', channelId: 'ch-1' }],
+      args: [
+        { guildId: 'guild-1', channelId: 'ch-1' },
+      ],
     })
   })
 
@@ -58,7 +67,9 @@ describe('player API', () => {
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'player',
       method: 'leave',
-      args: [{ guildId: 'guild-1' }],
+      args: [
+        { guildId: 'guild-1' },
+      ],
     })
   })
 
@@ -73,7 +84,16 @@ describe('player API', () => {
   })
 
   it('fetchGuildDirectory uses apiCall', async () => {
-    const dir = [{ guildId: 'g1', guildName: 'Guild', iconUrl: null, channels: [{ id: 'ch1', name: 'General' }] }]
+    const dir = [
+      {
+        guildId: 'g1',
+        guildName: 'Guild',
+        iconUrl: null,
+        channels: [
+          { id: 'ch1', name: 'General' },
+        ],
+      },
+    ]
     mockInvoke.mockResolvedValue(dir)
     const result = await fetchGuildDirectory()
     expect(result).toEqual(dir)
@@ -85,7 +105,11 @@ describe('player API', () => {
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'player',
       method: 'playMusic',
-      args: ['g1', 'song-1', { volume: 80, loop: true, fadeInMs: 3000 }],
+      args: [
+        'g1',
+        'song-1',
+        { volume: 80, loop: true, fadeInMs: 3000 },
+      ],
     })
   })
 
@@ -105,17 +129,35 @@ describe('player API', () => {
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'player',
       method: 'setMusicVolume',
-      args: ['g1', 40, { rampMs: 500 }],
+      args: [
+        'g1',
+        40,
+        { rampMs: 500 },
+      ],
     })
   })
 
   it('playAmbience uses apiCall', async () => {
     mockInvoke.mockResolvedValue(undefined)
-    await playAmbience('g1', 'rain', { volume: 70, repeatMin: 5, repeatMax: 15, fadeInMs: 3000 })
+    await playAmbience('g1', 'rain', {
+      volume: 70,
+      repeatMin: 5,
+      repeatMax: 15,
+      fadeInMs: 3000,
+    })
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'player',
       method: 'playAmbience',
-      args: ['g1', 'rain', { volume: 70, repeatMin: 5, repeatMax: 15, fadeInMs: 3000 }],
+      args: [
+        'g1',
+        'rain',
+        {
+          volume: 70,
+          repeatMin: 5,
+          repeatMax: 15,
+          fadeInMs: 3000,
+        },
+      ],
     })
   })
 
@@ -135,7 +177,12 @@ describe('player API', () => {
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'player',
       method: 'setAmbienceVolume',
-      args: ['g1', 'rain', 40, { rampMs: 500 }],
+      args: [
+        'g1',
+        'rain',
+        40,
+        { rampMs: 500 },
+      ],
     })
   })
 
@@ -145,7 +192,11 @@ describe('player API', () => {
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'player',
       method: 'playEffect',
-      args: ['g1', 'fx-1', { volume: 90 }],
+      args: [
+        'g1',
+        'fx-1',
+        { volume: 90 },
+      ],
     })
   })
 

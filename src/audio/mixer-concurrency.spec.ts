@@ -31,7 +31,9 @@ function sampleShare(output: Buffer): Record<number, number> {
     counts.set(v, (counts.get(v) ?? 0) + 1)
   }
   const total = output.length / 2
-  return Object.fromEntries([...counts.entries()].map(([v, n]) => [v, n / total]))
+  return Object.fromEntries([
+    ...counts.entries(),
+  ].map(([v, n]) => [v, n / total]))
 }
 
 /**
@@ -42,7 +44,12 @@ function sampleShare(output: Buffer): Record<number, number> {
 async function mixTwoConstantInputs(mixer: AudioMixer): Promise<Record<number, number>> {
   const output = new PassThrough()
   mixer.pipe(output)
-  const makeInput = () => mixer.createAudioInput({ sampleRate: 48000, channels: 2, bitDepth: 16, volume: 100 })
+  const makeInput = () => mixer.createAudioInput({
+    sampleRate: 48000,
+    channels: 2,
+    bitDepth: 16,
+    volume: 100,
+  })
   const a = makeInput()
   const b = makeInput()
   const feedA = feedMixerInput(constantPcm(1000, 400), a)
@@ -67,7 +74,14 @@ async function mixTwoConstantInputs(mixer: AudioMixer): Promise<Record<number, n
 }
 
 function createEngineMixer(): AudioMixer {
-  return new AudioMixer({ sampleRate: 48000, channels: 2, bitDepth: 16, generateSilence: false, autoClose: false, highWaterMark: MIXER_PACKET_BYTES })
+  return new AudioMixer({
+    sampleRate: 48000,
+    channels: 2,
+    bitDepth: 16,
+    generateSilence: false,
+    autoClose: false,
+    highWaterMark: MIXER_PACKET_BYTES,
+  })
 }
 
 describe('mixing two concurrently fed inputs', () => {

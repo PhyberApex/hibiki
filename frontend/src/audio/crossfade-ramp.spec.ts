@@ -13,7 +13,13 @@ describe('crossfadeRamp', () => {
   it('ramps linearly from `from` to `to` over the duration', () => {
     const ramp = new CrossfadeRamp()
     const onVolume = vi.fn()
-    ramp.fade('a', { direction: 'in', from: 0, to: 1, durationMs: 1000, onVolume })
+    ramp.fade('a', {
+      direction: 'in',
+      from: 0,
+      to: 1,
+      durationMs: 1000,
+      onVolume,
+    })
 
     vi.advanceTimersByTime(500)
     expect(onVolume).toHaveBeenLastCalledWith(0.5)
@@ -25,7 +31,14 @@ describe('crossfadeRamp', () => {
   it('calls onDone exactly once when the ramp reaches its target', () => {
     const ramp = new CrossfadeRamp()
     const onDone = vi.fn()
-    ramp.fade('a', { direction: 'out', from: 1, to: 0, durationMs: 200, onVolume: () => {}, onDone })
+    ramp.fade('a', {
+      direction: 'out',
+      from: 1,
+      to: 0,
+      durationMs: 200,
+      onVolume: () => {},
+      onDone,
+    })
 
     vi.advanceTimersByTime(200)
     expect(onDone).toHaveBeenCalledTimes(1)
@@ -38,7 +51,14 @@ describe('crossfadeRamp', () => {
     const ramp = new CrossfadeRamp()
     const onVolume = vi.fn()
     const onDone = vi.fn()
-    ramp.fade('a', { direction: 'out', from: 0.8, to: 0, durationMs: 0, onVolume, onDone })
+    ramp.fade('a', {
+      direction: 'out',
+      from: 0.8,
+      to: 0,
+      durationMs: 0,
+      onVolume,
+      onDone,
+    })
 
     expect(onVolume).toHaveBeenCalledWith(0)
     expect(onDone).toHaveBeenCalledTimes(1)
@@ -50,7 +70,14 @@ describe('crossfadeRamp', () => {
     const ramp = new CrossfadeRamp()
     const onVolume = vi.fn()
     const onDone = vi.fn()
-    ramp.fade('a', { direction: 'in', from: 0, to: 1, durationMs: 100, onVolume, onDone })
+    ramp.fade('a', {
+      direction: 'in',
+      from: 0,
+      to: 1,
+      durationMs: 100,
+      onVolume,
+      onDone,
+    })
 
     vi.advanceTimersByTime(5000)
     expect(onVolume).toHaveBeenLastCalledWith(1)
@@ -60,10 +87,22 @@ describe('crossfadeRamp', () => {
   it('does not redirect a fade already heading out back toward in', () => {
     const ramp = new CrossfadeRamp()
     const outVolume = vi.fn()
-    ramp.fade('a', { direction: 'out', from: 1, to: 0, durationMs: 1000, onVolume: outVolume })
+    ramp.fade('a', {
+      direction: 'out',
+      from: 1,
+      to: 0,
+      durationMs: 1000,
+      onVolume: outVolume,
+    })
 
     const inVolume = vi.fn()
-    ramp.fade('a', { direction: 'in', from: 0.5, to: 1, durationMs: 1000, onVolume: inVolume })
+    ramp.fade('a', {
+      direction: 'in',
+      from: 0.5,
+      to: 1,
+      durationMs: 1000,
+      onVolume: inVolume,
+    })
 
     vi.advanceTimersByTime(1000)
     expect(inVolume).not.toHaveBeenCalled()
@@ -74,13 +113,25 @@ describe('crossfadeRamp', () => {
   it('retargets an in-progress fade toward a new target starting from the given `from`', () => {
     const ramp = new CrossfadeRamp()
     const onVolume = vi.fn()
-    ramp.fade('a', { direction: 'in', from: 0, to: 1, durationMs: 1000, onVolume })
+    ramp.fade('a', {
+      direction: 'in',
+      from: 0,
+      to: 1,
+      durationMs: 1000,
+      onVolume,
+    })
     vi.advanceTimersByTime(500)
     expect(onVolume).toHaveBeenLastCalledWith(0.5)
 
     // A second Scene switch retargets mid-fade, starting fresh from the
     // caller-supplied current volume toward the newest target.
-    ramp.fade('a', { direction: 'in', from: 0.5, to: 0.2, durationMs: 1000, onVolume })
+    ramp.fade('a', {
+      direction: 'in',
+      from: 0.5,
+      to: 0.2,
+      durationMs: 1000,
+      onVolume,
+    })
     vi.advanceTimersByTime(1000)
     expect(onVolume).toHaveBeenLastCalledWith(0.2)
   })
@@ -88,10 +139,22 @@ describe('crossfadeRamp', () => {
   it('allows switching an in-progress "in" fade over to "out"', () => {
     const ramp = new CrossfadeRamp()
     const onVolume = vi.fn()
-    ramp.fade('a', { direction: 'in', from: 0, to: 1, durationMs: 1000, onVolume })
+    ramp.fade('a', {
+      direction: 'in',
+      from: 0,
+      to: 1,
+      durationMs: 1000,
+      onVolume,
+    })
     vi.advanceTimersByTime(300)
 
-    ramp.fade('a', { direction: 'out', from: 0.3, to: 0, durationMs: 500, onVolume })
+    ramp.fade('a', {
+      direction: 'out',
+      from: 0.3,
+      to: 0,
+      durationMs: 500,
+      onVolume,
+    })
     vi.advanceTimersByTime(500)
     expect(onVolume).toHaveBeenLastCalledWith(0)
   })
@@ -100,8 +163,20 @@ describe('crossfadeRamp', () => {
     const ramp = new CrossfadeRamp()
     const volumeA = vi.fn()
     const volumeB = vi.fn()
-    ramp.fade('a', { direction: 'out', from: 1, to: 0, durationMs: 1000, onVolume: volumeA })
-    ramp.fade('b', { direction: 'in', from: 0, to: 1, durationMs: 1000, onVolume: volumeB })
+    ramp.fade('a', {
+      direction: 'out',
+      from: 1,
+      to: 0,
+      durationMs: 1000,
+      onVolume: volumeA,
+    })
+    ramp.fade('b', {
+      direction: 'in',
+      from: 0,
+      to: 1,
+      durationMs: 1000,
+      onVolume: volumeB,
+    })
 
     vi.advanceTimersByTime(1000)
     expect(volumeA).toHaveBeenLastCalledWith(0)
@@ -112,7 +187,14 @@ describe('crossfadeRamp', () => {
     const ramp = new CrossfadeRamp()
     const onVolume = vi.fn()
     const onDone = vi.fn()
-    ramp.fade('a', { direction: 'out', from: 1, to: 0, durationMs: 1000, onVolume, onDone })
+    ramp.fade('a', {
+      direction: 'out',
+      from: 1,
+      to: 0,
+      durationMs: 1000,
+      onVolume,
+      onDone,
+    })
     vi.advanceTimersByTime(100)
     onVolume.mockClear()
 
@@ -127,8 +209,20 @@ describe('crossfadeRamp', () => {
     const ramp = new CrossfadeRamp()
     const volumeA = vi.fn()
     const volumeB = vi.fn()
-    ramp.fade('a', { direction: 'out', from: 1, to: 0, durationMs: 1000, onVolume: volumeA })
-    ramp.fade('b', { direction: 'in', from: 0, to: 1, durationMs: 1000, onVolume: volumeB })
+    ramp.fade('a', {
+      direction: 'out',
+      from: 1,
+      to: 0,
+      durationMs: 1000,
+      onVolume: volumeA,
+    })
+    ramp.fade('b', {
+      direction: 'in',
+      from: 0,
+      to: 1,
+      durationMs: 1000,
+      onVolume: volumeB,
+    })
     vi.advanceTimersByTime(100)
     volumeA.mockClear()
     volumeB.mockClear()

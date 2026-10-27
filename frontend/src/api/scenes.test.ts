@@ -44,7 +44,9 @@ describe('scenes API', () => {
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'scenes',
       method: 'save',
-      args: [{ name: 'New' }],
+      args: [
+        { name: 'New' },
+      ],
     })
   })
 

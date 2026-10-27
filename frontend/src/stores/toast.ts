@@ -66,7 +66,9 @@ export const useToastStore = defineStore('toast', () => {
     else if (type === 'warning')
       console.warn(`[toast] ${text}`)
 
-    const existing = key ? toasts.value.find(t => t.key === key) : undefined
+    const existing = key
+      ? toasts.value.find(t => t.key === key)
+      : undefined
     if (existing) {
       clearTimeout(timers.get(existing.id))
       timers.delete(existing.id)

@@ -152,7 +152,9 @@ export function feedMixerInput(source: Readable, input: MixerFeedInput, options:
 
   function onData(chunk: Buffer): void {
     source.pause()
-    pending = pending.length > 0 ? Buffer.concat([pending, chunk]) : chunk
+    pending = pending.length > 0
+      ? Buffer.concat([pending, chunk])
+      : chunk
     pump()
   }
 

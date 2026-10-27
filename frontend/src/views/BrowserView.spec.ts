@@ -67,9 +67,16 @@ vi.mock('@/audio/browser-audio-capture', () => ({
 vi.mock('@/audio/routed-tab-local-playback', () => ({
   createRoutedTabLocalPlayback: vi.fn(),
 }))
-vi.mock('@/api/scenes', () => ({ getScene: vi.fn() }))
-vi.mock('@/api/usage-stats', () => ({ trackUsage: vi.fn() }))
-vi.mock('@/api/sounds', () => ({ soundStreamUrl: vi.fn(), canDecode: vi.fn().mockResolvedValue(true) }))
+vi.mock('@/api/scenes', () => ({
+  getScene: vi.fn(),
+}))
+vi.mock('@/api/usage-stats', () => ({
+  trackUsage: vi.fn(),
+}))
+vi.mock('@/api/sounds', () => ({
+  soundStreamUrl: vi.fn(),
+  canDecode: vi.fn().mockResolvedValue(true),
+}))
 vi.mock('@/api/player', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/player')>()
   return {
@@ -103,13 +110,19 @@ function joinDiscord(guildId = 'g1') {
   const player = usePlayerStore()
   player.activeTarget = 'discord'
   player.guildId = guildId
-  player.playerState = [{ guildId, connectedChannelId: 'c1' } as never]
+  player.playerState = [
+    { guildId, connectedChannelId: 'c1' } as never,
+  ]
 }
 
 const showBrowser = ref(true)
 const Host = defineComponent({
   setup() {
-    return () => h(KeepAlive, null, [showBrowser.value ? h(BrowserView) : h('div', 'Elsewhere')])
+    return () => h(KeepAlive, null, [
+      showBrowser.value
+        ? h(BrowserView)
+        : h('div', 'Elsewhere'),
+    ])
   },
 })
 
@@ -154,14 +167,23 @@ describe('browserView', () => {
     setActivePinia(createPinia())
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
-      { x: 10.4, y: 80.6, width: 799.5, height: 600.2 } as DOMRect,
+      {
+        x: 10.4,
+        y: 80.6,
+        width: 799.5,
+        height: 600.2,
+      } as DOMRect,
     )
     nextId = 1
     resizeCallback = null
     vi.mocked(createBrowserView).mockImplementation(() => Promise.resolve(nextId++))
     vi.mocked(listBookmarks).mockResolvedValue([])
-    const track = { stop: vi.fn() }
-    vi.mocked(captureTabStream).mockResolvedValue({ getTracks: () => [track] } as unknown as MediaStream)
+    const track = {
+      stop: vi.fn(),
+    }
+    vi.mocked(captureTabStream).mockResolvedValue({
+      getTracks: () => [track],
+    } as unknown as MediaStream)
     vi.mocked(captureFromMediaStream).mockResolvedValue({ stop: captureStop })
     vi.mocked(createRoutedTabLocalPlayback).mockResolvedValue({ stop: localStop, setLevel: localSetLevel })
     useScenePlaybackStore().masterVolume = 50
@@ -180,7 +202,12 @@ describe('browserView', () => {
 
       expect(createBrowserView).toHaveBeenCalledWith(DEFAULT_URL)
       expect(showBrowserView).toHaveBeenCalledWith(1)
-      expect(setBrowserViewBounds).toHaveBeenCalledWith(1, { x: 10, y: 81, width: 800, height: 600 })
+      expect(setBrowserViewBounds).toHaveBeenCalledWith(1, {
+        x: 10,
+        y: 81,
+        width: 800,
+        height: 600,
+      })
       expect(tabPills()).toHaveLength(1)
       expect(urlValue()).toBe(DEFAULT_URL)
       // The default tab cannot be closed.
@@ -260,7 +287,12 @@ describe('browserView', () => {
       resizeCallback!()
       await flush()
 
-      expect(setBrowserViewBounds).toHaveBeenCalledWith(1, { x: 10, y: 81, width: 800, height: 600 })
+      expect(setBrowserViewBounds).toHaveBeenCalledWith(1, {
+        x: 10,
+        y: 81,
+        width: 800,
+        height: 600,
+      })
     })
 
     it('hides the active view when leaving the Browser and shows it again on return', async () => {
@@ -439,7 +471,9 @@ describe('browserView', () => {
       await wrapper!.findAll('.bookmark-remove')[0]!.trigger('click')
       await flush()
 
-      expect(saveBookmarks).toHaveBeenCalledWith([{ name: 'Example', url: 'https://example.com', favicon: undefined }])
+      expect(saveBookmarks).toHaveBeenCalledWith([
+        { name: 'Example', url: 'https://example.com', favicon: undefined },
+      ])
       expect(wrapper!.findAll('.bookmark-item')).toHaveLength(1)
     })
 

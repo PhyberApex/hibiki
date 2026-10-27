@@ -78,7 +78,9 @@ describe('searchableSoundSelect', () => {
     expect(optionButtons[1]).toBeDefined()
     await optionButtons[1]!.trigger('mousedown')
     await flushPromises()
-    expect(wrapper.emitted('update:modelValue')).toEqual([['b2']])
+    expect(wrapper.emitted('update:modelValue')).toEqual([
+      ['b2'],
+    ])
   })
 
   it('opens on Enter when closed', async () => {
@@ -130,7 +132,9 @@ describe('searchableSoundSelect', () => {
     await flushPromises()
     await wrapper.find('.searchable-select-input').trigger('keydown', { key: 'Enter' })
     await flushPromises()
-    expect(wrapper.emitted('update:modelValue')).toEqual([['b2']])
+    expect(wrapper.emitted('update:modelValue')).toEqual([
+      ['b2'],
+    ])
   })
 
   it('moves highlight with ArrowUp', async () => {

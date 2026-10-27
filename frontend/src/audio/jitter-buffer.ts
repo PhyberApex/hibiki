@@ -25,7 +25,9 @@ export class JitterBuffer {
 
   /** Seconds of audio scheduled but not yet played at `now`. */
   queuedSec(now: number): number {
-    return this.nextTime === null ? 0 : Math.max(0, this.nextTime - now)
+    return this.nextTime === null
+      ? 0
+      : Math.max(0, this.nextTime - now)
   }
 
   /**

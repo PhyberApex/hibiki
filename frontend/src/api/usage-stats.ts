@@ -58,6 +58,8 @@ export function trackUsage(event: UsageStatsEvent): void {
   if (!useElectronApi())
     return
   const url = currentRoutePattern()
-  apiCall<void>('usageStats', 'track', [{ ...event, url }])
+  apiCall<void>('usageStats', 'track', [
+    { ...event, url },
+  ])
     .catch(error => console.warn(`[usage-stats] Could not hand ${event.name} to the backend:`, error))
 }

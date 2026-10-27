@@ -52,7 +52,10 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
   }
 
   try {
-    const [scenes, actionHotkeys] = await Promise.all([deps.listScenes(), deps.getActionHotkeys()])
+    const [scenes, actionHotkeys] = await Promise.all([
+      deps.listScenes(),
+      deps.getActionHotkeys(),
+    ])
     const playingId = deps.playingSceneId()
 
     if (actionHotkeys.stopHotkey === accelerator) {
@@ -79,10 +82,14 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
 
     const volumeStep = actionHotkeys.volumeUpHotkey === accelerator
       ? VOLUME_STEP
-      : actionHotkeys.volumeDownHotkey === accelerator ? -VOLUME_STEP : 0
+      : actionHotkeys.volumeDownHotkey === accelerator
+        ? -VOLUME_STEP
+        : 0
     if (volumeStep) {
       deps.trackFired('action')
-      const action = volumeStep > 0 ? 'volume up' : 'volume down'
+      const action = volumeStep > 0
+        ? 'volume up'
+        : 'volume down'
       const volume = await deps.stepMasterVolume(volumeStep)
       if (volume === null) {
         deps.logDebug(`[hotkeys] ${accelerator} -> ${action}, Target ${target}: ignored, master volume already at the limit`)
@@ -95,16 +102,26 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
 
     const direction = actionHotkeys.nextSceneHotkey === accelerator
       ? 1
-      : actionHotkeys.previousSceneHotkey === accelerator ? -1 : 0
+      : actionHotkeys.previousSceneHotkey === accelerator
+        ? -1
+        : 0
     if (direction) {
       deps.trackFired('action')
-      const action = direction > 0 ? 'next Scene' : 'previous Scene'
-      const currentIndex = playingId ? scenes.findIndex(s => s.id === playingId) : -1
+      const action = direction > 0
+        ? 'next Scene'
+        : 'previous Scene'
+      const currentIndex = playingId
+        ? scenes.findIndex(s => s.id === playingId)
+        : -1
       const destination = currentIndex === -1
-        ? (direction > 0 ? scenes[0] : scenes[scenes.length - 1])
+        ? (direction > 0
+            ? scenes[0]
+            : scenes[scenes.length - 1])
         : scenes[currentIndex + direction]
       if (!destination) {
-        deps.logDebug(`[hotkeys] ${accelerator} -> ${action}, Scene ${playingId ?? 'none'}, Target ${target}: ignored, ${currentIndex === -1 ? 'no Scenes' : 'no Scene beyond the end of the list'}`)
+        deps.logDebug(`[hotkeys] ${accelerator} -> ${action}, Scene ${playingId ?? 'none'}, Target ${target}: ignored, ${currentIndex === -1
+          ? 'no Scenes'
+          : 'no Scene beyond the end of the list'}`)
         return 'ignored'
       }
       if (!deps.canPlay())
@@ -139,7 +156,9 @@ export async function dispatchHotkey(accelerator: string, deps: HotkeyDeps): Pro
       return 'played'
     }
 
-    const playing = playingId ? scenes.find(s => s.id === playingId) : undefined
+    const playing = playingId
+      ? scenes.find(s => s.id === playingId)
+      : undefined
     const effect = playing?.effects.find(e => e.hotkey === accelerator)
     if (!playing || !effect) {
       deps.logDebug(`[hotkeys] ${accelerator} ignored: no Scene or Stop binding, and no Effect in the Playing Scene (${playingId ?? 'none'})`)

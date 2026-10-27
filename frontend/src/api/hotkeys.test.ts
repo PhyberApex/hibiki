@@ -20,7 +20,13 @@ describe('hotkeys API', () => {
   })
 
   it('fetchHotkeyStatus reads hotkeys:getStatus', async () => {
-    const status = { enabled: true, registered: ['F13'], failures: [{ accelerator: 'F14', owner: 'scene:storm', reason: 'taken' }] }
+    const status = {
+      enabled: true,
+      registered: ['F13'],
+      failures: [
+        { accelerator: 'F14', owner: 'scene:storm', reason: 'taken' },
+      ],
+    }
     mockInvoke.mockResolvedValue(status)
     await expect(fetchHotkeyStatus()).resolves.toEqual(status)
     expect(mockInvoke).toHaveBeenCalledWith('hotkeys:getStatus')

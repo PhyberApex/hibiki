@@ -35,7 +35,11 @@ let page: Page
 function seed(): string {
   const root = mkdtempSync(join(tmpdir(), 'hibiki-e2e-scene-ui-'))
   mkdirSync(join(root, 'data'), { recursive: true })
-  const files: [string, string, number][] = [['music', MUSIC.id, 10], ['ambience', AMBIENCE.id, 10], ['effects', EFFECT.id, EFFECT_SECONDS]]
+  const files: [string, string, number][] = [
+    ['music', MUSIC.id, 10],
+    ['ambience', AMBIENCE.id, 10],
+    ['effects', EFFECT.id, EFFECT_SECONDS],
+  ]
   for (const [category, id, seconds] of files) {
     mkdirSync(join(root, 'storage', category), { recursive: true })
     writeMinimalWav(join(root, 'storage', category, `${id}.wav`), seconds)
@@ -121,13 +125,27 @@ test('creates, plays, edits live, stops and deletes a Scene through the UI on th
   await page.getByLabel('Add effect').selectOption({ label: EFFECT.name })
   await expect(page.getByRole('button', { name: EFFECT.name, exact: true })).toBeVisible()
 
-  await expect.poll(listScenes).toMatchObject([{
-    name: SCENE_NAME,
-    music: [{ soundId: MUSIC.id, volume: 60, loop: true }],
-    ambience: [{ soundId: AMBIENCE.id, volume: 40, enabled: true, repeatMin: 0, repeatMax: 0 }],
-    // The editor has no per-Effect volume control; a new item starts at 80.
-    effects: [{ soundId: EFFECT.id, volume: 80 }],
-  }])
+  await expect.poll(listScenes).toMatchObject([
+    {
+      name: SCENE_NAME,
+      music: [
+        { soundId: MUSIC.id, volume: 60, loop: true },
+      ],
+      ambience: [
+        {
+          soundId: AMBIENCE.id,
+          volume: 40,
+          enabled: true,
+          repeatMin: 0,
+          repeatMax: 0,
+        },
+      ],
+      // The editor has no per-Effect volume control; a new item starts at 80.
+      effects: [
+        { soundId: EFFECT.id, volume: 80 },
+      ],
+    },
+  ])
 
   // 2. Play from the playback bar.
   await page.getByRole('button', { name: 'Play', exact: true }).click()
@@ -139,8 +157,12 @@ test('creates, plays, edits live, stops and deletes a Scene through the UI on th
   await expect(page.locator('.now-playing-line')).toHaveText(`${MUSIC.name} · 1 ambience`)
   // The Scene list badges the Playing Scene; going there and back does not stop it.
   await page.getByRole('link', { name: 'Scenes', exact: true }).click()
-  await expect(page.getByRole('link', { name: new RegExp(SCENE_NAME) }).getByLabel('Playing locally')).toBeVisible()
-  await page.getByRole('link', { name: new RegExp(SCENE_NAME) }).click()
+  await expect(page.getByRole('link', {
+    name: new RegExp(SCENE_NAME),
+  }).getByLabel('Playing locally')).toBeVisible()
+  await page.getByRole('link', {
+    name: new RegExp(SCENE_NAME),
+  }).click()
   await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible()
   expect((await localState())?.track?.id).toBe(MUSIC.id)
 

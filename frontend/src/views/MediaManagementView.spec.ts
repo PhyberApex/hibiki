@@ -8,7 +8,12 @@ import MediaManagementView from './MediaManagementView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
-  routes: [{ path: '/', component: { template: '' } }],
+  routes: [
+    {
+      path: '/',
+      component: { template: '' },
+    },
+  ],
 })
 
 vi.mock('@/api/config', () => ({
@@ -39,14 +44,24 @@ vi.mock('@/api/player', () => ({
 describe('mediaManagementView', () => {
   it('renders page title', () => {
     const wrapper = mount(MediaManagementView, {
-      global: { plugins: [createPinia(), router] },
+      global: {
+        plugins: [
+          createPinia(),
+          router,
+        ],
+      },
     })
     expect(wrapper.find('h1').text()).toBe('Sound library')
   })
 
   it('renders category tabs and defaults to Music', () => {
     const wrapper = mount(MediaManagementView, {
-      global: { plugins: [createPinia(), router] },
+      global: {
+        plugins: [
+          createPinia(),
+          router,
+        ],
+      },
     })
     const tabs = wrapper.findAll('.category-tab')
     expect(tabs).toHaveLength(3)
@@ -62,7 +77,12 @@ describe('mediaManagementView', () => {
 
   it('switches tab to show different SoundListManage', async () => {
     const wrapper = mount(MediaManagementView, {
-      global: { plugins: [createPinia(), router] },
+      global: {
+        plugins: [
+          createPinia(),
+          router,
+        ],
+      },
     })
     const tabs = wrapper.findAll('.category-tab')
 
@@ -77,7 +97,11 @@ describe('mediaManagementView local target', () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     usePlayerStore().activeTarget = 'local'
-    const wrapper = mount(MediaManagementView, { global: { plugins: [pinia, router] } })
+    const wrapper = mount(MediaManagementView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
     await flushPromises()
     expect(wrapper.find('.setup-guide').exists()).toBe(false)
   })

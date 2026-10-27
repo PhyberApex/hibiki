@@ -151,11 +151,17 @@ test.describe('Hibiki Electron E2E', () => {
       expect(soundId).toBeTruthy()
 
       await page.locator('.channel-item').first().waitFor({ timeout: 30_000 })
-      await invokeApi(page, 'player', 'join', [{ guildId, channelId: voiceChannelId }])
+      await invokeApi(page, 'player', 'join', [
+        { guildId, channelId: voiceChannelId },
+      ])
       await verifier.expectInVoice(voiceChannelId)
 
       capture = await captureAudioFrom(sidecar!, guildId, voiceChannelId, verifier.hibikiUserId)
-      await invokeApi(page, 'player', 'playMusic', [guildId, soundId, { volume: 100, loop: true }])
+      await invokeApi(page, 'player', 'playMusic', [
+        guildId,
+        soundId,
+        { volume: 100, loop: true },
+      ])
 
       await expect.poll(async () => {
         const states = await invokeApi<Array<{ targetId: string, track: { id: string } | null }>>(page, 'player', 'getState')
@@ -168,7 +174,9 @@ test.describe('Hibiki Electron E2E', () => {
       await expect.poll(() => capture!.audioPacketCount(), { timeout: 15_000 }).toBeGreaterThanOrEqual(25)
 
       await invokeApi(page, 'player', 'stop', [guildId])
-      await invokeApi(page, 'player', 'leave', [{ guildId }])
+      await invokeApi(page, 'player', 'leave', [
+        { guildId },
+      ])
       await verifier.expectInVoice(null)
     }
     finally {
@@ -200,8 +208,16 @@ test.describe('Hibiki Electron E2E', () => {
     try {
       const saved = await page.evaluate(async ({ category, base64, name }) => {
         const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
-        return (window as any).hibiki.invoke('api', { domain: 'sounds', method: 'uploadSound', args: [category, bytes.buffer, name] }) as Promise<{ id: string }>
-      }, { category, base64: readFileSync(wavPath).toString('base64'), name: filename })
+        return (window as any).hibiki.invoke('api', {
+          domain: 'sounds',
+          method: 'uploadSound',
+          args: [category, bytes.buffer, name],
+        }) as Promise<{ id: string }>
+      }, {
+        category,
+        base64: readFileSync(wavPath).toString('base64'),
+        name: filename,
+      })
       return saved.id
     }
     finally {
@@ -214,7 +230,9 @@ test.describe('Hibiki Electron E2E', () => {
   async function logSinceNow(electronApp: ElectronApplication): Promise<() => string> {
     const userData = await electronApp.evaluate(({ app }) => app.getPath('userData'))
     const path = join(userData, 'logs', 'hibiki.log')
-    const read = () => (existsSync(path) ? readFileSync(path) : Buffer.alloc(0))
+    const read = () => (existsSync(path)
+      ? readFileSync(path)
+      : Buffer.alloc(0))
     const start = read().length
     return () => read().subarray(start).toString('utf8')
   }
@@ -234,7 +252,10 @@ test.describe('Hibiki Electron E2E', () => {
     while (Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 50))
       const now = Date.now()
-      samples.push({ at: now, silenceFrames: capture.silenceFrameCount() })
+      samples.push({
+        at: now,
+        silenceFrames: capture.silenceFrameCount(),
+      })
       const windowStart = samples.find(s => s.at >= now - windowMs)!
       if (now - windowStart.at < windowMs - 100)
         continue
@@ -246,7 +267,9 @@ test.describe('Hibiki Electron E2E', () => {
         return lastAudioAt
     }
     const lastAudioAt = capture.lastAudioPacketAt()
-    throw new Error(`Hibiki was not sending only silence frames at >= 30/s ${timeoutMs} ms later (last window ${perSecond} silence frames/s; last audio packet ${lastAudioAt === undefined ? 'never' : `${Date.now() - lastAudioAt} ms ago`}; ${capture.packetCount()} packets received so far, ${capture.silenceFrameCount()} of them Opus silence frames)`)
+    throw new Error(`Hibiki was not sending only silence frames at >= 30/s ${timeoutMs} ms later (last window ${perSecond} silence frames/s; last audio packet ${lastAudioAt === undefined
+      ? 'never'
+      : `${Date.now() - lastAudioAt} ms ago`}; ${capture.packetCount()} packets received so far, ${capture.silenceFrameCount()} of them Opus silence frames)`)
   }
 
   /** The Output Target the renderer's Playing Scene is on (`playingSceneMode` in the player store). */
@@ -276,12 +299,18 @@ test.describe('Hibiki Electron E2E', () => {
 
       await page.goto('hibiki://app/scenes')
       await page.locator('.channel-item').first().waitFor({ timeout: 30_000 })
-      await invokeApi(page, 'player', 'join', [{ guildId, channelId: voiceChannelId }])
+      await invokeApi(page, 'player', 'join', [
+        { guildId, channelId: voiceChannelId },
+      ])
       await verifier.expectInVoice(voiceChannelId)
       capture = await captureAudioFrom(sidecar!, guildId, voiceChannelId, verifier.hibikiUserId)
 
       // Ambience: interval repeats with a 0-0 s gap, a separate mixer path from Music.
-      await invokeApi(page, 'player', 'playAmbience', [guildId, ambienceId, { volume: 100, repeatMin: 0, repeatMax: 0 }])
+      await invokeApi(page, 'player', 'playAmbience', [
+        guildId,
+        ambienceId,
+        { volume: 100, repeatMin: 0, repeatMax: 0 },
+      ])
       await expect.poll(async () => (await targetState(page, guildId))?.ambience).toContain(ambienceId)
       await expect(capture.speaking).resolves.toBeUndefined()
       const ambienceStart = capture.audioPacketCount()
@@ -294,7 +323,11 @@ test.describe('Hibiki Electron E2E', () => {
       // Effect: a one-shot layered input that ends on its own after the file.
       const effectStart = capture.audioPacketCount()
       const effectStartedAt = Date.now()
-      const instance = await invokeApi<{ instanceId: string, soundId: string } | undefined>(page, 'player', 'playEffect', [guildId, effectId, { volume: 100 }])
+      const instance = await invokeApi<{ instanceId: string, soundId: string } | undefined>(page, 'player', 'playEffect', [
+        guildId,
+        effectId,
+        { volume: 100 },
+      ])
       expect(instance?.soundId).toBe(effectId)
       await expect.poll(() => capture!.audioPacketCount() - effectStart, { timeout: 10_000 }).toBeGreaterThanOrEqual(25)
       const lastEffectAudioAt = await waitForOnlySilence(capture, EFFECT_SECONDS * 1000 + 5_000)
@@ -312,7 +345,9 @@ test.describe('Hibiki Electron E2E', () => {
     finally {
       capture?.stop()
       await invokeApi(page, 'player', 'stop', [guildId]).catch(() => undefined)
-      await invokeApi(page, 'player', 'leave', [{ guildId }]).catch(() => undefined)
+      await invokeApi(page, 'player', 'leave', [
+        { guildId },
+      ]).catch(() => undefined)
       for (const [category, id] of uploaded)
         await invokeApi(page, 'sounds', 'deleteSound', [category, id]).catch(() => undefined)
     }
@@ -333,10 +368,19 @@ test.describe('Hibiki Electron E2E', () => {
       page.getByRole('group', { name: 'Output Target' }).getByRole('button', { name, exact: true })
     try {
       musicId = await uploadWav(page, 'music', `${unique}.wav`, 20)
-      const scene = await invokeApi<{ id: string }>(page, 'scenes', 'save', [{
-        name: `E2E Handover ${unique}`,
-        music: [{ soundId: musicId, soundName: unique, volume: 80, loop: true }],
-      }])
+      const scene = await invokeApi<{ id: string }>(page, 'scenes', 'save', [
+        {
+          name: `E2E Handover ${unique}`,
+          music: [
+            {
+              soundId: musicId,
+              soundName: unique,
+              volume: 80,
+              loop: true,
+            },
+          ],
+        },
+      ])
       sceneId = scene.id
 
       await page.goto(`hibiki://app/scenes/${sceneId}`)
@@ -379,7 +423,9 @@ test.describe('Hibiki Electron E2E', () => {
       capture?.stop()
       await invokeApi(page, 'player', 'stop', [LOCAL]).catch(() => undefined)
       await invokeApi(page, 'player', 'stop', [guildId]).catch(() => undefined)
-      await invokeApi(page, 'player', 'leave', [{ guildId }]).catch(() => undefined)
+      await invokeApi(page, 'player', 'leave', [
+        { guildId },
+      ]).catch(() => undefined)
       // The Target is persisted; later tests (and launches) expect the default Discord Target.
       await invokeApi(page, 'config', 'setActiveOutputTarget', ['discord']).catch(() => undefined)
       if (sceneId)
@@ -401,11 +447,17 @@ test.describe('Hibiki Electron E2E', () => {
       musicId = await uploadWav(page, 'music', `e2e-discord-silence-${Date.now()}.wav`, 20)
       await page.goto('hibiki://app/scenes')
       await page.locator('.channel-item').first().waitFor({ timeout: 30_000 })
-      await invokeApi(page, 'player', 'join', [{ guildId, channelId: voiceChannelId }])
+      await invokeApi(page, 'player', 'join', [
+        { guildId, channelId: voiceChannelId },
+      ])
       await verifier.expectInVoice(voiceChannelId)
       capture = await captureAudioFrom(sidecar!, guildId, voiceChannelId, verifier.hibikiUserId)
 
-      await invokeApi(page, 'player', 'playMusic', [guildId, musicId, { volume: 100, loop: true }])
+      await invokeApi(page, 'player', 'playMusic', [
+        guildId,
+        musicId,
+        { volume: 100, loop: true },
+      ])
       await expect.poll(async () => (await targetState(page, guildId))?.track?.id).toBe(musicId)
       await expect(capture.speaking).resolves.toBeUndefined()
       // Let the stream settle before measuring.
@@ -420,7 +472,9 @@ test.describe('Hibiki Electron E2E', () => {
     finally {
       capture?.stop()
       await invokeApi(page, 'player', 'stop', [guildId]).catch(() => undefined)
-      await invokeApi(page, 'player', 'leave', [{ guildId }]).catch(() => undefined)
+      await invokeApi(page, 'player', 'leave', [
+        { guildId },
+      ]).catch(() => undefined)
       if (musicId)
         await invokeApi(page, 'sounds', 'deleteSound', ['music', musicId]).catch(() => undefined)
     }

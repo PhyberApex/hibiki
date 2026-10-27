@@ -6,12 +6,21 @@ import { openExternal } from '@/api/electron'
 import { uploadSound } from '@/api/sounds'
 import ResolveSoundDialog from './ResolveSoundDialog.vue'
 
-vi.mock('@/api/electron', () => ({ openExternal: vi.fn() }))
+vi.mock('@/api/electron', () => ({
+  openExternal: vi.fn(),
+}))
 
-vi.mock('@/api/sounds', () => ({ uploadSound: vi.fn() }))
+vi.mock('@/api/sounds', () => ({
+  uploadSound: vi.fn(),
+}))
 
 function sound(id: string, name: string): SoundFile {
-  return { id, name, filename: `${id}.mp3`, category: 'ambience' }
+  return {
+    id,
+    name,
+    filename: `${id}.mp3`,
+    category: 'ambience',
+  }
 }
 
 const rain = sound('rain-id', 'Rain')
@@ -68,7 +77,10 @@ describe('resolveSoundDialog', () => {
     })
 
     it('links a source with a URL and opens it externally', async () => {
-      const wrapper = mountDialog({ soundId: 'x', source: { name: 'Freesound', url: 'https://freesound.org/s/1', note: 'CC-BY, credit the author' } })
+      const wrapper = mountDialog({
+        soundId: 'x',
+        source: { name: 'Freesound', url: 'https://freesound.org/s/1', note: 'CC-BY, credit the author' },
+      })
       const link = wrapper.find('.source-info-link')
       expect(link.text()).toBe('Freesound')
       expect(wrapper.find('.source-info-note').text()).toBe('CC-BY, credit the author')
@@ -77,7 +89,10 @@ describe('resolveSoundDialog', () => {
     })
 
     it('shows a source without a URL or note as plain text', () => {
-      const wrapper = mountDialog({ soundId: 'x', source: { name: 'Record it yourself' } })
+      const wrapper = mountDialog({
+        soundId: 'x',
+        source: { name: 'Record it yourself' },
+      })
       expect(wrapper.find('.source-info-link').exists()).toBe(false)
       expect(wrapper.find('.source-info-name').text()).toBe('Record it yourself')
       expect(wrapper.find('.source-info-note').exists()).toBe(false)
@@ -88,7 +103,10 @@ describe('resolveSoundDialog', () => {
     it('lists every library sound after a placeholder', () => {
       const wrapper = mountDialog()
       const options = wrapper.findAll('.resolve-select option')
-      expect(options.map(o => [o.attributes('value'), o.text()])).toEqual([
+      expect(options.map(o => [
+        o.attributes('value'),
+        o.text(),
+      ])).toEqual([
         ['', 'Pick from library...'],
         ['rain-id', 'Rain'],
         ['wind-id', 'Wind'],
@@ -98,7 +116,9 @@ describe('resolveSoundDialog', () => {
     it('emits resolved with the picked sound', async () => {
       const wrapper = mountDialog()
       await wrapper.find('.resolve-select').setValue('wind-id')
-      expect(wrapper.emitted('resolved')).toEqual([['wind-id', 'Wind']])
+      expect(wrapper.emitted('resolved')).toEqual([
+        ['wind-id', 'Wind'],
+      ])
     })
 
     it('emits nothing when the placeholder is picked', async () => {
@@ -135,14 +155,18 @@ describe('resolveSoundDialog', () => {
       await chooseFile(wrapper, [file])
       await flushPromises()
       expect(uploadSound).toHaveBeenCalledWith('ambience', file)
-      expect(wrapper.emitted('resolved')).toEqual([['new-id', 'Thunder.mp3']])
+      expect(wrapper.emitted('resolved')).toEqual([
+        ['new-id', 'Thunder.mp3'],
+      ])
     })
 
     it('disables the button while uploading', async () => {
       const pending = deferred<SoundFile>()
       vi.mocked(uploadSound).mockReturnValue(pending.promise)
       const wrapper = mountDialog()
-      await chooseFile(wrapper, [new File(['x'], 'thunder.mp3')])
+      await chooseFile(wrapper, [
+        new File(['x'], 'thunder.mp3'),
+      ])
       const button = chooseButton(wrapper)
       expect(button.text()).toBe('Uploading...')
       expect(button.attributes('disabled')).toBeDefined()
@@ -156,7 +180,9 @@ describe('resolveSoundDialog', () => {
     it('shows the error when the upload fails and emits nothing', async () => {
       vi.mocked(uploadSound).mockRejectedValue(new Error('Unsupported format'))
       const wrapper = mountDialog()
-      await chooseFile(wrapper, [new File(['x'], 'thunder.txt')])
+      await chooseFile(wrapper, [
+        new File(['x'], 'thunder.txt'),
+      ])
       await flushPromises()
       expect(wrapper.find('.resolve-error').text()).toBe('Unsupported format')
       expect(wrapper.emitted('resolved')).toBeUndefined()
@@ -166,7 +192,9 @@ describe('resolveSoundDialog', () => {
     it('falls back to a generic message for a non-Error rejection', async () => {
       vi.mocked(uploadSound).mockRejectedValue('nope')
       const wrapper = mountDialog()
-      await chooseFile(wrapper, [new File(['x'], 'thunder.mp3')])
+      await chooseFile(wrapper, [
+        new File(['x'], 'thunder.mp3'),
+      ])
       await flushPromises()
       expect(wrapper.find('.resolve-error').text()).toBe('Upload failed')
     })
@@ -174,13 +202,17 @@ describe('resolveSoundDialog', () => {
     it('clears a previous error when a new upload starts', async () => {
       vi.mocked(uploadSound).mockRejectedValueOnce(new Error('Unsupported format'))
       const wrapper = mountDialog()
-      await chooseFile(wrapper, [new File(['x'], 'thunder.txt')])
+      await chooseFile(wrapper, [
+        new File(['x'], 'thunder.txt'),
+      ])
       await flushPromises()
       expect(wrapper.find('.resolve-error').exists()).toBe(true)
 
       const pending = deferred<SoundFile>()
       vi.mocked(uploadSound).mockReturnValueOnce(pending.promise)
-      await chooseFile(wrapper, [new File(['x'], 'thunder.mp3')])
+      await chooseFile(wrapper, [
+        new File(['x'], 'thunder.mp3'),
+      ])
       expect(wrapper.find('.resolve-error').exists()).toBe(false)
       pending.resolve(sound('new-id', 'Thunder'))
       await flushPromises()

@@ -36,7 +36,13 @@ jest.mock('node-audio-mixer', () => ({
     unpipe: jest.fn(),
     destroy: jest.fn(),
     createAudioInput: jest.fn().mockImplementation((params: { volume?: number }) => {
-      const input: FakeInput = { destroy: jest.fn(), write: jest.fn(), end: jest.fn(), dataSize: 0, params: { volume: params.volume } }
+      const input: FakeInput = {
+        destroy: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+        dataSize: 0,
+        params: { volume: params.volume },
+      }
       createdInputs.push(input)
       return input
     }),
@@ -72,7 +78,9 @@ describe('audioEngine', () => {
       const { createAudioPlayer } = await import('@discordjs/voice')
 
       expect(AudioMixer).toHaveBeenCalledWith(expect.objectContaining({ generateSilence: false }))
-      expect(createAudioPlayer).toHaveBeenCalledWith({ behaviors: expect.objectContaining({ maxMissedFrames: Number.POSITIVE_INFINITY }) })
+      expect(createAudioPlayer).toHaveBeenCalledWith({
+        behaviors: expect.objectContaining({ maxMissedFrames: Number.POSITIVE_INFINITY }),
+      })
     })
 
     it('primes each mixer output with one frame of silence so the player starts playing right away', async () => {

@@ -5,7 +5,9 @@ export async function fetchLogPath(): Promise<string | null> {
   if (!useElectronApi())
     return null
   const result = await window.hibiki!.invoke('logs:getPath')
-  return typeof result === 'string' ? result : null
+  return typeof result === 'string'
+    ? result
+    : null
 }
 
 export async function openLogFolder(): Promise<void> {

@@ -17,7 +17,9 @@ describe('createSoundLibrary', () => {
       effectsDir,
       webDistDir: 'web-dist',
     },
-    database: { path: join(tempRoot, 'data', 'hibiki.json') },
+    database: {
+      path: join(tempRoot, 'data', 'hibiki.json'),
+    },
   }
 
   beforeAll(async () => {
@@ -83,7 +85,9 @@ describe('sound tags', () => {
       ambienceDir,
       webDistDir: 'web-dist',
     },
-    database: { path: join(tempRoot, 'data', 'hibiki.json') },
+    database: {
+      path: join(tempRoot, 'data', 'hibiki.json'),
+    },
   }
 
   beforeAll(async () => {
@@ -138,7 +142,10 @@ describe('sound tags', () => {
 
   it('save() returns a sound with empty tags', async () => {
     const lib = createSoundLibrary(config)
-    const saved = await lib.save('music', { buffer: Buffer.from('x'), originalname: 'new-song.mp3' })
+    const saved = await lib.save('music', {
+      buffer: Buffer.from('x'),
+      originalname: 'new-song.mp3',
+    })
     expect(saved.tags).toEqual([])
   })
 
@@ -164,7 +171,9 @@ describe('canDecode', () => {
       effectsDir: join(tempRoot, 'effects'),
       webDistDir: 'web-dist',
     },
-    database: { path: join(tempRoot, 'data', 'hibiki.json') },
+    database: {
+      path: join(tempRoot, 'data', 'hibiki.json'),
+    },
   }
 
   beforeAll(async () => {
@@ -209,7 +218,9 @@ describe('sound library edge cases', () => {
         ambienceDir: join(tempRoot, 'ambience'),
         webDistDir: 'web-dist',
       },
-      database: { path: join(tempRoot, 'data', 'hibiki.json') },
+      database: {
+        path: join(tempRoot, 'data', 'hibiki.json'),
+      },
     }
   })
 
@@ -227,20 +238,29 @@ describe('sound library edge cases', () => {
     ['effects', 'effectsDir'],
     ['ambience', 'ambienceDir'],
   ] as const)('save writes %s into its own directory', async (category, dirKey) => {
-    const saved = await createSoundLibrary(config).save(category, { buffer: Buffer.from('abc'), originalname: 'Dragon Roar!.ogg' })
+    const saved = await createSoundLibrary(config).save(category, {
+      buffer: Buffer.from('abc'),
+      originalname: 'Dragon Roar!.ogg',
+    })
     expect(saved).toMatchObject({ category, size: 3, tags: [] })
     expect(saved.id).toMatch(/^dragon-roar-\d+$/)
     expect(readFileSync(join(config.audio[dirKey], saved.filename), 'utf-8')).toBe('abc')
   })
 
   it('save defaults a name without an extension to .mp3', async () => {
-    const saved = await createSoundLibrary(config).save('music', { buffer: Buffer.from('x'), originalname: 'no-extension' })
+    const saved = await createSoundLibrary(config).save('music', {
+      buffer: Buffer.from('x'),
+      originalname: 'no-extension',
+    })
     expect(saved.filename).toBe(`${saved.id}.mp3`)
   })
 
   it('save keeps an unsupported extension, which then has no backend decoder', async () => {
     const lib = createSoundLibrary(config)
-    const saved = await lib.save('effects', { buffer: Buffer.from('not audio'), originalname: 'notes.txt' })
+    const saved = await lib.save('effects', {
+      buffer: Buffer.from('not audio'),
+      originalname: 'notes.txt',
+    })
     expect(saved.filename).toMatch(/\.txt$/)
     await expect(lib.canDecode('effects', saved.id)).resolves.toBe(false)
   })
@@ -249,8 +269,14 @@ describe('sound library edge cases', () => {
     const now = jest.spyOn(Date, 'now')
     now.mockReturnValueOnce(1000).mockReturnValueOnce(2000)
     const lib = createSoundLibrary(config)
-    const a = await lib.save('music', { buffer: Buffer.from('a'), originalname: 'theme.mp3' })
-    const b = await lib.save('music', { buffer: Buffer.from('b'), originalname: 'theme.mp3' })
+    const a = await lib.save('music', {
+      buffer: Buffer.from('a'),
+      originalname: 'theme.mp3',
+    })
+    const b = await lib.save('music', {
+      buffer: Buffer.from('b'),
+      originalname: 'theme.mp3',
+    })
     expect([a.id, b.id]).toEqual(['theme-1000', 'theme-2000'])
     expect((await lib.list('music')).map(f => f.id).sort()).toEqual(['theme-1000', 'theme-2000'])
   })

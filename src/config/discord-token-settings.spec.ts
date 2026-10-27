@@ -8,11 +8,28 @@ function setup(initial: Record<string, string> = {}, envToken = '') {
     set: async (k: string, v: string) => { data.set(k, v) },
     delete: async (k: string) => { data.delete(k) },
   }
-  const discord = { logout: jest.fn(async () => {}) }
-  const player = { disconnectAllVoice: jest.fn(async () => {}) }
+  const discord = {
+    logout: jest.fn(async () => {}),
+  }
+  const player = {
+    disconnectAllVoice: jest.fn(async () => {}),
+  }
   const outputTargets = createOutputTargetSettings(store, () => isDiscordTokenConfigured(store, envToken))
-  const settings = createDiscordTokenSettings({ store, envToken, encrypted: true, outputTargets, discord, player })
-  return { data, settings, discord, player, outputTargets }
+  const settings = createDiscordTokenSettings({
+    store,
+    envToken,
+    encrypted: true,
+    outputTargets,
+    discord,
+    player,
+  })
+  return {
+    data,
+    settings,
+    discord,
+    player,
+    outputTargets,
+  }
 }
 
 describe('discord token settings', () => {

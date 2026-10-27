@@ -28,7 +28,9 @@ describe('createVisionService', () => {
   writeFileSync(imagePath, Buffer.from('fake-png-bytes'))
 
   function withProviderConfig(config: VisionProviderConfig) {
-    return createVisionService({ getProviderConfig: async () => config })
+    return createVisionService({
+      getProviderConfig: async () => config,
+    })
   }
 
   beforeEach(() => {
@@ -38,17 +40,36 @@ describe('createVisionService', () => {
   it('returns description and tags parsed from the Claude response', async () => {
     mockCreate.mockResolvedValue({
       stop_reason: 'end_turn',
-      content: [{ type: 'text', text: JSON.stringify({ description: 'A stormy coastline at dusk.', tags: ['stormy', ' coastline ', 'dusk', ''] }) }],
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            description: 'A stormy coastline at dusk.',
+            tags: ['stormy', ' coastline ', 'dusk', ''],
+          }),
+        },
+      ],
     })
     const service = withProviderConfig({ provider: 'claude', apiKey: 'sk-test' })
     const result = await service.analyzeImageVibe(imagePath)
-    expect(result).toEqual({ description: 'A stormy coastline at dusk.', tags: ['stormy', 'coastline', 'dusk'] })
+    expect(result).toEqual({
+      description: 'A stormy coastline at dusk.',
+      tags: ['stormy', 'coastline', 'dusk'],
+    })
   })
 
   it('sends the image as base64 with the media type derived from the extension', async () => {
     mockCreate.mockResolvedValue({
       stop_reason: 'end_turn',
-      content: [{ type: 'text', text: JSON.stringify({ description: 'x', tags: ['a'] }) }],
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            description: 'x',
+            tags: ['a'],
+          }),
+        },
+      ],
     })
     const service = withProviderConfig({ provider: 'claude', apiKey: 'sk-test' })
     await service.analyzeImageVibe(imagePath)
@@ -90,14 +111,33 @@ describe('createVisionService', () => {
   it('dispatches to the OpenAI-compatible provider without requiring a key', async () => {
     const fetchImpl = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({ description: 'x', tags: ['a'] }) } }] }),
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                description: 'x',
+                tags: ['a'],
+              }),
+            },
+          },
+        ],
+      }),
     })
     const service = createVisionService({
-      getProviderConfig: async () => ({ provider: 'openai-compatible', apiKey: null, baseUrl: 'http://localhost:11434/v1', model: 'local-vision' }),
+      getProviderConfig: async () => ({
+        provider: 'openai-compatible',
+        apiKey: null,
+        baseUrl: 'http://localhost:11434/v1',
+        model: 'local-vision',
+      }),
       createProvider: config => createOpenAICompatibleVisionProvider({ ...config, fetchImpl }),
     })
     const result = await service.analyzeImageVibe(imagePath)
-    expect(result).toEqual({ description: 'x', tags: ['a'] })
+    expect(result).toEqual({
+      description: 'x',
+      tags: ['a'],
+    })
     expect(mockCreate).not.toHaveBeenCalled()
   })
 })
@@ -120,13 +160,27 @@ describe('createOpenAICompatibleVisionProvider', () => {
   it('posts the image inline as a data URL and requests structured JSON output', async () => {
     const fetchImpl = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({ description: 'A misty swamp.', tags: ['misty', 'swamp'] }) } }] }),
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                description: 'A misty swamp.',
+                tags: ['misty', 'swamp'],
+              }),
+            },
+          },
+        ],
+      }),
     })
     const { instance } = provider({ apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' }, fetchImpl)
 
     const result = await instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })
 
-    expect(result).toEqual({ description: 'A misty swamp.', tags: ['misty', 'swamp'] })
+    expect(result).toEqual({
+      description: 'A misty swamp.',
+      tags: ['misty', 'swamp'],
+    })
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://api.openai.com/v1/chat/completions',
       expect.objectContaining({
@@ -144,7 +198,15 @@ describe('createOpenAICompatibleVisionProvider', () => {
   it('omits the Authorization header when no key is configured', async () => {
     const fetchImpl = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({ description: 'x', tags: [] }) } }] }),
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({ description: 'x', tags: [] }),
+            },
+          },
+        ],
+      }),
     })
     const { instance } = provider({ apiKey: null }, fetchImpl)
     await instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })
@@ -153,7 +215,11 @@ describe('createOpenAICompatibleVisionProvider', () => {
   })
 
   it('reports an HTTP error from the endpoint with a readable message', async () => {
-    const fetchImpl = jest.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'invalid_api_key' })
+    const fetchImpl = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => 'invalid_api_key',
+    })
     const { instance } = provider({ apiKey: 'bad-key' }, fetchImpl)
     await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow(/HTTP 401/)
   })
@@ -167,14 +233,23 @@ describe('createOpenAICompatibleVisionProvider', () => {
   it('reports a non-JSON model response with a readable message', async () => {
     const fetchImpl = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ choices: [{ message: { content: 'not json' } }] }),
+      json: async () => ({
+        choices: [
+          {
+            message: { content: 'not json' },
+          },
+        ],
+      }),
     })
     const { instance } = provider({ apiKey: 'sk-test' }, fetchImpl)
     await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow(/couldn't understand/i)
   })
 
   it('reports a malformed (non-text) model response with a readable message', async () => {
-    const fetchImpl = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [] }) })
+    const fetchImpl = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [] }),
+    })
     const { instance } = provider({ apiKey: 'sk-test' }, fetchImpl)
     await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow(/couldn't understand/i)
   })
@@ -182,7 +257,15 @@ describe('createOpenAICompatibleVisionProvider', () => {
   it('trims a trailing slash from a custom Base URL', async () => {
     const fetchImpl = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({ description: 'x', tags: [] }) } }] }),
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({ description: 'x', tags: [] }),
+            },
+          },
+        ],
+      }),
     })
     const { instance } = provider({ apiKey: 'sk-test', baseUrl: 'http://localhost:11434/v1/' }, fetchImpl)
     await instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })

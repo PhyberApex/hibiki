@@ -33,7 +33,9 @@ async function handleFileSelected(event: Event) {
     emit('resolved', result.id, result.name)
   }
   catch (err) {
-    uploadError.value = err instanceof Error ? err.message : 'Upload failed'
+    uploadError.value = err instanceof Error
+      ? err.message
+      : 'Upload failed'
   }
   finally {
     uploading.value = false

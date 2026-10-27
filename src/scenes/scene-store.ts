@@ -30,7 +30,9 @@ const MUSIC_MODES: readonly MusicMode[] = ['single', 'sequential', 'shuffle']
 
 /** Any stored, imported or Registry-supplied value that is not a known Music Mode reads as `single`. */
 export function normalizeMusicMode(raw: unknown): MusicMode {
-  return MUSIC_MODES.includes(raw as MusicMode) ? raw as MusicMode : 'single'
+  return MUSIC_MODES.includes(raw as MusicMode)
+    ? raw as MusicMode
+    : 'single'
 }
 
 export interface Scene {
@@ -52,7 +54,9 @@ const SCENES_FILENAME = 'scenes.json'
 function getScenesPath(config: Config): string {
   const base = process.env.HIBIKI_USER_DATA
   const dbPath = config.database.path
-  const dir = base ? join(base, 'data') : dirname(dbPath)
+  const dir = base
+    ? join(base, 'data')
+    : dirname(dbPath)
   return join(dir, SCENES_FILENAME)
 }
 
@@ -75,7 +79,9 @@ function normalizeEffects(effects: SceneItem[]): SceneItem[] {
   return effects.map((item) => {
     const { hotkey: raw, ...rest } = item
     const hotkey = normalizeOptionalAccelerator(raw)
-    return hotkey ? { ...rest, hotkey } : rest
+    return hotkey
+      ? { ...rest, hotkey }
+      : rest
   })
 }
 
@@ -105,7 +111,9 @@ export function createSceneStore(config: Config, options: SceneStoreOptions = {}
       const actionHotkeys = await options.getActionHotkeys?.()
       return store.update((scenes) => {
         const now = new Date().toISOString()
-        const existing = scene.id ? scenes.find(s => s.id === scene.id) : null
+        const existing = scene.id
+          ? scenes.find(s => s.id === scene.id)
+          : null
 
         const saved: Scene = {
           id: existing?.id ?? scene.id ?? randomUUID(),
@@ -138,14 +146,18 @@ export function createSceneStore(config: Config, options: SceneStoreOptions = {}
           throw e
         }
         const bound = [
-          ...(saved.hotkey ? [`scene ${saved.hotkey}`] : []),
+          ...(saved.hotkey
+            ? [`scene ${saved.hotkey}`]
+            : []),
           ...saved.effects.filter(e => e.hotkey).map(e => `effect ${e.soundName ?? e.soundId} ${e.hotkey}`),
         ]
         if (bound.length > 0)
           log.info(`Hotkey bindings on scene "${saved.name}" (${saved.id}): ${bound.join(', ')}`)
 
         const next = existing
-          ? scenes.map(s => (s.id === saved.id ? saved : s))
+          ? scenes.map(s => (s.id === saved.id
+              ? saved
+              : s))
           : [...scenes, saved]
         log.info(`${existing ? 'Updated' : 'Created'} scene "${saved.name}" (${saved.id}): ${saved.music.length} music, ${saved.ambience.length} ambience, ${saved.effects.length} effects, Music Mode ${musicMode}`)
         return { next, result: saved }

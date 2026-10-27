@@ -22,15 +22,34 @@ const SCENE_NAME = 'Rainy Tavern'
 // The library names a file by humanizing its id: `tavern-theme.wav` lists as "Tavern Theme".
 const SOUNDS = {
   music: [
-    { id: 'tavern-theme', name: 'Tavern Theme', tags: ['tavern', 'cozy'] },
-    { id: 'battle-drums', name: 'Battle Drums', tags: ['battle', 'epic'] },
+    {
+      id: 'tavern-theme',
+      name: 'Tavern Theme',
+      tags: ['tavern', 'cozy'],
+    },
+    {
+      id: 'battle-drums',
+      name: 'Battle Drums',
+      tags: ['battle', 'epic'],
+    },
   ],
   ambience: [
-    { id: 'stormy-rain', name: 'Stormy Rain', tags: ['rain', 'night'] },
-    { id: 'forest-birds', name: 'Forest Birds', tags: ['forest', 'day'] },
+    {
+      id: 'stormy-rain',
+      name: 'Stormy Rain',
+      tags: ['rain', 'night'],
+    },
+    {
+      id: 'forest-birds',
+      name: 'Forest Birds',
+      tags: ['forest', 'day'],
+    },
   ],
 } as const
-const VIBE = { description: 'A candlelit tavern while rain hammers the shutters.', tags: ['tavern', 'rain'] }
+const VIBE = {
+  description: 'A candlelit tavern while rain hammers the shutters.',
+  tags: ['tavern', 'rain'],
+}
 
 /** A 1x1 PNG: big enough to be a distinctive base64 string in a request body or log. */
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')
@@ -50,9 +69,22 @@ const provider = createServer((req, res) => {
   const chunks: Buffer[] = []
   req.on('data', chunk => chunks.push(chunk))
   req.on('end', () => {
-    providerRequests.push({ url: req.url ?? '', authorization: req.headers.authorization, body: Buffer.concat(chunks).toString('utf8') })
+    providerRequests.push({
+      url: req.url ?? '',
+      authorization: req.headers.authorization,
+      body: Buffer.concat(chunks).toString('utf8'),
+    })
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: JSON.stringify(VIBE) } }] }))
+    res.end(JSON.stringify({
+      choices: [
+        {
+          message: {
+            role: 'assistant',
+            content: JSON.stringify(VIBE),
+          },
+        },
+      ],
+    }))
   })
 })
 
@@ -69,11 +101,21 @@ function seed(): string {
   }
   const now = new Date().toISOString()
   writeFileSync(join(root, 'data', 'scenes.json'), JSON.stringify([
-    { id: SCENE_ID, name: SCENE_NAME, music: [], ambience: [], effects: [], createdAt: now, updatedAt: now },
+    {
+      id: SCENE_ID,
+      name: SCENE_NAME,
+      music: [],
+      ambience: [],
+      effects: [],
+      createdAt: now,
+      updatedAt: now,
+    },
   ]))
   writeFileSync(join(root, 'data', 'sound-tags.json'), JSON.stringify(tags))
   // The launch update check would GET GitHub on every (re)launch; keep the run off the network.
-  writeFileSync(join(root, 'data', 'app-config.json'), JSON.stringify({ updates: JSON.stringify({ enabled: false }) }))
+  writeFileSync(join(root, 'data', 'app-config.json'), JSON.stringify({
+    updates: JSON.stringify({ enabled: false }),
+  }))
   imagePath = join(root, 'battle-map.png')
   writeFileSync(imagePath, PNG)
   return root
@@ -209,7 +251,10 @@ test('Vision to Vibe analyses an image through a keyless OpenAI-compatible serve
   await expect(dialog.getByText(`The image is sent to ${baseUrl}`)).toBeVisible()
   // The native file picker cannot be driven; answer it from the main process instead.
   await app!.evaluate(({ dialog }, path) => {
-    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [path] })) as typeof dialog.showOpenDialog
+    dialog.showOpenDialog = (async () => ({
+      canceled: false,
+      filePaths: [path],
+    })) as typeof dialog.showOpenDialog
   }, imagePath)
   await dialog.getByTestId('vibe-pick-image').click()
 
@@ -225,7 +270,10 @@ test('Vision to Vibe analyses an image through a keyless OpenAI-compatible serve
   expect(request.authorization).toBeUndefined()
   const image = PNG.toString('base64')
   expect(request.body.split(image)).toHaveLength(2)
-  expect(JSON.parse(request.body).messages[0].content).toContainEqual({ type: 'image_url', image_url: { url: `data:image/png;base64,${image}` } })
+  expect(JSON.parse(request.body).messages[0].content).toContainEqual({
+    type: 'image_url',
+    image_url: { url: `data:image/png;base64,${image}` },
+  })
 
   // The analysis is logged, the image and any key are not.
   await expect.poll(logText).toContain('Vision analysis returned 2 tag(s)')

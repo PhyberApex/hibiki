@@ -17,8 +17,14 @@ describe('audioEngine with a Local sink', () => {
   })
 
   it('starts the sink with the first stream, delivers its audio in packets, and stops it after the idle grace', async () => {
-    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] })
-    const sink = { start: jest.fn(), write: jest.fn(), stop: jest.fn() }
+    jest.useFakeTimers({
+      doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'],
+    })
+    const sink = {
+      start: jest.fn(),
+      write: jest.fn(),
+      stop: jest.fn(),
+    }
     engine = new AudioEngine({ localSink: sink })
     expect(engine.isIdle).toBe(true)
 
@@ -42,16 +48,28 @@ describe('audioEngine with a Local sink', () => {
   })
 
   it('stopLocalSink cuts the streams and the sink', () => {
-    const sink = { start: jest.fn(), write: jest.fn(), stop: jest.fn() }
+    const sink = {
+      start: jest.fn(),
+      write: jest.fn(),
+      stop: jest.fn(),
+    }
     engine = new AudioEngine({ localSink: sink })
-    engine.playMusicFromStream(new Readable({ read() {} }), 'm')
+    engine.playMusicFromStream(new Readable({
+      read() {},
+    }), 'm')
     engine.stopLocalSink()
     expect(sink.stop).toHaveBeenCalledTimes(1)
     expect(engine.isIdle).toBe(true)
   })
 
   it('has no voice player', () => {
-    engine = new AudioEngine({ localSink: { start: jest.fn(), write: jest.fn(), stop: jest.fn() } })
+    engine = new AudioEngine({
+      localSink: {
+        start: jest.fn(),
+        write: jest.fn(),
+        stop: jest.fn(),
+      },
+    })
     expect(() => engine.audioPlayer).toThrow()
   })
 })

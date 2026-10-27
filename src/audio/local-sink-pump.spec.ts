@@ -4,9 +4,18 @@ import { MIXER_PACKET_BYTES } from './mixer-feed'
 
 function setup() {
   const source = new PassThrough()
-  const sink = { start: jest.fn(), write: jest.fn(), stop: jest.fn() }
+  const sink = {
+    start: jest.fn(),
+    write: jest.fn(),
+    stop: jest.fn(),
+  }
   const onFailure = jest.fn()
-  return { source, sink, onFailure, pump: new LocalSinkPump(source, sink, onFailure) }
+  return {
+    source,
+    sink,
+    onFailure,
+    pump: new LocalSinkPump(source, sink, onFailure),
+  }
 }
 
 describe('localSinkPump', () => {
