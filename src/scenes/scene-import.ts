@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import AdmZip from 'adm-zip'
 import { createLogger } from '../logger'
+import { isSafeSoundId } from '../sound/sound-id'
 import { createSceneStore, normalizeMusicMode } from './scene-store'
 
 const log = createLogger('scene-import')
@@ -44,25 +45,50 @@ function manifestItemToSceneItem(
   return item
 }
 
-function extractBundledSounds(zip: AdmZip, config: Config): Map<string, string> {
-  const bundledFileIds = new Map<string, string>()
+interface BundledSound {
+  entry: AdmZip.IZipEntry
+  destDir: string
+  filename: string
+  soundId: string
+}
+
+function planBundledSounds(zip: AdmZip, config: Config): BundledSound[] {
+  const planned: BundledSound[] = []
   for (const category of CATEGORIES) {
     const prefix = `${SOUNDS_PREFIX}${category}/`
-    const entries = zip.getEntries().filter(e => !e.isDirectory && e.entryName.startsWith(prefix))
-    if (entries.length === 0)
-      continue
     const destDir = resolveStorageDir(config, category)
-    mkdirSync(destDir, { recursive: true })
-    for (const entry of entries) {
+    for (const entry of zip.getEntries()) {
+      if (entry.isDirectory || !entry.entryName.startsWith(prefix))
+        continue
       const filename = basename(entry.entryName)
       if (filename.startsWith('.'))
         continue
-      writeFileSync(join(destDir, filename), entry.getData())
-      const soundId = filename.replace(extname(filename), '')
-      bundledFileIds.set(entry.entryName, soundId)
+      planned.push({
+        entry,
+        destDir,
+        filename,
+        soundId: filename.replace(extname(filename), ''),
+      })
     }
   }
-  return bundledFileIds
+  return planned
+}
+
+function writeBundledSounds(planned: BundledSound[]): void {
+  for (const { entry, destDir, filename } of planned) {
+    mkdirSync(destDir, { recursive: true })
+    writeFileSync(join(destDir, filename), entry.getData())
+  }
+}
+
+/** A Scene item's sound id is later globbed inside a category folder, so it must be one safe path segment (#637). */
+function assertSafeSoundIds(items: SceneItem[], category: SoundCategory): void {
+  for (const item of items) {
+    if (isSafeSoundId(item.soundId))
+      continue
+    log.warn(`Rejected archive: ${category} item has unsafe sound id ${JSON.stringify(item.soundId)}`)
+    throw new Error(`Invalid hibiki-scene.json: ${category} item '${String(item.soundId)}' is not a valid sound id`)
+  }
 }
 
 export async function importScene(config: Config, sourceZipPath: string): Promise<Scene> {
@@ -79,7 +105,16 @@ export async function importScene(config: Config, sourceZipPath: string): Promis
     throw new Error('Invalid hibiki-scene.json: missing scene data')
 
   const scenes = createSceneStore(config)
-  const bundledFileIds = extractBundledSounds(zip, config)
+  const bundled = planBundledSounds(zip, config)
+  const bundledFileIds = new Map(bundled.map(b => [b.entry.entryName, b.soundId]))
+  const items = {
+    ambience: manifest.scene.ambience.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
+    music: manifest.scene.music.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
+    effects: manifest.scene.effects.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
+  }
+  for (const category of CATEGORIES)
+    assertSafeSoundIds(items[category], category)
+  writeBundledSounds(bundled)
 
   const existing = await scenes.list()
   const existingNames = new Set(existing.map(s => s.name.toLowerCase()))
@@ -92,9 +127,7 @@ export async function importScene(config: Config, sourceZipPath: string): Promis
 
   const scene: Omit<Scene, 'id' | 'createdAt' | 'updatedAt'> = {
     name,
-    ambience: manifest.scene.ambience.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
-    music: manifest.scene.music.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
-    effects: manifest.scene.effects.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
+    ...items,
     musicMode: normalizeMusicMode(manifest.scene.musicMode),
   }
   const saved = await scenes.save(scene)

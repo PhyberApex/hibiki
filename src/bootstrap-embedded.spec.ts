@@ -635,6 +635,22 @@ describe('getEmbeddedApp', () => {
       expect(services.sounds.getFilePath).toHaveBeenCalledWith('music', 'm1')
       expect(services.sounds.canDecode).toHaveBeenCalledWith('music', 'm1')
     })
+
+    it('rejects an unknown category before touching the library or any Scene', async () => {
+      const bogus = 'bogus' as never
+      await expect(api.sounds.deleteSound(bogus, 'a1')).rejects.toThrow('Invalid sound category \'bogus\'')
+      await expect(api.sounds.getFilePath(bogus, 'a1')).rejects.toThrow('Invalid sound category')
+      await expect(api.sounds.canDecode(bogus, 'a1')).rejects.toThrow('Invalid sound category')
+      await expect(api.sounds.setTags(bogus, 'a1', [])).rejects.toThrow('Invalid sound category')
+      await expect(api.sounds.uploadSound(bogus, Buffer.from([1]), 'x.mp3')).rejects.toThrow('Invalid sound category')
+
+      expect(services.sounds.remove).not.toHaveBeenCalled()
+      expect(services.scenes.removeSoundFromAll).not.toHaveBeenCalled()
+      expect(services.sounds.getFilePath).not.toHaveBeenCalled()
+      expect(services.sounds.canDecode).not.toHaveBeenCalled()
+      expect(services.sounds.setTags).not.toHaveBeenCalled()
+      expect(services.sounds.save).not.toHaveBeenCalled()
+    })
   })
 
   describe('scenes and registry', () => {

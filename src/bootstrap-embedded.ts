@@ -35,6 +35,7 @@ import { exportScene } from './scenes/scene-export'
 import { importScene } from './scenes/scene-import'
 import { createSceneRegistry, REGISTRY_INDEX_URL, resolveRegistryIndexUrl } from './scenes/scene-registry'
 import { createSceneStore } from './scenes/scene-store'
+import { isSoundCategory } from './sound/sound-id'
 import { createSoundLibrary } from './sound/sound-library'
 import { createUpdateCheck } from './updates/update-check'
 import { buildUserAgent, createUmamiSender, createUsageStats, resolveUsageStatsHost, USAGE_STATS_HOST, USAGE_STATS_WEBSITE_ID } from './usage-stats/usage-stats'
@@ -184,6 +185,14 @@ export interface EmbeddedApp {
  * it ahead of destroying the Discord client.
  */
 const log = createLogger('hibiki')
+
+/** IPC hands us whatever the renderer sent; an unknown category must not fall through to a real folder (#637). */
+function checkSoundCategory(type: unknown, method: string): asserts type is SoundCategory {
+  if (isSoundCategory(type))
+    return
+  log.warn(`sounds.${method} rejected unknown category ${JSON.stringify(type)}`)
+  throw new Error(`Invalid sound category '${String(type)}'`)
+}
 
 /**
  * `@snazzah/davey` (Discord's end-to-end voice encryption) silently falls
@@ -420,22 +429,34 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       listMusic: () => sounds.list('music'),
       listEffects: () => sounds.list('effects'),
       listAmbience: () => sounds.list('ambience'),
-      uploadSound: (type, bufferOrArrayBuffer: Buffer | ArrayBuffer, originalname: string) =>
-        sounds.save(type, {
+      uploadSound: async (type, bufferOrArrayBuffer: Buffer | ArrayBuffer, originalname: string) => {
+        checkSoundCategory(type, 'uploadSound')
+        return sounds.save(type, {
           buffer: Buffer.isBuffer(bufferOrArrayBuffer)
             ? bufferOrArrayBuffer
             : Buffer.from(bufferOrArrayBuffer),
           originalname,
-        }),
+        })
+      },
       deleteSound: async (type, id) => {
+        checkSoundCategory(type, 'deleteSound')
         await sounds.remove(type, id)
         await scenes.removeSoundFromAll(type, id)
       },
-      getFilePath: (type, id) => sounds.getFilePath(type, id),
-      setTags: (type, id, tags) => sounds.setTags(type, id, Array.isArray(tags)
-        ? tags
-        : []),
-      canDecode: (type, id) => sounds.canDecode(type, id),
+      getFilePath: async (type, id) => {
+        checkSoundCategory(type, 'getFilePath')
+        return sounds.getFilePath(type, id)
+      },
+      setTags: async (type, id, tags) => {
+        checkSoundCategory(type, 'setTags')
+        return sounds.setTags(type, id, Array.isArray(tags)
+          ? tags
+          : [])
+      },
+      canDecode: async (type, id) => {
+        checkSoundCategory(type, 'canDecode')
+        return sounds.canDecode(type, id)
+      },
     },
     scenes: {
       list: () => scenes.list(),
