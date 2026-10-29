@@ -450,7 +450,7 @@ export class GuildAudioManager extends EventEmitter {
       const volume = isRestart
         ? this.musicStreams.get(streamId)?.volume ?? options.volume
         : options.volume
-      log.info(`Music "${metadata.name}" ${isRestart ? 'restarting' : 'starting'} as ${streamId}: volume ${volume}, loop ${loop}, fadeIn ${startFadeMs} ms; ${this.encryptionSummary}`)
+      log.info(`Music "${metadata.name}" starting as ${streamId}${isRestart ? ' (loop restart)' : ''}: volume ${volume}, loop ${loop}, fadeIn ${startFadeMs} ms; ${this.encryptionSummary}`)
       this.musicStreams.set(streamId, { metadata, seq, loop, volume })
       this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0
         ? 0
