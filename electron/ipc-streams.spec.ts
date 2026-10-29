@@ -316,6 +316,23 @@ describe('registerApiHandler', () => {
     expect(spies.error).toHaveBeenCalledWith('[ipc]', 'Unknown API: player.nope')
   })
 
+  it.each([
+    ['__proto__', 'hasOwnProperty'],
+    ['constructor', 'assign'],
+    ['player', 'constructor'],
+    ['player', 'toString'],
+    ['player', '__proto__'],
+  ])('rejects the inherited %s.%s', async (domain, method) => {
+    const ipc = fakeIpcMain()
+    registerApiHandler(ipc, {
+      player: {
+        join: jest.fn(),
+      },
+    }, () => null)
+
+    await expect(ipc.invoke('api', { domain, method, args: [] })).rejects.toThrow(`Unknown API: ${domain}.${method}`)
+  })
+
   it('logs and rethrows a failing call', async () => {
     const ipc = fakeIpcMain()
     const err = new Error('boom')

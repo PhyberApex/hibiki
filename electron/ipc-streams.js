@@ -36,8 +36,11 @@ function createLocalSink(getWindow) {
 /** The generic `api` channel: dispatches `{ domain, method, args }` to the `EmbeddedApi` and logs every failed call. */
 function registerApiHandler(ipcMain, api, getHotkeys) {
   ipcMain.handle('api', async (_, { domain, method, args }) => {
-    const obj = api[domain]
-    if (!obj || typeof obj[method] !== 'function') {
+    // Own properties only: `__proto__`, `constructor` and inherited methods are not part of the API.
+    const obj = Object.hasOwn(api, domain)
+      ? api[domain]
+      : undefined
+    if (!obj || !Object.hasOwn(obj, method) || typeof obj[method] !== 'function') {
       ipcLog.error(`Unknown API: ${domain}.${method}`)
       throw new Error(`Unknown API: ${domain}.${method}`)
     }
