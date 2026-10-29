@@ -333,7 +333,11 @@ describe('createWavPcmStream', () => {
     const path = writeTemp(buildWav({
       data: Buffer.alloc(MIXER_SAMPLE_RATE * 4),
     }))
-    const close = jest.fn()
+    let closed!: () => void
+    const handleClosed = new Promise<void>((resolve) => {
+      closed = resolve
+    })
+    const close = jest.fn(() => closed())
     const realOpen = jest.requireActual<typeof import('node:fs/promises')>('node:fs/promises').open
     jest.mocked(open).mockImplementationOnce(async (...args) => {
       const handle = await realOpen(...args)
@@ -351,7 +355,8 @@ describe('createWavPcmStream', () => {
     expect(close).not.toHaveBeenCalled()
 
     stream.destroy()
-    await new Promise(resolve => setTimeout(resolve, 20))
+    await handleClosed
+    await new Promise(resolve => setImmediate(resolve))
 
     expect(close).toHaveBeenCalledTimes(1)
   })

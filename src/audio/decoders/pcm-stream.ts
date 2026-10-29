@@ -72,7 +72,7 @@ export function createProducerStream(
         return
       }
       if (aborted) {
-        log.debug(`${label} failed after destroy:`, err)
+        log.warn(`${label} failed after destroy:`, err)
         return
       }
       stream.destroy(err instanceof Error
