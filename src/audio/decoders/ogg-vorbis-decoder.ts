@@ -1,4 +1,5 @@
 import type { Readable } from 'node:stream'
+import { basename } from 'node:path'
 import { OggVorbisDecoder } from '@wasm-audio-decoders/ogg-vorbis'
 import { createProducerStream } from './pcm-stream'
 import { readFileChunks } from './read-chunks'
@@ -18,5 +19,5 @@ export function createOggVorbisPcmStream(filePath: string): Readable {
     finally {
       decoder.free()
     }
-  })
+  }, `ogg-vorbis ${basename(filePath)}`)
 }

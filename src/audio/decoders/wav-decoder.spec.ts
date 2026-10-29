@@ -1,9 +1,18 @@
 import type { Readable } from 'node:stream'
 import { mkdtempSync, writeFileSync } from 'node:fs'
+import { open } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MIXER_SAMPLE_RATE } from './pcm-resample'
 import { createWavPcmStream, probeWav } from './wav-decoder'
+
+jest.mock('node:fs/promises', () => {
+  const actual = jest.requireActual('node:fs/promises')
+  return {
+    ...actual,
+    open: jest.fn(actual.open),
+  }
+})
 
 const PCM = 1
 const ADPCM = 2
@@ -317,5 +326,33 @@ describe('createWavPcmStream', () => {
     })))
       .rejects
       .toThrow(`Unsupported WAV format: tag ${formatTag}, ${bitsPerSample}-bit`)
+  })
+
+  it('closes the file handle when destroyed mid-decode', async () => {
+    // One second of 48 kHz stereo, far past the stream's highWaterMark, so the producer parks in push.
+    const path = writeTemp(buildWav({
+      data: Buffer.alloc(MIXER_SAMPLE_RATE * 4),
+    }))
+    const close = jest.fn()
+    const realOpen = jest.requireActual<typeof import('node:fs/promises')>('node:fs/promises').open
+    jest.mocked(open).mockImplementationOnce(async (...args) => {
+      const handle = await realOpen(...args)
+      const realClose = handle.close.bind(handle)
+      handle.close = () => {
+        close()
+        return realClose()
+      }
+      return handle
+    })
+
+    const stream = createWavPcmStream(path)
+    await new Promise(resolve => stream.once('readable', resolve))
+    await new Promise(resolve => setImmediate(resolve))
+    expect(close).not.toHaveBeenCalled()
+
+    stream.destroy()
+    await new Promise(resolve => setTimeout(resolve, 20))
+
+    expect(close).toHaveBeenCalledTimes(1)
   })
 })

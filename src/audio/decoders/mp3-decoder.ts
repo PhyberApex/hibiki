@@ -1,5 +1,6 @@
 import type { Readable } from 'node:stream'
 import { open } from 'node:fs/promises'
+import { basename } from 'node:path'
 import { MPEGDecoder } from 'mpg123-decoder'
 import { createProducerStream } from './pcm-stream'
 import { readFileChunks } from './read-chunks'
@@ -38,5 +39,5 @@ export function createMp3PcmStream(filePath: string): Readable {
     finally {
       decoder.free()
     }
-  })
+  }, `mp3 ${basename(filePath)}`)
 }
