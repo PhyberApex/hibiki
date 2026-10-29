@@ -206,10 +206,12 @@ describe('feedMixerInput', () => {
       const onEnded = jest.fn()
       feedMixerInput(source, input, { onEnded })
 
-      source.destroy(new Error('decode failed'))
+      const err = new Error('decode failed')
+      source.destroy(err)
       await flush()
 
       expect(onEnded).toHaveBeenCalledTimes(1)
+      expect(onEnded).toHaveBeenCalledWith(err)
     })
 
     it('does not fire, and stops writing, after stop()', async () => {

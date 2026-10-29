@@ -189,23 +189,23 @@ export class AudioEngine {
   /**
    * Starts `stream` as the music stream under `streamId` (replacing any
    * stream already under that id). `onEnded` fires once the stream has
-   * played out through the mixer, or errored; never after a stop or a
-   * replacement.
+   * played out through the mixer, or errored (then with the error); never
+   * after a stop or a replacement.
    */
-  playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.music, onEnded?: () => void) {
+  playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.music, onEnded?: (err?: Error) => void) {
     this.stopMusicStream(streamId)
     log.debug(`Mixer input opened for ${streamId ?? '(default)'} at volume ${CLAMP(initialVolume)}`)
-    const active = this.spawnInputFromStream(stream, CLAMP(initialVolume), (ended) => {
+    const active = this.spawnInputFromStream(stream, streamId ?? '(default)', CLAMP(initialVolume), (ended, err) => {
       if (this.musicStreams.get(streamId) !== ended)
         return
-      log.debug(`Mixer input for ${streamId ?? '(default)'} drained`)
+      log.debug(`Mixer input for ${streamId ?? '(default)'} ${err ? 'closed after a source error' : 'drained'}`)
       // A ramp still running would keep writing params to a destroyed input and then fire its onDone for a gone stream (#642).
       ended.cancelRamp?.()
       ended.cancelRamp = undefined
       ended.input.destroy()
       this.musicStreams.delete(streamId)
       this.syncLocalSink()
-      onEnded?.()
+      onEnded?.(err)
     })
     this.musicStreams.set(streamId, active)
     this.syncLocalSink()
@@ -220,7 +220,7 @@ export class AudioEngine {
   playEffectFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.effects) {
     const id = streamId ?? `effect-${++this.anonymousEffectSeq}`
     log.debug(`Effect mixer input opened for ${id} at volume ${CLAMP(initialVolume)}`)
-    const effectStream = this.spawnInputFromStream(stream, CLAMP(initialVolume), (ended) => {
+    const effectStream = this.spawnInputFromStream(stream, id, CLAMP(initialVolume), (ended) => {
       ended.input.destroy()
       if (this.effectStreams.get(id) === ended)
         this.effectStreams.delete(id)
@@ -313,7 +313,7 @@ export class AudioEngine {
     this.mixerOutput?.destroy()
   }
 
-  private spawnInputFromStream(stream: Readable, volume: number, onEnded: (active: ActiveStream) => void): ActiveStream {
+  private spawnInputFromStream(stream: Readable, label: string, volume: number, onEnded: (active: ActiveStream, err?: Error) => void): ActiveStream {
     const input = this.mixer.createAudioInput({
       sampleRate: 48000,
       channels: 2,
@@ -330,7 +330,8 @@ export class AudioEngine {
       },
     }
     active.feed = feedMixerInput(stream, input, {
-      onEnded: () => onEnded(active),
+      label,
+      onEnded: err => onEnded(active, err),
     })
     return active
   }

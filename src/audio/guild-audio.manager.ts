@@ -458,9 +458,16 @@ export class GuildAudioManager extends EventEmitter {
         return
       }
 
-      const onEnded = () => {
+      const onEnded = (err?: Error) => {
         if (this.musicStreams.get(streamId)?.seq !== seq)
           return
+        // An errored source (file deleted, drive unplugged, corrupt) would
+        // fail the same way on every restart, so it ends the track (#644).
+        if (err) {
+          log.warn(`Music "${metadata.name}" (${metadata.id}, ${streamId}) stopped: its source errored (guild ${this.guildId}):`, err)
+          this.clearBackendTrack(streamId)
+          return
+        }
         if (loop) {
           log.debug(`Music ${streamId} reached its end; looping`)
           startStream(0, true).catch((err) => {
@@ -614,11 +621,17 @@ export class GuildAudioManager extends EventEmitter {
         return
       }
 
-      const onEnded = () => {
+      const onEnded = (err?: Error) => {
         if (this.ambienceGenerations.get(soundId) !== myGeneration)
           return
         if (this.ambienceEntries.get(soundId) !== entry)
           return
+        // Same as Music: an errored source would fail again on restart (#644).
+        if (err) {
+          log.warn(`Ambience ${soundId} (${streamId}) stopped: its source errored (guild ${this.guildId}):`, err)
+          this.clearAmbienceEntry(soundId, entry)
+          return
+        }
         if (entry.loop) {
           startStream(0, true).catch((err) => {
             log.error('Failed to restart looping ambience:', err)
