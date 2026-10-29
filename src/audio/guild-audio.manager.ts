@@ -217,7 +217,7 @@ export class GuildAudioManager extends EventEmitter {
       return this.connection
     }
 
-    this.destroyConnection()
+    this.destroyOwnConnection(this.connection)
 
     const voiceOptions = resolveVoiceOptions()
     const connection = joinVoiceChannel({
@@ -318,9 +318,7 @@ export class GuildAudioManager extends EventEmitter {
     if (this.connection !== connection || this.intentionalTeardown)
       return
     log.warn(`Voice connection was destroyed externally; stopping all playback (guild ${this.guildId})`)
-    this.stopAllMusic()
-    this.stopAllAmbience()
-    this.stopAllEffects()
+    this.stopEverything()
     this.connection = undefined
     this.channelName = undefined
     this.destroyEngine('teardown')
@@ -351,10 +349,6 @@ export class GuildAudioManager extends EventEmitter {
     this.withIntentionalTeardown(() => connection.destroy())
   }
 
-  private destroyConnection() {
-    this.destroyOwnConnection(this.connection)
-  }
-
   /**
    * Shuts the engine down once this manager gives up its connection: the
    * mixer's read loop otherwise reschedules itself every 1 ms forever (#643).
@@ -370,9 +364,7 @@ export class GuildAudioManager extends EventEmitter {
   disconnect() {
     log.info(`Leaving voice channel (guild ${this.guildId})`)
     this.clearEncryptionRecheck()
-    this.stopAllMusic()
-    this.stopAllAmbience()
-    this.stopAllEffects()
+    this.stopEverything()
     try {
       this.destroyOwnConnection(getVoiceConnection(this.guildId))
     }
@@ -386,9 +378,7 @@ export class GuildAudioManager extends EventEmitter {
 
   destroy() {
     this.clearEncryptionRecheck()
-    this.stopAllMusic()
-    this.stopAllAmbience()
-    this.stopAllEffects()
+    this.stopEverything()
     try {
       this.destroyOwnConnection(this.connection)
     }
