@@ -55,6 +55,8 @@ test.afterAll(async () => {
 })
 
 test('the About GitHub link opens the system browser, not a second window', async () => {
+  // A fresh profile opens on the Welcome screen, which has no footer.
+  await page.goto('hibiki://app/scenes')
   await page.getByRole('link', { name: 'About', exact: true }).click()
   await page.getByRole('link', { name: 'GitHub', exact: true }).click()
 

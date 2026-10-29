@@ -5,7 +5,7 @@ const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, pr
 const { createHotkeys } = require('./hotkeys')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createLogger, setupFileLogging } = require('./logger')
-const { guardMainWindowNavigation } = require('./navigation-guard')
+const { guardMainWindowNavigation, isWebUrl } = require('./navigation-guard')
 const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
@@ -508,7 +508,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('logs:openFolder', () => shell.openPath(logging.logsDir))
 
   ipcMain.handle('shell:openExternal', (_, url) => {
-    if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://')))
+    if (isWebUrl(url))
       return shell.openExternal(url)
   })
 

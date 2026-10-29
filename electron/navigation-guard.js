@@ -19,6 +19,11 @@ function describeUrl(url) {
   }
 }
 
+/** Whether `url` is a web page the system browser should open; the only kind Hibiki ever hands to `shell.openExternal`. */
+function isWebUrl(url) {
+  return typeof url === 'string' && /^https?:\/\//i.test(url)
+}
+
 /** Scheme and host of `url`; `URL#origin` is `'null'` for custom schemes like `hibiki:`. */
 function schemeAndHost(url) {
   try {
@@ -42,7 +47,7 @@ function guardMainWindowNavigation(webContents, { appUrl, openExternal }) {
   const appOrigin = schemeAndHost(appUrl)
 
   webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/i.test(url)) {
+    if (isWebUrl(url)) {
       log.info(`Opening ${describeUrl(url)} in the system browser`)
       Promise.resolve(openExternal(url)).catch(err => log.warn(`Could not open ${describeUrl(url)} in the system browser`, err))
     }
@@ -60,4 +65,4 @@ function guardMainWindowNavigation(webContents, { appUrl, openExternal }) {
   })
 }
 
-module.exports = { describeUrl, guardMainWindowNavigation }
+module.exports = { describeUrl, guardMainWindowNavigation, isWebUrl }

@@ -1,4 +1,4 @@
-import { describeUrl, guardMainWindowNavigation } from './navigation-guard'
+import { describeUrl, guardMainWindowNavigation, isWebUrl } from './navigation-guard'
 
 const spies = {
   info: jest.spyOn(console, 'info').mockImplementation(() => {}),
@@ -118,5 +118,15 @@ describe('describeUrl', () => {
     expect(describeUrl('https://example.com:8443/a?b=c')).toBe('https://example.com:8443')
     expect(describeUrl('file:///etc/passwd')).toBe('file:')
     expect(describeUrl('nonsense')).toBe('an unparseable URL')
+  })
+})
+
+describe('isWebUrl', () => {
+  it('accepts only http(s) URLs', () => {
+    expect(isWebUrl('https://example.com')).toBe(true)
+    expect(isWebUrl('HTTP://example.com')).toBe(true)
+    expect(isWebUrl('file:///etc/passwd')).toBe(false)
+    expect(isWebUrl('https:evil')).toBe(false)
+    expect(isWebUrl(42)).toBe(false)
   })
 })
