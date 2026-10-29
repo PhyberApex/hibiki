@@ -1,4 +1,5 @@
 import type { Readable } from 'node:stream'
+import { basename } from 'node:path'
 import { OggOpusDecoder } from 'ogg-opus-decoder'
 import { createProducerStream } from './pcm-stream'
 import { readFileChunks } from './read-chunks'
@@ -23,5 +24,5 @@ export function createOggOpusPcmStream(filePath: string): Readable {
     finally {
       decoder.free()
     }
-  })
+  }, `ogg-opus ${basename(filePath)}`)
 }

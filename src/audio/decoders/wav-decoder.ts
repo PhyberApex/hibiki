@@ -1,6 +1,7 @@
 import type { FileHandle } from 'node:fs/promises'
 import type { Readable } from 'node:stream'
 import { open } from 'node:fs/promises'
+import { basename } from 'node:path'
 import { PcmResampler } from './pcm-resample'
 import { createProducerStream } from './pcm-stream'
 
@@ -156,5 +157,5 @@ export function createWavPcmStream(filePath: string): Readable {
     finally {
       await handle.close()
     }
-  })
+  }, `wav ${basename(filePath)}`)
 }

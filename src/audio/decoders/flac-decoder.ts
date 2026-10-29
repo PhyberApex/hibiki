@@ -1,5 +1,6 @@
 import type { Readable } from 'node:stream'
 import { open } from 'node:fs/promises'
+import { basename } from 'node:path'
 import { FLACDecoder } from '@wasm-audio-decoders/flac'
 import { createProducerStream } from './pcm-stream'
 import { readFileChunks } from './read-chunks'
@@ -35,5 +36,5 @@ export function createFlacPcmStream(filePath: string): Readable {
     finally {
       decoder.free()
     }
-  })
+  }, `flac ${basename(filePath)}`)
 }
