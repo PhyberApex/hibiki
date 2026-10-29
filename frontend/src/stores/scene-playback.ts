@@ -182,6 +182,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // jump, a Target switch): an advance or skip chain started before then must
   // not start anything afterwards.
   let musicIntent = 0
+  // Bumped by every Scene start, Stop and Scene Crossfade: a Scene start-up
+  // still awaiting its Ambience must not start anything once overtaken.
+  let sceneStartSeq = 0
 
   function getAmbienceAudio(soundId: string): HTMLAudioElement {
     let el = ambienceAudioEls.get(soundId)
@@ -901,16 +904,27 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     if (!canPlay.value || !targetId.value)
       return
     stopScene()
+    const start = ++sceneStartSeq
+    const intent = musicIntent
+    const superseded = () => {
+      if (start === sceneStartSeq)
+        return false
+      logInfo(`[scene] play Scene ${target.id} superseded, aborting start-up`)
+      return true
+    }
     player.setPlayingScene(target.id, targetId.value)
     logInfo(`[scene] play Scene ${target.id} on Target ${targetId.value}`)
     sceneTransitionFlash.trigger(SCENE_START_FLASH)
     try {
-      for (const item of target.ambience.filter(a => a.enabled))
+      for (const item of target.ambience.filter(a => a.enabled)) {
         await playAmbience(item)
+        if (superseded())
+          return
+      }
       const mode = normalizeMusicMode(target.musicMode)
       const first = selectFirstTrack(mode, target.music.map(m => m.soundId))
       if (first)
-        await startMusicFrom(target, mode, first, startMusicDirect, musicIntent)
+        await startMusicFrom(target, mode, first, startMusicDirect, intent)
     }
     catch (e) {
       console.error('[scene] playScene failed:', e)
@@ -925,6 +939,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // losing voice, and ambience/music toggled individually (never via Play)
   // when the GM leaves the open Scene.
   function stopScene() {
+    sceneStartSeq++
     pendingHandoverSceneId.value = null
     for (const soundId of [...playingAmbienceIds.value])
       stopAmbience(soundId)
@@ -1189,6 +1204,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     if (!target)
       return
     const durationMs = await sceneFadeMs()
+    sceneStartSeq++
     player.setPlayingScene(target.id, targetId.value)
     trackScenePlay(target)
     sceneTransitionFlash.trigger(SCENE_START_FLASH)

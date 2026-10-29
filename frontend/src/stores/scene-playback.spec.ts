@@ -117,6 +117,116 @@ describe('scene playback store', () => {
     expect(store.playingMusicId).toBeNull()
   })
 
+  describe('a Stop or a second Play during Scene start-up', () => {
+    const twoAmbienceScene: Scene = {
+      ...scene,
+      createdAt: '',
+      updatedAt: '',
+      ambience: [
+        ...scene.ambience,
+        {
+          soundId: 'amb-2',
+          soundName: 'Wind',
+          volume: 80,
+          enabled: true,
+        },
+      ],
+    }
+    const otherScene: Scene = {
+      ...scene,
+      createdAt: '',
+      updatedAt: '',
+      id: 's2',
+      name: 'Tavern',
+      ambience: [
+        {
+          soundId: 'amb-3',
+          soundName: 'Crowd',
+          volume: 80,
+          enabled: true,
+        },
+      ],
+      music: [
+        {
+          soundId: 'mus-2',
+          soundName: 'Jig',
+          volume: 100,
+          loop: true,
+        },
+      ],
+    }
+
+    function holdFirstAmbience() {
+      let release!: () => void
+      vi.mocked(playAmbience).mockReturnValueOnce(new Promise<void>((resolve) => {
+        release = resolve
+      }))
+      return () => release()
+    }
+
+    function setupStore() {
+      const store = useScenePlaybackStore()
+      store.musicSounds = [
+        { id: 'mus-1', name: 'Theme', filename: 'theme.mp3' },
+        { id: 'mus-2', name: 'Jig', filename: 'jig.mp3' },
+      ] as never
+      return store
+    }
+
+    it('a Stop while the first Ambience is starting leaves the rest of the Scene unstarted', async () => {
+      const store = setupStore()
+      const release = holdFirstAmbience()
+
+      const starting = store.playScene(twoAmbienceScene)
+      await vi.waitFor(() => expect(playAmbience).toHaveBeenCalledTimes(1))
+      store.stopScene()
+      release()
+      await starting
+
+      expect(vi.mocked(playAmbience).mock.calls.map(c => c[1])).toEqual(['amb-1'])
+      expect(playMusic).not.toHaveBeenCalled()
+      expect(store.playingMusicId).toBeNull()
+      expect(store.musicSceneId).toBeNull()
+      expect(usePlayerStore().playingSceneId).toBeNull()
+    })
+
+    it('a second Play while the first Scene is starting ends with only the second Scene\'s Music', async () => {
+      const store = setupStore()
+      const release = holdFirstAmbience()
+
+      const startingA = store.playScene(twoAmbienceScene)
+      await vi.waitFor(() => expect(playAmbience).toHaveBeenCalledTimes(1))
+      await store.playScene(otherScene)
+      release()
+      await startingA
+
+      expect(vi.mocked(playAmbience).mock.calls.map(c => c[1])).toEqual(['amb-1', 'amb-3'])
+      expect(vi.mocked(playMusic).mock.calls.map(c => c[1])).toEqual(['mus-2'])
+      expect(store.playingMusicId).toBe('mus-2')
+      expect(store.musicSceneId).toBe('s2')
+      expect(usePlayerStore().playingSceneId).toBe('s2')
+    })
+
+    it('a Scene Crossfade while the first Scene is starting ends with only the crossfaded Scene\'s Music', async () => {
+      const { getScene } = await import('@/api/scenes')
+      vi.mocked(getScene).mockResolvedValue(otherScene)
+      const store = setupStore()
+      const release = holdFirstAmbience()
+
+      const startingA = store.playScene(twoAmbienceScene)
+      await vi.waitFor(() => expect(playAmbience).toHaveBeenCalledTimes(1))
+      await store.crossfadeToScene('s2')
+      release()
+      await startingA
+      await flushPromises()
+
+      expect(vi.mocked(playAmbience).mock.calls.map(c => c[1])).not.toContain('amb-2')
+      expect(vi.mocked(playMusic).mock.calls.map(c => c[1])).toEqual(['mus-2'])
+      expect(store.musicSceneId).toBe('s2')
+      expect(usePlayerStore().playingSceneId).toBe('s2')
+    })
+  })
+
   it('toggles one Ambience sound and triggers one Effect', async () => {
     const store = useScenePlaybackStore()
     const item = { ...scene.ambience[0] }
