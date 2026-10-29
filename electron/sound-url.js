@@ -1,3 +1,5 @@
+// Mirrors SOUND_CATEGORIES and isSafeSoundId in src/sound/sound-id.ts, which
+// main cannot require before the backend is built; keep them in step.
 const SOUND_TYPES = ['music', 'effects', 'ambience']
 
 /**

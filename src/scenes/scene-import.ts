@@ -6,15 +6,13 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import AdmZip from 'adm-zip'
 import { createLogger } from '../logger'
-import { isSafeSoundId } from '../sound/sound-id'
+import { isSafeSoundId, SOUND_CATEGORIES } from '../sound/sound-id'
 import { createSceneStore, normalizeMusicMode } from './scene-store'
 
 const log = createLogger('scene-import')
 
 const MANIFEST_JSON = 'hibiki-scene.json'
 const SOUNDS_PREFIX = 'sounds/'
-
-const CATEGORIES: SoundCategory[] = ['music', 'effects', 'ambience']
 
 function resolveStorageDir(config: Config, category: SoundCategory): string {
   return category === 'music'
@@ -54,7 +52,7 @@ interface BundledSound {
 
 function planBundledSounds(zip: AdmZip, config: Config): BundledSound[] {
   const planned: BundledSound[] = []
-  for (const category of CATEGORIES) {
+  for (const category of SOUND_CATEGORIES) {
     const prefix = `${SOUNDS_PREFIX}${category}/`
     const destDir = resolveStorageDir(config, category)
     for (const entry of zip.getEntries()) {
@@ -107,13 +105,11 @@ export async function importScene(config: Config, sourceZipPath: string): Promis
   const scenes = createSceneStore(config)
   const bundled = planBundledSounds(zip, config)
   const bundledFileIds = new Map(bundled.map(b => [b.entry.entryName, b.soundId]))
-  const items = {
-    ambience: manifest.scene.ambience.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
-    music: manifest.scene.music.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
-    effects: manifest.scene.effects.map(pkg => manifestItemToSceneItem(pkg, bundledFileIds)),
-  }
-  for (const category of CATEGORIES)
+  const items = {} as Record<SoundCategory, SceneItem[]>
+  for (const category of SOUND_CATEGORIES) {
+    items[category] = manifest.scene[category].map(pkg => manifestItemToSceneItem(pkg, bundledFileIds))
     assertSafeSoundIds(items[category], category)
+  }
   writeBundledSounds(bundled)
 
   const existing = await scenes.list()

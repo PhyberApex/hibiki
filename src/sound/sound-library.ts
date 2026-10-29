@@ -11,16 +11,18 @@ import { createSoundTagsStore } from './sound-tags.store'
 
 const log = createLogger('sounds')
 
+const CATEGORY_DIRS = {
+  music: 'musicDir',
+  effects: 'effectsDir',
+  ambience: 'ambienceDir',
+} as const satisfies Record<SoundCategory, keyof Config['audio']>
+
 function resolvePath(config: Config, category: SoundCategory, filename?: string): string {
   if (!isSoundCategory(category)) {
     log.warn(`Rejected unknown sound category ${JSON.stringify(category)}`)
     throw new Error(`Invalid sound category '${String(category)}'`)
   }
-  const base = category === 'music'
-    ? config.audio.musicDir
-    : category === 'effects'
-      ? config.audio.effectsDir
-      : config.audio.ambienceDir
+  const base = config.audio[CATEGORY_DIRS[category]]
   if (!filename)
     return base
   const filePath = join(base, filename)

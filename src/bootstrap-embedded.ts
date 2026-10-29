@@ -186,12 +186,13 @@ export interface EmbeddedApp {
  */
 const log = createLogger('hibiki')
 
-/** IPC hands us whatever the renderer sent; an unknown category must not fall through to a real folder (#637). */
-function checkSoundCategory(type: unknown, method: string): asserts type is SoundCategory {
-  if (isSoundCategory(type))
-    return
-  log.warn(`sounds.${method} rejected unknown category ${JSON.stringify(type)}`)
-  throw new Error(`Invalid sound category '${String(type)}'`)
+/**
+ * IPC hands us whatever the renderer sent; an unknown category must not fall
+ * through to a real folder (#637). The `api` handler logs the thrown error.
+ */
+function checkSoundCategory(type: unknown): asserts type is SoundCategory {
+  if (!isSoundCategory(type))
+    throw new Error(`Invalid sound category '${String(type)}'`)
 }
 
 /**
@@ -430,7 +431,7 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       listEffects: () => sounds.list('effects'),
       listAmbience: () => sounds.list('ambience'),
       uploadSound: async (type, bufferOrArrayBuffer: Buffer | ArrayBuffer, originalname: string) => {
-        checkSoundCategory(type, 'uploadSound')
+        checkSoundCategory(type)
         return sounds.save(type, {
           buffer: Buffer.isBuffer(bufferOrArrayBuffer)
             ? bufferOrArrayBuffer
@@ -439,22 +440,22 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
         })
       },
       deleteSound: async (type, id) => {
-        checkSoundCategory(type, 'deleteSound')
+        checkSoundCategory(type)
         await sounds.remove(type, id)
         await scenes.removeSoundFromAll(type, id)
       },
       getFilePath: async (type, id) => {
-        checkSoundCategory(type, 'getFilePath')
+        checkSoundCategory(type)
         return sounds.getFilePath(type, id)
       },
       setTags: async (type, id, tags) => {
-        checkSoundCategory(type, 'setTags')
+        checkSoundCategory(type)
         return sounds.setTags(type, id, Array.isArray(tags)
           ? tags
           : [])
       },
       canDecode: async (type, id) => {
-        checkSoundCategory(type, 'canDecode')
+        checkSoundCategory(type)
         return sounds.canDecode(type, id)
       },
     },
