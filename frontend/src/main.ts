@@ -8,6 +8,7 @@ import { installOutputDevice } from './audio/output-device'
 
 import router from './router'
 import { useToastStore } from './stores/toast'
+import { installStrayDropGuard } from './stray-drop-guard'
 import './assets/main.css'
 
 const app = createApp(App)
@@ -23,6 +24,9 @@ window.addEventListener('unhandledrejection', (event) => {
 window.addEventListener('error', (event) => {
   console.error('[renderer] Uncaught error:', event.error ?? event.message)
 })
+
+// A file or link dropped outside a drop zone must not navigate the window away from the app.
+installStrayDropGuard()
 
 // The Local Target's speakers: plays the backend mix whenever the main process sends it.
 installLocalSink()

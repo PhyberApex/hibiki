@@ -5,6 +5,7 @@ const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, pr
 const { createHotkeys } = require('./hotkeys')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createLogger, setupFileLogging } = require('./logger')
+const { guardMainWindowNavigation } = require('./navigation-guard')
 const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
@@ -99,6 +100,10 @@ function createWindow(loadUrl) {
       autoplayPolicy: 'no-user-gesture-required',
       preload: path.join(__dirname, 'preload.js'),
     },
+  })
+  guardMainWindowNavigation(win.webContents, {
+    appUrl: loadUrl,
+    openExternal: url => shell.openExternal(url),
   })
   win.loadURL(loadUrl)
   win.webContents.on('console-message', (details) => {
