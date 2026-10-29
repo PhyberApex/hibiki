@@ -19,9 +19,12 @@ export interface MixerFeedOptions {
   /**
    * Called exactly once when playback has genuinely finished: the source
    * ended and every byte of it has left the mixer input, or the source
-   * errored. Never called after `stop()`.
+   * errored, in which case it gets the error (#644). Never called after
+   * `stop()`.
    */
-  onEnded?: () => void
+  onEnded?: (err?: Error) => void
+  /** Names the stream in log lines, e.g. its engine stream id. */
+  label?: string
 }
 
 export interface MixerFeed {
@@ -101,11 +104,11 @@ export function feedMixerInput(source: Readable, input: MixerFeedInput, options:
     source.off('error', onSourceError)
   }
 
-  function finish(): void {
+  function finish(err?: Error): void {
     if (done)
       return
     detach()
-    options.onEnded?.()
+    options.onEnded?.(err)
   }
 
   function pollLater(): void {
@@ -164,7 +167,8 @@ export function feedMixerInput(source: Readable, input: MixerFeedInput, options:
       pump()
   }
 
-  function onSourceError(): void {
-    finish()
+  function onSourceError(err: Error): void {
+    log.error(`Source for ${options.label ?? '(unlabelled stream)'} errored; ending its playback:`, err)
+    finish(err)
   }
 }

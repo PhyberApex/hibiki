@@ -510,6 +510,24 @@ describe('guildAudioManager', () => {
       expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, streamId, 30, expect.any(Function))
     })
 
+    it('a looping track whose source errors is cleared instead of restarted (#644)', async () => {
+      const listener = jest.fn()
+      manager.on('trackChanged', listener)
+      const stream = createFakeStream()
+      const factory = jest.fn().mockReturnValue(stream)
+
+      await manager.playMusic(factory, meta, { volume: 80, loop: true })
+      listener.mockClear()
+
+      stream.emit('error', new Error('ENOENT: no such file'))
+      await flushAsync()
+
+      expect(factory).toHaveBeenCalledTimes(1)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+      expect(manager.track).toBeUndefined()
+      expect(listener).toHaveBeenCalledTimes(1)
+    })
+
     it('clears the current track when a non-looping track ends', async () => {
       const stream = createFakeStream()
       await manager.playMusic(jest.fn().mockReturnValue(stream), meta, { volume: 80 })
@@ -882,6 +900,28 @@ describe('guildAudioManager', () => {
       expect(factory).toHaveBeenCalledTimes(2)
       expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, streamId, 70, expect.any(Function))
       expect(manager.activeAmbience).toEqual(['rain'])
+    })
+
+    it.each([
+      ['seamless loop', 0, 0],
+      ['interval repeat', 10, 20],
+    ])('a %s ambience whose source errors is cleared instead of restarted (#644)', async (_label, repeatMin, repeatMax) => {
+      jest.useFakeTimers()
+      const listener = jest.fn()
+      manager.on('ambienceChanged', listener)
+      const stream = createFakeStream()
+      const factory = jest.fn().mockReturnValue(stream)
+
+      await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin, repeatMax })
+      listener.mockClear()
+
+      stream.emit('error', new Error('ENOENT: no such file'))
+      await jest.advanceTimersByTimeAsync(30_000)
+
+      expect(factory).toHaveBeenCalledTimes(1)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+      expect(manager.activeAmbience).toEqual([])
+      expect(listener).toHaveBeenCalledTimes(1)
     })
 
     it('non-zero repeat bounds wait a random delay in range before restarting, using fake timers', async () => {

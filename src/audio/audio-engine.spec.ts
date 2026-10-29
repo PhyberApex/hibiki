@@ -374,10 +374,12 @@ describe('audioEngine', () => {
       engine.playMusicFromStream(streamA, 'a', 80, onEnded)
       engine.playMusicFromStream(streamB, 'b')
 
-      streamA.emit('error', new Error('boom'))
+      const err = new Error('boom')
+      streamA.emit('error', err)
 
       expect(createdInputs[0].destroy).toHaveBeenCalledTimes(1)
       expect(onEnded).toHaveBeenCalledTimes(1)
+      expect(onEnded).toHaveBeenCalledWith(err)
       expect(createdInputs[1].destroy).not.toHaveBeenCalled()
     })
 
