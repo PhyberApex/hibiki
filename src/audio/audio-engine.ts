@@ -194,11 +194,12 @@ export class AudioEngine {
    */
   playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.music, onEnded?: (err?: Error) => void) {
     this.stopMusicStream(streamId)
-    log.debug(`Mixer input opened for ${streamId ?? '(default)'} at volume ${CLAMP(initialVolume)}`)
-    const active = this.spawnInputFromStream(stream, streamId ?? '(default)', CLAMP(initialVolume), (ended, err) => {
+    const label = streamId ?? '(default)'
+    log.debug(`Mixer input opened for ${label} at volume ${CLAMP(initialVolume)}`)
+    const active = this.spawnInputFromStream(stream, label, CLAMP(initialVolume), (ended, err) => {
       if (this.musicStreams.get(streamId) !== ended)
         return
-      log.debug(`Mixer input for ${streamId ?? '(default)'} ${err ? 'closed after a source error' : 'drained'}`)
+      log.debug(`Mixer input for ${label} ${err ? 'closed after a source error' : 'drained'}`)
       // A ramp still running would keep writing params to a destroyed input and then fire its onDone for a gone stream (#642).
       ended.cancelRamp?.()
       ended.cancelRamp = undefined

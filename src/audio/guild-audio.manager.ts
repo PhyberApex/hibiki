@@ -464,7 +464,7 @@ export class GuildAudioManager extends EventEmitter {
         // An errored source (file deleted, drive unplugged, corrupt) would
         // fail the same way on every restart, so it ends the track (#644).
         if (err) {
-          log.warn(`Music "${metadata.name}" (${metadata.id}, ${streamId}) stopped: its source errored (guild ${this.guildId}):`, err)
+          log.warn(`Music "${metadata.name}" (${metadata.id}, ${streamId}) stopped: its source errored (guild ${this.guildId}): ${err.message}`)
           this.clearBackendTrack(streamId)
           return
         }
@@ -628,7 +628,7 @@ export class GuildAudioManager extends EventEmitter {
           return
         // Same as Music: an errored source would fail again on restart (#644).
         if (err) {
-          log.warn(`Ambience ${soundId} (${streamId}) stopped: its source errored (guild ${this.guildId}):`, err)
+          log.warn(`Ambience ${soundId} (${streamId}) stopped: its source errored (guild ${this.guildId}): ${err.message}`)
           this.clearAmbienceEntry(soundId, entry)
           return
         }

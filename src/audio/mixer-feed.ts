@@ -168,8 +168,7 @@ export function feedMixerInput(source: Readable, input: MixerFeedInput, options:
   }
 
   function onSourceError(err: Error): void {
-    if (!done)
-      log.error(`Source for ${options.label ?? '(unlabelled stream)'} errored; ending its playback:`, err)
+    log.error(`Source for ${options.label ?? '(unlabelled stream)'} errored; ending its playback:`, err)
     finish(err)
   }
 }
