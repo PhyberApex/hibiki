@@ -267,10 +267,11 @@ describe('config API', () => {
     provider: 'claude' as const,
     enabled: false,
     configured: true,
-    claude: { keyConfigured: true, configured: true },
+    claude: { keyConfigured: true, configured: true, encrypted: true },
     openaiCompatible: {
       keyConfigured: false,
       configured: false,
+      encrypted: true,
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-6-astra',
     },

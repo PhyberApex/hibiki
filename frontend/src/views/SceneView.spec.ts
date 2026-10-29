@@ -59,10 +59,11 @@ const UNCONFIGURED_VISION = {
   provider: 'claude' as const,
   enabled: false,
   configured: false,
-  claude: { keyConfigured: false, configured: false },
+  claude: { keyConfigured: false, configured: false, encrypted: true },
   openaiCompatible: {
     keyConfigured: false,
     configured: false,
+    encrypted: true,
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-6-astra',
   },
@@ -73,10 +74,11 @@ vi.mock('@/api/config', () => ({
     provider: 'claude',
     enabled: false,
     configured: false,
-    claude: { keyConfigured: false, configured: false },
+    claude: { keyConfigured: false, configured: false, encrypted: true },
     openaiCompatible: {
       keyConfigured: false,
       configured: false,
+      encrypted: true,
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-6-astra',
     },
@@ -522,7 +524,7 @@ describe('sceneView — Vision to Vibe entry point', () => {
     vi.mocked(fetchVisionConfig).mockResolvedValue({
       ...UNCONFIGURED_VISION,
       configured: true,
-      claude: { keyConfigured: true, configured: true },
+      claude: { keyConfigured: true, configured: true, encrypted: true },
     })
     const wrapper = await mountScene()
     expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(false)
@@ -539,7 +541,7 @@ describe('sceneView — Vision to Vibe entry point', () => {
       ...UNCONFIGURED_VISION,
       enabled: true,
       configured: true,
-      claude: { keyConfigured: true, configured: true },
+      claude: { keyConfigured: true, configured: true, encrypted: true },
     })
     const wrapper = await mountScene()
     const button = wrapper.find('[data-testid="vision-to-vibe-open"]')
@@ -553,10 +555,11 @@ describe('sceneView — Vision to Vibe entry point', () => {
       provider: 'openai-compatible',
       enabled: true,
       configured: true,
-      claude: { keyConfigured: false, configured: false },
+      claude: { keyConfigured: false, configured: false, encrypted: true },
       openaiCompatible: {
         keyConfigured: false,
         configured: true,
+        encrypted: true,
         baseUrl: 'http://localhost:11434/v1',
         model: 'local-vision',
       },

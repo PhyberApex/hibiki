@@ -224,6 +224,18 @@ describe('createOpenAICompatibleVisionProvider', () => {
     await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow(/HTTP 401/)
   })
 
+  it('redacts the API key if the endpoint echoes it back in an error body', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => 'Incorrect API key provided: sk-echoed-secret',
+    })
+    const { instance } = provider({ apiKey: 'sk-echoed-secret' }, fetchImpl)
+    const error = await instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' }).catch(err => err as Error)
+    expect(error.message).toContain('HTTP 401')
+    expect(error.message).not.toContain('sk-echoed-secret')
+  })
+
   it('reports an unreachable endpoint with a readable message', async () => {
     const fetchImpl = jest.fn().mockRejectedValue(new Error('fetch failed'))
     const { instance } = provider({ apiKey: 'sk-test', baseUrl: 'http://localhost:1/v1' }, fetchImpl)

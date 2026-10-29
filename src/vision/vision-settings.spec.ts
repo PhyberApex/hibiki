@@ -35,10 +35,24 @@ describe('createVisionSettings', () => {
       openaiCompatible: {
         keyConfigured: false,
         configured: false,
+        encrypted: false,
         baseUrl: OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
         model: OPENAI_COMPATIBLE_DEFAULT_MODEL,
       },
     })
+  })
+
+  it('reports both Vision keys encrypted when secrets are encrypted at rest', async () => {
+    const config = makeConfig()
+    const codec = {
+      available: true,
+      encrypt: async (value: string) => value,
+      decrypt: async (value: string) => ({ result: value, shouldReEncrypt: false }),
+    }
+    const settings = createVisionSettings(config, createAppConfig(config, codec))
+    const state = await settings.setApiKey('openai-compatible', 'sk-openai')
+    expect(state.openaiCompatible.encrypted).toBe(true)
+    expect(state.claude.encrypted).toBe(true)
   })
 
   it('stores a trimmed Claude key and reports it configured', async () => {

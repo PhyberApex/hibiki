@@ -27,10 +27,7 @@ export type VisionProviderId = 'claude' | 'openai-compatible'
 export interface VisionProviderStatus {
   keyConfigured: boolean
   configured: boolean
-}
-
-/** The Claude key is the only Vision secret encrypted at rest. */
-export interface VisionClaudeStatus extends VisionProviderStatus {
+  /** False when this system can't encrypt secrets at rest — a stored key for this provider is plain text. */
   encrypted: boolean
 }
 
@@ -44,7 +41,7 @@ export interface VisionConfig {
   enabled: boolean
   /** Gate for the currently selected provider — mirrors `claude.configured` or `openaiCompatible.configured`. */
   configured: boolean
-  claude: VisionClaudeStatus
+  claude: VisionProviderStatus
   openaiCompatible: VisionOpenAICompatibleStatus
 }
 

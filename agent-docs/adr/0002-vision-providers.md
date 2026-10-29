@@ -27,4 +27,4 @@ This ADR records the decisions reached (via `/triage` on #335) on which provider
 - Gemini has no native adapter; it is reachable only through an OpenAI-compatible endpoint.
 - The image now goes to whichever endpoint the GM configured, so the consent copy in Settings must name the selected destination rather than Anthropic.
 - The `config` IPC domain grows additively (provider selection, per-provider key, base URL, model); `vision.analyzeImageVibe` is unchanged.
-- Issue #412 (encrypting secrets at rest) now has more than one Vision key to cover.
+- Issue #412 (encrypting secrets at rest) now has more than one Vision key to cover; both are encrypted since #639.

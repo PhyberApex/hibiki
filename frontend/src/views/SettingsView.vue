@@ -82,6 +82,7 @@ const DEFAULT_VISION_CONFIG: VisionConfig = {
   openaiCompatible: {
     keyConfigured: false,
     configured: false,
+    encrypted: true,
     baseUrl: '',
     model: '',
   },
@@ -1137,7 +1138,7 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
             Remove
           </button>
         </div>
-        <p v-if="!isOpenAiCompatible && visionConfig && !visionConfig.claude.encrypted" class="field-hint field-hint-warning">
+        <p v-if="selectedProviderStatus && !selectedProviderStatus.encrypted" class="field-hint field-hint-warning" data-testid="vision-key-plaintext-warning">
           Not encrypted on this system — stored as plain text.
         </p>
       </div>

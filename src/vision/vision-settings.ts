@@ -7,10 +7,7 @@ import { OPENAI_COMPATIBLE_DEFAULT_BASE_URL, OPENAI_COMPATIBLE_DEFAULT_MODEL } f
 export interface VisionProviderState {
   keyConfigured: boolean
   configured: boolean
-}
-
-/** The Claude key is the only Vision secret encrypted at rest (see `createAppConfig`'s `SecretCodec`). */
-export interface VisionClaudeState extends VisionProviderState {
+  /** Whether a stored key is encrypted at rest (see `createAppConfig`'s `SecretCodec`); false means plain text on disk. */
   encrypted: boolean
 }
 
@@ -24,7 +21,7 @@ export interface VisionSettingsState {
   enabled: boolean
   /** Gate for the currently selected provider — mirrors `claude.configured` or `openaiCompatible.configured`. */
   configured: boolean
-  claude: VisionClaudeState
+  claude: VisionProviderState
   openaiCompatible: VisionOpenAICompatibleState
 }
 
@@ -111,7 +108,7 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
       getOpenAiModel(),
     ])
 
-    const claude: VisionClaudeState = {
+    const claude: VisionProviderState = {
       keyConfigured: Boolean(claudeKey),
       configured: Boolean(claudeKey),
       encrypted: appConfig.secretsEncrypted,
@@ -119,6 +116,7 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
     const openaiCompatible: VisionOpenAICompatibleState = {
       keyConfigured: Boolean(openaiKey),
       configured: Boolean(openaiKey) || baseUrl !== OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
+      encrypted: appConfig.secretsEncrypted,
       baseUrl,
       model,
     }
