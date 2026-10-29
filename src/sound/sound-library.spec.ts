@@ -333,3 +333,94 @@ describe('sound library edge cases', () => {
     })
   })
 })
+
+describe('sound ids stay inside the library directory', () => {
+  let tempRoot: string
+  let config: {
+    discord: { token: string }
+    audio: { storageRoot: string, musicDir: string, effectsDir: string, ambienceDir: string, webDistDir: string }
+    database: { path: string }
+  }
+
+  beforeEach(() => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-sound-traversal-'))
+    config = {
+      discord: { token: '' },
+      audio: {
+        storageRoot: tempRoot,
+        musicDir: join(tempRoot, 'storage', 'music'),
+        effectsDir: join(tempRoot, 'storage', 'effects'),
+        ambienceDir: join(tempRoot, 'storage', 'ambience'),
+        webDistDir: 'web-dist',
+      },
+      database: {
+        path: join(tempRoot, 'data', 'hibiki.json'),
+      },
+    }
+    mkdirSync(config.audio.musicDir, { recursive: true })
+    mkdirSync(config.audio.ambienceDir, { recursive: true })
+    mkdirSync(join(tempRoot, 'data'), { recursive: true })
+    writeFileSync(join(tempRoot, 'data', 'app-config.json'), '{"secret":true}')
+    writeFileSync(join(tempRoot, 'storage', 'outside.mp3'), 'x')
+    writeFileSync(join(config.audio.ambienceDir, 'rain.mp3'), 'x')
+  })
+
+  afterEach(() => {
+    rmSync(tempRoot, { recursive: true, force: true })
+  })
+
+  const unsafeIds = [
+    '../../data/app-config',
+    '../outside',
+    'sub/rain',
+    '..\\outside',
+    '..',
+    '.',
+    '',
+    'with\0nul',
+  ]
+
+  it.each(unsafeIds)('getFilePath rejects the id %j', async (id) => {
+    await expect(createSoundLibrary(config).getFilePath('music', id)).rejects.toThrow(/Invalid sound id/)
+  })
+
+  it('rejects an absolute path as an id', async () => {
+    const absolute = join(tempRoot, 'data', 'app-config')
+    await expect(createSoundLibrary(config).getFilePath('music', absolute)).rejects.toThrow(/Invalid sound id/)
+  })
+
+  it.each(['canDecode', 'getFile', 'remove'] as const)('%s rejects a traversal id', async (method) => {
+    await expect(createSoundLibrary(config)[method]('music', '../../data/app-config')).rejects.toThrow(/Invalid sound id/)
+  })
+
+  it('setTags rejects a traversal id', async () => {
+    await expect(createSoundLibrary(config).setTags('music', '../../data/app-config', ['x'])).rejects.toThrow(/Invalid sound id/)
+  })
+
+  it('remove never unlinks a file outside the library', async () => {
+    await expect(createSoundLibrary(config).remove('music', '../../data/app-config')).rejects.toThrow()
+    expect(readFileSync(join(tempRoot, 'data', 'app-config.json'), 'utf-8')).toBe('{"secret":true}')
+  })
+
+  it.each([
+    'getFilePath',
+    'canDecode',
+    'getFile',
+    'remove',
+  ] as const)('%s rejects an unknown category instead of reading ambience', async (method) => {
+    const lib = createSoundLibrary(config)
+    await expect(lib[method]('bogus' as never, 'rain')).rejects.toThrow(/Invalid sound category/)
+    expect(readFileSync(join(config.audio.ambienceDir, 'rain.mp3'), 'utf-8')).toBe('x')
+  })
+
+  it('setTags rejects an unknown category', async () => {
+    await expect(createSoundLibrary(config).setTags('bogus' as never, 'rain', [])).rejects.toThrow(/Invalid sound category/)
+  })
+
+  it('still resolves ids with spaces, dots and brackets from files dropped into the folder', async () => {
+    writeFileSync(join(config.audio.musicDir, 'Tavern Song v1.2 (live).mp3'), 'x')
+    await expect(createSoundLibrary(config).getFilePath('music', 'Tavern Song v1.2 (live)'))
+      .resolves
+      .toBe(join(config.audio.musicDir, 'Tavern Song v1.2 (live).mp3'))
+  })
+})

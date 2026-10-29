@@ -1,22 +1,36 @@
 import type { Config } from '../config'
 import type { SoundCategory, SoundFile } from './sound.types'
 import { mkdir, stat, unlink, writeFile } from 'node:fs/promises'
-import { extname, join } from 'node:path'
+import { extname, join, resolve, sep } from 'node:path'
 import fg from 'fast-glob'
 import slugify from 'slugify'
 import { canDecode as canDecodeFile } from '../audio/decoders'
 import { createLogger } from '../logger'
+import { isSafeSoundId, isSoundCategory } from './sound-id'
 import { createSoundTagsStore } from './sound-tags.store'
 
+const log = createLogger('sounds')
+
+const CATEGORY_DIRS = {
+  music: 'musicDir',
+  effects: 'effectsDir',
+  ambience: 'ambienceDir',
+} as const satisfies Record<SoundCategory, keyof Config['audio']>
+
 function resolvePath(config: Config, category: SoundCategory, filename?: string): string {
-  const base = category === 'music'
-    ? config.audio.musicDir
-    : category === 'effects'
-      ? config.audio.effectsDir
-      : config.audio.ambienceDir
-  return filename
-    ? join(base, filename)
-    : base
+  if (!isSoundCategory(category)) {
+    log.warn(`Rejected unknown sound category ${JSON.stringify(category)}`)
+    throw new Error(`Invalid sound category '${String(category)}'`)
+  }
+  const base = config.audio[CATEGORY_DIRS[category]]
+  if (!filename)
+    return base
+  const filePath = join(base, filename)
+  if (!resolve(filePath).startsWith(resolve(base) + sep)) {
+    log.warn(`Rejected ${category} file ${JSON.stringify(filename)}: resolves outside ${base}`)
+    throw new Error(`Invalid sound file '${filename}'`)
+  }
+  return filePath
 }
 
 function humanize(filename: string): string {
@@ -32,6 +46,10 @@ function escapeGlob(id: string): string {
 
 async function findFilename(config: Config, category: SoundCategory, id: string): Promise<string> {
   const base = resolvePath(config, category)
+  if (!isSafeSoundId(id)) {
+    log.warn(`Rejected ${category} sound id ${JSON.stringify(id)}: not a single path segment`)
+    throw new Error(`Invalid sound id '${String(id)}'`)
+  }
   const escaped = escapeGlob(id)
   const matches = await fg(`${escaped}.*`, { cwd: base, onlyFiles: true, dot: false })
   if (!matches.length)
@@ -42,8 +60,6 @@ async function findFilename(config: Config, category: SoundCategory, id: string)
 function buildId(name: string): string {
   return `${slugify(name.replace(extname(name), ''), { lower: true, strict: true })}-${Date.now()}`
 }
-
-const log = createLogger('sounds')
 
 export function createSoundLibrary(config: Config) {
   const tagsStore = createSoundTagsStore(config)
@@ -148,11 +164,7 @@ export function createSoundLibrary(config: Config) {
       category: SoundCategory,
       file: { buffer: Buffer, originalname: string },
     ): Promise<SoundFile> {
-      const base = category === 'music'
-        ? config.audio.musicDir
-        : category === 'effects'
-          ? config.audio.effectsDir
-          : config.audio.ambienceDir
+      const base = resolvePath(config, category)
       await mkdir(base, { recursive: true })
       const safeId = buildId(file.originalname)
       const ext = extname(file.originalname) || '.mp3'

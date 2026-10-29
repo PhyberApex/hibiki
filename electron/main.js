@@ -5,6 +5,7 @@ const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, pr
 const { createHotkeys } = require('./hotkeys')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createLogger, setupFileLogging } = require('./logger')
+const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
 // install/update/uninstall. Quitting here means `app.whenReady()` below never
@@ -304,7 +305,7 @@ function serveSoundFile(request, filePath) {
           'Content-Length': String(chunkSize),
           'Content-Range': `bytes ${start}-${end}/${totalSize}`,
           'Accept-Ranges': 'bytes',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': SOUND_ALLOWED_ORIGIN,
         },
       }, { start, end })
     }
@@ -318,7 +319,7 @@ function serveSoundFile(request, filePath) {
       'Content-Type': mime,
       'Content-Length': String(totalSize),
       'Accept-Ranges': 'bytes',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': SOUND_ALLOWED_ORIGIN,
     },
   })
 }
@@ -330,20 +331,22 @@ function registerHibikiProtocol(api, webDistDir) {
     const pathname = u.pathname || '/'
 
     if (host === 'sound') {
-      const parts = pathname.split('/').filter(Boolean)
-      const [type, id] = parts
-      if ((type === 'music' || type === 'effects' || type === 'ambience') && id) {
-        return api.sounds.getFilePath(type, decodeURIComponent(id)).then((filePath) => {
-          if (!fs.existsSync(filePath)) {
-            protocolLog.warn(`${type}/${id} resolved to a missing file: ${filePath}`)
-            return new Response('Not Found', { status: 404 })
-          }
-          return serveSoundFile(request, filePath)
-        }).catch((err) => {
-          protocolLog.warn(`Could not serve ${type}/${id}:`, err)
-          return new Response('Not Found', { status: 404 })
-        })
+      const sound = parseSoundPath(pathname)
+      if (!sound.ok) {
+        protocolLog.warn(`Rejected hibiki://sound${pathname}: ${sound.reason}`)
+        return new Response('Not Found', { status: 404 })
       }
+      const { type, id } = sound
+      return api.sounds.getFilePath(type, id).then((filePath) => {
+        if (!fs.existsSync(filePath)) {
+          protocolLog.warn(`${type}/${id} resolved to a missing file: ${filePath}`)
+          return new Response('Not Found', { status: 404 })
+        }
+        return serveSoundFile(request, filePath)
+      }).catch((err) => {
+        protocolLog.warn(`Could not serve ${type}/${id}:`, err)
+        return new Response('Not Found', { status: 404 })
+      })
     }
 
     if (host === 'app') {

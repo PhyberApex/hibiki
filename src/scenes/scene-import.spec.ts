@@ -258,6 +258,49 @@ describe('importScene', () => {
     expect(scene.music[0]!.soundId).toBe('Lost Theme')
   })
 
+  it.each([
+    '../../data/app-config',
+    'sub/theme',
+    '..',
+  ])('rejects a reference item whose sound name %j is not a single path segment', async (soundName) => {
+    const manifest = makeManifest({
+      displayName: `Traversal ${soundName}`,
+      scene: {
+        music: [
+          { soundName, volume: 50, bundled: false },
+        ],
+        ambience: [],
+        effects: [],
+      },
+    })
+    await expect(importScene(config, createManifestZip(manifest))).rejects.toThrow(/not a valid sound id/)
+  })
+
+  it('writes no bundled sound and saves no Scene when an item is rejected', async () => {
+    const manifest = makeManifest({
+      displayName: 'Half Bad',
+      scene: {
+        music: [
+          {
+            soundName: 'Theme',
+            volume: 50,
+            bundled: true,
+            bundledPath: 'sounds/music/half-bad-theme.mp3',
+          },
+        ],
+        ambience: [],
+        effects: [
+          { soundName: '../escape', volume: 50, bundled: false },
+        ],
+      },
+    })
+    const zipPath = createManifestZip(manifest, { 'sounds/music/half-bad-theme.mp3': 'x' })
+    await expect(importScene(config, zipPath)).rejects.toThrow(/not a valid sound id/)
+    expect(existsSync(join(config.audio.musicDir, 'half-bad-theme.mp3'))).toBe(false)
+    const { createSceneStore } = await import('./scene-store')
+    expect((await createSceneStore(config).list()).some(s => s.name === 'Half Bad')).toBe(false)
+  })
+
   it('never reuses an id from the archive, so an existing scene with that id survives', async () => {
     const existing = await importScene(config, createManifestZip(makeManifest({ displayName: 'Original' })))
     const clash = await importScene(config, createManifestZip(makeManifest({
