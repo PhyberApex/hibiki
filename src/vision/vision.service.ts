@@ -163,7 +163,11 @@ export function createOpenAICompatibleVisionProvider(options: OpenAICompatiblePr
       }
 
       if (!response.ok) {
-        const detail = await response.text().catch(() => '')
+        // The error lands in hibiki.log via the service's failure log, so never let an echoed key through.
+        const body = await response.text().catch(() => '')
+        const detail = options.apiKey
+          ? body.replaceAll(options.apiKey, '[redacted]')
+          : body
         throw new Error(`The vision endpoint returned an error (HTTP ${response.status}).${detail
           ? ` ${detail.slice(0, 200)}`
           : ''}`)

@@ -26,10 +26,11 @@ const UNCONFIGURED_VISION = {
   provider: 'claude' as const,
   enabled: false,
   configured: false,
-  claude: { keyConfigured: false, configured: false },
+  claude: { keyConfigured: false, configured: false, encrypted: true },
   openaiCompatible: {
     keyConfigured: false,
     configured: false,
+    encrypted: true,
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-6-astra',
   },
@@ -38,7 +39,7 @@ const UNCONFIGURED_VISION = {
 const CLAUDE_CONFIGURED_VISION = {
   ...UNCONFIGURED_VISION,
   configured: true,
-  claude: { keyConfigured: true, configured: true },
+  claude: { keyConfigured: true, configured: true, encrypted: true },
 }
 
 vi.mock('@/api/config', () => ({
@@ -48,10 +49,11 @@ vi.mock('@/api/config', () => ({
     provider: 'claude',
     enabled: false,
     configured: false,
-    claude: { keyConfigured: false, configured: false },
+    claude: { keyConfigured: false, configured: false, encrypted: true },
     openaiCompatible: {
       keyConfigured: false,
       configured: false,
+      encrypted: true,
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-6-astra',
     },
@@ -507,6 +509,35 @@ describe('settingsView', () => {
       expect(updateVisionEnabled).toHaveBeenCalledWith(true)
     })
 
+    it('warns that the Claude key is stored as plain text when secrets are not encrypted', async () => {
+      vi.mocked(fetchVisionConfig).mockResolvedValue({
+        ...UNCONFIGURED_VISION,
+        claude: { ...UNCONFIGURED_VISION.claude, encrypted: false },
+      })
+      const wrapper = mountSettings()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="vision-key-plaintext-warning"]').exists()).toBe(true)
+    })
+
+    it('warns that the OpenAI-compatible key is stored as plain text when secrets are not encrypted', async () => {
+      vi.mocked(fetchVisionConfig).mockResolvedValue({
+        ...UNCONFIGURED_VISION,
+        provider: 'openai-compatible',
+        claude: { ...UNCONFIGURED_VISION.claude, encrypted: false },
+        openaiCompatible: { ...UNCONFIGURED_VISION.openaiCompatible, encrypted: false },
+      })
+      const wrapper = mountSettings()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="vision-key-plaintext-warning"]').exists()).toBe(true)
+    })
+
+    it('does not warn about plain text when the Vision keys are encrypted', async () => {
+      vi.mocked(fetchVisionConfig).mockResolvedValue({ ...UNCONFIGURED_VISION, provider: 'openai-compatible' })
+      const wrapper = mountSettings()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="vision-key-plaintext-warning"]').exists()).toBe(false)
+    })
+
     it('does not show Base URL/Model fields for Claude', async () => {
       const wrapper = mountSettings()
       await flushPromises()
@@ -534,6 +565,7 @@ describe('settingsView', () => {
         openaiCompatible: {
           keyConfigured: false,
           configured: true,
+          encrypted: true,
           baseUrl: 'http://localhost:11434/v1',
           model: 'gpt-6-astra',
         },
@@ -554,6 +586,7 @@ describe('settingsView', () => {
         openaiCompatible: {
           keyConfigured: false,
           configured: false,
+          encrypted: true,
           baseUrl: 'https://api.openai.com/v1',
           model: 'llava',
         },
@@ -564,6 +597,7 @@ describe('settingsView', () => {
         openaiCompatible: {
           keyConfigured: false,
           configured: false,
+          encrypted: true,
           baseUrl: 'https://api.openai.com/v1',
           model: 'gpt-6-astra',
         },

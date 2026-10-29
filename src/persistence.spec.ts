@@ -256,8 +256,110 @@ describe('createAppConfig with a secret codec', () => {
     expect(readStoredConfig()['discord.token']).toBe('legacy-plain')
   })
 
+  it('encrypts the OpenAI-compatible Vision key on write, like the Claude key', async () => {
+    const appConfig = createAppConfig(secretConfig, fakeCodec())
+    await appConfig.set('vision.openai.apiKey', 'sk-or-v1-openai')
+
+    expect(readStoredConfig()['vision.openai.apiKey']).toBe('enc:v1:enc(sk-or-v1-openai)')
+    expect(await appConfig.get('vision.openai.apiKey')).toBe('sk-or-v1-openai')
+  })
+
+  it('migrates a legacy plaintext OpenAI-compatible Vision key on read', async () => {
+    writeStoredConfig({ 'vision.openai.apiKey': 'sk-legacy' })
+
+    const appConfig = createAppConfig(secretConfig, fakeCodec())
+    expect(await appConfig.get('vision.openai.apiKey')).toBe('sk-legacy')
+    expect(readStoredConfig()['vision.openai.apiKey']).toBe('enc:v1:enc(sk-legacy)')
+  })
+
   it('reports secretsEncrypted based on codec availability', () => {
     expect(createAppConfig(secretConfig, fakeCodec(true)).secretsEncrypted).toBe(true)
     expect(createAppConfig(secretConfig, fakeCodec(false)).secretsEncrypted).toBe(false)
+  })
+})
+
+describe('createAppConfig logging', () => {
+  let logged: string[]
+  let spies: jest.SpyInstance[]
+  let logConfig: ReturnType<typeof makeLogConfig>
+
+  function makeLogConfig() {
+    const root = mkdtempSync(join(tmpdir(), 'hibiki-config-log-'))
+    return {
+      discord: { token: '' },
+      audio: {
+        storageRoot: root,
+        musicDir: join(root, 'music'),
+        effectsDir: join(root, 'effects'),
+        webDistDir: 'web-dist',
+      },
+      database: {
+        path: join(root, 'data', 'hibiki.json'),
+      },
+    }
+  }
+
+  beforeEach(() => {
+    logConfig = makeLogConfig()
+    logged = []
+    const capture = (...args: unknown[]) => {
+      logged.push(args.map(String).join(' '))
+    }
+    spies = (['debug', 'info', 'warn', 'error'] as const).map(level => jest.spyOn(console, level).mockImplementation(capture))
+  })
+
+  afterEach(() => {
+    spies.forEach(spy => spy.mockRestore())
+  })
+
+  it.each(['discord.token', 'vision.apiKey', 'vision.openai.apiKey'])('never logs the value of the secret "%s"', async (key) => {
+    const secret = 'sk-super-secret-value'
+    const encryptingCodec: SecretCodec = {
+      available: true,
+      encrypt: async value => `x${value}`,
+      decrypt: async value => ({
+        result: value.slice(1),
+        shouldReEncrypt: false,
+      }),
+    }
+    // Plain-text and encrypted storage must log the same: the key name, never the value.
+    for (const codec of [undefined, encryptingCodec]) {
+      const appConfig = createAppConfig(logConfig, codec)
+      await appConfig.set(key, secret)
+      await appConfig.get(key)
+      await appConfig.set(key, '')
+    }
+
+    expect(logged.join('\n')).not.toContain(secret)
+    expect(logged).toContainEqual(expect.stringContaining(`Set "${key}" (secret, non-empty)`))
+    expect(logged).toContainEqual(expect.stringContaining(`Set "${key}" (secret, cleared)`))
+  })
+
+  it('does not log bookmark URLs, which can carry VTT invite tokens', async () => {
+    const appConfig = createAppConfig(logConfig)
+    const bookmarks = JSON.stringify([
+      { label: 'Table', url: 'https://vtt.example/join/invite-token-123' },
+    ])
+    await appConfig.set('bookmarks', bookmarks)
+
+    const output = logged.join('\n')
+    expect(output).not.toContain('invite-token-123')
+    expect(output).toContain('Set "bookmarks"')
+  })
+
+  it('does not log the value of a key it does not know to be safe', async () => {
+    const appConfig = createAppConfig(logConfig)
+    await appConfig.set('some.future.key', 'private-value')
+
+    const output = logged.join('\n')
+    expect(output).not.toContain('private-value')
+    expect(output).toContain('Set "some.future.key"')
+  })
+
+  it('still logs the value of settings that are safe to log', async () => {
+    const appConfig = createAppConfig(logConfig)
+    await appConfig.set('vision.provider', 'openai-compatible')
+
+    expect(logged).toContainEqual(expect.stringContaining('Set "vision.provider" = openai-compatible'))
   })
 })

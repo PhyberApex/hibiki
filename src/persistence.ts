@@ -30,7 +30,38 @@ const NOOP_CODEC: SecretCodec = {
 }
 
 /** The only keys ever written to disk encrypted — see `agent-docs` issue #412. */
-const SECRET_KEYS = new Set(['discord.token', 'vision.apiKey'])
+const SECRET_KEYS = new Set(['discord.token', 'vision.apiKey', 'vision.openai.apiKey'])
+
+/**
+ * Keys whose values `set` may print to `hibiki.log`: settings, toggles and
+ * ids a GM would not mind in a bug report. Everything else (secrets,
+ * bookmarks, keys added later) is logged by name and length only (#639).
+ */
+const LOGGABLE_VALUE_KEYS = new Set([
+  'accessibility',
+  'hotkeys',
+  'output.activeTarget',
+  'output.local.device',
+  'player.masterVolume',
+  'scene.fadeLength',
+  'storage.path',
+  'updates',
+  'usageStats',
+  'vision.enabled',
+  'vision.openai.baseUrl',
+  'vision.openai.model',
+  'vision.provider',
+])
+
+function describeSetForLog(key: string, value: string): string {
+  if (SECRET_KEYS.has(key))
+    return `Set "${key}" (secret, ${value ? 'non-empty' : 'cleared'})`
+  if (!LOGGABLE_VALUE_KEYS.has(key))
+    return `Set "${key}" (${value.length} chars)`
+  return `Set "${key}" = ${value.length > 120
+    ? `${value.slice(0, 117)}...`
+    : value}`
+}
 
 const ENCRYPTED_PREFIX = 'enc:v1:'
 
@@ -101,11 +132,7 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
       const toStore = SECRET_KEYS.has(key) && codec.available
         ? await encryptForStorage(value)
         : value
-      log.info(SECRET_KEYS.has(key)
-        ? `Set "${key}" (secret, ${value ? 'non-empty' : 'cleared'})`
-        : `Set "${key}" = ${value.length > 120
-          ? `${value.slice(0, 117)}...`
-          : value}`)
+      log.info(describeSetForLog(key, value))
       return store.update(data => ({
         next: { ...data, [key]: toStore },
         result: undefined,
@@ -119,7 +146,7 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
         return { next, result: undefined }
       })
     },
-    /** Whether secret keys (`discord.token`, `vision.apiKey`) are being encrypted at rest right now. */
+    /** Whether secret keys (`discord.token`, `vision.apiKey`, `vision.openai.apiKey`) are being encrypted at rest right now. */
     secretsEncrypted: codec.available,
   }
 }
