@@ -646,6 +646,89 @@ describe('guildAudioManager', () => {
         expect(manager.track).toBeUndefined()
         expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
       })
+
+      describe('a bulk stop while a loop restart is mid-decode prevents that restart from resurrecting playback (#640)', () => {
+        async function startLoopingTrackWithPendingRestart(): Promise<ReturnType<typeof createDeferredFactory>> {
+          const firstStream = createFakeStream()
+          const restart = createDeferredFactory()
+          const factory = jest.fn()
+            .mockReturnValueOnce(firstStream)
+            .mockImplementationOnce(() => restart.factory())
+          await manager.playMusic(factory, meta, { volume: 80, loop: true })
+          expect(manager.track).toEqual(meta)
+          firstStream.emit('end')
+          expect(factory).toHaveBeenCalledTimes(2)
+          return restart
+        }
+
+        async function expectRestartDropped(restart: ReturnType<typeof createDeferredFactory>): Promise<void> {
+          const restartedStream = createFakeStream()
+          const destroy = jest.fn()
+          ;(restartedStream as EventEmitter & { destroy: jest.Mock }).destroy = destroy
+          restart.resolve(restartedStream)
+          await flushAsync()
+
+          expect(manager.track).toBeUndefined()
+          expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+          expect(destroy).toHaveBeenCalled()
+        }
+
+        it('stopAllMusic', async () => {
+          const restart = await startLoopingTrackWithPendingRestart()
+          manager.stopAllMusic()
+          await expectRestartDropped(restart)
+        })
+
+        it('stopEverything', async () => {
+          const restart = await startLoopingTrackWithPendingRestart()
+          manager.stopEverything()
+          await expectRestartDropped(restart)
+        })
+
+        it('disconnect()', async () => {
+          const restart = await startLoopingTrackWithPendingRestart()
+          manager.disconnect()
+          await expectRestartDropped(restart)
+        })
+
+        it('a lost connection teardown', async () => {
+          const connection = createFakeConnection()
+          ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+          await manager.connect(fakeChannel)
+          const restart = await startLoopingTrackWithPendingRestart()
+
+          connection.emit('stateChange', { status: voice.VoiceConnectionStatus.Ready }, { status: voice.VoiceConnectionStatus.Destroyed })
+          await expectRestartDropped(restart)
+        })
+
+        it('stopMusic on the track\'s own stream id (no generation bump)', async () => {
+          const restart = await startLoopingTrackWithPendingRestart()
+          manager.stopMusic('backend-music:1')
+          await expectRestartDropped(restart)
+        })
+
+        it('a later playMusic still plays normally', async () => {
+          const restart = await startLoopingTrackWithPendingRestart()
+          manager.stopAllMusic()
+          await expectRestartDropped(restart)
+
+          await manager.playMusic(() => createFakeStream() as any, meta, { volume: 80 })
+          expect(manager.track).toEqual(meta)
+          expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(2)
+        })
+      })
+
+      it('stopAllMusic called while a playMusic is mid-decode prevents that track from starting', async () => {
+        const deferred = createDeferredFactory()
+        const playCall = manager.playMusic(deferred.factory, meta, { volume: 80 })
+
+        manager.stopAllMusic()
+        deferred.resolve()
+        await playCall
+
+        expect(manager.track).toBeUndefined()
+        expect(getEngineMock().playMusicFromStream).not.toHaveBeenCalled()
+      })
     })
   })
 
@@ -1018,6 +1101,79 @@ describe('guildAudioManager', () => {
 
         restart.resolve()
         await jest.advanceTimersByTimeAsync(0)
+
+        expect(manager.activeAmbience).toEqual([])
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+      })
+
+      it('stopAllAmbience called while a loop restart is mid-decode prevents that restart from resurrecting playback (#640)', async () => {
+        const firstStream = createFakeStream()
+        const restart = createDeferredFactory()
+        const factory = jest.fn()
+          .mockReturnValueOnce(firstStream)
+          .mockImplementationOnce(() => restart.factory())
+
+        await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+        firstStream.emit('end')
+        expect(factory).toHaveBeenCalledTimes(2)
+
+        manager.stopAllAmbience()
+        expect(manager.activeAmbience).toEqual([])
+
+        restart.resolve()
+        await flushAsync()
+
+        expect(manager.activeAmbience).toEqual([])
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+      })
+
+      it('stopAllAmbience called while an interval-repeat restart is mid-decode prevents that restart from resurrecting playback (#640)', async () => {
+        jest.useFakeTimers()
+        const firstStream = createFakeStream()
+        const restart = createDeferredFactory()
+        const factory = jest.fn()
+          .mockReturnValueOnce(firstStream)
+          .mockImplementationOnce(() => restart.factory())
+
+        await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 1, repeatMax: 1 })
+        firstStream.emit('end')
+        await jest.advanceTimersByTimeAsync(1_000)
+        expect(factory).toHaveBeenCalledTimes(2)
+
+        manager.stopAllAmbience()
+
+        restart.resolve()
+        await jest.advanceTimersByTimeAsync(0)
+
+        expect(manager.activeAmbience).toEqual([])
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+      })
+
+      it('stopAllAmbience called while an initial playAmbience is mid-decode prevents that sound from starting (#640)', async () => {
+        const deferred = createDeferredFactory()
+        const playCall = manager.playAmbience(deferred.factory, 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+
+        manager.stopAllAmbience()
+        deferred.resolve()
+        await playCall
+
+        expect(manager.activeAmbience).toEqual([])
+        expect(getEngineMock().playMusicFromStream).not.toHaveBeenCalled()
+      })
+
+      it('disconnect() while an Ambience loop restart is mid-decode prevents that restart from resurrecting playback (#640)', async () => {
+        const firstStream = createFakeStream()
+        const restart = createDeferredFactory()
+        const factory = jest.fn()
+          .mockReturnValueOnce(firstStream)
+          .mockImplementationOnce(() => restart.factory())
+
+        await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+        firstStream.emit('end')
+
+        manager.disconnect()
+        restart.resolve()
+        await flushAsync()
 
         expect(manager.activeAmbience).toEqual([])
         expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)

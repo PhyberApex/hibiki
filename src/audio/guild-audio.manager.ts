@@ -126,7 +126,7 @@ export class GuildAudioManager extends EventEmitter {
    */
   private backendTrackId?: string
   /**
-   * Bumped at the start of every `playMusic`/`stopCurrentTrack` call and
+   * Bumped at the start of every `playMusic`/`stopCurrentTrack`/`stopAllMusic` call and
    * captured by `playMusic` before it awaits the decoder. If another call
    * supersedes it before the decode resolves, the generation no longer
    * matches and the stale call aborts instead of committing — otherwise two
@@ -138,7 +138,7 @@ export class GuildAudioManager extends EventEmitter {
   private readonly ambienceEntries = new Map<string, AmbienceEntry>()
   /**
    * Bumped at the start of every `playAmbience`/`stopAmbience` call for a
-   * given soundId and captured by the in-flight decode/restart it started —
+   * given soundId (and for every soundId by `stopAllAmbience`) and captured by the in-flight decode/restart it started —
    * same race guard as `musicGeneration`, scoped per soundId instead of per
    * guild since Ambience sounds are independent of each other. Kept
    * separate from `ambienceEntries` (rather than a field on the entry)
@@ -381,8 +381,9 @@ export class GuildAudioManager extends EventEmitter {
     this.engine.stopMusic(streamId)
   }
 
-  /** Ends every music stream for this guild, regardless of id. */
+  /** Ends every music stream for this guild, regardless of id. Also supersedes any `playMusic` decode or loop restart still in flight (#640). */
   stopAllMusic() {
+    this.musicGeneration++
     this.musicStreams.clear()
     this.backendTrackId = undefined
     this.engine.stopAllMusic()
@@ -396,7 +397,7 @@ export class GuildAudioManager extends EventEmitter {
    * #409. `loop` restarts `streamFactory` at end of file; otherwise the
    * track clears once the file ends. Rejects (leaving any current track
    * untouched) if `streamFactory` fails on its first call. If superseded by
-   * another `playMusic`/`stopCurrentTrack` call before the decode resolves,
+   * another `playMusic`/`stopCurrentTrack`/`stopAllMusic` call before the decode resolves,
    * this resolves without taking effect — the newer call wins.
    */
   async playMusic(
@@ -411,15 +412,19 @@ export class GuildAudioManager extends EventEmitter {
     const streamId = `backend-music:${++this.musicStreamSeq}`
     const seq = this.musicStreamSeq
 
-    const startStream = async (startFadeMs: number): Promise<void> => {
+    const startStream = async (startFadeMs: number, isRestart: boolean): Promise<void> => {
       const stream = await streamFactory()
 
-      if (this.musicGeneration !== myGeneration) {
-        // Superseded by a newer playMusic/stopCurrentTrack call while this
-        // decode — the initial start, or a loop restart — was in flight.
-        // Checked here (not just once after the initial call below) so a
-        // Stop issued while a *loop restart* is decoding can't resurrect
-        // playback either: never register with the engine, just drop it.
+      // Superseded by a newer playMusic/stopCurrentTrack/stopAllMusic call
+      // while this decode — the initial start, or a loop restart — was in
+      // flight. Checked here (not just once after the initial call below) so
+      // a Stop, Leave or teardown issued while a *loop restart* is decoding
+      // can't resurrect playback either: never register with the engine,
+      // just drop it. A restart additionally needs its own stream to still
+      // be registered, since it was dropped from bookkeeping if not (#640).
+      const superseded = this.musicGeneration !== myGeneration
+      if (superseded || (isRestart && this.musicStreams.get(streamId)?.seq !== seq)) {
+        log.info(`Music "${metadata.name}" ${isRestart ? 'loop restart' : 'start'} of ${streamId} dropped: ${superseded ? 'superseded or stopped' : 'stream no longer registered'} while decoding (guild ${this.guildId})`)
         stream.destroy?.()
         return
       }
@@ -429,7 +434,7 @@ export class GuildAudioManager extends EventEmitter {
           return
         if (loop) {
           log.debug(`Music ${streamId} reached its end; looping`)
-          startStream(0).catch((err) => {
+          startStream(0, true).catch((err) => {
             log.error('Failed to restart looping track:', err)
             this.clearBackendTrack(streamId)
           })
@@ -449,7 +454,7 @@ export class GuildAudioManager extends EventEmitter {
         this.engine.rampStreamVolume(streamId, options.volume, startFadeMs)
     }
 
-    await startStream(fadeMs)
+    await startStream(fadeMs, false)
 
     if (this.musicGeneration !== myGeneration) {
       // The initial start itself was superseded (the check inside
@@ -533,7 +538,8 @@ export class GuildAudioManager extends EventEmitter {
    * duration instead of cutting — crossfade parity with `playMusic`.
    * Rejects (leaving any current entry for this soundId untouched) if
    * `streamFactory` fails on its first call. If superseded by another
-   * `playAmbience`/`stopAmbience` call for the same soundId before the
+   * `playAmbience`/`stopAmbience` call for the same soundId (or a
+   * `stopAllAmbience`) before the
    * decode resolves, this resolves without taking effect.
    */
   async playAmbience(
@@ -557,13 +563,17 @@ export class GuildAudioManager extends EventEmitter {
       loop: options.repeatMin <= 0 && options.repeatMax <= 0,
     }
 
-    const startStream = async (startFadeMs: number): Promise<void> => {
+    const startStream = async (startFadeMs: number, isRestart: boolean): Promise<void> => {
       const stream = await streamFactory()
 
-      if (this.ambienceGenerations.get(soundId) !== myGeneration) {
-        // Superseded by a newer playAmbience/stopAmbience call while this
-        // decode — the initial start, or a loop/interval-repeat restart —
-        // was in flight: never register with the engine, just drop it.
+      // Superseded by a newer playAmbience/stopAmbience/stopAllAmbience call
+      // while this decode — the initial start, or a loop/interval-repeat
+      // restart — was in flight: never register with the engine, just drop
+      // it. A restart additionally needs its entry to still be the active
+      // one, since it was dropped from bookkeeping if not (#640).
+      const superseded = this.ambienceGenerations.get(soundId) !== myGeneration
+      if (superseded || (isRestart && this.ambienceEntries.get(soundId) !== entry)) {
+        log.info(`Ambience ${soundId} ${isRestart ? 'restart' : 'start'} of ${streamId} dropped: ${superseded ? 'superseded or stopped' : 'entry no longer active'} while decoding (guild ${this.guildId})`)
         stream.destroy?.()
         return
       }
@@ -574,7 +584,7 @@ export class GuildAudioManager extends EventEmitter {
         if (this.ambienceEntries.get(soundId) !== entry)
           return
         if (entry.loop) {
-          startStream(0).catch((err) => {
+          startStream(0, true).catch((err) => {
             log.error('Failed to restart looping ambience:', err)
             this.clearAmbienceEntry(soundId, entry)
           })
@@ -586,7 +596,7 @@ export class GuildAudioManager extends EventEmitter {
           log.debug(`Ambience ${soundId} played out; next repeat in ${Math.round(delay)} ms`)
           entry.repeatTimer = setTimeout(() => {
             entry.repeatTimer = undefined
-            startStream(0).catch((err) => {
+            startStream(0, true).catch((err) => {
               log.error('Failed to restart interval-repeat ambience:', err)
               this.clearAmbienceEntry(soundId, entry)
             })
@@ -605,7 +615,7 @@ export class GuildAudioManager extends EventEmitter {
         this.engine.rampStreamVolume(streamId, entry.volume, startFadeMs)
     }
 
-    await startStream(options.fadeInMs ?? 0)
+    await startStream(options.fadeInMs ?? 0, false)
 
     if (this.ambienceGenerations.get(soundId) !== myGeneration) {
       // The initial start itself was superseded (the check inside
@@ -648,8 +658,16 @@ export class GuildAudioManager extends EventEmitter {
       this.engine.setStreamVolume(entry.streamId, volume)
   }
 
-  /** Ends every Ambience sound for this guild, clearing their repeat timers. Bulk teardown, like `stopAllMusic`, so it does not emit `ambienceChanged` per sound. */
+  /**
+   * Ends every Ambience sound for this guild, clearing their repeat timers.
+   * Bulk teardown, like `stopAllMusic`, so it does not emit `ambienceChanged`
+   * per sound. Bumps the generation of every soundId ever seen, not just the
+   * active entries, so an initial decode still in flight (no entry yet) is
+   * superseded too, along with any restart mid-decode (#640).
+   */
   stopAllAmbience(): void {
+    for (const [soundId, generation] of this.ambienceGenerations)
+      this.ambienceGenerations.set(soundId, generation + 1)
     for (const entry of this.ambienceEntries.values()) {
       this.clearAmbienceRepeatTimer(entry)
       this.engine.stopMusic(entry.streamId)
