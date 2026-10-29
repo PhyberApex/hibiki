@@ -58,6 +58,8 @@ interface MusicStreamEntry {
   seq: number
   /** Only set for a track started via `playMusic` (the backend-decoded path); restarts the decoder stream on end. */
   loop?: boolean
+  /** 0-100, the volume this track is heading to: `playMusic`'s volume, then each `setMusicVolume` target. A loop restart starts at this, not the original (#642). */
+  volume?: number
 }
 
 export interface PlayMusicOptions {
@@ -445,13 +447,16 @@ export class GuildAudioManager extends EventEmitter {
         }
       }
 
-      log.info(`Music "${metadata.name}" starting as ${streamId}: volume ${options.volume}, loop ${loop}, fadeIn ${startFadeMs} ms; ${this.encryptionSummary}`)
-      this.musicStreams.set(streamId, { metadata, seq, loop })
+      const volume = isRestart
+        ? this.musicStreams.get(streamId)?.volume ?? options.volume
+        : options.volume
+      log.info(`Music "${metadata.name}" ${isRestart ? 'restarting' : 'starting'} as ${streamId}: volume ${volume}, loop ${loop}, fadeIn ${startFadeMs} ms; ${this.encryptionSummary}`)
+      this.musicStreams.set(streamId, { metadata, seq, loop, volume })
       this.engine.playMusicFromStream(stream, streamId, startFadeMs > 0
         ? 0
-        : options.volume, onEnded)
+        : volume, onEnded)
       if (startFadeMs > 0)
-        this.engine.rampStreamVolume(streamId, options.volume, startFadeMs)
+        this.engine.rampStreamVolume(streamId, volume, startFadeMs)
     }
 
     await startStream(fadeMs, false)
@@ -491,6 +496,10 @@ export class GuildAudioManager extends EventEmitter {
     if (streamId === undefined)
       return
     const rampMs = options.rampMs ?? 0
+    const entry = this.musicStreams.get(streamId)
+    if (entry)
+      entry.volume = volume
+    log.debug(`Music ${streamId} volume -> ${volume}, ramp ${rampMs} ms (guild ${this.guildId})`)
     if (rampMs > 0)
       this.engine.rampStreamVolume(streamId, volume, rampMs)
     else

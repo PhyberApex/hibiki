@@ -402,6 +402,42 @@ describe('guildAudioManager', () => {
       expect(manager.track).toEqual(meta)
     })
 
+    it.each([
+      ['immediate', {}],
+      [
+        'ramped',
+        { rampMs: 300 },
+      ],
+    ])('a loop restart keeps the volume set by an %s setMusicVolume (#642)', async (_label, volumeOptions) => {
+      const firstStream = createFakeStream()
+      const secondStream = createFakeStream()
+      const factory = jest.fn().mockReturnValueOnce(firstStream).mockReturnValueOnce(secondStream)
+
+      await manager.playMusic(factory, meta, { volume: 80, loop: true })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+      manager.setMusicVolume(20, volumeOptions)
+
+      firstStream.emit('end')
+      await flushAsync()
+
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, streamId, 20, expect.any(Function))
+    })
+
+    it('a loop restart keeps a volume set during the initial fade-in (#642)', async () => {
+      const firstStream = createFakeStream()
+      const secondStream = createFakeStream()
+      const factory = jest.fn().mockReturnValueOnce(firstStream).mockReturnValueOnce(secondStream)
+
+      await manager.playMusic(factory, meta, { volume: 80, loop: true, fadeInMs: 500 })
+      const streamId = getEngineMock().playMusicFromStream.mock.calls[0][1]
+      manager.setMusicVolume(30)
+
+      firstStream.emit('end')
+      await flushAsync()
+
+      expect(getEngineMock().playMusicFromStream).toHaveBeenNthCalledWith(2, secondStream, streamId, 30, expect.any(Function))
+    })
+
     it('clears the current track when a non-looping track ends', async () => {
       const stream = createFakeStream()
       await manager.playMusic(jest.fn().mockReturnValue(stream), meta, { volume: 80 })

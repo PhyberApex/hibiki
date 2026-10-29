@@ -205,6 +205,30 @@ describe('audioEngine', () => {
         jest.useRealTimers()
       }
     })
+
+    it('a stream draining naturally cancels its in-progress ramp (#642)', async () => {
+      jest.useFakeTimers()
+      try {
+        const stream = createFakeStream()
+        const onEnded = jest.fn()
+        engine.playMusicFromStream(stream, 'a', 0, onEnded)
+        const onDone = jest.fn()
+
+        engine.rampStreamVolume('a', 100, 1000, onDone)
+        await endStream(stream)
+        jest.advanceTimersByTime(50)
+        expect(onEnded).toHaveBeenCalledTimes(1)
+
+        const paramsAtDrain = createdInputs[0].params
+        jest.advanceTimersByTime(1000)
+
+        expect(createdInputs[0].params).toBe(paramsAtDrain)
+        expect(onDone).not.toHaveBeenCalled()
+      }
+      finally {
+        jest.useRealTimers()
+      }
+    })
   })
 
   describe('keyed effect streams', () => {

@@ -199,6 +199,9 @@ export class AudioEngine {
       if (this.musicStreams.get(streamId) !== ended)
         return
       log.debug(`Mixer input for ${streamId ?? '(default)'} drained`)
+      // A ramp still running would keep writing params to a destroyed input and then fire its onDone for a gone stream (#642).
+      ended.cancelRamp?.()
+      ended.cancelRamp = undefined
       ended.input.destroy()
       this.musicStreams.delete(streamId)
       this.syncLocalSink()
