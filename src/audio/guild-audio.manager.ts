@@ -397,7 +397,7 @@ export class GuildAudioManager extends EventEmitter {
    * #409. `loop` restarts `streamFactory` at end of file; otherwise the
    * track clears once the file ends. Rejects (leaving any current track
    * untouched) if `streamFactory` fails on its first call. If superseded by
-   * another `playMusic`/`stopCurrentTrack` call before the decode resolves,
+   * another `playMusic`/`stopCurrentTrack`/`stopAllMusic` call before the decode resolves,
    * this resolves without taking effect — the newer call wins.
    */
   async playMusic(
@@ -424,8 +424,7 @@ export class GuildAudioManager extends EventEmitter {
       // be registered, since it was dropped from bookkeeping if not (#640).
       const superseded = this.musicGeneration !== myGeneration
       if (superseded || (isRestart && this.musicStreams.get(streamId)?.seq !== seq)) {
-        if (isRestart)
-          log.info(`Music "${metadata.name}" loop restart of ${streamId} dropped: ${superseded ? 'superseded or stopped' : 'stream no longer registered'} while decoding (guild ${this.guildId})`)
+        log.info(`Music "${metadata.name}" ${isRestart ? 'loop restart' : 'start'} of ${streamId} dropped: ${superseded ? 'superseded or stopped' : 'stream no longer registered'} while decoding (guild ${this.guildId})`)
         stream.destroy?.()
         return
       }
@@ -539,7 +538,8 @@ export class GuildAudioManager extends EventEmitter {
    * duration instead of cutting — crossfade parity with `playMusic`.
    * Rejects (leaving any current entry for this soundId untouched) if
    * `streamFactory` fails on its first call. If superseded by another
-   * `playAmbience`/`stopAmbience` call for the same soundId before the
+   * `playAmbience`/`stopAmbience` call for the same soundId (or a
+   * `stopAllAmbience`) before the
    * decode resolves, this resolves without taking effect.
    */
   async playAmbience(
@@ -573,8 +573,7 @@ export class GuildAudioManager extends EventEmitter {
       // one, since it was dropped from bookkeeping if not (#640).
       const superseded = this.ambienceGenerations.get(soundId) !== myGeneration
       if (superseded || (isRestart && this.ambienceEntries.get(soundId) !== entry)) {
-        if (isRestart)
-          log.info(`Ambience ${soundId} restart of ${streamId} dropped: ${superseded ? 'superseded or stopped' : 'entry no longer active'} while decoding (guild ${this.guildId})`)
+        log.info(`Ambience ${soundId} ${isRestart ? 'restart' : 'start'} of ${streamId} dropped: ${superseded ? 'superseded or stopped' : 'entry no longer active'} while decoding (guild ${this.guildId})`)
         stream.destroy?.()
         return
       }
