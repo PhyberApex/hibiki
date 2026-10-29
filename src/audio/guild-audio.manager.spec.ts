@@ -43,6 +43,7 @@ jest.mock('./audio-engine', () => ({
 
 /** The mocked AudioEngine instance the manager under test constructed. */
 function getEngineMock(): {
+  destroy: jest.Mock
   playMusicFromStream: jest.Mock
   stopMusic: jest.Mock
   stopAllMusic: jest.Mock
@@ -102,6 +103,7 @@ function createDeferredEffectFactory(): {
 
 type FakeConnection = EventEmitter & {
   joinConfig: { channelId: string }
+  state: { status: string }
   destroy: jest.Mock
   subscribe: jest.Mock
 }
@@ -111,6 +113,9 @@ function createFakeConnection(channelId = 'channel-1'): FakeConnection {
   connection.joinConfig = { channelId }
   connection.subscribe = jest.fn()
   let status: string = voice.VoiceConnectionStatus.Ready
+  Object.defineProperty(connection, 'state', {
+    get: () => ({ status }),
+  })
   connection.destroy = jest.fn(() => {
     const oldStatus = status
     status = voice.VoiceConnectionStatus.Destroyed
@@ -175,6 +180,51 @@ describe('guildAudioManager', () => {
 
       expect(connection.destroy).toHaveBeenCalled()
       expect(listener).not.toHaveBeenCalled()
+    })
+
+    it('destroys the audio engine exactly once (#643)', () => {
+      ;(voice.getVoiceConnection as jest.Mock).mockReturnValue(createFakeConnection())
+
+      manager.disconnect()
+
+      expect(getEngineMock().destroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('a throwing connection.destroy() still resets the teardown guard and destroys the engine (#643)', async () => {
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      await manager.connect(fakeChannel)
+      const throwingConnection = {
+        state: { status: voice.VoiceConnectionStatus.Ready },
+        destroy: jest.fn(() => {
+          throw new Error('Cannot destroy VoiceConnection - it has already been destroyed')
+        }),
+      }
+      ;(voice.getVoiceConnection as jest.Mock).mockReturnValue(throwingConnection)
+
+      expect(() => manager.disconnect()).not.toThrow()
+
+      expect(getEngineMock().destroy).toHaveBeenCalledTimes(1)
+      // The guard is down again: a later external Destroyed on a connection this manager owns is handled, not swallowed.
+      const listener = jest.fn()
+      manager.on('disconnected', listener)
+      const next = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(next)
+      await manager.connect(fakeChannel)
+      next.emit('stateChange', { status: voice.VoiceConnectionStatus.Ready }, { status: voice.VoiceConnectionStatus.Destroyed })
+      expect(listener).toHaveBeenCalledTimes(1)
+    })
+
+    it('skips destroying a connection that is already Destroyed (#643)', () => {
+      const connection = createFakeConnection()
+      connection.destroy()
+      connection.destroy.mockClear()
+      ;(voice.getVoiceConnection as jest.Mock).mockReturnValue(connection)
+
+      manager.disconnect()
+
+      expect(connection.destroy).not.toHaveBeenCalled()
+      expect(getEngineMock().destroy).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -242,6 +292,28 @@ describe('guildAudioManager', () => {
       expect(manager.connected).toBe(false)
       expect(manager.channelId).toBeUndefined()
       expect(manager.channelLabel).toBeUndefined()
+    })
+
+    it('destroys the audio engine exactly once when the connection is destroyed from outside (#643)', async () => {
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      await manager.connect(fakeChannel)
+
+      connection.destroy()
+      await flushAsync()
+
+      expect(getEngineMock().destroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the audio engine when switching channels destroys the old connection (#643)', async () => {
+      ;(voice.joinVoiceChannel as jest.Mock)
+        .mockReturnValueOnce(createFakeConnection('channel-1'))
+        .mockReturnValueOnce(createFakeConnection('channel-2'))
+      await manager.connect(fakeChannel)
+
+      await manager.connect({ ...fakeChannel, id: 'channel-2' } as VoiceBasedChannel)
+
+      expect(getEngineMock().destroy).not.toHaveBeenCalled()
     })
 
     it('does not emit disconnected when switching channels destroys the old connection', async () => {

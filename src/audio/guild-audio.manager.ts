@@ -179,6 +179,8 @@ export class GuildAudioManager extends EventEmitter {
    * resulting Destroyed stateChange doesn't re-trigger teardown handling.
    */
   private intentionalTeardown = false
+  /** Set once the engine is shut down, so no path destroys it twice. */
+  private engineDestroyed = false
 
   /**
    * `localSink` makes this the Local Target's engine (ADR-0004): no voice
@@ -321,6 +323,7 @@ export class GuildAudioManager extends EventEmitter {
     this.stopAllEffects()
     this.connection = undefined
     this.channelName = undefined
+    this.destroyEngine('teardown')
     this.emit('disconnected')
   }
 
@@ -330,14 +333,38 @@ export class GuildAudioManager extends EventEmitter {
    */
   private withIntentionalTeardown(action: () => void): void {
     this.intentionalTeardown = true
-    action()
-    this.intentionalTeardown = false
+    try {
+      action()
+    }
+    finally {
+      this.intentionalTeardown = false
+    }
+  }
+
+  /**
+   * Destroys `connection` under the intentional-teardown guard. Skipped when
+   * it is already Destroyed, since `VoiceConnection.destroy()` throws then.
+   */
+  private destroyOwnConnection(connection: VoiceConnection | undefined): void {
+    if (!connection || connection.state?.status === VoiceConnectionStatus.Destroyed)
+      return
+    this.withIntentionalTeardown(() => connection.destroy())
   }
 
   private destroyConnection() {
-    if (!this.connection)
+    this.destroyOwnConnection(this.connection)
+  }
+
+  /**
+   * Shuts the engine down once this manager gives up its connection: the
+   * mixer's read loop otherwise reschedules itself every 1 ms forever (#643).
+   */
+  private destroyEngine(reason: 'disconnect' | 'teardown' | 'shutdown'): void {
+    if (this.engineDestroyed)
       return
-    this.withIntentionalTeardown(() => this.connection!.destroy())
+    this.engineDestroyed = true
+    this.engine.destroy()
+    log.info(`Audio engine destroyed (guild ${this.guildId}, reason ${reason})`)
   }
 
   disconnect() {
@@ -346,9 +373,15 @@ export class GuildAudioManager extends EventEmitter {
     this.stopAllMusic()
     this.stopAllAmbience()
     this.stopAllEffects()
-    this.withIntentionalTeardown(() => getVoiceConnection(this.guildId)?.destroy())
+    try {
+      this.destroyOwnConnection(getVoiceConnection(this.guildId))
+    }
+    catch (err) {
+      log.warn(`Destroying the voice connection failed while leaving (guild ${this.guildId}):`, err)
+    }
     this.connection = undefined
     this.channelName = undefined
+    this.destroyEngine('disconnect')
   }
 
   destroy() {
@@ -356,9 +389,13 @@ export class GuildAudioManager extends EventEmitter {
     this.stopAllMusic()
     this.stopAllAmbience()
     this.stopAllEffects()
-    this.withIntentionalTeardown(() => this.connection?.destroy())
-    this.connection = undefined
-    this.engine.destroy()
+    try {
+      this.destroyOwnConnection(this.connection)
+    }
+    finally {
+      this.connection = undefined
+      this.destroyEngine('shutdown')
+    }
   }
 
   /**
