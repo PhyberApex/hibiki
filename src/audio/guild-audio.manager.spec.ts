@@ -228,6 +228,48 @@ describe('guildAudioManager', () => {
     })
   })
 
+  describe('connect: Ready timeout (#645)', () => {
+    it('destroys the half-joined connection and reports not connected', async () => {
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      ;(voice.entersState as jest.Mock).mockRejectedValue(new Error('The operation was aborted'))
+      const listener = jest.fn()
+      manager.on('disconnected', listener)
+
+      await expect(manager.connect(fakeChannel)).rejects.toThrow('The operation was aborted')
+
+      expect(connection.destroy).toHaveBeenCalledTimes(1)
+      expect(manager.connected).toBe(false)
+      expect(manager.channelId).toBeUndefined()
+      expect(manager.channelLabel).toBeUndefined()
+      expect(listener).not.toHaveBeenCalled()
+      expect(getEngineMock().destroy).not.toHaveBeenCalled()
+    })
+
+    it('leaves a newer connection alone when a superseded join times out', async () => {
+      const first = createFakeConnection('channel-1')
+      const second = createFakeConnection('channel-2')
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValueOnce(first).mockReturnValueOnce(second)
+      let rejectFirst!: (err: Error) => void
+      ;(voice.entersState as jest.Mock)
+        .mockImplementationOnce(() => new Promise((_resolve, reject) => {
+          rejectFirst = reject
+        }))
+        .mockResolvedValueOnce(undefined)
+
+      const firstJoin = manager.connect(fakeChannel)
+      await manager.connect({ ...fakeChannel, id: 'channel-2', name: 'Other' } as VoiceBasedChannel)
+      rejectFirst(new Error('The operation was aborted'))
+      await expect(firstJoin).rejects.toThrow('The operation was aborted')
+
+      expect(first.destroy).toHaveBeenCalledTimes(1)
+      expect(second.destroy).not.toHaveBeenCalled()
+      expect(manager.connected).toBe(true)
+      expect(manager.channelId).toBe('channel-2')
+      expect(manager.channelLabel).toBe('Other')
+    })
+  })
+
   describe('connect: Disconnected handling', () => {
     it('stays connected when the connection recovers within the grace period', async () => {
       const connection = createFakeConnection()

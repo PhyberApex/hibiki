@@ -251,6 +251,20 @@ export class GuildAudioManager extends EventEmitter {
     }
     catch (err) {
       log.error(`Voice connection to "${channel.name}" did not become ready within 20 s (guild ${this.guildId})`, err)
+      // A half-joined connection left registered would report the Target as
+      // joined and accept playback that only buffers silently (#645). A newer
+      // connect() already destroyed this one and owns the state, so skip then.
+      if (this.connection === connection) {
+        try {
+          this.destroyOwnConnection(connection)
+        }
+        catch (destroyErr) {
+          log.warn(`Destroying the unready voice connection failed (guild ${this.guildId}):`, destroyErr)
+        }
+        this.connection = undefined
+        this.channelName = undefined
+        log.warn(`Gave up joining "${channel.name}"; connection destroyed (guild ${this.guildId})`)
+      }
       throw err
     }
     log.info(`Voice connection ready in "${channel.name}" (guild ${this.guildId}): ${describeEncryption(connection)}`)
