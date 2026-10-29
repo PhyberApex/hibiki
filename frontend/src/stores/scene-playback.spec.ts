@@ -207,6 +207,24 @@ describe('scene playback store', () => {
       expect(usePlayerStore().playingSceneId).toBe('s2')
     })
 
+    it('a Stop while the first track\'s decode probe is pending leaves Music unstarted', async () => {
+      const store = setupStore()
+      let releaseProbe!: (decodable: boolean) => void
+      vi.mocked(canDecode).mockReturnValueOnce(new Promise((resolve) => {
+        releaseProbe = resolve
+      }))
+
+      const starting = store.playScene({ ...twoAmbienceScene, ambience: [] })
+      await vi.waitFor(() => expect(canDecode).toHaveBeenCalledWith('music', 'mus-1'))
+      store.stopScene()
+      releaseProbe(true)
+      await starting
+
+      expect(playMusic).not.toHaveBeenCalled()
+      expect(store.playingMusicId).toBeNull()
+      expect(store.musicSceneId).toBeNull()
+    })
+
     it('a Scene Crossfade while the first Scene is starting ends with only the crossfaded Scene\'s Music', async () => {
       const { getScene } = await import('@/api/scenes')
       vi.mocked(getScene).mockResolvedValue(otherScene)

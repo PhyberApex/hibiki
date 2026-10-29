@@ -184,7 +184,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   let musicIntent = 0
   // Bumped by every Scene start, Stop and Scene Crossfade: a Scene start-up
   // still awaiting its Ambience must not start anything once overtaken.
-  let sceneStartSeq = 0
+  let sceneIntent = 0
 
   function getAmbienceAudio(soundId: string): HTMLAudioElement {
     let el = ambienceAudioEls.get(soundId)
@@ -664,6 +664,13 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         console.warn(`[scene] Music Mode ${mode}: track ${next.soundId} is no longer in Scene ${scene.id}, Music stops`)
         return
       }
+      // `start` claims the channel only after this cached probe resolves, so
+      // await it here: a Stop landing meanwhile is seen before anything starts.
+      await canDecodeMusicCached(item.soundId)
+      if (intent !== musicIntent) {
+        logInfo(`[scene] Music start of track ${item.soundId} of Scene ${scene.id} superseded, nothing starts`)
+        return
+      }
       musicCursor = {
         sceneId: scene.id,
         current: next.soundId,
@@ -904,10 +911,12 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     if (!canPlay.value || !targetId.value)
       return
     stopScene()
-    const start = ++sceneStartSeq
+    const scenePlay = ++sceneIntent
+    // Captured now, not after the Ambience awaits: Music must not start for a
+    // Scene whose start-up a Stop, Play or Crossfade has meanwhile overtaken.
     const intent = musicIntent
-    const superseded = () => {
-      if (start === sceneStartSeq)
+    const abortIfSuperseded = () => {
+      if (scenePlay === sceneIntent)
         return false
       logInfo(`[scene] play Scene ${target.id} superseded, aborting start-up`)
       return true
@@ -918,7 +927,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     try {
       for (const item of target.ambience.filter(a => a.enabled)) {
         await playAmbience(item)
-        if (superseded())
+        if (abortIfSuperseded())
           return
       }
       const mode = normalizeMusicMode(target.musicMode)
@@ -939,7 +948,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // losing voice, and ambience/music toggled individually (never via Play)
   // when the GM leaves the open Scene.
   function stopScene() {
-    sceneStartSeq++
+    sceneIntent++
     pendingHandoverSceneId.value = null
     for (const soundId of [...playingAmbienceIds.value])
       stopAmbience(soundId)
@@ -1204,7 +1213,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     if (!target)
       return
     const durationMs = await sceneFadeMs()
-    sceneStartSeq++
+    sceneIntent++
     player.setPlayingScene(target.id, targetId.value)
     trackScenePlay(target)
     sceneTransitionFlash.trigger(SCENE_START_FLASH)
