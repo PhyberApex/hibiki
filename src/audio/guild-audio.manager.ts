@@ -254,7 +254,12 @@ export class GuildAudioManager extends EventEmitter {
       // A half-joined connection left registered would report the Target as
       // joined and accept playback that only buffers silently (#645). A newer
       // connect() already destroyed this one and owns the state, so skip then.
-      if (this.connection === connection) {
+      if (this.connection !== connection) {
+        log.info(`Join to "${channel.name}" was superseded by a newer join; leaving its state alone (guild ${this.guildId})`)
+      }
+      else {
+        // Anything started during the join window would otherwise sit buffered in the mixer.
+        this.stopEverything()
         try {
           this.destroyOwnConnection(connection)
         }

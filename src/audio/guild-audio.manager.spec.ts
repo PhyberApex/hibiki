@@ -246,6 +246,29 @@ describe('guildAudioManager', () => {
       expect(getEngineMock().destroy).not.toHaveBeenCalled()
     })
 
+    it('stops playback started while the join was still pending', async () => {
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      let rejectReady!: (err: Error) => void
+      ;(voice.entersState as jest.Mock).mockImplementation(() => new Promise((_resolve, reject) => {
+        rejectReady = reject
+      }))
+      const join = manager.connect(fakeChannel)
+      await manager.playMusic(() => createFakeStream() as never, {
+        id: 'a',
+        name: 'A',
+        filename: 'a.mp3',
+        category: 'music',
+      }, { volume: 50 })
+      expect(manager.track).toBeDefined()
+
+      rejectReady(new Error('The operation was aborted'))
+      await expect(join).rejects.toThrow('The operation was aborted')
+
+      expect(manager.track).toBeUndefined()
+      expect(getEngineMock().stopAllMusic).toHaveBeenCalled()
+    })
+
     it('leaves a newer connection alone when a superseded join times out', async () => {
       const first = createFakeConnection('channel-1')
       const second = createFakeConnection('channel-2')
