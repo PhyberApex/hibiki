@@ -381,6 +381,18 @@ describe('createPlayer', () => {
       await expect(player.playMusic('guild-1', 's1', { volume: 80 })).rejects.toThrow('Not connected')
     })
 
+    it('throws when the join timed out before the connection became ready (#645)', async () => {
+      const sounds = createFakeSoundLibrary()
+      const player = createPlayer(createFakeDiscordClient(), sounds)
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(createFakeConnection())
+      ;(voice.entersState as jest.Mock).mockRejectedValue(new Error('The operation was aborted'))
+
+      await expect(player.connect(fakeChannel)).rejects.toThrow('The operation was aborted')
+
+      await expect(player.playMusic('guild-1', 's1', { volume: 80 })).rejects.toThrow('Not connected')
+      expect(sounds.getFile).not.toHaveBeenCalled()
+    })
+
     it('stopMusic forwards fadeOutMs to the manager and is a no-op without a manager', async () => {
       const file = {
         id: 's1',
