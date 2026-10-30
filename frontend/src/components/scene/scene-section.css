@@ -1,0 +1,166 @@
+/* Shared by the Scene category cards (Ambience, Music, Effects); each card
+   includes it as a scoped style next to its own. */
+
+.scene-section {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--section-color, var(--color-border));
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.scene-section:first-of-type {
+  margin-top: 1.25rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--section-color, var(--color-text-dim));
+}
+
+.section-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.add-select {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+
+.sound-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sound-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.sound-card-info {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.sound-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sound-card-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.volume-slider {
+  width: 120px;
+  accent-color: var(--color-accent);
+}
+
+.toggle input {
+  accent-color: var(--color-accent);
+}
+
+.sound-missing-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.35rem;
+  background: var(--color-error-muted);
+  color: var(--color-error);
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.sound-source-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  padding: 0.4rem 0.6rem;
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+
+.btn-resolve {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-accent);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-resolve:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-accent);
+}
+
+.btn-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon:hover:not(:disabled) {
+  background: var(--color-border);
+}
+
+.btn-remove {
+  color: var(--color-text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.btn-remove:hover {
+  color: var(--color-error);
+}

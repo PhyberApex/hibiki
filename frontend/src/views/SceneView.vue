@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import type { OutputTargetKind, VisionProviderId } from '@/api/config'
+import type { VisionProviderId } from '@/api/config'
 import type { MusicMode, Scene, SceneItem } from '@/api/scenes'
 import type { SoundFile } from '@/api/sounds'
-import type { EffectSoundStatus } from '@/stores/player'
-import type { MusicProgress } from '@/stores/scene-playback'
+import type { SceneCategory } from '@/components/scene/scene-format'
 import { storeToRefs } from 'pinia'
 import { computed, nextTick, onActivated, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
@@ -12,12 +11,17 @@ import { deleteScene, exportScene, getScene, importScene, listScenes, moveScene,
 import { listAmbience, listEffects, listMusic } from '@/api/sounds'
 import { logInfo } from '@/audio/audio-element-diagnostics'
 import { normalizeMusicMode } from '@/audio/music-mode'
-import HotkeyRecorder from '@/components/HotkeyRecorder.vue'
 import RegistryBrowser from '@/components/RegistryBrowser.vue'
 import ResolveSoundDialog from '@/components/ResolveSoundDialog.vue'
+import AmbienceCard from '@/components/scene/AmbienceCard.vue'
+import EffectsCard from '@/components/scene/EffectsCard.vue'
+import MusicCard from '@/components/scene/MusicCard.vue'
+import { isMissingFrom } from '@/components/scene/scene-format'
+import SceneHeader from '@/components/scene/SceneHeader.vue'
+import ScenePlaybackBar from '@/components/scene/ScenePlaybackBar.vue'
 import VisionToVibeDialog from '@/components/VisionToVibeDialog.vue'
 import { usePlayerStore } from '@/stores/player'
-import { SCENE_START_FLASH, useScenePlaybackStore } from '@/stores/scene-playback'
+import { useScenePlaybackStore } from '@/stores/scene-playback'
 import { useToastStore } from '@/stores/toast'
 
 const route = useRoute()
@@ -25,12 +29,12 @@ const router = useRouter()
 const player = usePlayerStore()
 const toast = useToastStore()
 // Scene orchestration (play/stop, Scene Crossfade, renderer-fallback audio)
-// lives in the store so it survives leaving this view; the view renders state
-// and calls store actions.
+// lives in the store so it survives leaving this view. This view owns the
+// Scene list and the open Scene (loading, saving, rollback); the header,
+// playback bar and category cards under components/scene render it.
 const playback = useScenePlaybackStore()
-const { masterVolume: globalVolume, playingMusicId, musicProgress, playingAmbienceIds, musicSounds } = storeToRefs(playback)
-const { effectFlash, sceneTransitionFlash } = playback
-const { playScene: playSceneFor, stopScene, stopAmbience, playMusicTrack, playEffect, stopMusicPlayback, stopAllEffectInstances, updateAmbienceVolume, updateMusicVolume } = playback
+const { playingMusicId, musicSounds } = storeToRefs(playback)
+const { stopScene, stopAmbience, stopMusicPlayback, stopAllEffectInstances, updateAmbienceVolume, updateMusicVolume } = playback
 
 const scenes = ref<Scene[]>([])
 const scene = ref<Scene | null>(null)
@@ -46,7 +50,7 @@ const visionAvailable = ref(false)
 const visionProvider = ref<VisionProviderId>('claude')
 const visionEndpoint = ref('')
 const showVisionDialog = ref(false)
-const resolveTarget = ref<{ category: 'ambience' | 'music' | 'effects', item: SceneItem } | null>(null)
+const resolveTarget = ref<{ category: SceneCategory, item: SceneItem } | null>(null)
 // One per load so a later success only clears its own failure.
 const scenesLoadError = ref<string | null>(null)
 const sceneLoadError = ref<string | null>(null)
@@ -58,12 +62,6 @@ const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | nu
 watch(scene, (s) => {
   playback.openScene = s
 }, { immediate: true, flush: 'sync' })
-
-const MUSIC_MODE_OPTIONS: { value: MusicMode, label: string, title: string }[] = [
-  { value: 'single', label: 'Single', title: 'Play one track; its Loop toggle repeats it' },
-  { value: 'sequential', label: 'Sequential', title: 'Play the tracks in order, starting over after the last' },
-  { value: 'shuffle', label: 'Shuffle', title: 'Play every track once in random order, then reshuffle' },
-]
 
 const musicMode = computed(() => normalizeMusicMode(scene.value?.musicMode))
 
@@ -147,74 +145,6 @@ async function persistScene(what: string) {
   }
 }
 
-const INTERVAL_OPTIONS = [
-  0,
-  5,
-  10,
-  15,
-  20,
-  30,
-  45,
-  60,
-  90,
-  120,
-  180,
-  300,
-  600,
-]
-
-function formatInterval(seconds: number): string {
-  if (seconds === 0)
-    return '0s'
-  if (seconds < 60)
-    return `${seconds}s`
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return s > 0
-    ? `${m}m ${s}s`
-    : `${m}m`
-}
-
-/** `m:ss` for an elapsed/total timer label (whole seconds, per #509's acceptance criteria). */
-function formatTimerSeconds(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000)
-  const m = Math.floor(totalSeconds / 60)
-  const s = totalSeconds % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-/** Elapsed / total of an Effect's longest-remaining instance (#509) or the playing Music track (#695). */
-type TimerProgress = Pick<EffectSoundStatus, 'elapsedMs' | 'totalMs'>
-
-/** `m:ss / m:ss` (elapsed / total). */
-function timerLabel(progress: TimerProgress): string {
-  return `${formatTimerSeconds(progress.elapsedMs)} / ${formatTimerSeconds(progress.totalMs)}`
-}
-
-/** 0-100 fill percentage, or 0 while the duration isn't known yet. */
-function progressPercent(progress: TimerProgress): number {
-  if (progress.totalMs <= 0)
-    return 0
-  return Math.min(100, (progress.elapsedMs / progress.totalMs) * 100)
-}
-
-/** The playing Music track's progress when `soundId` is that track, else null. */
-function musicProgressFor(soundId: string): MusicProgress | null {
-  return musicProgress.value?.soundId === soundId
-    ? musicProgress.value
-    : null
-}
-
-// One `player.effectStatus()` scan per Effect item per reactive tick, shared by the whole card.
-const effectCards = computed(() => {
-  if (!scene.value)
-    return []
-  return scene.value.effects.map(item => ({
-    item,
-    status: player.effectStatus(item.soundId),
-  }))
-})
-
 // Hotkey bindings are validated when the Scene is saved (uniqueness, Stop Hotkey), so a rejection
 // surfaces here: revert the edit and show the message on the recorder that caused it.
 const hotkeyErrors = ref<Record<string, string>>({})
@@ -258,73 +188,22 @@ async function bindHotkey(errorKey: string, target: { hotkey?: string }, value: 
   }
 }
 
-function updateRepeat(item: SceneItem, field: 'repeatMin' | 'repeatMax', value: number) {
-  item[field] = value
-  if (field === 'repeatMin' && (item.repeatMax ?? 0) < value)
-    item.repeatMax = value
-  if (field === 'repeatMax' && value < (item.repeatMin ?? 0))
-    item.repeatMin = value
-  persistScene(`the repeat interval of ${item.soundName ?? item.soundId}`)
-}
-
 const sceneId = computed(() => {
   if (route.path === '/scenes' || route.path.startsWith('/scenes/'))
     return route.params.id as string
   return undefined
 })
 
-const canPlay = computed(() => player.canPlay)
-
 const hasSounds = computed(() =>
   ambienceSounds.value.length > 0 || musicSounds.value.length > 0 || effectsSounds.value.length > 0,
 )
 
 const hasAnySoundMissing = computed(() => {
-  if (!scene.value)
+  const s = scene.value
+  if (!s)
     return false
-  return [
-    ...scene.value.ambience,
-    ...scene.value.music,
-    ...scene.value.effects,
-  ]
-    .some(item => isSoundMissing(
-      scene.value!.ambience.includes(item)
-        ? 'ambience'
-        : scene.value!.music.includes(item)
-          ? 'music'
-          : 'effects',
-      item.soundId,
-    ))
-})
-
-const isScenePlayingHere = computed(() =>
-  scene.value != null && player.playingSceneId === scene.value.id,
-)
-
-// Gated on the scene-level playing flag (not just "is a track currently
-// audible") so this never contradicts the Play/Stop button next to it — a
-// track can end naturally (onended clears playingMusicId) while the scene is
-// still "started" and Stop is still the right action.
-const nowPlayingLabel = computed(() => {
-  if (!isScenePlayingHere.value)
-    return 'Nothing playing'
-  const parts: string[] = []
-  // Backend-decoded Music (ADR-0003) is reported by GuildAudioManager and
-  // survives a renderer reload, so it's preferred over the local ref here —
-  // see CONTEXT.md on "now playing" sourcing.
-  const backendTrack = player.activeTargetState?.track
-  if (backendTrack && backendTrack.category === 'music') {
-    parts.push(backendTrack.name)
-  }
-  else if (playingMusicId.value) {
-    const musicItem = scene.value?.music.find(m => m.soundId === playingMusicId.value)
-    parts.push(musicItem?.soundName ?? resolveSoundName('music', playingMusicId.value))
-  }
-  if (playingAmbienceIds.value.size > 0)
-    parts.push(`${playingAmbienceIds.value.size} ambience`)
-  return parts.length > 0
-    ? parts.join(' · ')
-    : 'Scene playing'
+  return (['ambience', 'music', 'effects'] as const)
+    .some(category => s[category].some(item => isMissingFrom(librarySounds(category), item.soundId)))
 })
 
 function sceneSoundCount(s: Scene): number {
@@ -353,17 +232,14 @@ function formatDate(iso: string): string {
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
 }
 
-function resolveSoundName(category: 'ambience' | 'music' | 'effects', soundId: string): string {
-  const list = category === 'ambience'
+/** The Sound Library half a category's Scene items come from. */
+function librarySounds(category: SceneCategory): SoundFile[] {
+  return category === 'ambience'
     ? ambienceSounds.value
     : category === 'music'
       ? musicSounds.value
       : effectsSounds.value
-  return list.find(s => s.id === soundId)?.name ?? soundId
 }
-
-const loadGlobalVolume = () => playback.loadMasterVolume()
-const saveGlobalVolume = () => playback.saveMasterVolume()
 
 async function loadScenes() {
   try {
@@ -435,14 +311,7 @@ async function loadSounds() {
   }
 }
 
-function toggleAmbience(item: SceneItem) {
-  persistScene(`${item.soundName ?? item.soundId} ${item.enabled
-    ? 'on'
-    : 'off'}`)
-  playback.toggleAmbience(item)
-}
-
-async function addToScene(category: 'ambience' | 'music' | 'effects', sound: SoundFile) {
+async function addToScene(category: SceneCategory, sound: SoundFile) {
   if (!scene.value)
     return
   const list = scene.value[category]
@@ -458,7 +327,7 @@ async function addToScene(category: 'ambience' | 'music' | 'effects', sound: Sou
   await persistScene(`${sound.name} to the scene`)
 }
 
-async function removeFromScene(category: 'ambience' | 'music' | 'effects', soundId: string) {
+async function removeFromScene(category: SceneCategory, soundId: string) {
   if (!scene.value)
     return
   const list = scene.value[category]
@@ -481,19 +350,6 @@ async function removeFromScene(category: 'ambience' | 'music' | 'effects', sound
     }
     await persistScene(`the removal of ${removed.soundName ?? soundId}`)
   }
-}
-
-function playScene() {
-  if (scene.value)
-    return playSceneFor(scene.value)
-}
-
-function stopPlayingScene() {
-  stopScene()
-}
-
-function switchTarget(kind: OutputTargetKind) {
-  return playback.switchTarget(kind)
 }
 
 function openCreateScene() {
@@ -743,16 +599,7 @@ async function doImportScene() {
   }
 }
 
-function isSoundMissing(category: 'ambience' | 'music' | 'effects', soundId: string): boolean {
-  const list = category === 'ambience'
-    ? ambienceSounds.value
-    : category === 'music'
-      ? musicSounds.value
-      : effectsSounds.value
-  return !list.some(s => s.id === soundId)
-}
-
-async function relinkSound(category: 'ambience' | 'music' | 'effects', item: SceneItem, soundId: string, soundName: string) {
+async function relinkSound(item: SceneItem, soundId: string, soundName: string) {
   if (!scene.value)
     return
   const previous = item.soundName ?? item.soundId
@@ -775,7 +622,7 @@ onMounted(async () => {
   loadSounds()
   loadVisionAvailability()
   await player.loadActiveTarget()
-  loadGlobalVolume()
+  playback.loadMasterVolume()
 })
 
 onActivated(() => {
@@ -949,7 +796,7 @@ watch(sceneId, (newId) => {
             type="button"
             class="btn-stop-list"
             :aria-label="`Stop ${s.name}`"
-            @click="stopPlayingScene"
+            @click="stopScene"
           >
             Stop
           </button>
@@ -983,53 +830,19 @@ watch(sceneId, (newId) => {
     </template>
 
     <!-- ═══════ DETAIL STATE ═══════ -->
+    <!-- ═══════ DETAIL STATE ═══════ -->
     <template v-else>
-      <header class="detail-header">
-        <RouterLink to="/scenes" class="back-link">
-          <span class="back-arrow" aria-hidden="true">‹</span>
-          Scenes
-        </RouterLink>
-        <div class="detail-title-row">
-          <h1 class="detail-title">
-            {{ scene?.name ?? (sceneLoadError ? 'Scene unavailable' : 'Loading…') }}
-          </h1>
-          <HotkeyRecorder
-            v-if="scene"
-            :model-value="scene.hotkey"
-            label="Scene Hotkey"
-            :error="hotkeyErrors.scene"
-            @update:model-value="bindHotkey('scene', scene, $event)"
-          />
-          <div v-if="scene" class="detail-actions">
-            <button
-              v-if="visionAvailable"
-              type="button"
-              class="btn btn-ghost btn-vision"
-              data-testid="vision-to-vibe-open"
-              title="Drop in an image and get matching Music and Ambience from your tagged library"
-              @click="showVisionDialog = true"
-            >
-              <span class="btn-vision-icon" aria-hidden="true">✦</span>
-              Vision to Vibe
-            </button>
-            <button
-              type="button"
-              class="btn btn-ghost"
-              :disabled="exportBusy"
-              @click="doExportScene"
-            >
-              {{ exportBusy ? '…' : 'Export' }}
-            </button>
-            <button
-              type="button"
-              class="btn btn-ghost btn-danger"
-              @click="deleteCurrentScene"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      </header>
+      <SceneHeader
+        :scene="scene"
+        :load-error="sceneLoadError"
+        :hotkey-error="hotkeyErrors.scene"
+        :vision-available="visionAvailable"
+        :export-busy="exportBusy"
+        @bind-hotkey="scene && bindHotkey('scene', scene, $event)"
+        @open-vision="showVisionDialog = true"
+        @export="doExportScene"
+        @delete="deleteCurrentScene"
+      />
 
       <p
         v-if="exportImportMessage"
@@ -1048,409 +861,38 @@ watch(sceneId, (newId) => {
         {{ sceneLoadError ?? soundsLoadError }}
       </p>
 
-      <div
-        v-if="scene"
-        class="scene-playback-bar"
-        :class="{ 'pulse pulse-flash': sceneTransitionFlash.has(SCENE_START_FLASH) }"
-      >
-        <label class="global-volume">
-          <span class="volume-icon" aria-hidden="true">🔊</span>
-          <input
-            v-model.number="globalVolume"
-            type="range"
-            min="0"
-            max="100"
-            class="volume-slider"
-            aria-label="Global volume"
-            @change="saveGlobalVolume"
-          >
-        </label>
-        <div class="target-toggle" role="group" aria-label="Output Target">
-          <button
-            type="button"
-            class="btn btn-ghost target-option"
-            :class="{ 'target-option-active': !player.isLocalActive }"
-            :aria-pressed="!player.isLocalActive"
-            title="Play to your Discord voice channel"
-            @click="switchTarget('discord')"
-          >
-            Discord
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost target-option"
-            :class="{ 'target-option-active': player.isLocalActive }"
-            :aria-pressed="player.isLocalActive"
-            title="Play through this computer's speakers"
-            @click="switchTarget('local')"
-          >
-            Local
-          </button>
-        </div>
-        <div class="playback-actions">
-          <template v-if="isScenePlayingHere">
-            <button
-              type="button"
-              class="btn btn-stop-scene"
-              @click="stopPlayingScene"
-            >
-              Stop
-            </button>
-          </template>
-          <template v-else>
-            <button
-              type="button"
-              class="btn btn-primary btn-play-scene"
-              :title="hasAnySoundMissing ? 'Some sounds are missing — add them to your library first' : !canPlay ? 'Join a voice channel first' : player.isLocalActive ? 'Play this scene through your speakers' : 'Stream this scene to your Discord voice channel'"
-              :disabled="!canPlay || hasAnySoundMissing"
-              @click="playScene"
-            >
-              Play
-            </button>
-          </template>
-        </div>
-      </div>
-
-      <p v-if="scene" class="now-playing-line">
-        {{ nowPlayingLabel }}
-      </p>
-
       <template v-if="scene">
-        <section class="scene-section scene-section-ambience">
-          <div class="section-header">
-            <h2 class="section-title">
-              Ambience
-            </h2>
-            <select
-              class="add-select"
-              aria-label="Add ambience"
-              @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = ambienceSounds.find(x => x.id === id); if (s) addToScene('ambience', s); (e.target as HTMLSelectElement).value = '' } }"
-            >
-              <option value="">
-                Add ambience…
-              </option>
-              <option
-                v-for="s in ambienceSounds.filter(x => !scene.ambience.some(a => a.soundId === x.id))"
-                :key="s.id"
-                :value="s.id"
-              >
-                {{ s.name }}
-              </option>
-            </select>
-          </div>
-          <div class="sound-cards">
-            <div
-              v-for="item in scene.ambience"
-              :key="item.soundId"
-              class="sound-card sound-card-ambience"
-              :class="{ 'pulse pulse-breathe': playingAmbienceIds.has(item.soundId) }"
-            >
-              <div class="sound-card-row">
-                <div class="sound-card-info">
-                  <span class="sound-name">{{ item.soundName ?? resolveSoundName('ambience', item.soundId) }}</span>
-                  <span v-if="isSoundMissing('ambience', item.soundId)" class="sound-missing-badge">
-                    missing
-                  </span>
-                </div>
-                <div class="sound-card-controls">
-                  <input
-                    v-model.number="item.volume"
-                    type="range"
-                    min="0"
-                    max="100"
-                    class="volume-slider"
-                    :aria-label="`Volume for ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
-                    @input="updateAmbienceVolume(item)"
-                    @change="persistScene(`the volume of ${item.soundName ?? item.soundId}`)"
-                  >
-                  <label class="toggle">
-                    <input
-                      v-model="item.enabled"
-                      type="checkbox"
-                      :aria-label="`Enable ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
-                      :disabled="isSoundMissing('ambience', item.soundId)"
-                      @change="toggleAmbience(item)"
-                    >
-                  </label>
-                  <button
-                    type="button"
-                    class="btn-icon btn-remove"
-                    title="Remove"
-                    :aria-label="`Remove ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
-                    @click="removeFromScene('ambience', item.soundId)"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-              <div v-if="isSoundMissing('ambience', item.soundId)" class="sound-source-hint">
-                <button
-                  type="button"
-                  class="btn-resolve"
-                  @click="resolveTarget = { category: 'ambience', item }"
-                >
-                  Resolve missing sound...
-                </button>
-              </div>
-              <div class="ambience-repeat-row">
-                <span class="repeat-label">Repeat every</span>
-                <select
-                  class="repeat-select"
-                  :aria-label="`Shortest repeat interval for ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
-                  :value="item.repeatMin ?? 0"
-                  @change="updateRepeat(item, 'repeatMin', Number(($event.target as HTMLSelectElement).value))"
-                >
-                  <option
-                    v-for="opt in INTERVAL_OPTIONS"
-                    :key="opt"
-                    :value="opt"
-                  >
-                    {{ formatInterval(opt) }}
-                  </option>
-                </select>
-                <span class="repeat-label">to</span>
-                <select
-                  class="repeat-select"
-                  :aria-label="`Longest repeat interval for ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
-                  :value="item.repeatMax ?? 0"
-                  @change="updateRepeat(item, 'repeatMax', Number(($event.target as HTMLSelectElement).value))"
-                >
-                  <option
-                    v-for="opt in INTERVAL_OPTIONS.filter(o => o >= (item.repeatMin ?? 0))"
-                    :key="opt"
-                    :value="opt"
-                  >
-                    {{ formatInterval(opt) }}
-                  </option>
-                </select>
-              </div>
-            </div>
-          </div>
-          <p v-if="scene.ambience.length === 0" class="section-empty">
-            No ambience yet. Ambience loops continuously in the background — rain, wind, tavern chatter. Use the dropdown above to add tracks.
-          </p>
-        </section>
+        <ScenePlaybackBar :scene="scene" :has-any-sound-missing="hasAnySoundMissing" />
 
-        <section class="scene-section scene-section-music">
-          <div class="section-header">
-            <h2 class="section-title">
-              Music
-            </h2>
-            <div class="music-mode-toggle" role="group" aria-label="Music Mode">
-              <button
-                v-for="option in MUSIC_MODE_OPTIONS"
-                :key="option.value"
-                type="button"
-                class="btn btn-ghost music-mode-option"
-                :class="{ 'music-mode-option-active': musicMode === option.value }"
-                :aria-pressed="musicMode === option.value"
-                :title="option.title"
-                @click="setMusicMode(option.value)"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-            <select
-              class="add-select"
-              aria-label="Add music"
-              @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = musicSounds.find(x => x.id === id); if (s) addToScene('music', s); (e.target as HTMLSelectElement).value = '' } }"
-            >
-              <option value="">
-                Add music…
-              </option>
-              <option
-                v-for="s in musicSounds.filter(x => !scene.music.some(m => m.soundId === x.id))"
-                :key="s.id"
-                :value="s.id"
-              >
-                {{ s.name }}
-              </option>
-            </select>
-          </div>
-          <div class="sound-cards">
-            <div
-              v-for="item in scene.music"
-              :key="item.soundId"
-              class="sound-card"
-              :class="{
-                'sound-card-has-hint': isSoundMissing('music', item.soundId),
-                'sound-card-music-timed': musicProgressFor(item.soundId),
-              }"
-            >
-              <span
-                v-if="musicProgressFor(item.soundId)"
-                class="music-progress-fill"
-                :style="{ width: `${progressPercent(musicProgressFor(item.soundId)!)}%` }"
-              />
-              <div class="sound-card-main-row">
-                <div class="sound-card-info">
-                  <span class="sound-name">{{ item.soundName ?? resolveSoundName('music', item.soundId) }}</span>
-                  <span v-if="musicProgressFor(item.soundId)" class="music-timer">{{ timerLabel(musicProgressFor(item.soundId)!) }}</span>
-                  <span v-if="isSoundMissing('music', item.soundId)" class="sound-missing-badge">
-                    missing
-                  </span>
-                </div>
-                <div class="sound-card-controls sound-card-controls-music">
-                  <button
-                    v-if="playingMusicId === item.soundId"
-                    type="button"
-                    class="btn-icon btn-icon-active"
-                    title="Stop"
-                    aria-label="Stop music"
-                    @click="stopMusicPlayback"
-                  >
-                    ■
-                  </button>
-                  <button
-                    v-else
-                    type="button"
-                    class="btn-icon"
-                    :disabled="!canPlay || isSoundMissing('music', item.soundId)"
-                    title="Play"
-                    :aria-label="`Play ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
-                    @click="playMusicTrack(item)"
-                  >
-                    ▶
-                  </button>
-                  <input
-                    v-model.number="item.volume"
-                    type="range"
-                    min="0"
-                    max="100"
-                    class="volume-slider"
-                    :aria-label="`Volume for ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
-                    @input="updateMusicVolume(item)"
-                    @change="persistScene(`the volume of ${item.soundName ?? item.soundId}`)"
-                  >
-                  <label v-if="musicMode === 'single'" class="toggle" title="Loop">
-                    <input v-model="item.loop" type="checkbox" :aria-label="`Loop ${item.soundName ?? resolveSoundName('music', item.soundId)}`" @change="persistScene(`the loop of ${item.soundName ?? item.soundId}`)">
-                  </label>
-                  <button
-                    type="button"
-                    class="btn-icon btn-remove"
-                    title="Remove"
-                    :aria-label="`Remove ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
-                    @click="removeFromScene('music', item.soundId)"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-              <div v-if="isSoundMissing('music', item.soundId)" class="sound-source-hint">
-                <button
-                  type="button"
-                  class="btn-resolve"
-                  @click="resolveTarget = { category: 'music', item }"
-                >
-                  Resolve missing sound...
-                </button>
-              </div>
-            </div>
-          </div>
-          <p v-if="scene.music.length === 0" class="section-empty">
-            No music yet. Music plays one track at a time — great for background themes. Use the dropdown above to add tracks.
-          </p>
-        </section>
+        <AmbienceCard
+          :items="scene.ambience"
+          :sounds="ambienceSounds"
+          @add="addToScene('ambience', $event)"
+          @remove="removeFromScene('ambience', $event)"
+          @resolve="resolveTarget = { category: 'ambience', item: $event }"
+          @persist="persistScene"
+        />
 
-        <section class="scene-section scene-section-effects">
-          <div class="section-header">
-            <h2 class="section-title">
-              Effects
-            </h2>
-            <select
-              class="add-select"
-              aria-label="Add effect"
-              @change="(e) => { const id = (e.target as HTMLSelectElement).value; if (id) { const s = effectsSounds.find(x => x.id === id); if (s) addToScene('effects', s); (e.target as HTMLSelectElement).value = '' } }"
-            >
-              <option value="">
-                Add effect…
-              </option>
-              <option
-                v-for="s in effectsSounds.filter(x => !scene.effects.some(ef => ef.soundId === x.id))"
-                :key="s.id"
-                :value="s.id"
-              >
-                {{ s.name }}
-              </option>
-            </select>
-          </div>
-          <div class="sound-cards effect-cards">
-            <div
-              v-for="{ item, status } in effectCards"
-              :key="item.soundId"
-              class="effect-card"
-              :class="{
-                'effect-card-missing': isSoundMissing('effects', item.soundId),
-                'effect-card-playing': Boolean(status),
-                'pulse pulse-flash': effectFlash.has(item.soundId),
-              }"
-            >
-              <button
-                type="button"
-                class="effect-trigger"
-                :disabled="isSoundMissing('effects', item.soundId)"
-                :title="isSoundMissing('effects', item.soundId) ? 'Sound missing' : `Play ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
-                @click="playEffect(item)"
-              >
-                <span
-                  v-if="status"
-                  class="effect-progress-fill"
-                  :style="{ width: `${progressPercent(status)}%` }"
-                />
-                <span class="effect-trigger-content">
-                  <span class="effect-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
-                  <span v-if="status" class="effect-timer">{{ timerLabel(status) }}</span>
-                </span>
-                <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing-badge">
-                  missing
-                </span>
-                <span v-if="status && status.count > 1" class="effect-count-badge">
-                  ×{{ status.count }}
-                </span>
-              </button>
-              <button
-                v-if="status"
-                type="button"
-                class="btn-icon effect-stop"
-                title="Stop"
-                :aria-label="`Stop ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
-                @click="player.stopEffectSound(item.soundId)"
-              >
-                ■
-              </button>
-              <button
-                type="button"
-                class="btn-icon btn-remove effect-remove"
-                title="Remove"
-                :aria-label="`Remove ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
-                @click="removeFromScene('effects', item.soundId)"
-              >
-                ×
-              </button>
-              <HotkeyRecorder
-                class="effect-hotkey-recorder"
-                compact
-                data-testid="effect-hotkey-recorder"
-                :model-value="item.hotkey"
-                :label="`Effect Hotkey for ${item.soundName ?? resolveSoundName('effects', item.soundId)}`"
-                :error="hotkeyErrors[`effect:${item.soundId}`]"
-                @update:model-value="bindHotkey(`effect:${item.soundId}`, item, $event)"
-              />
-              <div v-if="isSoundMissing('effects', item.soundId)" class="sound-source-hint effect-resolve-hint">
-                <button
-                  type="button"
-                  class="btn-resolve"
-                  @click="resolveTarget = { category: 'effects', item }"
-                >
-                  Resolve…
-                </button>
-              </div>
-            </div>
-          </div>
-          <p v-if="scene.effects.length === 0" class="section-empty">
-            No effects yet. Effects are one-shot sounds you trigger on demand — a thunder clap, a door slam. Use the dropdown above to add some.
-          </p>
-        </section>
+        <MusicCard
+          :items="scene.music"
+          :sounds="musicSounds"
+          :music-mode="musicMode"
+          @update:music-mode="setMusicMode"
+          @add="addToScene('music', $event)"
+          @remove="removeFromScene('music', $event)"
+          @resolve="resolveTarget = { category: 'music', item: $event }"
+          @persist="persistScene"
+        />
+
+        <EffectsCard
+          :items="scene.effects"
+          :sounds="effectsSounds"
+          :hotkey-errors="hotkeyErrors"
+          @add="addToScene('effects', $event)"
+          @remove="removeFromScene('effects', $event)"
+          @resolve="resolveTarget = { category: 'effects', item: $event }"
+          @bind-hotkey="bindHotkey"
+        />
       </template>
     </template>
 
@@ -1477,8 +919,8 @@ watch(sceneId, (newId) => {
       v-if="resolveTarget"
       :item="resolveTarget.item"
       :category="resolveTarget.category"
-      :sounds="resolveTarget.category === 'ambience' ? ambienceSounds : resolveTarget.category === 'music' ? musicSounds : effectsSounds"
-      @resolved="async (id: string, name: string) => { await relinkSound(resolveTarget!.category, resolveTarget!.item, id, name); resolveTarget = null }"
+      :sounds="librarySounds(resolveTarget.category)"
+      @resolved="async (id: string, name: string) => { await relinkSound(resolveTarget!.item, id, name); resolveTarget = null }"
       @close="resolveTarget = null"
     />
   </main>
@@ -1679,57 +1121,6 @@ watch(sceneId, (newId) => {
   line-height: 1;
 }
 
-/* ═══════ DETAIL STATE ═══════ */
-
-.detail-header {
-  margin-bottom: 0.25rem;
-}
-
-.back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  text-decoration: none;
-  transition: color var(--transition);
-}
-
-.back-link:hover {
-  color: var(--color-accent);
-}
-
-.back-arrow {
-  font-size: 1.1rem;
-  line-height: 1;
-}
-
-.detail-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-top: 0.35rem;
-}
-
-.detail-title {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.detail-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
 /* ── Create scene form ── */
 
 .create-scene-form {
@@ -1755,87 +1146,6 @@ watch(sceneId, (newId) => {
 .create-scene-buttons {
   display: flex;
   gap: 0.5rem;
-}
-
-/* ── Playback bar ── */
-
-.scene-playback-bar {
-  --pulse-color: var(--color-accent);
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 1rem;
-  padding: 0.75rem 1rem;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.global-volume {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.volume-icon {
-  font-size: 1rem;
-}
-
-.volume-slider {
-  width: 120px;
-  accent-color: var(--color-accent);
-}
-
-.playback-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-}
-
-.target-toggle {
-  display: inline-flex;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-
-.target-option {
-  border: none;
-  border-radius: 0;
-  font-size: 0.8rem;
-}
-
-.target-option-active {
-  background: var(--color-accent-muted);
-  color: var(--color-text);
-}
-
-.btn-play-scene {
-  padding: 0.5rem 1.5rem;
-  font-size: 1rem;
-  box-shadow: var(--shadow-accent-sm);
-}
-
-.btn-play-scene:hover:not(:disabled) {
-  box-shadow: var(--shadow-accent-md);
-}
-
-.btn-stop-scene {
-  padding: 0.5rem 1.5rem;
-  font-size: 1rem;
-  background: var(--color-error-muted);
-  color: var(--color-error);
-  border: 1px solid var(--color-error);
-  border-radius: var(--radius-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--transition), color var(--transition);
-}
-
-.btn-stop-scene:hover {
-  background: var(--color-error);
-  color: var(--color-on-accent-bg);
 }
 
 /* ═══════ EMPTY STATE ═══════ */
@@ -1886,492 +1196,10 @@ watch(sceneId, (newId) => {
   text-decoration: underline;
 }
 
-.now-playing-line {
-  display: none;
-  margin: 0.5rem 0 0;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-
-/* ═══════ SCENE SECTIONS ═══════ */
-
-.scene-section {
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--section-color, var(--color-border));
-  border-radius: var(--radius-lg);
-  padding: 1rem 1.25rem;
-  margin-top: 1.5rem;
-}
-
-.scene-section:first-of-type {
-  margin-top: 1.25rem;
-}
-
-.scene-section-ambience {
-  --section-color: var(--color-ambience);
-}
-
-.scene-section-music {
-  --section-color: var(--color-music);
-}
-
-.scene-section-effects {
-  --section-color: var(--color-effects);
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.music-mode-toggle {
-  display: inline-flex;
-  margin-left: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-
-.music-mode-option {
-  border: none;
-  border-radius: 0;
-  padding: 0.25rem 0.6rem;
-  font-size: 0.75rem;
-}
-
-.music-mode-option-active {
-  background: var(--color-accent-muted);
-  color: var(--color-text);
-}
-
-.section-title {
-  margin: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--section-color, var(--color-text-dim));
-}
-
-/* ── Sound cards (Ambience & Music) ── */
-
-.sound-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.sound-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.6rem 0.75rem;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.sound-card-ambience {
-  --pulse-color: var(--color-ambience);
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.35rem;
-}
-
-.sound-card-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-}
-
-.ambience-repeat-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  padding-left: 0.125rem;
-}
-
-.repeat-label {
-  white-space: nowrap;
-}
-
-.repeat-select {
-  padding: 0.15rem 0.35rem;
-  font-size: 0.75rem;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text);
-}
-
-.sound-card-music-timed {
-  position: relative;
-  overflow: hidden;
-}
-
-/* The playing Music track's progress (#695): a thin bar along the card's
-   bottom edge, no transition, so a Stop removes it at once. */
-.music-progress-fill {
-  position: absolute;
-  inset: auto auto 0 0;
-  height: 2px;
-  background: var(--color-music);
-  opacity: 0.7;
-}
-
-.music-timer {
-  flex-shrink: 0;
-  font-size: 0.7rem;
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.sound-card-info {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.sound-name {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sound-card-has-hint {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.5rem;
-}
-
-.sound-card-main-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-}
-
-.sound-missing-badge {
-  display: inline-block;
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0.1rem 0.35rem;
-  background: var(--color-error-muted);
-  color: var(--color-error);
-  border-radius: var(--radius-sm);
-  vertical-align: middle;
-  flex-shrink: 0;
-}
-
-.sound-source-hint {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-  padding: 0.4rem 0.6rem;
-  background: var(--color-bg);
-  border-radius: var(--radius-sm);
-  line-height: 1.5;
-}
-
-.btn-resolve {
-  background: none;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-accent);
-  font-size: 0.8rem;
-  font-weight: 500;
-  padding: 0.25rem 0.6rem;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.btn-resolve:hover {
-  background: var(--color-bg-elevated);
-  border-color: var(--color-accent);
-}
-
-.sound-card-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-shrink: 0;
-}
-
-.sound-card-controls-music {
-  gap: 0.5rem;
-}
-
-.btn-icon {
-  width: 1.75rem;
-  height: 1.75rem;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-size: 0.8rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-icon:hover:not(:disabled) {
-  background: var(--color-border);
-}
-
-.btn-icon-active {
-  background: var(--color-error-muted);
-  color: var(--color-error);
-}
-
-.btn-icon-active:hover {
-  background: var(--color-error);
-  color: var(--color-on-accent-bg);
-}
-
-.toggle input {
-  accent-color: var(--color-accent);
-}
-
-.add-select {
-  padding: 0.3rem 0.5rem;
-  font-size: 0.8rem;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text);
-}
-
-.btn-remove {
-  color: var(--color-text-muted);
-  font-size: 1.1rem;
-  line-height: 1;
-}
-
-.btn-remove:hover {
-  color: var(--color-error);
-}
-
-/* ── Effects: dense trigger grid ── */
-
-.effect-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 0.5rem;
-}
-
-.effect-card {
-  --pulse-color: var(--color-effects);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.effect-trigger {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.75rem;
-  padding-right: 2rem;
-  background: none;
-  border: none;
-  color: var(--color-text);
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-  overflow: hidden;
-  transition: background 0.15s;
-}
-
-.effect-trigger:hover:not(:disabled) {
-  background: var(--color-effects-muted);
-}
-
-.effect-trigger:active:not(:disabled) {
-  background: var(--color-effects-muted-hover);
-}
-
-.effect-trigger:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Sweeps across the trigger button as the longest-remaining instance
-   plays out — a plain width percentage, no transition: a mid-playback Stop
-   or eviction must make this disappear instantly, not animate out. */
-.effect-progress-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  z-index: 0;
-  background: var(--color-effects-muted);
-}
-
-.effect-trigger-content {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-  flex: 1;
-}
-
-.effect-name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.effect-timer {
-  font-size: 0.7rem;
-  font-weight: 400;
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.effect-count-badge {
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--color-effects);
-}
-
-.effect-card-playing .effect-trigger {
-  padding-right: 3.75rem;
-}
-
-.effect-stop,
-.effect-remove {
-  position: absolute;
-  top: 0.35rem;
-  right: 0.25rem;
-  z-index: 2;
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
-.effect-stop {
-  font-size: 0.7rem;
-  background: var(--color-bg);
-  color: var(--color-effects);
-}
-
-.effect-remove {
-  font-size: 1rem;
-  background: transparent;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.effect-card-playing .effect-remove {
-  right: 2rem;
-}
-
-.effect-card:hover .effect-remove {
-  opacity: 1;
-}
-
-.effect-hotkey-recorder {
-  padding: 0 0.75rem 0.45rem;
-}
-
-.effect-card-missing {
-  border-color: var(--color-error-muted);
-}
-
-.effect-resolve-hint {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
-}
-
-/* ── Shared ── */
-
-.section-empty {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  line-height: 1.5;
-}
-
-.btn-danger:hover {
-  color: var(--color-error);
-}
-
-.btn-vision {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border-color: var(--color-accent-muted);
-  color: var(--color-accent-hover);
-}
-
-.btn-vision:hover:not(:disabled) {
-  background: var(--color-accent-muted);
-  color: var(--color-accent-hover);
-}
-
-.btn-vision-icon {
-  font-size: 0.85em;
-}
-
-/* ── Compact session layout: Scene editing hidden, Effects + playback only ──
-   899.98px (not 900px) keeps "900px and above unchanged" exact — max-width is
-   inclusive, so matching exactly 900 here would also catch the 900px boundary.
-   Kept in sync with the matching breakpoint in App.vue. */
-
-@media (max-width: 899.98px) {
-  .detail-actions {
-    display: none;
-  }
-
-  .scene-section-ambience,
-  .scene-section-music {
-    display: none;
-  }
-
-  .scene-section-effects .add-select,
-  .effect-remove,
-  .effect-resolve-hint {
-    display: none;
-  }
-
-  .now-playing-line {
-    display: block;
-  }
-}
-
 /* ── Narrow ── */
 
 @media (max-width: 560px) {
   .list-title-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
-
-  .detail-title-row {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
@@ -2383,17 +1211,6 @@ watch(sceneId, (newId) => {
 
   .scene-list-date {
     display: none;
-  }
-
-  .scene-playback-bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.75rem;
-  }
-
-  .playback-actions {
-    margin-left: 0;
-    justify-content: flex-end;
   }
 }
 </style>
