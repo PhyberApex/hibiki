@@ -47,8 +47,8 @@ const resolveTarget = ref<{ category: 'ambience' | 'music' | 'effects', item: Sc
 const loadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
-// The store resolves per-item volumes against the open Scene when the master
-// volume moves, so it needs to follow this view's Scene.
+// The store reads the open Scene's live copy for Music Mode advances, Target
+// handovers and Music track jumps, so it needs to follow this view's Scene.
 watch(scene, (s) => {
   playback.openScene = s
 }, { immediate: true, flush: 'sync' })

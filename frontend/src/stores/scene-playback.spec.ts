@@ -3,7 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchMasterVolume, fetchSceneFadeLength, updateMasterVolume } from '@/api/config'
-import { playAmbience, playEffect, playMusic, stopAmbience, stopEffects, stopMusic } from '@/api/player'
+import { playAmbience, playEffect, playMusic, setAmbienceVolume, setMusicVolume, stopAmbience, stopEffects, stopMusic } from '@/api/player'
 import { canDecode } from '@/api/sounds'
 import { trackUsage } from '@/api/usage-stats'
 import { usePlayerStore } from '@/stores/player'
@@ -474,6 +474,133 @@ describe('scene playback store', () => {
     expect(await store.stepMasterVolume(5)).toBeNull()
     vi.mocked(fetchMasterVolume).mockResolvedValueOnce(2)
     expect(await store.stepMasterVolume(-5)).toBe(0)
+  })
+})
+
+describe('scene playback store: master volume reaches the Playing Scene', () => {
+  const otherScene: Scene = {
+    id: 's2',
+    name: 'Tavern',
+    ambience: [
+      {
+        soundId: 'amb-9',
+        soundName: 'Fire',
+        volume: 30,
+        enabled: true,
+      },
+    ],
+    music: [
+      { soundId: 'mus-9', soundName: 'Lute', volume: 30 },
+    ],
+    effects: [],
+    createdAt: '',
+    updatedAt: '',
+  }
+
+  const mediaProto = HTMLMediaElement.prototype
+  const originalMedia = { load: mediaProto.load, play: mediaProto.play, pause: mediaProto.pause }
+  let playingEls: HTMLMediaElement[]
+
+  async function playStorm() {
+    const store = useScenePlaybackStore()
+    store.masterVolume = 60
+    store.musicSounds = [
+      { id: 'mus-1', name: 'Theme', filename: 'theme.mp3' },
+    ] as never
+    await store.playScene({
+      ...scene,
+      createdAt: '',
+      updatedAt: '',
+    })
+    await flushPromises()
+    return store
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    usePlayerStore().activeTarget = 'local'
+    vi.mocked(fetchMasterVolume).mockResolvedValue(60)
+    playingEls = []
+    Object.defineProperty(mediaProto, 'load', {
+      configurable: true,
+      value(this: HTMLMediaElement) {
+        queueMicrotask(() => this.dispatchEvent(new Event('canplaythrough')))
+      },
+    })
+    Object.defineProperty(mediaProto, 'play', {
+      configurable: true,
+      value(this: HTMLMediaElement) {
+        playingEls.push(this)
+        return Promise.resolve()
+      },
+    })
+    Object.defineProperty(mediaProto, 'pause', {
+      configurable: true,
+      value: vi.fn(),
+    })
+  })
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(originalMedia))
+      Object.defineProperty(mediaProto, key, { configurable: true, value })
+    vi.mocked(canDecode).mockResolvedValue(true)
+    vi.mocked(fetchMasterVolume).mockResolvedValue(50)
+  })
+
+  it('a Volume hotkey step with no Scene open rescales every playing item of the Playing Scene', async () => {
+    const store = await playStorm()
+    store.openScene = null
+
+    expect(await store.stepMasterVolume(-10)).toBe(50)
+    await flushPromises()
+
+    expect(setMusicVolume).toHaveBeenCalledWith('local', 50)
+    expect(setAmbienceVolume).toHaveBeenCalledWith('local', 'amb-1', 40)
+  })
+
+  it('a master change while a different Scene is open rescales the Playing Scene, not the open one', async () => {
+    const store = await playStorm()
+    store.openScene = otherScene
+
+    store.masterVolume = 50
+    await flushPromises()
+
+    expect(setMusicVolume).toHaveBeenCalledTimes(1)
+    expect(setMusicVolume).toHaveBeenCalledWith('local', 50)
+    expect(vi.mocked(setAmbienceVolume).mock.calls).toEqual([
+      ['local', 'amb-1', 40],
+    ])
+  })
+
+  it('a per-item volume edit sticks for later master changes', async () => {
+    const store = await playStorm()
+    store.updateAmbienceVolume({ ...scene.ambience[0]!, volume: 20 })
+    store.updateMusicVolume({ ...scene.music[0]!, volume: 40 })
+    store.openScene = null
+    vi.clearAllMocks()
+
+    store.masterVolume = 50
+    await flushPromises()
+
+    expect(setMusicVolume).toHaveBeenCalledWith('local', 20)
+    expect(setAmbienceVolume).toHaveBeenCalledWith('local', 'amb-1', 10)
+  })
+
+  it('renderer-fallback elements follow a master change with no Scene open', async () => {
+    vi.mocked(canDecode).mockResolvedValue(false)
+    const store = await playStorm()
+    expect(playingEls).toHaveLength(2)
+    store.openScene = null
+
+    store.masterVolume = 50
+    await flushPromises()
+
+    const [ambienceEl, musicEl] = playingEls
+    expect(ambienceEl!.volume).toBeCloseTo(0.4)
+    expect(musicEl!.volume).toBeCloseTo(0.5)
+    expect(setMusicVolume).not.toHaveBeenCalled()
+    expect(setAmbienceVolume).not.toHaveBeenCalled()
   })
 })
 

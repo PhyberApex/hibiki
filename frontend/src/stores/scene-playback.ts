@@ -75,6 +75,7 @@ function createDecodeCache(category: 'music' | 'ambience' | 'effects'): (soundId
 // tell "this track played out" from "a track this channel used to hold"
 // (Music Mode advance, ADR-0006). `backendTarget` is the Target a 'backend'
 // track was confirmed started on; until then its end cannot be detected.
+// `itemVolume` is the track's own 0-100 Scene item volume, before the master.
 interface MusicChannel {
   el: HTMLAudioElement
   streamId: string
@@ -82,6 +83,7 @@ interface MusicChannel {
   source: 'renderer' | 'backend' | null
   token: number
   backendTarget: string | null
+  itemVolume: number
 }
 
 // Where a Scene's Music Mode stands (CONTEXT.md, ADR-0006): the Scene the
@@ -120,9 +122,10 @@ function ambienceFadeKey(soundId: string): string {
 export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   const player = usePlayerStore()
 
-  // The Scene open in the Scene view, kept in sync by the view; only used to
-  // resolve per-item volumes when the master volume moves, and to skip a fetch
-  // when a Target handover restarts the Scene that is already open.
+  // The Scene open in the Scene view, kept in sync by the view: the live copy
+  // of a Scene for a Music Mode advance or a Target handover, and the list a
+  // Music track's Play jumps within. Never used to resolve volumes: the Playing
+  // Scene need not be the open one (#648).
   const openScene = shallowRef<Scene | null>(null)
   const musicSounds = ref<SoundFile[]>([])
   const masterVolume = ref(80)
@@ -159,6 +162,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // soundIds whose current start is still in flight, not yet in
   // `playingAmbienceIds`: a Scene Stop must reach them too.
   const startingAmbience = new Set<string>()
+  // The 0-100 Scene item volume each audible or starting Ambience sound was
+  // started with (or last edited to), so a master volume change can rescale it
+  // whichever Scene it came from and whatever Scene is open.
+  const ambienceItemVolumes = new Map<string, number>()
 
   const musicChannels: MusicChannel[] = [
     {
@@ -168,6 +175,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       source: null,
       token: 0,
       backendTarget: null,
+      itemVolume: 80,
     },
     {
       el: createAudioEl(),
@@ -176,6 +184,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       source: null,
       token: 0,
       backendTarget: null,
+      itemVolume: 80,
     },
   ]
   let primaryMusicChannel = musicChannels[0]
@@ -231,37 +240,68 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     return (itemVolume / 100) * (masterVolume.value / 100)
   }
 
-  function updateAmbienceVolume(item: SceneItem) {
-    if (ambienceSource.get(item.soundId) === 'backend') {
-      if (targetId.value)
-        setBackendAmbienceVolume(targetId.value, item.soundId, computeVolume(item.volume ?? 80) * 100).catch(() => {})
+  function applyAmbienceVolume(soundId: string, itemVolume: number) {
+    if (ambienceSource.get(soundId) === 'backend') {
+      if (targetId.value) {
+        setBackendAmbienceVolume(targetId.value, soundId, computeVolume(itemVolume) * 100)
+          .catch(e => console.warn(`[scene] setAmbienceVolume ${soundId} failed on the backend:`, e))
+      }
       return
     }
-    const el = ambienceAudioEls.get(item.soundId)
+    const el = ambienceAudioEls.get(soundId)
     if (el)
-      el.volume = computeVolume(item.volume ?? 80)
+      el.volume = computeVolume(itemVolume)
   }
 
+  function applyMusicVolume(channel: MusicChannel) {
+    if (channel.source === 'backend') {
+      if (targetId.value) {
+        setBackendMusicVolume(targetId.value, computeVolume(channel.itemVolume) * 100)
+          .catch(e => console.warn(`[scene] setMusicVolume ${channel.soundId} failed on the backend:`, e))
+      }
+    }
+    else {
+      channel.el.volume = computeVolume(channel.itemVolume)
+    }
+  }
+
+  /** An Ambience item's volume slider in the open Scene: applies to the sound if it is audible, and sticks for later master volume changes. */
+  function updateAmbienceVolume(item: SceneItem) {
+    const itemVolume = item.volume ?? 80
+    if (playingAmbienceIds.value.has(item.soundId) || startingAmbience.has(item.soundId))
+      ambienceItemVolumes.set(item.soundId, itemVolume)
+    applyAmbienceVolume(item.soundId, itemVolume)
+  }
+
+  /** A Music item's volume slider in the open Scene: applies to the primary track if it is that item, and sticks for later master volume changes. */
   function updateMusicVolume(item: SceneItem) {
     if (primaryMusicChannel.soundId !== item.soundId)
       return
-    if (primaryMusicChannel.source === 'backend') {
-      if (targetId.value)
-        setBackendMusicVolume(targetId.value, computeVolume(item.volume ?? 80) * 100).catch(() => {})
-    }
-    else {
-      primaryMusicChannel.el.volume = computeVolume(item.volume ?? 80)
-    }
+    primaryMusicChannel.itemVolume = item.volume ?? 80
+    applyMusicVolume(primaryMusicChannel)
   }
 
+  // Rescales everything audible from the item volumes it was started with, so
+  // the master reaches the Playing Scene from any route (#648). Ambience on its
+  // way out of a Scene Crossfade is left to its fade.
   function updateAllVolumes() {
-    if (!openScene.value)
-      return
-    for (const item of openScene.value.ambience)
-      updateAmbienceVolume(item)
-    const musicItem = openScene.value.music.find(m => m.soundId === playingMusicId.value)
-    if (musicItem)
-      updateMusicVolume(musicItem)
+    let ambience = 0
+    for (const soundId of playingAmbienceIds.value) {
+      if (crossfadeRamp.directionOf(ambienceFadeKey(soundId)) === 'out')
+        continue
+      const itemVolume = ambienceItemVolumes.get(soundId)
+      if (itemVolume === undefined) {
+        logDebug(`[scene] master volume: no item volume known for Ambience ${soundId}, left as is`)
+        continue
+      }
+      applyAmbienceVolume(soundId, itemVolume)
+      ambience++
+    }
+    if (primaryMusicChannel.soundId !== null)
+      applyMusicVolume(primaryMusicChannel)
+    logDebug(`[scene] master volume ${masterVolume.value}% applied to ${ambience} Ambience sound(s)${primaryMusicChannel.soundId === null
+      ? ''
+      : ` and Music ${primaryMusicChannel.soundId}`}`)
   }
 
   watch(masterVolume, () => updateAllVolumes())
@@ -316,6 +356,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       if (ambienceSource.get(soundId) === 'backend' && !backendIds.has(soundId)) {
         playingAmbienceIds.value.delete(soundId)
         ambienceSource.delete(soundId)
+        ambienceItemVolumes.delete(soundId)
       }
     }
   })
@@ -351,6 +392,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   function stopAmbience(soundId: string, fadeOutMs = 0) {
     claimAmbienceIntent(soundId, true)
     startingAmbience.delete(soundId)
+    ambienceItemVolumes.delete(soundId)
     releaseAmbience(soundId, fadeOutMs)
   }
 
@@ -446,6 +488,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       if (previousSource !== 'backend') {
         ambienceSource.delete(item.soundId)
         playingAmbienceIds.value.delete(item.soundId)
+        ambienceItemVolumes.delete(item.soundId)
       }
     }
     finally {
@@ -458,6 +501,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       return
     const token = claimAmbienceIntent(item.soundId, false)
     startingAmbience.add(item.soundId)
+    ambienceItemVolumes.set(item.soundId, item.volume ?? 80)
     try {
       await startAmbience(item, token, initialVolume, fadeInMs)
     }
@@ -603,6 +647,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     channel.source = 'backend'
     channel.token = token
     channel.backendTarget = null
+    channel.itemVolume = item.volume ?? 80
     if (channel === primaryMusicChannel)
       playingMusicId.value = item.soundId
     await playBackendMusic(target, item.soundId, {
@@ -648,6 +693,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       channel.source = 'renderer'
       channel.token = token
       channel.backendTarget = null
+      channel.itemVolume = item.volume ?? 80
       if (channel === primaryMusicChannel)
         playingMusicId.value = item.soundId
       logInfo(`[scene] playMusic ${item.soundId} via renderer fallback (${streamed ? 'streamed to Discord' : 'local'}) on channel ${channel.streamId}`)
@@ -1136,6 +1182,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         }
         playingAmbienceIds.value.delete(soundId)
         ambienceSource.delete(soundId)
+        ambienceItemVolumes.delete(soundId)
         continue
       }
       // Already on its way out from an earlier switch — let it finish; a
@@ -1160,6 +1207,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       const source = ambienceSource.get(item.soundId)
       const alreadyPlaying = playingAmbienceIds.value.has(item.soundId) && !!source
       if (alreadyPlaying) {
+        ambienceItemVolumes.set(item.soundId, item.volume ?? 80)
         if (source === 'backend') {
           // The shared-sound rule (CONTEXT.md): never restarted, just glided
           // to the new Scene's volume.
