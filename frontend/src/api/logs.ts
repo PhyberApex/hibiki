@@ -15,3 +15,10 @@ export async function openLogFolder(): Promise<void> {
     return
   await window.hibiki!.invoke('logs:openFolder')
 }
+
+/** Puts the redacted Diagnostics summary (environment, settings flags, log tail) on the clipboard; resolves to its line count. */
+export async function copyDiagnostics(): Promise<{ lines: number }> {
+  if (!useElectronApi())
+    throw new Error('Electron API not available')
+  return await window.hibiki!.invoke('diagnostics:copy') as { lines: number }
+}

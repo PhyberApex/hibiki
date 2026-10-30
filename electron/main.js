@@ -1,7 +1,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { Readable } = require('node:stream')
-const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { buildDiagnosticsSummary, LOG_TAIL_LINES, readLogTail } = require('./diagnostics')
 const { createHotkeys } = require('./hotkeys')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createUncaughtExceptionHandler, exitWithError } = require('./lifecycle')
@@ -51,6 +52,7 @@ const rendererLog = createLogger('renderer')
 const appLog = createLogger('app')
 const dialogLog = createLogger('dialog')
 const captureLog = createLogger('capture')
+const diagnosticsLog = createLogger('diagnostics')
 
 let appHandle = null
 let mainWindow = null
@@ -465,18 +467,22 @@ app.whenReady().then(async () => {
   const { getEmbeddedApp } = require(path.join(botRoot, 'dist', 'bootstrap-embedded.js'))
   let handle
   let api
+  let secretCodec
+  // Shared by Usage Stats and the Diagnostics summary so the two describe the machine the same way.
+  const runtimeEnvironment = {
+    electronVersion: process.versions.electron,
+    platform: process.platform,
+    arch: process.arch,
+    locale: app.getLocale(),
+  }
   try {
-    const embedded = await getEmbeddedApp(await createSecretCodec(), {
+    secretCodec = await createSecretCodec()
+    const embedded = await getEmbeddedApp(secretCodec, {
       localSink: createLocalSink(() => mainWindow),
       appVersion: app.getVersion(),
       usageStats: {
         gate: { packaged: app.isPackaged, killSwitch: process.env.HIBIKI_USAGE_STATS === 'off' },
-        environment: {
-          electronVersion: process.versions.electron,
-          platform: process.platform,
-          arch: process.arch,
-          locale: app.getLocale(),
-        },
+        environment: runtimeEnvironment,
       },
     })
     handle = embedded
@@ -587,6 +593,33 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('logs:getPath', () => logging.logFile)
   ipcMain.handle('logs:openFolder', () => shell.openPath(logging.logsDir))
+  // Settings → Diagnostics "Copy diagnostics" (#698): the content is never logged, only that it was copied.
+  ipcMain.handle('diagnostics:copy', async () => {
+    diagnosticsLog.info('Copy diagnostics requested')
+    try {
+      const summary = await buildDiagnosticsSummary({
+        environment: {
+          ...runtimeEnvironment,
+          appVersion: app.getVersion(),
+          nodeVersion: process.versions.node,
+        },
+        api,
+        hotkeyStatus: hotkeys?.getStatus() ?? null,
+        secretStorageAvailable: secretCodec.available,
+        loadLogTail: () => readLogTail(logging.logFile, LOG_TAIL_LINES),
+        homeDir: app.getPath('home'),
+        log: diagnosticsLog,
+      })
+      clipboard.writeText(summary)
+      const lines = summary.split('\n').length - 1
+      diagnosticsLog.info(`Diagnostics summary copied to the clipboard (${lines} lines)`)
+      return { lines }
+    }
+    catch (err) {
+      diagnosticsLog.error('Could not copy the diagnostics summary:', err)
+      throw err
+    }
+  })
 
   ipcMain.handle('shell:openExternal', (_, url) => {
     if (isWebUrl(url))

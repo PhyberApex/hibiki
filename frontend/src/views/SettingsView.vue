@@ -26,7 +26,7 @@ import {
   updateVisionProvider,
 } from '@/api/config'
 import { fetchHotkeyStatus } from '@/api/hotkeys'
-import { fetchLogPath, openLogFolder } from '@/api/logs'
+import { copyDiagnostics, fetchLogPath, openLogFolder } from '@/api/logs'
 import { fetchUpdateCheckSettings, updateUpdateCheckEnabled } from '@/api/updates'
 import { fetchUsageStats, updateUsageStatsEnabled } from '@/api/usage-stats'
 import { logInfo } from '@/audio/audio-element-diagnostics'
@@ -48,6 +48,9 @@ const storagePath = ref<string | null>(null)
 const logPath = ref<string | null>(null)
 const savingStorage = ref(false)
 const storageMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+
+const copyingDiagnostics = ref(false)
+const diagnosticsMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
 const accessibilityMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
@@ -632,6 +635,27 @@ async function toggleUsageStats(event: Event) {
   }
 }
 
+async function copyDiagnosticsSummary() {
+  copyingDiagnostics.value = true
+  diagnosticsMessage.value = null
+  try {
+    await copyDiagnostics()
+    diagnosticsMessage.value = { type: 'success', text: 'Diagnostics copied to the clipboard. Paste them into your bug report.' }
+  }
+  catch (e) {
+    console.warn('[settings] Copy diagnostics failed:', e)
+    diagnosticsMessage.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Couldn\'t copy the diagnostics.',
+    }
+  }
+  finally {
+    copyingDiagnostics.value = false
+  }
+}
+
 function setActionHotkey(field: ActionHotkeyField, value: string | undefined) {
   const { [field]: _previous, ...rest } = hotkeySettings.value
   return saveHotkeySettings(value
@@ -1006,6 +1030,32 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
             Open log folder
           </button>
         </div>
+      </div>
+      <div class="field">
+        <span class="field-label">Diagnostics summary</span>
+        <p class="section-desc">
+          Copies versions, your operating system, the Output Target and Device, Hotkey and settings status, and the last 300 lines of the log. Tokens and API keys are never included, only whether they are set.
+        </p>
+        <div class="field-row">
+          <button
+            type="button"
+            class="btn btn-primary"
+            data-testid="copy-diagnostics"
+            :disabled="copyingDiagnostics"
+            @click="copyDiagnosticsSummary"
+          >
+            {{ copyingDiagnostics ? 'Copying…' : 'Copy diagnostics' }}
+          </button>
+        </div>
+        <p
+          v-if="diagnosticsMessage"
+          class="status-message settings-message"
+          :class="[diagnosticsMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
+          data-testid="diagnostics-message"
+          role="status"
+        >
+          {{ diagnosticsMessage.text }}
+        </p>
       </div>
       <div class="field" data-testid="hotkey-failures">
         <span class="field-label">Hotkeys the OS refused</span>
