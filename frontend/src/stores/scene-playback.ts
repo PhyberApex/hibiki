@@ -1410,7 +1410,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     // A newer crossfade may re-claim the outgoing channel for its own incoming
     // track before this one's backend play lands; that track is then not ours to clear.
     const outgoingToken = outgoingChannel.token
-    const outgoingStillOurs = (action: 'clearing' | 'stopping') => {
+    const outgoingStillOurs = (action: 'clearing' | 'stopping' | 'restoring') => {
       if (outgoingChannel.token === outgoingToken)
         return true
       logInfo(`[scene] crossfade to ${targetTrack?.soundId}: not ${action} ${outgoingChannel.streamId}, re-claimed meanwhile (token ${outgoingToken} -> ${outgoingChannel.token})`)
@@ -1434,8 +1434,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
           // If the outgoing track is still alive on the backend (preserved on
           // purpose below), restore it as primary so Stop/volume controls can
           // reach it again instead of leaving it reachable only on the
-          // backend with no surviving UI handle.
-          if (outgoingHadTrack && outgoingWasBackend) {
+          // backend with no surviving UI handle. A newer crossfade that
+          // re-claimed the outgoing channel owns primary instead.
+          if (outgoingHadTrack && outgoingWasBackend && outgoingStillOurs('restoring')) {
             primaryMusicChannel = outgoingChannel
             playingMusicId.value = outgoingChannel.soundId
             syncMusicClock()

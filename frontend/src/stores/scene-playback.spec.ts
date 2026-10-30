@@ -1021,6 +1021,46 @@ describe('scene playback store: Music Mode', () => {
     store.stopScene()
   })
 
+  it('three Scene Crossfades within one backend play, landing newest first, leave the newest track primary (#712)', async () => {
+    const sceneA = musicScene('sequential', ['m1'], 'sa')
+    const scenes: Record<string, Scene> = {
+      sb: musicScene('sequential', ['m2'], 'sb'),
+      sc: musicScene('sequential', ['m3'], 'sc'),
+      sd: musicScene('sequential', ['x1', 'x2'], 'sd'),
+    }
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockImplementation(async id => scenes[id]!)
+    const store = setup(sceneA)
+    store.musicSounds = store.musicSounds.map(s => ({ ...s, durationMs: 60_000 }))
+    await store.playScene(sceneA)
+    await backendTrack('m1')
+    const held: (() => void)[] = []
+    for (let i = 0; i < 3; i++) {
+      vi.mocked(playMusic).mockReturnValueOnce(new Promise<void>((resolve) => {
+        held.push(resolve)
+      }))
+    }
+
+    await store.crossfadeToScene('sb')
+    await vi.waitFor(() => expect(startedTracks()).toEqual(['m1', 'm2']))
+    await store.crossfadeToScene('sc')
+    await vi.waitFor(() => expect(startedTracks()).toEqual(['m1', 'm2', 'm3']))
+    await store.crossfadeToScene('sd')
+    await vi.waitFor(() => expect(startedTracks()).toEqual(['m1', 'm2', 'm3', 'x1']))
+    for (const i of [2, 1, 0]) {
+      held[i]!()
+      await flushPromises()
+    }
+
+    expect(store.playingMusicId).toBe('x1')
+    expect(store.musicSceneId).toBe('sd')
+    expect(store.musicProgress?.soundId).toBe('x1')
+
+    await playsOut('x1')
+    expect(startedTracks()).toEqual(['m1', 'm2', 'm3', 'x1', 'x2'])
+    store.stopScene()
+  })
+
   it('a jump crossfades to the clicked track and the sequence continues from it', async () => {
     const scene = musicScene('sequential')
     const store = setup(scene)
