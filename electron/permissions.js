@@ -6,8 +6,12 @@ const log = createLogger('permissions')
 /** Where the renderer runs; Browser tabs share its session, so the origin is what tells them apart. */
 const APP_ORIGIN = 'hibiki://app'
 
-/** What the renderer needs: `media` for Routed Tab capture and `enumerateDevices`, `speaker-selection` for `setSinkId`. */
-const APP_PERMISSIONS = new Set(['media', 'speaker-selection'])
+/**
+ * What the renderer needs: `display-capture` for Routed Tab capture
+ * (`getUserMedia` with `chromeMediaSource: 'tab'`), `media` for
+ * `enumerateDevices`, `speaker-selection` for `setSinkId`.
+ */
+const APP_PERMISSIONS = new Set(['display-capture', 'media', 'speaker-selection'])
 
 function isAllowed(permission, url) {
   return APP_PERMISSIONS.has(permission) && schemeAndHost(url) === APP_ORIGIN
@@ -18,8 +22,13 @@ function isAllowed(permission, url) {
  * when no handler is installed, and Browser tabs share the renderer's
  * session, so any page a GM opened would get the microphone, camera,
  * geolocation and the like without a prompt. Only the app origin gets
- * `APP_PERMISSIONS`; everything else is denied and logged. Screen capture is
- * refused outright: the renderer captures Routed Tabs with `getUserMedia`.
+ * `APP_PERMISSIONS`; everything else is denied and logged. `getDisplayMedia`
+ * is refused outright: the renderer captures Routed Tabs with `getUserMedia`.
+ *
+ * Media requests are judged by `details.securityOrigin`, the origin that called
+ * `getUserMedia`. For tab capture Chromium attributes the request to the
+ * captured tab's frame, so `requestingUrl` names the Browser tab page even
+ * when the renderer asked.
  */
 function createPermissionPolicy() {
   // Chromium runs permission checks on every `navigator.permissions.query`
@@ -28,8 +37,10 @@ function createPermissionPolicy() {
 
   return {
     requestHandler(_webContents, permission, callback, details) {
-      const url = details?.requestingUrl
+      const url = details?.securityOrigin || details?.requestingUrl
       if (isAllowed(permission, url)) {
+        if (permission === 'display-capture')
+          log.info(`Granted tab capture to ${describeUrl(url)}`)
         callback(true)
         return
       }
@@ -62,7 +73,7 @@ function installPermissionPolicy(session) {
   session.setPermissionRequestHandler(policy.requestHandler)
   session.setPermissionCheckHandler(policy.checkHandler)
   session.setDisplayMediaRequestHandler(policy.displayMediaHandler)
-  log.info(`Permission policy installed: ${APP_ORIGIN} gets media and speaker-selection, every other request and all screen capture is denied`)
+  log.info(`Permission policy installed: ${APP_ORIGIN} gets ${[...APP_PERMISSIONS].join(', ')}, every other request and all getDisplayMedia are denied`)
 }
 
 module.exports = {

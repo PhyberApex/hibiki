@@ -8,23 +8,34 @@ const spies = {
 afterEach(() => jest.clearAllMocks())
 
 /** What the request handler answered for `permission` asked by a frame on `requestingUrl`. */
-function request(permission: string, requestingUrl: string) {
+function request(permission: string, requestingUrl: string, securityOrigin?: string) {
   const { requestHandler } = createPermissionPolicy()
   const callback = jest.fn()
-  requestHandler({}, permission, callback, { requestingUrl })
+  requestHandler({}, permission, callback, { requestingUrl, securityOrigin })
   expect(callback).toHaveBeenCalledTimes(1)
   return callback.mock.calls[0][0]
 }
 
 describe('permission request handler', () => {
-  it.each(['media', 'speaker-selection'])('grants %s to the app renderer', (permission) => {
+  it.each(['media', 'speaker-selection', 'display-capture'])('grants %s to the app renderer', (permission) => {
     expect(request(permission, 'hibiki://app/browser')).toBe(true)
     expect(spies.warn).not.toHaveBeenCalled()
+  })
+
+  it('grants tab capture the renderer asked for although Chromium attributes it to the captured tab', () => {
+    expect(request('display-capture', 'https://tab.example/page', 'hibiki://app/')).toBe(true)
+    expect(spies.info).toHaveBeenCalledWith('[permissions]', 'Granted tab capture to hibiki:')
+  })
+
+  it.each(['display-capture', 'media'])('denies %s a Browser tab page asked for itself', (permission) => {
+    expect(request(permission, 'https://evil.example/page', 'https://evil.example/')).toBe(false)
+    expect(spies.warn).toHaveBeenCalledWith('[permissions]', `Denied ${permission} to https://evil.example`)
   })
 
   it.each([
     'media',
     'speaker-selection',
+    'display-capture',
     'geolocation',
     'notifications',
     'clipboard-read',
@@ -105,6 +116,6 @@ describe('installPermissionPolicy', () => {
     expect(session.setPermissionRequestHandler).toHaveBeenCalledWith(expect.any(Function))
     expect(session.setPermissionCheckHandler).toHaveBeenCalledWith(expect.any(Function))
     expect(session.setDisplayMediaRequestHandler).toHaveBeenCalledWith(expect.any(Function))
-    expect(spies.info).toHaveBeenCalledWith('[permissions]', expect.stringContaining('media and speaker-selection'))
+    expect(spies.info).toHaveBeenCalledWith('[permissions]', expect.stringContaining('display-capture, media, speaker-selection'))
   })
 })

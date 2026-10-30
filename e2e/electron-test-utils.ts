@@ -22,6 +22,8 @@ export interface LaunchOptions {
   env?: Record<string, string>
   /** Variables inherited from the current process that must not reach the app. */
   stripEnv?: string[]
+  /** Extra Chromium/Electron switches, passed before the main script. */
+  args?: string[]
 }
 
 export async function launchElectronApp(options: LaunchOptions = {}): Promise<ElectronApplication> {
@@ -42,9 +44,13 @@ export async function launchElectronApp(options: LaunchOptions = {}): Promise<El
   // CI runners (GitHub Actions) can't use the SUID sandbox — chrome-sandbox
   // must be root-owned with mode 4755, which isn't possible in containers.
   const isCI = !!process.env.CI
-  const args = isCI
-    ? ['--no-sandbox', mainPath]
-    : [mainPath]
+  const args = [
+    ...(isCI
+      ? ['--no-sandbox']
+      : []),
+    ...(options.args ?? []),
+    mainPath,
+  ]
 
   // ELECTRON_RUN_AS_NODE (set by some editors and agent shells) would turn the
   // Electron binary into a plain Node process that rejects Chromium flags.

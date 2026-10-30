@@ -11,6 +11,8 @@ import { closeElectronApp, getMainWindow, launchElectronApp } from '../electron-
  * Browser tabs share the renderer's session, so a page opened in one must not
  * inherit the app's permissions (#706). The fixture asks for the microphone on
  * load and keeps the outcome for the test to read. Needs no Discord token.
+ * CI runners have no microphone, and Chromium rejects with `NotFoundError`
+ * before asking the permission handler, so the app gets fake capture devices.
  */
 
 const PAGE = `<!doctype html><title>Permission fixture</title><body><script>
@@ -62,6 +64,7 @@ test.beforeAll(async () => {
   mkdirSync(join(userDataDir, 'data'), { recursive: true })
   writeFileSync(join(userDataDir, 'data', 'app-config.json'), JSON.stringify({}))
   app = await launchElectronApp({
+    args: ['--use-fake-device-for-media-stream'],
     env: {
       DISCORD_TOKEN: '',
       HIBIKI_VISION_API_KEY: '',
