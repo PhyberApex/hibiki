@@ -170,7 +170,16 @@ function normalizeItems(raw: unknown, category: SoundCategory, sceneName: string
     return []
   if (!Array.isArray(raw))
     rejectInput(`Scene ${category} must be a list`)
-  return raw.map((item, index) => normalizeItem(item, category, index, sceneName))
+  const items = raw.map((item, index) => normalizeItem(item, category, index, sceneName))
+  // The editor keys a category's cards and its Ambience playback by sound id,
+  // so a second item with the same id would act as the first (#715).
+  const seen = new Set<string>()
+  for (const { soundId } of items) {
+    if (seen.has(soundId))
+      rejectInput(`Scene ${category} lists sound ${soundId} twice`)
+    seen.add(soundId)
+  }
+  return items
 }
 
 function withoutHotkey(items: SceneItem[]): SceneItem[] {
