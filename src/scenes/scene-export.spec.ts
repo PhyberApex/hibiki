@@ -222,7 +222,7 @@ describe('exportScene', () => {
       await exportScene(config, saved.id, targetZip)
 
       const lines = info.mock.calls.map(args => args.join(' '))
-      expect(lines).toContain('[scene-export] Export started (1 sound(s) to bundle)')
+      expect(lines).toContain(`[scene-export] Export started: "Logged Export" (${saved.id}), Music Mode single, 1 sound(s) to bundle`)
       expect(lines).toContainEqual(expect.stringMatching(/^\[scene-export\] Export finished in \d+ ms: 1 sound\(s\), 10 bytes, \d+-byte archive written to /))
     }
     finally {

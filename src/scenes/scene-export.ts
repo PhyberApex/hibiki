@@ -80,12 +80,11 @@ export async function exportScene(
   if (!scene)
     throw new Error(`Scene '${sceneId}' not found`)
 
-  log.info(`Exporting "${scene.name}" (${sceneId}), Music Mode ${normalizeMusicMode(scene.musicMode)}`)
   const startedAt = Date.now()
   const zip = new AdmZip()
 
   const soundRefs = dedupe(collectSoundIds(scene), x => `${x.category}:${x.soundId}`)
-  log.info(`Export started (${soundRefs.length} sound(s) to bundle)`)
+  log.info(`Export started: "${scene.name}" (${sceneId}), Music Mode ${normalizeMusicMode(scene.musicMode)}, ${soundRefs.length} sound(s) to bundle`)
   let soundBytes = 0
   const bundledPaths = new Map<string, string>()
   for (const { category, soundId } of soundRefs) {
@@ -93,7 +92,7 @@ export async function exportScene(
       const srcPath = await sounds.getFilePath(category, soundId)
       const filename = basename(srcPath)
       const entryPath = `${SOUNDS_DIR}/${category}/${filename}`
-      // awaited per sound so the event loop gets a turn and playback is not starved (#710)
+      // awaited per sound so the event loop gets a turn between files (#710)
       const data = await readFile(srcPath)
       zip.addFile(entryPath, data)
       soundBytes += data.length
@@ -123,9 +122,17 @@ export async function exportScene(
 
   zip.addFile(MANIFEST_JSON, Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'))
 
-  // toBufferPromise deflates entry by entry on the zlib threadpool; writeZip would block (#710)
-  const archive = await zip.toBufferPromise()
-  await mkdir(dirname(targetZipPath), { recursive: true })
-  await writeFile(targetZipPath, archive)
+  // toBufferPromise deflates entry by entry on the zlib threadpool, where writeZip
+  // would block (#710); fs/promises keeps the real error that writeZipPromise drops
+  let archive: Buffer
+  try {
+    archive = await zip.toBufferPromise()
+    await mkdir(dirname(targetZipPath), { recursive: true })
+    await writeFile(targetZipPath, archive)
+  }
+  catch (e) {
+    log.warn(`Export of "${scene.name}" (${sceneId}) failed after ${Date.now() - startedAt} ms`)
+    throw e
+  }
   log.info(`Export finished in ${Date.now() - startedAt} ms: ${bundledPaths.size} sound(s), ${soundBytes} bytes, ${archive.length}-byte archive written to ${targetZipPath}; ${countRepeatIntervals(scene)} item(s) carry a repeat interval`)
 }

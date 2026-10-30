@@ -253,8 +253,8 @@ async function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImpor
 }
 
 /**
- * Inflates one entry off the main thread's critical path: zlib runs on the
- * threadpool and the await yields, so the mixer keeps being fed (#710).
+ * Inflates one entry on the zlib threadpool and yields while it runs, so the
+ * mixer keeps being fed (#710). adm-zip still checks the CRC on this thread.
  */
 function readEntry(entry: AdmZip.IZipEntry): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -343,7 +343,8 @@ export async function importScene(config: Config, sourceZipPath: string, limits:
   const scenes = createSceneStore(config)
   const bundled = await planBundledSounds(zip, config, limits, archiveName)
   const toWrite = bundled.filter(b => !b.reuse)
-  log.info(`Import started (${toWrite.length} bundled file(s) to write, ${toWrite.reduce((sum, b) => sum + b.entry.header.size, 0)} bytes; ${bundled.length - toWrite.length} reused)`)
+  const bytesToWrite = toWrite.reduce((sum, b) => sum + b.entry.header.size, 0)
+  log.info(`Import started (${toWrite.length} bundled file(s) to write, ${bytesToWrite} bytes; ${bundled.length - toWrite.length} reused)`)
   const bundledFileIds = new Map(bundled.map(b => [b.entry.entryName, b.soundId]))
   const items = {} as Record<SoundCategory, SceneItem[]>
   for (const category of SOUND_CATEGORIES) {
