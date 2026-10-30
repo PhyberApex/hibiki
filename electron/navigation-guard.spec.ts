@@ -1,4 +1,4 @@
-import { describeUrl, guardMainWindowNavigation, isWebUrl } from './navigation-guard'
+import { describeScheme, describeUrl, forwardMainFrameNavigation, guardMainWindowNavigation, isWebUrl } from './navigation-guard'
 
 const spies = {
   info: jest.spyOn(console, 'info').mockImplementation(() => {}),
@@ -121,6 +121,14 @@ describe('describeUrl', () => {
   })
 })
 
+describe('describeScheme', () => {
+  it('reduces a URL to its scheme alone', () => {
+    expect(describeScheme('ftp://host.example/secret')).toBe('ftp:')
+    expect(describeScheme('file:///home/gm/secret.txt')).toBe('file:')
+    expect(describeScheme(42)).toBe('an unparseable URL')
+  })
+})
+
 describe('isWebUrl', () => {
   it('accepts only http(s) URLs', () => {
     expect(isWebUrl('https://example.com')).toBe(true)
@@ -128,5 +136,19 @@ describe('isWebUrl', () => {
     expect(isWebUrl('file:///etc/passwd')).toBe(false)
     expect(isWebUrl('https:evil')).toBe(false)
     expect(isWebUrl(42)).toBe(false)
+  })
+})
+
+describe('forwardMainFrameNavigation', () => {
+  it('forwards main-frame URLs from the details object and ignores subframes', () => {
+    const send = jest.fn()
+    const listener = forwardMainFrameNavigation(send)
+
+    listener({ url: 'https://dndbeyond.com/', isMainFrame: true })
+    listener({ url: 'https://ads.example/frame', isMainFrame: false })
+
+    expect(send.mock.calls).toEqual([
+      ['https://dndbeyond.com/'],
+    ])
   })
 })

@@ -4,8 +4,9 @@ const { Readable } = require('node:stream')
 const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
 const { createHotkeys } = require('./hotkeys')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
+const { createUncaughtExceptionHandler, exitWithError } = require('./lifecycle')
 const { createLogger, setupFileLogging } = require('./logger')
-const { guardMainWindowNavigation, isWebUrl } = require('./navigation-guard')
+const { describeScheme, describeUrl, forwardMainFrameNavigation, guardMainWindowNavigation, isWebUrl } = require('./navigation-guard')
 const { parseRange, resolveAppPath } = require('./protocol')
 const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
 
@@ -43,22 +44,36 @@ const logging = setupFileLogging(
   `Hibiki ${app.getVersion()} starting (electron ${process.versions.electron}, node ${process.versions.node}, ${process.platform} ${process.arch})`,
 )
 
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught exception in the main process:', err)
-  dialog.showErrorBox('Hibiki ran into an unexpected error', `${err?.stack || err}\n\nDetails were written to the log file (Settings → Diagnostics).`)
-})
-
 const windowLog = createLogger('window')
 const browserLog = createLogger('browser')
 const protocolLog = createLogger('protocol')
 const rendererLog = createLogger('renderer')
 const appLog = createLogger('app')
+const dialogLog = createLogger('dialog')
+const captureLog = createLogger('capture')
 
 let appHandle = null
 let mainWindow = null
 let hotkeys = null
 /** `registerAudioStreamHandlers`' handle; `endAll` tears down the renderer's chunked-IPC streams when it goes away. */
 let audioStreamHandlers = null
+
+process.on('uncaughtException', createUncaughtExceptionHandler({
+  dialog,
+  isReady: () => app.isReady(),
+  getWindow: () => mainWindow,
+}))
+
+/** Startup cannot continue: release what already started and exit with code 1. */
+function exitAfterFatalError(message, err) {
+  return exitWithError({
+    app,
+    teardown: async () => {
+      hotkeys?.releaseAll()
+      await teardownBeforeQuit()
+    },
+  }, message, err)
+}
 
 /**
  * On Linux without a keyring, `safeStorage` reports encryption as available
@@ -186,10 +201,10 @@ function registerBrowserViewHandlers() {
     view.setBounds({ x: 0, y: 0, width: 0, height: 0 })
     const id = view.webContents.id
 
-    view.webContents.on('did-start-navigation', (_, navUrl, __, isMainFrame) => {
-      if (isMainFrame && mainWindow)
+    view.webContents.on('did-start-navigation', forwardMainFrameNavigation((navUrl) => {
+      if (mainWindow)
         mainWindow.webContents.send('browserView:didNavigate', id, navUrl)
-    })
+    }))
     view.webContents.on('page-title-updated', (_, title) => {
       if (mainWindow)
         mainWindow.webContents.send('browserView:titleUpdated', id, title)
@@ -242,34 +257,43 @@ function registerBrowserViewHandlers() {
     destroyBrowserView(id, view, mainWindow)
   })
 
-  ipcMain.handle('browserView:setBounds', async (_, { id, bounds }) => {
+  /**
+   * The tab `id` names, or `undefined` after logging that `action` had nothing to act on.
+   * `setBounds` follows every resize and can trail a closed tab, so it logs at `debug`.
+   */
+  const knownView = (id, action, level = 'warn') => {
     const view = browserViews.get(id)
-    if (view)
-      view.setBounds(bounds)
+    if (!view)
+      browserLog[level](`${action} ignored: no tab ${id}`)
+    return view
+  }
+
+  ipcMain.handle('browserView:setBounds', async (_, { id, bounds }) => {
+    knownView(id, 'setBounds', 'debug')?.setBounds(bounds)
   })
 
   ipcMain.handle('browserView:loadURL', async (_, { id, url }) => {
-    const view = browserViews.get(id)
-    if (view)
+    const view = knownView(id, 'loadURL')
+    if (view) {
+      browserLog.info(`Tab ${id} loading ${describeUrl(url)}`)
       view.webContents.loadURL(url).catch(() => {})
+    }
   })
 
   ipcMain.handle('browserView:goBack', async (_, { id }) => {
-    const view = browserViews.get(id)
+    const view = knownView(id, 'goBack')
     if (view?.webContents.navigationHistory.canGoBack())
       view.webContents.navigationHistory.goBack()
   })
 
   ipcMain.handle('browserView:goForward', async (_, { id }) => {
-    const view = browserViews.get(id)
+    const view = knownView(id, 'goForward')
     if (view?.webContents.navigationHistory.canGoForward())
       view.webContents.navigationHistory.goForward()
   })
 
   ipcMain.handle('browserView:reload', async (_, { id }) => {
-    const view = browserViews.get(id)
-    if (view)
-      view.webContents.reload()
+    knownView(id, 'reload')?.webContents.reload()
   })
 
   ipcMain.handle('browserView:getMediaSourceId', async (_, { id }) => {
@@ -459,8 +483,7 @@ app.whenReady().then(async () => {
     api = embedded.api
   }
   catch (err) {
-    console.error('Failed to start embedded app:', err)
-    app.quit(1)
+    await exitAfterFatalError('Failed to start embedded app:', err)
     return
   }
   appHandle = handle
@@ -471,8 +494,7 @@ app.whenReady().then(async () => {
 
   const webDistDir = path.join(botRoot, 'web-dist')
   if (!fs.existsSync(path.join(webDistDir, 'index.html'))) {
-    console.error('web-dist/index.html not found. Run: pnpm run build')
-    app.quit(1)
+    await exitAfterFatalError('web-dist/index.html not found. Run: pnpm run build')
     return
   }
 
@@ -487,59 +509,80 @@ app.whenReady().then(async () => {
   registerBrowserViewHandlers()
   registerHibikiProtocol(api, webDistDir)
 
+  // Where the OS offers a system picker, Electron shows it and never calls
+  // this handler, so a log line from here means the fallback was taken.
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    captureLog.info(`Display media requested (audio: ${request.audioRequested ? 'yes' : 'no'}); system picker not used, choosing a source`)
     desktopCapturer.getSources({
       types: ['screen', 'window'],
     })
       .then((sources) => {
         if (sources.length === 0) {
+          captureLog.warn('No screen or window sources to capture; denying the request')
           callback({})
           return
         }
         const opts = { video: sources[0] }
         if (request.audioRequested)
           opts.audio = 'loopback'
+        captureLog.info(`Capturing ${sources[0].id}, first of ${sources.length} source(s)${opts.audio ? ' with loopback audio' : ''}`)
         callback(opts)
       })
       .catch((err) => {
-        console.error('Display media request failed:', err)
+        captureLog.error('Display media request failed:', err)
         callback({})
       })
   }, { useSystemPicker: true })
+  captureLog.info('Display media handler registered; the OS system picker is preferred where available')
 
-  ipcMain.handle('dialog:selectFolder', async (_, options = {}) => {
-    const win = BrowserWindow.getFocusedWindow()
-    const result = await dialog.showOpenDialog(win ?? null, {
-      properties: ['openDirectory'],
-      title: options.title ?? 'Select folder',
+  /**
+   * Registers a file dialog handler that logs the request and the GM's choice.
+   * Only the chosen file or folder name is logged: the full path carries the OS user name.
+   * `show(title, options)` opens the dialog and resolves to the chosen path, or `null` when cancelled.
+   */
+  const handleFileDialog = (kind, defaultTitle, show) => {
+    ipcMain.handle(`dialog:${kind}`, async (_, options = {}) => {
+      const title = options.title ?? defaultTitle
+      dialogLog.info(`${kind} "${title}" opened`)
+      const chosen = await show(BrowserWindow.getFocusedWindow() ?? null, title, options)
+      if (chosen)
+        dialogLog.info(`${kind} "${title}": chose ${path.basename(chosen)}`)
+      else
+        dialogLog.info(`${kind} "${title}": cancelled`)
+      return chosen || null
     })
-    if (result.canceled || result.filePaths.length === 0)
-      return null
-    return result.filePaths[0]
+  }
+
+  handleFileDialog('selectFolder', 'Select folder', async (win, title) => {
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory'],
+      title,
+    })
+    return result.canceled
+      ? null
+      : result.filePaths[0]
   })
 
-  ipcMain.handle('dialog:saveFile', async (_, options = {}) => {
-    const win = BrowserWindow.getFocusedWindow()
-    const result = await dialog.showSaveDialog(win ?? null, {
-      title: options.title ?? 'Save file',
+  handleFileDialog('saveFile', 'Save file', async (win, title, options) => {
+    const result = await dialog.showSaveDialog(win, {
+      title,
       defaultPath: options.defaultPath,
       filters: options.filters,
     })
-    if (result.canceled || !result.filePath)
-      return null
-    return result.filePath
+    return result.canceled
+      ? null
+      : result.filePath
   })
 
-  ipcMain.handle('dialog:openFile', async (_, options = {}) => {
-    const win = BrowserWindow.getFocusedWindow()
-    const result = await dialog.showOpenDialog(win ?? null, {
+  handleFileDialog('openFile', 'Open file', async (win, title, options) => {
+    const result = await dialog.showOpenDialog(win, {
       properties: ['openFile'],
-      title: options.title ?? 'Open file',
+      title,
       filters: options.filters,
     })
-    if (result.canceled || result.filePaths.length === 0)
-      return null
-    return result.filePaths[0]
+    return result.canceled
+      ? null
+      : result.filePaths[0]
   })
 
   ipcMain.handle('logs:getPath', () => logging.logFile)
@@ -548,13 +591,11 @@ app.whenReady().then(async () => {
   ipcMain.handle('shell:openExternal', (_, url) => {
     if (isWebUrl(url))
       return shell.openExternal(url)
+    appLog.warn(`openExternal refused a non-web URL (${describeScheme(url)})`)
   })
 
   createWindow('hibiki://app/')
-}).catch((err) => {
-  console.error('Electron app.whenReady failed:', err)
-  app.quit(1)
-})
+}).catch(err => exitAfterFatalError('Electron app.whenReady failed:', err))
 
 const SHUTDOWN_TEARDOWN_TIMEOUT_MS = 5_000
 
@@ -573,7 +614,7 @@ async function teardownBeforeQuit() {
     return
   let timeout
   await Promise.race([
-    handle.close().catch(err => console.error('Error during shutdown teardown:', err)),
+    handle.close().catch(err => appLog.error('Error during shutdown teardown:', err)),
     new Promise((resolve) => { timeout = setTimeout(resolve, SHUTDOWN_TEARDOWN_TIMEOUT_MS) }),
   ])
   clearTimeout(timeout)
