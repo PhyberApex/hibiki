@@ -641,7 +641,12 @@ describe('createPlayer', () => {
 
       const result = await player.warmEffects('storm', ['thunder', 'horn', 'door'])
 
-      expect(result).toEqual({ warmed: 2, skipped: 1, failed: 0 })
+      expect(result).toEqual({
+        warmed: 2,
+        skipped: 1,
+        oversize: 0,
+        failed: 0,
+      })
       expect(sounds.canDecode).toHaveBeenCalledWith('effects', 'horn')
       expect(createPcmStream.mock.calls.map(call => call[0])).toEqual(['/effects/thunder.mp3', '/effects/door.mp3'])
     })
@@ -656,7 +661,12 @@ describe('createPlayer', () => {
 
       const result = await player.warmEffects('storm', ['gone', 'corrupt', 'door'])
 
-      expect(result).toEqual({ warmed: 1, skipped: 0, failed: 2 })
+      expect(result).toEqual({
+        warmed: 1,
+        skipped: 0,
+        oversize: 0,
+        failed: 2,
+      })
     })
 
     it('warms each Effect once even when the Scene lists it twice', async () => {
@@ -667,7 +677,12 @@ describe('createPlayer', () => {
 
       const result = await player.warmEffects('storm', ['door', 'door'])
 
-      expect(result).toEqual({ warmed: 1, skipped: 0, failed: 0 })
+      expect(result).toEqual({
+        warmed: 1,
+        skipped: 0,
+        oversize: 0,
+        failed: 0,
+      })
       expect(createPcmStream).toHaveBeenCalledTimes(1)
     })
 

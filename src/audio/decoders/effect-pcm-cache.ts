@@ -123,17 +123,20 @@ export class EffectPcmCache {
    * trigger lands as fast as a repeat. Already cached: only its recency is
    * refreshed. Known to be over `maxEntryBytes`: nothing to do, it streams
    * uncached anyway. Otherwise runs (or joins) the same decode `get` would.
-   * Rejects when the decode fails, leaving nothing cached.
+   * Resolves `false` when the Effect turned out (or was already known) to be
+   * over `maxEntryBytes`, so nothing is retained. Rejects when the decode
+   * fails, leaving nothing cached.
    */
-  async warm(key: string, decode: () => Readable | Promise<Readable>): Promise<void> {
+  async warm(key: string, decode: () => Readable | Promise<Readable>): Promise<boolean> {
     if (this.oversize.has(key))
-      return
+      return false
     const cached = this.cache.get(key)
     if (cached !== undefined) {
       this.bump(key, cached)
-      return
+      return true
     }
     await this.decodeOnce(key, decode)
+    return !this.oversize.has(key)
   }
 
   private decodeOnce(key: string, decode: () => Readable | Promise<Readable>): Promise<Buffer> {

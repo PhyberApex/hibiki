@@ -212,8 +212,18 @@ describe('player API', () => {
   })
 
   it('warmEffects uses apiCall with the Scene id and its Effect ids', async () => {
-    mockInvoke.mockResolvedValue({ warmed: 2, skipped: 0, failed: 0 })
-    await expect(warmEffects('storm', ['thunder', 'door'])).resolves.toEqual({ warmed: 2, skipped: 0, failed: 0 })
+    mockInvoke.mockResolvedValue({
+      warmed: 2,
+      skipped: 0,
+      oversize: 0,
+      failed: 0,
+    })
+    await expect(warmEffects('storm', ['thunder', 'door'])).resolves.toEqual({
+      warmed: 2,
+      skipped: 0,
+      oversize: 0,
+      failed: 0,
+    })
     expect(mockInvoke).toHaveBeenCalledWith('api', {
       domain: 'player',
       method: 'warmEffects',

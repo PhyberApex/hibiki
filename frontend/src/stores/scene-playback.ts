@@ -165,6 +165,8 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     const soundIds = scene.effects.map(e => e.soundId)
     if (!soundIds.length)
       return
+    // Through a resolved promise so a synchronous throw (no Electron bridge)
+    // lands in the same catch as a rejected call.
     Promise.resolve()
       .then(() => warmEffects(scene.id, soundIds))
       .catch(e => console.warn(`[scene] warming Effects for Scene ${scene.id} failed:`, e))

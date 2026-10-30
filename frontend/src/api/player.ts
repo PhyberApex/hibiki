@@ -145,6 +145,7 @@ export function playEffect(guildId: string, soundId: string, options: PlayEffect
 export interface WarmEffectsResult {
   warmed: number
   skipped: number
+  oversize: number
   failed: number
 }
 

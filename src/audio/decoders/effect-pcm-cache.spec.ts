@@ -255,7 +255,7 @@ describe('effectPcmCache', () => {
       const cache = createEffectPcmCache()
       const decode = jest.fn().mockReturnValue(streamOf('a', 'b'))
 
-      await cache.warm('/effects/thunder.mp3', decode)
+      await expect(cache.warm('/effects/thunder.mp3', decode)).resolves.toBe(true)
       const { stream } = await cache.get('/effects/thunder.mp3', decode)
 
       expect(decode).toHaveBeenCalledTimes(1)
@@ -278,14 +278,14 @@ describe('effectPcmCache', () => {
       expect(decodeB).toHaveBeenCalledTimes(2)
     })
 
-    it('does not decode an Effect already known to be over the cut-off', async () => {
+    it('reports an Effect over the cut-off as not kept, and does not decode it again', async () => {
       const cache = createEffectPcmCache({ maxEntryBytes: PCM_BYTES_PER_MS * 100 })
       const decode = jest.fn().mockImplementation(() => NodeReadable.from([
         pcmChunkOfMs(200),
       ]))
-      await cache.warm('long', decode)
+      await expect(cache.warm('long', decode)).resolves.toBe(false)
 
-      await cache.warm('long', decode)
+      await expect(cache.warm('long', decode)).resolves.toBe(false)
 
       expect(decode).toHaveBeenCalledTimes(1)
     })
