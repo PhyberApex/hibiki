@@ -1907,7 +1907,7 @@ describe('sceneView — Scene Crossfade', () => {
       expect(setAmbienceVolume).toHaveBeenCalledWith('g1', 'amb-1', expect.closeTo(32), { rampMs: 100 })
       // ...while amb-2 (new, not backend-decodable) falls back to the
       // renderer path instead of being orphaned or silently dropped.
-      expect(startEffectStream).toHaveBeenCalledWith('g1', 'ambience-amb-2')
+      expect(startEffectStream).toHaveBeenCalledWith('g1', 'ambience-amb-2', 100)
     })
   })
 })

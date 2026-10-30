@@ -640,8 +640,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       const el = getAmbienceAudio(item.soundId)
       const streamId = `ambience-${item.soundId}`
       logInfo(`[scene] playAmbience ${item.soundId} via renderer fallback (${streamed ? 'streamed to Discord' : 'local'})`)
+      // The element already plays at the final volume and is captured after
+      // it, so the mixer input must pass the PCM through unscaled (#711).
       if (streamed)
-        await startEffectStream(target, streamId)
+        await startEffectStream(target, streamId, 100)
       if (abortIfSuperseded())
         return
       el.src = soundStreamUrl('ambience', item.soundId)
@@ -1112,8 +1114,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     }
     logInfo(`[scene] playEffect ${item.soundId} via renderer fallback (${streamed ? 'streamed to Discord' : 'local'}) as ${id}`)
     try {
+      // Already scaled by the element's volume: unscaled mixer input (#711).
       if (streamed)
-        await startEffectStream(target, id)
+        await startEffectStream(target, id, 100)
       if (abortIfRemoved())
         return
       el.src = soundStreamUrl('effects', item.soundId)

@@ -796,6 +796,27 @@ describe('guildAudioManager', () => {
         expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(streamB, idB, 60, expect.any(Function))
       })
 
+      it('a playMusic whose decode resolves after disconnect() registers nothing with the destroyed engine and logs the drop (#711)', async () => {
+        const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {})
+        const listener = jest.fn()
+        manager.on('trackChanged', listener)
+        manager.disconnect()
+        const deferred = createDeferredFactory()
+        const playCall = manager.playMusic(deferred.factory, meta, { volume: 80 })
+
+        const stream = createFakeStream() as EventEmitter & { destroy: jest.Mock }
+        stream.destroy = jest.fn()
+        deferred.resolve(stream)
+        await playCall
+
+        expect(getEngineMock().playMusicFromStream).not.toHaveBeenCalled()
+        expect(stream.destroy).toHaveBeenCalledTimes(1)
+        expect(manager.track).toBeUndefined()
+        expect(listener).not.toHaveBeenCalled()
+        expect(infoSpy).toHaveBeenCalledWith('[voice]', expect.stringContaining('dropped: Target torn down while decoding'))
+        infoSpy.mockRestore()
+      })
+
       it('stopCurrentTrack called while a playMusic is mid-decode prevents that track from resurrecting playback', async () => {
         const deferred = createDeferredFactory()
         const playCall = manager.playMusic(deferred.factory, meta, { volume: 80 })
@@ -938,6 +959,24 @@ describe('guildAudioManager', () => {
       const engine = getEngineMock()
       expect(engine.playMusicFromStream).toHaveBeenCalledWith(stream, expect.any(String), 70, expect.any(Function))
       expect(manager.activeAmbience).toEqual(['rain'])
+    })
+
+    it('a playAmbience whose decode resolves after disconnect() registers nothing with the destroyed engine and logs the drop (#711)', async () => {
+      const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {})
+      const listener = jest.fn()
+      manager.on('ambienceChanged', listener)
+      manager.disconnect()
+      const deferred = createDeferredFactory()
+      const playCall = manager.playAmbience(deferred.factory, 'rain', { volume: 70, repeatMin: 0, repeatMax: 0 })
+
+      deferred.resolve()
+      await playCall
+
+      expect(getEngineMock().playMusicFromStream).not.toHaveBeenCalled()
+      expect(manager.activeAmbience).toEqual([])
+      expect(listener).not.toHaveBeenCalled()
+      expect(infoSpy).toHaveBeenCalledWith('[voice]', expect.stringContaining('dropped: Target torn down while decoding'))
+      infoSpy.mockRestore()
     })
 
     it('several Ambience sounds can be active at once, independently', async () => {

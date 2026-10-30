@@ -470,9 +470,18 @@ export class GuildAudioManager extends EventEmitter {
       // can't resurrect playback either: never register with the engine,
       // just drop it. A restart additionally needs its own stream to still
       // be registered, since it was dropped from bookkeeping if not (#640).
-      const superseded = this.musicGeneration !== myGeneration
-      if (superseded || (isRestart && this.musicStreams.get(streamId)?.seq !== seq)) {
-        log.info(`Music "${metadata.name}" ${isRestart ? 'loop restart' : 'start'} of ${streamId} dropped: ${superseded ? 'superseded or stopped' : 'stream no longer registered'} while decoding (guild ${this.guildId})`)
+      // Leave and teardown bump the generation too, but a call that only
+      // reached this manager after them captured the bumped value, so the
+      // destroyed engine is checked on its own (#711).
+      const dropReason = this.engineDestroyed
+        ? 'Target torn down'
+        : this.musicGeneration !== myGeneration
+          ? 'superseded or stopped'
+          : isRestart && this.musicStreams.get(streamId)?.seq !== seq
+            ? 'stream no longer registered'
+            : undefined
+      if (dropReason) {
+        log.info(`Music "${metadata.name}" ${isRestart ? 'loop restart' : 'start'} of ${streamId} dropped: ${dropReason} while decoding (guild ${this.guildId})`)
         stream.destroy?.()
         return
       }
@@ -514,11 +523,11 @@ export class GuildAudioManager extends EventEmitter {
 
     await startStream(fadeMs, false)
 
-    if (this.musicGeneration !== myGeneration) {
-      // The initial start itself was superseded (the check inside
-      // startStream already aborted it before it registered with the
-      // engine, so there is nothing of ours left to tear down) — leave
-      // whatever the newer call set up untouched.
+    if (this.musicGeneration !== myGeneration || this.engineDestroyed) {
+      // The initial start itself was superseded or the Target torn down
+      // (the check inside startStream already aborted it before it
+      // registered with the engine, so there is nothing of ours left to
+      // tear down) — leave whatever the newer call set up untouched.
       return
     }
 
@@ -633,9 +642,16 @@ export class GuildAudioManager extends EventEmitter {
       // restart — was in flight: never register with the engine, just drop
       // it. A restart additionally needs its entry to still be the active
       // one, since it was dropped from bookkeeping if not (#640).
-      const superseded = this.ambienceGenerations.get(soundId) !== myGeneration
-      if (superseded || (isRestart && this.ambienceEntries.get(soundId) !== entry)) {
-        log.info(`Ambience ${soundId} ${isRestart ? 'restart' : 'start'} of ${streamId} dropped: ${superseded ? 'superseded or stopped' : 'entry no longer active'} while decoding (guild ${this.guildId})`)
+      // As for Music, a destroyed engine is checked on its own (#711).
+      const dropReason = this.engineDestroyed
+        ? 'Target torn down'
+        : this.ambienceGenerations.get(soundId) !== myGeneration
+          ? 'superseded or stopped'
+          : isRestart && this.ambienceEntries.get(soundId) !== entry
+            ? 'entry no longer active'
+            : undefined
+      if (dropReason) {
+        log.info(`Ambience ${soundId} ${isRestart ? 'restart' : 'start'} of ${streamId} dropped: ${dropReason} while decoding (guild ${this.guildId})`)
         stream.destroy?.()
         return
       }
@@ -685,11 +701,11 @@ export class GuildAudioManager extends EventEmitter {
 
     await startStream(options.fadeInMs ?? 0, false)
 
-    if (this.ambienceGenerations.get(soundId) !== myGeneration) {
-      // The initial start itself was superseded (the check inside
-      // startStream already aborted it before it registered with the
-      // engine, so there is nothing of ours left to tear down) — leave
-      // whatever the newer call set up untouched.
+    if (this.ambienceGenerations.get(soundId) !== myGeneration || this.engineDestroyed) {
+      // The initial start itself was superseded or the Target torn down
+      // (the check inside startStream already aborted it before it
+      // registered with the engine, so there is nothing of ours left to
+      // tear down) — leave whatever the newer call set up untouched.
       return
     }
 

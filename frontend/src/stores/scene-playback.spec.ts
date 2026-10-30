@@ -2,6 +2,7 @@ import type { Scene } from '@/api/scenes'
 import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { startEffectStream } from '@/api/audio-stream'
 import { fetchMasterVolume, fetchSceneFadeLength, updateMasterVolume } from '@/api/config'
 import { playAmbience, playEffect, playMusic, setAmbienceVolume, setMusicVolume, stopAmbience, stopEffects, stopMusic, warmEffects } from '@/api/player'
 import { canDecode } from '@/api/sounds'
@@ -280,6 +281,15 @@ describe('scene playback store', () => {
       return (decodable: boolean) => release(decodable)
     }
 
+    function joinDiscordTarget() {
+      const player = usePlayerStore()
+      player.activeTarget = 'discord'
+      player.guildId = 'guild-1'
+      player.playerState = [
+        { guildId: 'guild-1', connectedChannelId: 'voice-1' } as never,
+      ]
+    }
+
     beforeEach(() => {
       loadingEls = []
       playingEls = []
@@ -453,6 +463,32 @@ describe('scene playback store', () => {
       expect(playingEls).toEqual([])
       expect(pausedEls).toContain(el)
       expect(store.playingAmbienceIds.has('amb-1')).toBe(false)
+    })
+
+    it('a renderer-fallback Ambience streamed to a Discord Target opens its mixer input at full volume (#711)', async () => {
+      vi.mocked(canDecode).mockResolvedValue(false)
+      joinDiscordTarget()
+      const store = useScenePlaybackStore()
+
+      store.toggleAmbience({ ...scene.ambience[0] })
+      await vi.waitFor(() => expect(loadingEls).toHaveLength(1))
+
+      expect(startEffectStream).toHaveBeenCalledWith('guild-1', 'ambience-amb-1', 100)
+      store.toggleAmbience({ ...scene.ambience[0], enabled: false })
+    })
+
+    it('a renderer-fallback Effect streamed to a Discord Target opens its mixer input at full volume (#711)', async () => {
+      vi.mocked(canDecode).mockResolvedValue(false)
+      joinDiscordTarget()
+      const store = useScenePlaybackStore()
+
+      const playing = store.playEffect(scene.effects[0])
+      await vi.waitFor(() => expect(loadingEls).toHaveLength(1))
+
+      expect(startEffectStream).toHaveBeenCalledWith('guild-1', expect.any(String), 100)
+      store.stopAllEffectInstances()
+      loadingEls[0]!.dispatchEvent(new Event('canplaythrough'))
+      await playing
     })
 
     it('an Effect whose element is still loading when all Effects stop never plays', async () => {

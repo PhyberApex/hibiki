@@ -32,7 +32,12 @@ interface ActiveStream {
   cancelRamp?: () => void
 }
 
-const DEFAULT_VOLUMES = { music: 85, effects: 90 }
+/**
+ * Volumes are final and absolute (the renderer already applied master
+ * volume), so a stream started without one plays at full level rather than
+ * being attenuated a second time (#711).
+ */
+const DEFAULT_VOLUMES = { music: 100, effects: 100 }
 const CLAMP = (v: number) => Math.min(100, Math.max(0, Math.round(v)))
 
 /**
@@ -213,11 +218,19 @@ export class AudioEngine {
    * Starts `stream` as the music stream under `streamId` (replacing any
    * stream already under that id). `onEnded` fires once the stream has
    * played out through the mixer, or errored (then with the error); never
-   * after a stop or a replacement.
+   * after a stop or a replacement. On a destroyed engine the stream is
+   * dropped and `onEnded` fires at once: the mixer's read loop is gone, so an
+   * input would never drain (#711).
    */
   playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.music, onEnded?: (err?: Error) => void) {
-    this.stopMusicStream(streamId)
     const label = musicLabel(streamId)
+    if (this.destroyed) {
+      log.info(`Music stream ${label} dropped: the audio engine is already destroyed`)
+      stream.destroy()
+      onEnded?.()
+      return
+    }
+    this.stopMusicStream(streamId)
     const volume = initialVolumeOr(initialVolume, DEFAULT_VOLUMES.music, `music stream ${label}`)
     log.debug(`Mixer input opened for ${label} at volume ${volume}`)
     const active = this.spawnInputFromStream(stream, label, volume, (ended, err) => {
@@ -240,10 +253,16 @@ export class AudioEngine {
    * Starts `stream` as a layered effect input. With a `streamId` the input
    * can be found again by `setEffectStreamVolume` (a Routed Tab, ADR-0007);
    * a second start under the same id leaves the first draining and takes
-   * the id over. The stream ends when its source does.
+   * the id over. The stream ends when its source does. On a destroyed engine
+   * the stream is dropped (#711).
    */
   playEffectFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.effects) {
     const id = streamId ?? `effect-${++this.anonymousEffectSeq}`
+    if (this.destroyed) {
+      log.info(`Effect stream ${id} dropped: the audio engine is already destroyed`)
+      stream.destroy()
+      return
+    }
     const volume = initialVolumeOr(initialVolume, DEFAULT_VOLUMES.effects, `effect stream ${id}`)
     log.debug(`Effect mixer input opened for ${id} at volume ${volume}`)
     const effectStream = this.spawnInputFromStream(stream, id, volume, (ended) => {
