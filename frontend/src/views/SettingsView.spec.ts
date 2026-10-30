@@ -1,12 +1,14 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
 import {
   clearDiscordToken,
   fetchDiscordConfig,
   fetchLocalOutputDevice,
   fetchSceneFadeLength,
   fetchVisionConfig,
+  updateDiscordToken,
   updateHotkeySettings,
   updateLocalOutputDevice,
   updateSceneFadeLength,
@@ -16,6 +18,7 @@ import {
   updateVisionOpenAiModel,
   updateVisionProvider,
 } from '@/api/config'
+import { fetchHotkeyStatus } from '@/api/hotkeys'
 import { fetchUpdateCheckSettings, updateUpdateCheckEnabled } from '@/api/updates'
 import { fetchUsageStats, updateUsageStatsEnabled } from '@/api/usage-stats'
 import { useAccessibilityStore } from '@/stores/accessibility'
@@ -202,6 +205,43 @@ describe('settingsView', () => {
     })
   })
 
+  describe('discord connect', () => {
+    it('shows why Connect failed when the login is rejected', async () => {
+      vi.mocked(fetchDiscordConfig).mockResolvedValueOnce({ tokenConfigured: true, encrypted: true })
+      const pinia = createPinia()
+      const wrapper = mount(SettingsView, {
+        global: {
+          plugins: [pinia],
+        },
+      })
+      await flushPromises()
+      const player = usePlayerStore(pinia)
+      vi.spyOn(player, 'doReconnect').mockRejectedValueOnce(new Error('An invalid token was provided.'))
+      const connect = wrapper.findAll('button').find(b => b.text() === 'Connect')!
+      await connect.trigger('click')
+      await flushPromises()
+      expect(wrapper.text()).toContain('Could not connect: An invalid token was provided.')
+    })
+
+    it('tells a saved token apart from a failed connect', async () => {
+      const pinia = createPinia()
+      const wrapper = mount(SettingsView, {
+        global: {
+          plugins: [pinia],
+        },
+      })
+      await flushPromises()
+      const player = usePlayerStore(pinia)
+      vi.spyOn(player, 'doReconnect').mockRejectedValueOnce(new Error('An invalid token was provided.'))
+      await wrapper.find('#token').setValue('bad-token')
+      await wrapper.find('[data-testid="discord-token-save"]').trigger('click')
+      await flushPromises()
+      expect(updateDiscordToken).toHaveBeenCalledWith('bad-token')
+      expect(wrapper.text()).toContain('Token saved, but the bot couldn\'t connect: An invalid token was provided.')
+      expect(wrapper.text()).not.toContain('Couldn\'t save token')
+    })
+  })
+
   it('renders Storage location section', async () => {
     const wrapper = mount(SettingsView, {
       global: {
@@ -328,6 +368,50 @@ describe('settingsView', () => {
       expect(updateHotkeySettings).toHaveBeenCalledWith({ enabled: true, stopHotkey: 'F24', volumeUpHotkey: 'F14' })
     })
 
+    it('restores the enable checkbox when saving it fails', async () => {
+      vi.mocked(updateHotkeySettings).mockRejectedValueOnce(new Error('disk full'))
+      const wrapper = mountSettings()
+      await flushPromises()
+      const toggle = wrapper.find<HTMLInputElement>('#hotkeys-enabled')
+      await toggle.setValue(false)
+      await flushPromises()
+      expect(toggle.element.checked).toBe(true)
+      expect(wrapper.find('[data-testid="hotkeys-section"]').text()).toContain('disk full')
+    })
+
+    it('refetches refused hotkeys when Settings is shown again', async () => {
+      const showSettings = ref(true)
+      const Host = defineComponent({
+        setup: () => () => h(KeepAlive, null, [
+          showSettings.value
+            ? h(SettingsView)
+            : h('div', 'Elsewhere'),
+        ]),
+      })
+      const wrapper = mount(Host, {
+        global: {
+          plugins: [
+            createPinia(),
+          ],
+        },
+      })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="hotkey-failures"]').text()).not.toContain('F15')
+
+      showSettings.value = false
+      await nextTick()
+      vi.mocked(fetchHotkeyStatus).mockResolvedValueOnce({
+        enabled: true,
+        registered: [],
+        failures: [
+          { accelerator: 'F15', owner: 'Effect "Thunder"', reason: 'Already registered by another app' },
+        ],
+      })
+      showSettings.value = true
+      await flushPromises()
+      expect(wrapper.find('[data-testid="hotkey-failures"]').text()).toContain('F15')
+    })
+
     it('lists refused hotkeys with the reason under Diagnostics', async () => {
       const wrapper = mountSettings()
       await flushPromises()
@@ -450,6 +534,18 @@ describe('settingsView', () => {
       expect(wrapper.find('.fade-value').text()).toBe('Hard cut')
     })
 
+    it('reverts the slider when saving the fade length fails', async () => {
+      vi.mocked(updateSceneFadeLength).mockRejectedValueOnce(new Error('disk full'))
+      const wrapper = mountSettings()
+      await flushPromises()
+      const slider = wrapper.find<HTMLInputElement>('#scene-fade-length')
+      await slider.setValue('6')
+      await flushPromises()
+      expect(slider.element.value).toBe('3')
+      expect(wrapper.find('.fade-value').text()).toBe('3s')
+      expect(wrapper.text()).toContain('disk full')
+    })
+
     it('saves the fade length on change', async () => {
       const wrapper = mountSettings()
       await flushPromises()
@@ -507,6 +603,18 @@ describe('settingsView', () => {
       await toggle.setValue(true)
       await flushPromises()
       expect(updateVisionEnabled).toHaveBeenCalledWith(true)
+    })
+
+    it('restores the toggle when switching the feature on fails', async () => {
+      vi.mocked(fetchVisionConfig).mockResolvedValue(CLAUDE_CONFIGURED_VISION)
+      vi.mocked(updateVisionEnabled).mockRejectedValueOnce(new Error('disk full'))
+      const wrapper = mountSettings()
+      await flushPromises()
+      const toggle = wrapper.find<HTMLInputElement>('#vision-enabled')
+      await toggle.setValue(true)
+      await flushPromises()
+      expect(toggle.element.checked).toBe(false)
+      expect(wrapper.text()).toContain('disk full')
     })
 
     it('warns that the Claude key is stored as plain text when secrets are not encrypted', async () => {
@@ -668,6 +776,19 @@ describe('settingsView Local playback', () => {
     expect(updateLocalOutputDevice).toHaveBeenLastCalledWith({ deviceId: 'a', label: 'USB Speaker' })
     await wrapper.find('#output-device').setValue('')
     expect(updateLocalOutputDevice).toHaveBeenLastCalledWith(null)
+  })
+
+  it('keeps the stored selection when saving a new one fails', async () => {
+    stubDevices([
+      { deviceId: 'a', label: 'USB Speaker' },
+    ])
+    vi.mocked(updateLocalOutputDevice).mockRejectedValueOnce(new Error('disk full'))
+    const wrapper = mountSettings()
+    await flushPromises()
+    await wrapper.find('#output-device').setValue('a')
+    await flushPromises()
+    expect((wrapper.find('#output-device').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.text()).toContain('disk full')
   })
 
   it('re-lists devices on devicechange', async () => {

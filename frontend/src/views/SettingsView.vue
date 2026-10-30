@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DiscordConfig, HotkeySettings, LocalOutputDevice, VisionConfig, VisionProviderId } from '@/api/config'
 import type { HotkeyFailure } from '@/api/hotkeys'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onActivated, onMounted, onUnmounted, ref } from 'vue'
 import {
   clearDiscordToken,
   fetchDiscordConfig,
@@ -120,7 +120,8 @@ async function refreshOutputDevices() {
 }
 
 async function changeOutputDevice(event: Event) {
-  const deviceId = (event.target as HTMLSelectElement).value
+  const select = event.target as HTMLSelectElement
+  const deviceId = select.value
   const next = deviceId === ''
     ? null
     : (deviceId === outputDeviceChoice.value?.deviceId
@@ -134,6 +135,7 @@ async function changeOutputDevice(event: Event) {
   }
   catch (e) {
     console.warn('[settings] Output Device rejected:', e)
+    select.value = outputDeviceChoice.value?.deviceId ?? ''
     outputDeviceMessage.value = {
       type: 'error',
       text: e instanceof Error
@@ -212,8 +214,21 @@ async function saveToken() {
   message.value = null
   try {
     discordConfig.value = await updateDiscordToken(token)
-    tokenInput.value = ''
-    message.value = { type: 'success', text: 'Token saved. Connecting…' }
+  }
+  catch (e) {
+    console.warn('[settings] Discord token save failed:', e)
+    message.value = {
+      type: 'error',
+      text: e instanceof Error
+        ? e.message
+        : 'Couldn\'t save token. Copy the full token from the Discord Developer Portal and try again.',
+    }
+    saving.value = false
+    return
+  }
+  tokenInput.value = ''
+  message.value = { type: 'success', text: 'Token saved. Connecting…' }
+  try {
     await player.doReconnect()
     if (player.botStatus?.ready)
       message.value = { type: 'success', text: 'Token saved. Bot connected.' }
@@ -221,16 +236,18 @@ async function saveToken() {
       message.value = { type: 'success', text: 'Token saved. Bot didn\'t connect — click Connect below to try again.' }
   }
   catch (e) {
-    message.value = {
-      type: 'error',
-      text: e instanceof Error
-        ? e.message
-        : 'Couldn\'t save token. Copy the full token from the Discord Developer Portal and try again.',
-    }
+    console.warn('[settings] connect after saving the token failed:', e)
+    message.value = { type: 'error', text: `Token saved, but the bot couldn't connect: ${connectFailureText(e)}` }
   }
   finally {
     saving.value = false
   }
+}
+
+function connectFailureText(e: unknown) {
+  return e instanceof Error && e.message
+    ? e.message
+    : 'Double-check your token and try again.'
 }
 
 async function removeToken() {
@@ -264,7 +281,14 @@ async function removeToken() {
 
 async function connectBot() {
   message.value = null
-  await player.doReconnect()
+  try {
+    await player.doReconnect()
+  }
+  catch (e) {
+    console.warn('[settings] connect failed:', e)
+    message.value = { type: 'error', text: `Could not connect: ${connectFailureText(e)}` }
+    return
+  }
   if (player.botStatus?.ready)
     message.value = { type: 'success', text: 'Bot connected.' }
   else
@@ -346,7 +370,9 @@ function useSystemMotion() {
 }
 
 async function onSceneFadeLengthChange(event: Event) {
-  const seconds = Number((event.target as HTMLInputElement).value)
+  const input = event.target as HTMLInputElement
+  const seconds = Number(input.value)
+  const previous = sceneFadeLength.value
   sceneFadeLength.value = seconds
   savingFadeLength.value = true
   fadeLengthMessage.value = null
@@ -354,6 +380,9 @@ async function onSceneFadeLengthChange(event: Event) {
     await updateSceneFadeLength(seconds)
   }
   catch (e) {
+    console.warn('[settings] Scene fade length rejected:', e)
+    sceneFadeLength.value = previous
+    input.value = String(previous)
     fadeLengthMessage.value = {
       type: 'error',
       text: e instanceof Error
@@ -488,7 +517,8 @@ const saveVisionModel = () => saveVisionAdvancedField('Model', visionModelInput.
 const resetVisionModel = () => saveVisionAdvancedField('Model', '', updateVisionOpenAiModel)
 
 async function toggleVision(event: Event) {
-  const enabled = (event.target as HTMLInputElement).checked
+  const input = event.target as HTMLInputElement
+  const enabled = input.checked
   savingVisionToggle.value = true
   visionMessage.value = null
   try {
@@ -499,6 +529,8 @@ async function toggleVision(event: Event) {
     }
   }
   catch (e) {
+    console.warn('[settings] Vision to Vibe toggle rejected:', e)
+    input.checked = Boolean(visionConfig.value?.enabled)
     visionMessage.value = {
       type: 'error',
       text: e instanceof Error
@@ -518,7 +550,7 @@ async function saveHotkeySettings(next: HotkeySettings) {
   try {
     await updateHotkeySettings(next)
     hotkeySettings.value = next
-    hotkeyFailures.value = (await fetchHotkeyStatus().catch(() => null))?.failures ?? hotkeyFailures.value
+    await refreshHotkeyFailures()
   }
   catch (e) {
     console.warn('[settings] Hotkey settings rejected:', e)
@@ -536,8 +568,16 @@ async function saveHotkeySettings(next: HotkeySettings) {
   }
 }
 
-function toggleHotkeys(event: Event) {
-  return saveHotkeySettings({ ...hotkeySettings.value, enabled: (event.target as HTMLInputElement).checked })
+/** Keeps the last list on a failed fetch, so a flaky status call does not hide known refusals. */
+async function refreshHotkeyFailures() {
+  hotkeyFailures.value = (await fetchHotkeyStatus().catch(() => null))?.failures ?? hotkeyFailures.value
+}
+
+async function toggleHotkeys(event: Event) {
+  const input = event.target as HTMLInputElement
+  await saveHotkeySettings({ ...hotkeySettings.value, enabled: input.checked })
+  // Vue does not re-patch an unchanged :checked, so a rejected save must restore the box itself.
+  input.checked = hotkeySettings.value.enabled
 }
 
 async function toggleUpdateCheck(event: Event) {
@@ -605,6 +645,10 @@ onMounted(() => {
     usageStatsEnabled.value = enabled
   }).catch(e => console.error('[settings] Could not load the Usage Stats setting:', e))
   navigator.mediaDevices?.addEventListener?.('devicechange', refreshOutputDevices)
+})
+// Settings stays alive under KeepAlive: a Scene or Effect Hotkey bound since the last visit may have been refused.
+onActivated(() => {
+  void refreshHotkeyFailures()
 })
 onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', refreshOutputDevices))
 </script>

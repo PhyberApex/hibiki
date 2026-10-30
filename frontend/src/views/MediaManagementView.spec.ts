@@ -1,7 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { describe, expect, it, vi } from 'vitest'
+import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
+import { fetchDiscordConfig } from '@/api/config'
 import SoundListManage from '@/components/SoundListManage.vue'
 import { usePlayerStore } from '@/stores/player'
 import MediaManagementView from './MediaManagementView.vue'
@@ -104,5 +106,36 @@ describe('mediaManagementView local target', () => {
     })
     await flushPromises()
     expect(wrapper.find('.setup-guide').exists()).toBe(false)
+  })
+})
+
+describe('mediaManagementView under KeepAlive', () => {
+  it('drops the token step of the setup guide once a token was saved elsewhere', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    usePlayerStore().activeTarget = 'discord'
+    const showMedia = ref(true)
+    const Host = defineComponent({
+      setup: () => () => h(KeepAlive, null, [
+        showMedia.value
+          ? h(MediaManagementView)
+          : h('div', 'Settings'),
+      ]),
+    })
+    const wrapper = mount(Host, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Add your Discord bot token')
+
+    showMedia.value = false
+    await nextTick()
+    vi.mocked(fetchDiscordConfig).mockResolvedValueOnce({ tokenConfigured: true, encrypted: true })
+    showMedia.value = true
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Add your Discord bot token')
+    expect(wrapper.text()).toContain('Connecting to Discord')
   })
 })
