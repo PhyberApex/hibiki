@@ -6,6 +6,8 @@ import fg from 'fast-glob'
 import slugify from 'slugify'
 import { canDecode as canDecodeFile } from '../audio/decoders'
 import { createLogger } from '../logger'
+import { readDurationMs } from './sound-duration'
+import { createSoundDurationsStore } from './sound-durations.store'
 import { idFromFilename, isSafeSoundId, isSoundCategory } from './sound-id'
 import { createSoundTagsStore } from './sound-tags.store'
 
@@ -70,12 +72,61 @@ function unresolvableIdProblem(file: string, id: string, filesById: Map<string, 
   return null
 }
 
+/** Only Music needs a known duration (#695): Ambience loops and Effects learn theirs from decoding. */
+function isMeasured(category: SoundCategory): boolean {
+  return category === 'music'
+}
+
+/** `{ durationMs }` to spread into a `SoundFile`, empty when the duration is unknown. */
+function durationField(durationMs: number | null | undefined): { durationMs?: number } {
+  return typeof durationMs === 'number'
+    ? { durationMs }
+    : {}
+}
+
+async function measure(category: SoundCategory, id: string, path: string): Promise<number | null> {
+  try {
+    const durationMs = await readDurationMs(path)
+    if (durationMs === null)
+      log.warn(`${category}/${id}: header carries no duration, its timer stays off`)
+    return durationMs
+  }
+  catch (err) {
+    log.warn(`${category}/${id}: could not read a duration from its header, its timer stays off:`, err)
+    return null
+  }
+}
+
 function buildId(name: string): string {
   return `${slugify(idFromFilename(name), { lower: true, strict: true })}-${Date.now()}`
 }
 
 export function createSoundLibrary(config: Config) {
   const tagsStore = createSoundTagsStore(config)
+  const durationsStore = createSoundDurationsStore(config)
+
+  /** Durations for `files` of `category`, measuring and storing any never measured before (existing files, files dropped in by hand or an import). */
+  async function durationsFor(category: SoundCategory, files: { id: string, path: string }[]): Promise<Map<string, number | null>> {
+    if (!isMeasured(category))
+      return new Map()
+    const known = await durationsStore.getAll(category)
+    const measured = new Map<string, number | null>()
+    for (const { id, path } of files) {
+      if (!known.has(id) && !measured.has(id))
+        measured.set(id, await measure(category, id, path))
+    }
+    if (measured.size > 0) {
+      await durationsStore.setMany(category, measured)
+      const unreadable = [
+        ...measured.values(),
+      ].filter(ms => ms === null).length
+      log.info(`Measured ${measured.size} ${category} duration(s) lazily, ${unreadable} unreadable`)
+    }
+    return new Map([
+      ...known,
+      ...measured,
+    ])
+  }
   /** Files already warned about, so a refreshing view does not repeat the warning on every list. */
   const warnedUnresolvable = new Set<string>()
 
@@ -93,6 +144,7 @@ export function createSoundLibrary(config: Config) {
       const tagsById = await tagsStore.getAll(category)
       const results: SoundFile[] = []
       const filesById = new Map<string, string>()
+      const paths: { id: string, path: string }[] = []
       for (const file of entries) {
         const filePath = resolvePath(config, category, file)
         try {
@@ -115,11 +167,16 @@ export function createSoundLibrary(config: Config) {
             createdAt: stats.birthtime.toISOString(),
             tags: tagsById.get(id) ?? [],
           })
+          if (!problem)
+            paths.push({ id, path: filePath })
         }
         catch {
           continue
         }
       }
+      const durations = await durationsFor(category, paths)
+      for (const sound of results)
+        Object.assign(sound, durationField(durations.get(sound.id)))
       return results.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     },
 
@@ -137,9 +194,12 @@ export function createSoundLibrary(config: Config) {
     async getFile(category: SoundCategory, id: string): Promise<SoundFile & { path: string }> {
       const filename = await findFilename(config, category, id)
       const path = resolvePath(config, category, filename)
-      const [stats, tags] = await Promise.all([
+      const [stats, tags, durations] = await Promise.all([
         stat(path),
         tagsStore.get(category, id),
+        durationsFor(category, [
+          { id, path },
+        ]),
       ])
       return {
         id,
@@ -149,6 +209,7 @@ export function createSoundLibrary(config: Config) {
         size: stats.size,
         createdAt: stats.birthtime.toISOString(),
         tags,
+        ...durationField(durations.get(id)),
         path,
       }
     },
@@ -175,6 +236,7 @@ export function createSoundLibrary(config: Config) {
       const path = resolvePath(config, category, file)
       await unlink(path)
       await tagsStore.remove(category, id)
+      await durationsStore.remove(category, id)
       log.info(`Deleted ${category} "${file}"`)
     },
 
@@ -196,7 +258,16 @@ export function createSoundLibrary(config: Config) {
       const target = join(base, filename)
       await writeFile(target, file.buffer)
       const stats = await stat(target)
-      log.info(`Saved ${category} "${filename}" (${stats.size} bytes) from "${file.originalname}"`)
+      let durationMs: number | null = null
+      if (isMeasured(category)) {
+        durationMs = await measure(category, safeId, target)
+        await durationsStore.setMany(category, new Map([
+          [safeId, durationMs],
+        ]))
+      }
+      log.info(`Saved ${category} "${filename}" (${stats.size} bytes${durationMs === null
+        ? ''
+        : `, ${durationMs} ms`}) from "${file.originalname}"`)
       return {
         id: safeId,
         name: humanize(filename),
@@ -205,6 +276,7 @@ export function createSoundLibrary(config: Config) {
         size: stats.size,
         createdAt: stats.birthtime.toISOString(),
         tags: [],
+        ...durationField(durationMs),
       }
     },
   }

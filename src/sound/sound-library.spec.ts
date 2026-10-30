@@ -473,3 +473,82 @@ describe('sound ids stay inside the library directory', () => {
     expect(lines).toHaveLength(1)
   })
 })
+
+describe('music durations (#695)', () => {
+  function makeConfig() {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-sound-durations-'))
+    return {
+      discord: { token: '' },
+      audio: {
+        storageRoot: tempRoot,
+        musicDir: join(tempRoot, 'music'),
+        effectsDir: join(tempRoot, 'effects'),
+        ambienceDir: join(tempRoot, 'ambience'),
+        webDistDir: 'web-dist',
+      },
+      database: {
+        path: join(tempRoot, 'data', 'hibiki.json'),
+      },
+    }
+  }
+
+  function durationsFile(config: ReturnType<typeof makeConfig>): Record<string, number | null> {
+    return JSON.parse(readFileSync(join(config.audio.storageRoot, 'data', 'sound-durations.json'), 'utf-8'))
+  }
+
+  it('save measures an uploaded Music track and stores it in the sidecar', async () => {
+    const config = makeConfig()
+    const lib = createSoundLibrary(config)
+    const saved = await lib.save('music', {
+      buffer: readFileSync(join(FIXTURES_DIR, 'fixture-stereo-44100.ogg')),
+      originalname: 'tavern.ogg',
+    })
+    expect(saved.durationMs).toBe(300)
+    expect(durationsFile(config)[`music/${saved.id}`]).toBe(300)
+    await expect(lib.getFile('music', saved.id)).resolves.toMatchObject({ durationMs: 300 })
+  })
+
+  it('list measures an existing Music track lazily, once', async () => {
+    const config = makeConfig()
+    mkdirSync(config.audio.musicDir, { recursive: true })
+    copyFileSync(join(FIXTURES_DIR, 'fixture-stereo-44100.flac'), join(config.audio.musicDir, 'battle.flac'))
+    const lib = createSoundLibrary(config)
+    expect((await lib.list('music'))[0]!.durationMs).toBe(300)
+    expect(durationsFile(config)['music/battle']).toBe(300)
+    // the sidecar now answers: a corrupted file keeps its measured duration
+    writeFileSync(join(config.audio.musicDir, 'battle.flac'), 'x')
+    expect((await createSoundLibrary(config).list('music'))[0]!.durationMs).toBe(300)
+  })
+
+  it('an unreadable Music track has no duration and is remembered as unreadable', async () => {
+    const config = makeConfig()
+    mkdirSync(config.audio.musicDir, { recursive: true })
+    writeFileSync(join(config.audio.musicDir, 'garbage.mp3'), 'not audio')
+    const lib = createSoundLibrary(config)
+    const [file] = await lib.list('music')
+    expect(file!.durationMs).toBeUndefined()
+    expect(durationsFile(config)).toEqual({ 'music/garbage': null })
+  })
+
+  it('effects and Ambience are not measured', async () => {
+    const config = makeConfig()
+    const lib = createSoundLibrary(config)
+    const saved = await lib.save('ambience', {
+      buffer: readFileSync(join(FIXTURES_DIR, 'fixture-stereo-44100.ogg')),
+      originalname: 'rain.ogg',
+    })
+    expect(saved.durationMs).toBeUndefined()
+    expect((await lib.list('ambience'))[0]!.durationMs).toBeUndefined()
+  })
+
+  it('remove drops the deleted track from the sidecar', async () => {
+    const config = makeConfig()
+    const lib = createSoundLibrary(config)
+    const saved = await lib.save('music', {
+      buffer: readFileSync(join(FIXTURES_DIR, 'fixture-stereo-44100.ogg')),
+      originalname: 'tavern.ogg',
+    })
+    await lib.remove('music', saved.id)
+    expect(durationsFile(config)).toEqual({})
+  })
+})

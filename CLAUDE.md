@@ -20,7 +20,7 @@ Processes: `electron/` is the main process shell (window, IPC plumbing, hotkeys,
 
 ## Storage and environment
 
-User data lives in Electron's `userData` directory: `app-config.json` (settings and secrets), `scenes.json`, `sound-tags.json`, the sound folders and `logs/hibiki.log`. `.env.example` lists every env override. Secrets from env (`DISCORD_TOKEN`, the Vision keys) win over their stored counterpart; the Vision Provider selection has no env var. `HIBIKI_USER_DATA_DIR` moves the whole `userData` directory and is how e2e and the screenshot capture get a throwaway profile. Secret keys are encrypted at rest through a `SecretCodec` built in main from `safeStorage` (#412); on Linux the `basic_text` backend counts as unavailable because it does not encrypt.
+User data lives in Electron's `userData` directory: `app-config.json` (settings and secrets), `scenes.json`, `sound-tags.json`, `sound-durations.json`, the sound folders and `logs/hibiki.log`. `.env.example` lists every env override. Secrets from env (`DISCORD_TOKEN`, the Vision keys) win over their stored counterpart; the Vision Provider selection has no env var. `HIBIKI_USER_DATA_DIR` moves the whole `userData` directory and is how e2e and the screenshot capture get a throwaway profile. Secret keys are encrypted at rest through a `SecretCodec` built in main from `safeStorage` (#412); on Linux the `basic_text` backend counts as unavailable because it does not encrypt.
 
 ## Audio: the rules that are easy to break
 

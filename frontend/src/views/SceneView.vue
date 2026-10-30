@@ -3,6 +3,7 @@ import type { OutputTargetKind, VisionProviderId } from '@/api/config'
 import type { MusicMode, Scene, SceneItem } from '@/api/scenes'
 import type { SoundFile } from '@/api/sounds'
 import type { EffectSoundStatus } from '@/stores/player'
+import type { MusicProgress } from '@/stores/scene-playback'
 import { storeToRefs } from 'pinia'
 import { computed, onActivated, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
@@ -27,7 +28,7 @@ const toast = useToastStore()
 // lives in the store so it survives leaving this view; the view renders state
 // and calls store actions.
 const playback = useScenePlaybackStore()
-const { masterVolume: globalVolume, playingMusicId, playingAmbienceIds, musicSounds } = storeToRefs(playback)
+const { masterVolume: globalVolume, playingMusicId, musicProgress, playingAmbienceIds, musicSounds } = storeToRefs(playback)
 const { effectFlash, sceneTransitionFlash } = playback
 const { playScene: playSceneFor, stopScene, stopAmbience, playMusicTrack, playEffect, stopMusicPlayback, stopAllEffectInstances, updateAmbienceVolume, updateMusicVolume } = playback
 
@@ -185,6 +186,11 @@ function formatEffectSeconds(ms: number): string {
 /** `m:ss / m:ss` (elapsed / total) for a sound's longest-remaining active instance. */
 function effectTimerLabel(status: EffectSoundStatus): string {
   return `${formatEffectSeconds(status.elapsedMs)} / ${formatEffectSeconds(status.totalMs)}`
+}
+
+/** `m:ss / m:ss` (elapsed / total) for the playing Music track (#695). */
+function musicTimerLabel(progress: MusicProgress): string {
+  return `${formatEffectSeconds(progress.elapsedMs)} / ${formatEffectSeconds(progress.totalMs)}`
 }
 
 /** 0-100 fill percentage, or 0 while the duration isn't known yet. */
@@ -1127,11 +1133,20 @@ watch(sceneId, (newId) => {
               v-for="item in scene.music"
               :key="item.soundId"
               class="sound-card"
-              :class="{ 'sound-card-has-hint': isSoundMissing('music', item.soundId) }"
+              :class="{
+                'sound-card-has-hint': isSoundMissing('music', item.soundId),
+                'sound-card-music-timed': musicProgress?.soundId === item.soundId,
+              }"
             >
+              <span
+                v-if="musicProgress?.soundId === item.soundId"
+                class="music-progress-fill"
+                :style="{ width: `${Math.min(100, (musicProgress.elapsedMs / musicProgress.totalMs) * 100)}%` }"
+              />
               <div class="sound-card-main-row">
                 <div class="sound-card-info">
                   <span class="sound-name">{{ item.soundName ?? resolveSoundName('music', item.soundId) }}</span>
+                  <span v-if="musicProgress?.soundId === item.soundId" class="music-timer">{{ musicTimerLabel(musicProgress) }}</span>
                   <span v-if="isSoundMissing('music', item.soundId)" class="sound-missing-badge">
                     missing
                   </span>
@@ -1817,6 +1832,28 @@ watch(sceneId, (newId) => {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   color: var(--color-text);
+}
+
+.sound-card-music-timed {
+  position: relative;
+  overflow: hidden;
+}
+
+/* The playing Music track's progress (#695): a thin bar along the card's
+   bottom edge, no transition, so a Stop removes it at once. */
+.music-progress-fill {
+  position: absolute;
+  inset: auto auto 0 0;
+  height: 2px;
+  background: var(--color-music);
+  opacity: 0.7;
+}
+
+.music-timer {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .sound-card-info {
