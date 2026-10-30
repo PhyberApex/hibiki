@@ -89,7 +89,7 @@ describe('display media request handler', () => {
     const { displayMediaHandler } = createPermissionPolicy()
     const callback = jest.fn()
     displayMediaHandler({ securityOrigin, audioRequested: true }, callback)
-    expect(callback).toHaveBeenCalledWith({})
+    expect(callback).toHaveBeenCalledWith(null)
     expect(spies.warn).toHaveBeenCalledWith('[permissions]', expect.stringContaining('Refused screen capture'))
   })
 })

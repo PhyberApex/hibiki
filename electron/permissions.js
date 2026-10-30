@@ -1,5 +1,5 @@
 const { createLogger } = require('./logger')
-const { describeUrl } = require('./navigation-guard')
+const { describeUrl, schemeAndHost } = require('./navigation-guard')
 
 const log = createLogger('permissions')
 
@@ -9,19 +9,8 @@ const APP_ORIGIN = 'hibiki://app'
 /** What the renderer needs: `media` for Routed Tab capture and `enumerateDevices`, `speaker-selection` for `setSinkId`. */
 const APP_PERMISSIONS = new Set(['media', 'speaker-selection'])
 
-/** Whether `url` is on the app's scheme and host; `URL#origin` is `'null'` for custom schemes, so compare by hand. */
-function isAppUrl(url) {
-  try {
-    const parsed = new URL(url)
-    return `${parsed.protocol}//${parsed.host}` === APP_ORIGIN
-  }
-  catch {
-    return false
-  }
-}
-
 function isAllowed(permission, url) {
-  return APP_PERMISSIONS.has(permission) && isAppUrl(url)
+  return APP_PERMISSIONS.has(permission) && schemeAndHost(url) === APP_ORIGIN
 }
 
 /**
@@ -62,7 +51,7 @@ function createPermissionPolicy() {
 
     displayMediaHandler(request, callback) {
       log.warn(`Refused screen capture (audio: ${request.audioRequested ? 'yes' : 'no'}) to ${describeUrl(request.securityOrigin)}`)
-      callback({})
+      callback(null)
     },
   }
 }
