@@ -694,8 +694,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   }
 
   // A play call on a Discord Target with no joined channel (or no guild) does
-  // nothing; the log line is what makes that diagnosable (#713).
-  function logCannotPlay(action: string, soundId: string) {
+  // nothing; hotkeys and Scene restarts reach it past the disabled buttons,
+  // and this line is what makes that diagnosable (#713).
+  function logCannotPlay(action: 'playAmbience' | 'playMusic' | 'playEffect', soundId: string) {
     logInfo(`[scene] ${action} ${soundId} ignored: Target ${targetId.value ?? 'none'} cannot play`)
   }
 
@@ -795,6 +796,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       logCannotPlay('playMusic', item.soundId)
       return
     }
+    // Set once the renderer fallback claims the channel: a failed start must
+    // then end its stream and capture session too, not just the bookkeeping.
+    let rendererToken: number | null = null
     try {
       const track = musicSounds.value.find(s => s.id === item.soundId)
       if (!track) {
@@ -820,6 +824,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       if (channel.source)
         stopMusicChannel(channel, channel.source)
       const token = claimMusicChannel(channel, item, 'renderer')
+      rendererToken = token
       logInfo(`[scene] playMusic ${item.soundId} via renderer fallback (${streamed ? 'streamed to Discord' : 'local'}) on channel ${channel.streamId}`)
       if (streamed) {
         await startAudioStream(target, {
@@ -844,8 +849,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       // Released like any other Music teardown, so a Discord Target's stream
       // and capture session end with it rather than outliving the track.
       el.onerror = () => {
-        if (channel.token !== token)
+        if (channel.token !== token) {
+          logDebug(`[scene] stale error from music ${item.soundId} ignored, ${channel.streamId} moved on (token ${token} -> ${channel.token})`)
           return
+        }
         console.warn(`[scene] music ${item.soundId} errored mid-play, channel ${channel.streamId} released`)
         stopMusicChannel(channel, 'renderer')
       }
@@ -859,7 +866,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     }
     catch (e) {
       console.error('[scene] playMusic failed:', e)
-      clearMusicChannel(channel)
+      if (rendererToken !== null && channel.token === rendererToken)
+        stopMusicChannel(channel, 'renderer')
+      else
+        clearMusicChannel(channel)
     }
   }
 

@@ -1241,6 +1241,31 @@ describe('scene playback store: Music Mode', () => {
     warn.mockRestore()
   })
 
+  it('a streamed renderer-fallback Music start that fails to load ends its Discord stream (#713)', async () => {
+    vi.mocked(canDecode).mockResolvedValue(false)
+    const player = usePlayerStore()
+    player.activeTarget = 'discord'
+    player.guildId = 'g1'
+    player.playerState = [
+      { guildId: 'g1', connectedChannelId: 'c1' },
+    ] as never
+    Object.defineProperty(mediaProto, 'load', {
+      configurable: true,
+      value(this: HTMLMediaElement) {
+        if (this.getAttribute('src'))
+          queueMicrotask(() => this.dispatchEvent(new Event('error')))
+      },
+    })
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const store = setup(musicScene('sequential'))
+
+    await store.playMusic(track('m1'))
+
+    expect(stopAudioStream).toHaveBeenCalledWith('g1', 'music-a')
+    expect(store.playingMusicId).toBeNull()
+    error.mockRestore()
+  })
+
   it('a stale element error from a replaced track leaves the channel alone (#713)', async () => {
     vi.mocked(canDecode).mockResolvedValue(false)
     const scene = musicScene('sequential')
