@@ -494,7 +494,7 @@ app.whenReady().then(async () => {
 
   const webDistDir = path.join(botRoot, 'web-dist')
   if (!fs.existsSync(path.join(webDistDir, 'index.html'))) {
-    await exitAfterFatalError(`${path.join(webDistDir, 'index.html')} not found. Run: pnpm run build`)
+    await exitAfterFatalError('web-dist/index.html not found. Run: pnpm run build')
     return
   }
 
