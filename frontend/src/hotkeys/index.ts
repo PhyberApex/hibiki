@@ -1,3 +1,4 @@
+import type { Scene } from '@/api/scenes'
 import { fetchHotkeySettings } from '@/api/config'
 import { fetchHotkeyStatus, onHotkeyFired } from '@/api/hotkeys'
 import { listScenes } from '@/api/scenes'
@@ -38,8 +39,18 @@ export function startHotkeyDispatch(): () => void {
   // One press at a time: a second press must see the first one's effect on the Playing Scene.
   let chain: Promise<unknown> = Promise.resolve()
 
-  return onHotkeyFired((accelerator) => {
-    chain = chain.then(() => dispatchHotkey(accelerator, {
+  // A press holds the chain only until its Scene is claimed: the store claims
+  // the Playing Scene synchronously, then awaits every Ambience becoming
+  // playable, and a Stop queued behind that wait could never run (#714).
+  const claimScene = (scene: Scene): Promise<void> => {
+    playback.playScene(scene).catch((e: unknown) => console.error(`[hotkeys] Scene ${scene.id} start failed:`, e))
+    return Promise.resolve()
+  }
+
+  const handle = async (accelerator: string) => {
+    const startedAt = Date.now()
+    logInfo(`[hotkeys] ${accelerator} dispatching`)
+    const outcome = await dispatchHotkey(accelerator, {
       listScenes,
       getActionHotkeys: async () => {
         const { enabled: _enabled, ...actionHotkeys } = await fetchHotkeySettings()
@@ -48,7 +59,7 @@ export function startHotkeyDispatch(): () => void {
       playingSceneId: () => player.playingSceneId,
       activeTargetId: () => player.targetId,
       canPlay: () => player.canPlay,
-      playScene: playback.playScene,
+      playScene: claimScene,
       crossfadeToScene: playback.crossfadeToScene,
       stopScene: playback.stopScene,
       activeEffectCount: player.activeEffectCount,
@@ -64,6 +75,11 @@ export function startHotkeyDispatch(): () => void {
         name: 'hotkey-fired',
         data: { kind },
       }),
-    }))
+    })
+    logInfo(`[hotkeys] ${accelerator} handled: ${outcome} after ${Date.now() - startedAt} ms`)
+  }
+
+  return onHotkeyFired((accelerator) => {
+    chain = chain.then(() => handle(accelerator))
   })
 }

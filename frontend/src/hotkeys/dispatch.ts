@@ -9,6 +9,7 @@ export interface HotkeyDeps {
   activeTargetId: () => string | null
   /** True when the active Target can play right now (always for Local, joined channel for Discord). */
   canPlay: () => boolean
+  /** Starts the Scene; resolves once it is the Playing Scene, not once every element is playable (#714). */
   playScene: (scene: Scene) => Promise<void>
   crossfadeToScene: (sceneId: string) => Promise<void>
   stopScene: () => void
