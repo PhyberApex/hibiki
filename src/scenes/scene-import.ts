@@ -134,7 +134,10 @@ function soundIdOf(filename: string): string {
   return filename.replace(extname(filename), '')
 }
 
-/** Ids already in a library folder, by id, with each file's size. */
+/**
+ * Ids already in a library folder, keyed lower-cased because Windows and macOS
+ * folders are case-insensitive, with each file's size.
+ */
 function readLibrary(destDir: string): Map<string, { filename: string, size: number }[]> {
   const byId = new Map<string, { filename: string, size: number }[]>()
   let filenames: string[]
@@ -152,7 +155,7 @@ function readLibrary(destDir: string): Map<string, { filename: string, size: num
     catch {
       continue
     }
-    const id = soundIdOf(filename)
+    const id = soundIdOf(filename).toLowerCase()
     byId.set(id, [
       ...(byId.get(id) ?? []),
       { filename, size },
@@ -195,7 +198,7 @@ function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImportLimit
     const destDir = resolveStorageDir(config, category)
     const library = readLibrary(destDir)
     const plannedIds = new Set<string>()
-    const taken = (id: string) => library.has(id) || plannedIds.has(id)
+    const taken = (id: string) => library.has(id.toLowerCase()) || plannedIds.has(id.toLowerCase())
     for (const entry of zip.getEntries()) {
       if (entry.isDirectory || !entry.entryName.startsWith(prefix))
         continue
@@ -205,9 +208,9 @@ function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImportLimit
       total += entry.header.size
       assertWithinLimits(entry, total, limits, archiveName)
       const soundId = soundIdOf(filename)
-      const sameFile = library.get(soundId)?.find(f => f.filename === filename && f.size === entry.header.size)
-      if (sameFile && !plannedIds.has(soundId)) {
-        plannedIds.add(soundId)
+      const sameFile = library.get(soundId.toLowerCase())?.find(f => f.filename === filename && f.size === entry.header.size)
+      if (sameFile && !plannedIds.has(soundId.toLowerCase())) {
+        plannedIds.add(soundId.toLowerCase())
         planned.push({
           entry,
           destDir,
@@ -218,7 +221,7 @@ function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImportLimit
         continue
       }
       if (!taken(soundId)) {
-        plannedIds.add(soundId)
+        plannedIds.add(soundId.toLowerCase())
         planned.push({
           entry,
           destDir,
@@ -229,7 +232,7 @@ function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImportLimit
         continue
       }
       const renamed = freshSoundId(soundId, taken)
-      plannedIds.add(renamed)
+      plannedIds.add(renamed.toLowerCase())
       planned.push({
         entry,
         destDir,
@@ -242,15 +245,19 @@ function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImportLimit
   return planned
 }
 
-function writeBundledSounds(planned: BundledSound[]): void {
-  for (const { entry, destDir, filename, soundId, reuse } of planned) {
+/** Writes the planned sounds, recording each one in `written` as it lands so a rollback removes only those. */
+function writeBundledSounds(planned: BundledSound[], written: BundledSound[]): void {
+  for (const sound of planned) {
+    const { entry, destDir, filename, soundId, reuse } = sound
     const original = basename(entry.entryName)
     if (reuse) {
       log.info(`Reusing library file ${join(destDir, filename)} for ${entry.entryName} (same name and size)`)
       continue
     }
     mkdirSync(destDir, { recursive: true })
-    writeFileSync(join(destDir, filename), entry.getData())
+    // 'wx': a file that appeared since planning is never replaced
+    writeFileSync(join(destDir, filename), entry.getData(), { flag: 'wx' })
+    written.push(sound)
     if (filename === original)
       log.info(`Extracted ${entry.entryName} to ${join(destDir, filename)}`)
     else
@@ -259,10 +266,8 @@ function writeBundledSounds(planned: BundledSound[]): void {
 }
 
 /** Undoes `writeBundledSounds` when the Scene itself is not saved, so a failed import leaves no orphan files. */
-function removeWrittenSounds(planned: BundledSound[]): void {
-  for (const { destDir, filename, reuse } of planned) {
-    if (reuse)
-      continue
+function removeWrittenSounds(written: BundledSound[]): void {
+  for (const { destDir, filename } of written) {
     try {
       rmSync(join(destDir, filename), { force: true })
       log.info(`Removed ${join(destDir, filename)}: the imported Scene was not saved`)
@@ -318,12 +323,13 @@ export async function importScene(config: Config, sourceZipPath: string, limits:
     musicMode: normalizeMusicMode(manifest.scene.musicMode),
   }
   let saved: Scene
+  const written: BundledSound[] = []
   try {
-    writeBundledSounds(bundled)
+    writeBundledSounds(bundled, written)
     saved = await scenes.save(scene)
   }
   catch (e) {
-    removeWrittenSounds(bundled)
+    removeWrittenSounds(written)
     throw e
   }
   log.info(`Imported "${saved.name}" (${saved.id})`)

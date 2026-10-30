@@ -507,6 +507,19 @@ describe('importScene', () => {
       expect(readFileSync(join(config.audio.musicDir, `${soundId}.mp3`), 'utf-8')).toBe('archive rain')
     })
 
+    it('gives a bundled file a fresh id when its name differs from a library file only in case', async () => {
+      mkdirSync(config.audio.musicDir, { recursive: true })
+      writeFileSync(join(config.audio.musicDir, 'Storm-1.mp3'), 'the GM\'s own storm')
+      const zipPath = createManifestZip(bundledManifest('Clash Case', 'sounds/music/storm-1.mp3'), {
+        'sounds/music/storm-1.mp3': 'archive storm',
+      })
+      const scene = await importScene(config, zipPath)
+      const soundId = scene.music[0]!.soundId
+      expect(soundId).toMatch(/^storm-1-\d+$/)
+      expect(readFileSync(join(config.audio.musicDir, 'Storm-1.mp3'), 'utf-8')).toBe('the GM\'s own storm')
+      expect(readFileSync(join(config.audio.musicDir, `${soundId}.mp3`), 'utf-8')).toBe('archive storm')
+    })
+
     it('gives a bundled file a fresh id when a library file has the same id under another extension', async () => {
       mkdirSync(config.audio.musicDir, { recursive: true })
       writeFileSync(join(config.audio.musicDir, 'foo-1.mp3'), 'mp3')
