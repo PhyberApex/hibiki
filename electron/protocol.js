@@ -8,6 +8,8 @@ const path = require('node:path')
  *   the advertised `Content-Length` matches what the file stream delivers,
  * - `{ kind: 'unsatisfiable' }` when the range starts past the end of the file
  *   or after its own end (every range on a zero-byte file), answered with 416.
+ *
+ * @returns {{ kind: 'full' } | { kind: 'partial', start: number, end: number } | { kind: 'unsatisfiable' }} how to answer the request
  */
 function parseRange(rangeHeader, totalSize) {
   const match = rangeHeader?.match(/bytes=(\d+)-(\d*)/)
@@ -26,31 +28,34 @@ function parseRange(rangeHeader, totalSize) {
 }
 
 /**
- * The file under `webDistDir` that serves `hibiki://app<pathname>`, or `null`
- * when the pathname is malformed or escapes `webDistDir`. Chromium already
- * resolves `..` segments when it canonicalises the URL, but decoding can turn
- * `..%2F` into a real one, so containment is re-checked after decoding.
- * Anything that is not a regular file (an unknown route, a directory such as
- * `/assets`) falls back to `index.html` for the SPA router.
+ * The file under `webDistDir` that serves `hibiki://app<pathname>`. Chromium
+ * already resolves `..` segments when it canonicalises the URL, but decoding
+ * can turn `..%2F` into a real one, so containment is re-checked after
+ * decoding. Anything that is not a regular file (an unknown route, a directory
+ * such as `/assets`) falls back to `index.html` for the SPA router.
+ *
+ * @returns {{ ok: true, filePath: string } | { ok: false, reason: string }} the file to serve, or why the URL was refused
  */
 function resolveAppPath(webDistDir, pathname) {
-  const indexPath = path.join(webDistDir, 'index.html')
   let decoded
   try {
     decoded = decodeURIComponent(pathname || '/')
   }
   catch {
-    return null
+    return { ok: false, reason: 'malformed escape' }
   }
   if (decoded.includes('\0'))
-    return null
+    return { ok: false, reason: 'NUL byte' }
   const root = path.resolve(webDistDir)
   const filePath = path.join(root, decoded)
   if (filePath !== root && !filePath.startsWith(root + path.sep))
-    return null
-  return fs.statSync(filePath, { throwIfNoEntry: false })?.isFile()
-    ? filePath
-    : indexPath
+    return { ok: false, reason: 'outside the app bundle' }
+  return {
+    ok: true,
+    filePath: fs.statSync(filePath, { throwIfNoEntry: false })?.isFile()
+      ? filePath
+      : path.join(root, 'index.html'),
+  }
 }
 
 module.exports = { parseRange, resolveAppPath }

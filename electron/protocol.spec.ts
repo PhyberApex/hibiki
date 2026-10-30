@@ -52,52 +52,60 @@ describe('resolveAppPath', () => {
     fs.rmSync(webDistDir, { recursive: true, force: true })
   })
 
-  const index = () => path.join(webDistDir, 'index.html')
+  const index = () => ({
+    ok: true,
+    filePath: path.join(webDistDir, 'index.html'),
+  })
+  const file = (...segments: string[]) => ({
+    ok: true,
+    filePath: path.join(webDistDir, ...segments),
+  })
+  const refused = (reason: string) => ({ ok: false, reason })
 
   it('serves index.html for the root', () => {
-    expect(resolveAppPath(webDistDir, '/')).toBe(index())
+    expect(resolveAppPath(webDistDir, '/')).toEqual(index())
   })
 
   it('serves an existing asset', () => {
-    expect(resolveAppPath(webDistDir, '/assets/index-abc.js')).toBe(path.join(webDistDir, 'assets', 'index-abc.js'))
+    expect(resolveAppPath(webDistDir, '/assets/index-abc.js')).toEqual(file('assets', 'index-abc.js'))
   })
 
   it('falls back to index.html for an unknown route', () => {
-    expect(resolveAppPath(webDistDir, '/settings')).toBe(index())
+    expect(resolveAppPath(webDistDir, '/settings')).toEqual(index())
   })
 
   it('falls back to index.html for a directory instead of streaming it', () => {
-    expect(resolveAppPath(webDistDir, '/assets')).toBe(index())
-    expect(resolveAppPath(webDistDir, '/assets/')).toBe(index())
+    expect(resolveAppPath(webDistDir, '/assets')).toEqual(index())
+    expect(resolveAppPath(webDistDir, '/assets/')).toEqual(index())
   })
 
   it('decodes a percent-encoded asset name', () => {
     const pathname = new URL('hibiki://app/assets/font name+1.woff2').pathname
     expect(pathname).toBe('/assets/font%20name+1.woff2')
-    expect(resolveAppPath(webDistDir, pathname)).toBe(path.join(webDistDir, 'assets', 'font name+1.woff2'))
+    expect(resolveAppPath(webDistDir, pathname)).toEqual(file('assets', 'font name+1.woff2'))
   })
 
   it('relies on URL canonicalisation to resolve literal and %2e dot segments', () => {
     for (const url of ['hibiki://app/../../etc/passwd', 'hibiki://app/%2e%2e/%2E%2E/etc/passwd']) {
       const { pathname } = new URL(url)
       expect(pathname).toBe('/etc/passwd')
-      expect(resolveAppPath(webDistDir, pathname)).toBe(index())
+      expect(resolveAppPath(webDistDir, pathname)).toEqual(index())
     }
   })
 
   it('refuses a pathname that only escapes once decoded', () => {
     const { pathname } = new URL('hibiki://app/..%2F..%2Fetc%2Fpasswd')
     expect(pathname).toBe('/..%2F..%2Fetc%2Fpasswd')
-    expect(resolveAppPath(webDistDir, pathname)).toBeNull()
-    expect(resolveAppPath(webDistDir, '/..%5C..%5Cetc')).toBe(
+    expect(resolveAppPath(webDistDir, pathname)).toEqual(refused('outside the app bundle'))
+    expect(resolveAppPath(webDistDir, '/..%5C..%5Cetc')).toEqual(
       path.sep === '\\'
-        ? null
+        ? refused('outside the app bundle')
         : index(),
     )
   })
 
   it('refuses a malformed escape or a NUL byte', () => {
-    expect(resolveAppPath(webDistDir, '/assets/%E0%A4%A')).toBeNull()
-    expect(resolveAppPath(webDistDir, '/index.html%00.js')).toBeNull()
+    expect(resolveAppPath(webDistDir, '/assets/%E0%A4%A')).toEqual(refused('malformed escape'))
+    expect(resolveAppPath(webDistDir, '/index.html%00.js')).toEqual(refused('NUL byte'))
   })
 })

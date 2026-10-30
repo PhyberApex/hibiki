@@ -393,11 +393,12 @@ function registerHibikiProtocol(api, webDistDir) {
     }
 
     if (host === 'app') {
-      const filePath = resolveAppPath(webDistDir, pathname)
-      if (!filePath) {
-        protocolLog.warn(`Rejected hibiki://app${pathname}: malformed or outside the app bundle`)
+      const resolved = resolveAppPath(webDistDir, pathname)
+      if (!resolved.ok) {
+        protocolLog.warn(`Rejected hibiki://app${pathname}: ${resolved.reason}`)
         return new Response('Not Found', { status: 404 })
       }
+      const { filePath } = resolved
       const ext = path.extname(filePath).toLowerCase()
       const mime = {
         '.html': 'text/html',
