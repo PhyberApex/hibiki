@@ -32,7 +32,7 @@ export function rampVolume(options: RampOptions): RampHandle {
     }
   }
 
-  if (!(options.durationMs > 0) || !Number.isFinite(options.durationMs) || !Number.isFinite(options.from)) {
+  if (!Number.isFinite(options.durationMs) || options.durationMs <= 0 || !Number.isFinite(options.from)) {
     options.onVolume(options.to)
     options.onDone?.()
     return {

@@ -47,6 +47,10 @@ function isValidVolume(volume: number, what: string): boolean {
   return false
 }
 
+function musicLabel(streamId: string | undefined): string {
+  return streamId ?? '(default)'
+}
+
 /** `CLAMP(volume)`, or `fallback` (with a warning) when `volume` is not finite. */
 function initialVolumeOr(volume: number, fallback: number, what: string): number {
   return isValidVolume(volume, what)
@@ -213,7 +217,7 @@ export class AudioEngine {
    */
   playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.music, onEnded?: (err?: Error) => void) {
     this.stopMusicStream(streamId)
-    const label = streamId ?? '(default)'
+    const label = musicLabel(streamId)
     const volume = initialVolumeOr(initialVolume, DEFAULT_VOLUMES.music, `music stream ${label}`)
     log.debug(`Mixer input opened for ${label} at volume ${volume}`)
     const active = this.spawnInputFromStream(stream, label, volume, (ended, err) => {
@@ -274,7 +278,7 @@ export class AudioEngine {
    */
   setStreamVolume(streamId: string | undefined, volume: number): void {
     const active = this.musicStreams.get(streamId)
-    if (!active || !isValidVolume(volume, `music stream ${streamId ?? '(default)'}`))
+    if (!active || !isValidVolume(volume, `music stream ${musicLabel(streamId)}`))
       return
     active.cancelRamp?.()
     active.cancelRamp = undefined
@@ -294,7 +298,7 @@ export class AudioEngine {
     const active = this.musicStreams.get(streamId)
     if (!active)
       return
-    if (!isValidVolume(to, `music stream ${streamId ?? '(default)'} ramp`)) {
+    if (!isValidVolume(to, `music stream ${musicLabel(streamId)} ramp`)) {
       onDone?.()
       return
     }
@@ -369,7 +373,7 @@ export class AudioEngine {
     const active = this.musicStreams.get(streamId)
     if (!active)
       return
-    log.debug(`Mixer input for ${streamId ?? '(default)'} cut`)
+    log.debug(`Mixer input for ${musicLabel(streamId)} cut`)
     active.cancelRamp?.()
     this.teardown(active)
     this.musicStreams.delete(streamId)

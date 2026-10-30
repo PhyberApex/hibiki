@@ -2,8 +2,11 @@ import type { FileHandle } from 'node:fs/promises'
 import type { Readable } from 'node:stream'
 import { open } from 'node:fs/promises'
 import { basename } from 'node:path'
+import { createLogger } from '../../logger'
 import { PcmResampler } from './pcm-resample'
 import { createProducerStream } from './pcm-stream'
+
+const log = createLogger('wav-decoder')
 
 const WAVE_FORMAT_PCM = 1
 const WAVE_FORMAT_IEEE_FLOAT = 3
@@ -149,6 +152,8 @@ export function createWavPcmStream(filePath: string): Readable {
       const format = await parseWavFormat(handle)
       if (!isSupportedFormat(format))
         throw new Error(`Unsupported WAV format: tag ${format.formatTag}, ${format.bitsPerSample}-bit`)
+      if (format.dataSize === Infinity)
+        log.warn(`${basename(filePath)} declares no data chunk size; reading samples to end of file`)
       const resampler = new PcmResampler(format.sampleRate, format.channels)
       const bytesPerFrame = (format.bitsPerSample / 8) * format.channels
       const chunkFrames = 16384
