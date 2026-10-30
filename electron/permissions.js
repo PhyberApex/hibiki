@@ -26,9 +26,11 @@ function isAllowed(permission, url) {
  * is refused outright: the renderer captures Routed Tabs with `getUserMedia`.
  *
  * Media requests are judged by `details.securityOrigin`, the origin that called
- * `getUserMedia`. For tab capture Chromium attributes the request to the
- * captured tab's frame, so `requestingUrl` names the Browser tab page even
- * when the renderer asked.
+ * `getUserMedia`. For tab capture Chromium builds the permission request on
+ * the captured tab's frame (`MediaStreamManager` hands the target's render
+ * ids to `CreateTabCaptureUIRequest`) while `security_origin` stays the
+ * caller's, so `requestingUrl` names the Browser tab page even when the
+ * renderer asked.
  */
 function createPermissionPolicy() {
   // Chromium runs permission checks on every `navigator.permissions.query`
