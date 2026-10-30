@@ -99,7 +99,9 @@ export function createSoundLibrary(config: Config) {
           const stats = await stat(filePath)
           const id = idFromFilename(file)
           const problem = unresolvableIdProblem(file, id, filesById)
-          filesById.set(id, file)
+          // only a file `findFilename` would return claims its id, so a later duplicate is compared with the winner
+          if (!problem)
+            filesById.set(id, file)
           if (problem && !warnedUnresolvable.has(`${category}/${file}`)) {
             warnedUnresolvable.add(`${category}/${file}`)
             log.warn(`${category} file ${JSON.stringify(file)} ${problem}, so its id cannot be resolved back to it`)

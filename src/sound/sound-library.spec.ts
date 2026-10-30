@@ -450,6 +450,18 @@ describe('sound ids stay inside the library directory', () => {
     expect(warn.mock.calls.flat().join(' ')).toMatch(/no-extension.*cannot be resolved/)
   })
 
+  it('does not blame a resolvable file for sharing its id with an extensionless one (#662)', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    writeFileSync(join(config.audio.musicDir, 'rain'), 'x')
+    writeFileSync(join(config.audio.musicDir, 'rain.mp3'), 'x')
+    const lib = createSoundLibrary(config)
+    await lib.list('music')
+    const lines = warn.mock.calls.map(call => call.join(' '))
+    expect(lines.filter(line => /shares its id/.test(line))).toHaveLength(0)
+    expect(lines.filter(line => /"rain" has no extension/.test(line))).toHaveLength(1)
+    await expect(lib.getFilePath('music', 'rain')).resolves.toBe(join(config.audio.musicDir, 'rain.mp3'))
+  })
+
   it('warns once when two listed files share an id, not on every list (#662)', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
     writeFileSync(join(config.audio.musicDir, 'thunder.mp3'), 'x')
