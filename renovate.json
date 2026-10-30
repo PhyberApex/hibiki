@@ -9,6 +9,13 @@
     {
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
+    },
+    {
+      "description": "Packaging stays on Node 24: maker-squirrel's electron-winstaller breaks on Node 26 (#705)",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/build.yml"],
+      "matchDepNames": ["node"],
+      "allowedVersions": "<25"
     }
   ]
 }
