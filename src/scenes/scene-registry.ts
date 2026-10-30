@@ -12,7 +12,8 @@ const log = createLogger('scene-registry')
 
 export const REGISTRY_INDEX_URL = 'https://raw.githubusercontent.com/PhyberApex/hibiki/main/registry/index.json'
 const CACHE_FILENAME = 'registry-cache.json'
-const STALE_MS = 24 * 60 * 60 * 1000 // 24 hours
+const HOUR_MS = 60 * 60 * 1000
+const STALE_MS = 24 * HOUR_MS
 /** Without it a stalled connection pins the renderer's `getIndex` for undici's multi-minute defaults (#652). */
 export const DEFAULT_REGISTRY_FETCH_TIMEOUT_MS = 10_000
 
@@ -169,7 +170,7 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
         return await fetchAndCache()
       }
       catch (e) {
-        const hours = Math.round(age / (60 * 60 * 1000))
+        const hours = Math.round(age / HOUR_MS)
         log.warn(`Registry index fetch failed (${(e as Error).message}); serving the cached index from ${cached.fetchedAt} (${hours} h old)`)
         return cached.data
       }
