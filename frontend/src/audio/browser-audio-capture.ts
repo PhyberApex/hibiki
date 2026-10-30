@@ -5,6 +5,9 @@
  * Uses AudioWorkletNode (replaces deprecated ScriptProcessorNode).
  */
 
+import { logInfo } from './audio-element-diagnostics'
+import { outputDeviceRouter } from './output-device'
+
 const SAMPLE_RATE = 48000
 const CHANNELS = 2
 const BUFFER_SIZE = 4096
@@ -129,7 +132,36 @@ const elementContexts = new WeakMap<HTMLAudioElement, {
   ctx: AudioContext
   source: MediaElementAudioSourceNode
   activeWorklet?: AudioWorkletNode
+  unsubscribeSinkId: () => void
 }>()
+
+type SinkableContext = AudioContext & { setSinkId?: (sinkId: string) => Promise<void> }
+
+/**
+ * Once bound by createMediaElementSource the element plays through the
+ * context's destination, so its own setSinkId (`bindAudioElement`) no longer
+ * routes it; the context has to follow the Output Device instead (#650).
+ */
+function openElementContext(): { ctx: AudioContext, unsubscribeSinkId: () => void } {
+  const initialSinkId = outputDeviceRouter.sinkId
+  const ctx = new AudioContext({
+    sampleRate: SAMPLE_RATE,
+    ...(initialSinkId
+      ? { sinkId: initialSinkId }
+      : {}),
+  } as AudioContextOptions) as SinkableContext
+  const unsubscribeSinkId = outputDeviceRouter.subscribe((sinkId) => {
+    if (!ctx.setSinkId || ctx.state === 'closed')
+      return
+    logInfo(`[audio] moving a captured audio element to output ${sinkId === ''
+      ? 'the system default'
+      : sinkId}`)
+    ctx.setSinkId(sinkId).catch((err) => {
+      console.warn('[audio] could not move a captured audio element to the Output Device:', err)
+    })
+  })
+  return { ctx, unsubscribeSinkId }
+}
 
 /**
  * Capture from an HTML5 audio element. The element must have a src and be playing.
@@ -144,9 +176,18 @@ export async function captureFromAudioElement(
 ): Promise<CaptureSession> {
   let entry = elementContexts.get(element)
   if (!entry || entry.ctx.state === 'closed') {
-    const ctx = new AudioContext({ sampleRate: SAMPLE_RATE })
-    const source = ctx.createMediaElementSource(element)
-    entry = { ctx, source }
+    entry?.unsubscribeSinkId()
+    const { ctx, unsubscribeSinkId } = openElementContext()
+    let source: MediaElementAudioSourceNode
+    try {
+      source = ctx.createMediaElementSource(element)
+    }
+    catch (err) {
+      unsubscribeSinkId()
+      void ctx.close().catch(() => {})
+      throw err
+    }
+    entry = { ctx, source, unsubscribeSinkId }
     elementContexts.set(element, entry)
   }
 
@@ -198,6 +239,7 @@ export function releaseAudioElementContext(element: HTMLAudioElement): void {
     entry.activeWorklet.disconnect()
   }
   entry.source.disconnect()
+  entry.unsubscribeSinkId()
   elementContexts.delete(element)
   if (entry.ctx.state !== 'closed')
     entry.ctx.close().catch(() => {})
