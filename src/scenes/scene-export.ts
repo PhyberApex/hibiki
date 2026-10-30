@@ -7,7 +7,7 @@ import { basename } from 'node:path'
 import AdmZip from 'adm-zip'
 import { createLogger } from '../logger'
 import { createSoundLibrary } from '../sound/sound-library'
-import { createSceneStore, normalizeMusicMode } from './scene-store'
+import { countRepeatIntervals, createSceneStore, normalizeMusicMode } from './scene-store'
 
 const log = createLogger('scene-export')
 
@@ -60,6 +60,10 @@ function toPackageItem(
     pkg.enabled = item.enabled
   if (item.loop !== undefined)
     pkg.loop = item.loop
+  if (item.repeatMin !== undefined)
+    pkg.repeatMin = item.repeatMin
+  if (item.repeatMax !== undefined)
+    pkg.repeatMax = item.repeatMax
   if (item.source)
     pkg.source = item.source
   return pkg
@@ -114,5 +118,5 @@ export async function exportScene(
   zip.addFile(MANIFEST_JSON, Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'))
 
   zip.writeZip(targetZipPath)
-  log.info(`Written to ${targetZipPath}`)
+  log.info(`Written to ${targetZipPath}; ${countRepeatIntervals(scene)} item(s) carry a repeat interval`)
 }

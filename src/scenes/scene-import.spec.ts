@@ -106,6 +106,30 @@ describe('importScene', () => {
     expect(scene.music[0]!.source).toEqual({ name: 'Some Track', url: 'https://example.com', note: 'Any epic track' })
   })
 
+  it('keeps an Ambience item\'s repeat interval (#708)', async () => {
+    const zipPath = createManifestZip(makeManifest({
+      displayName: 'Storm',
+      scene: {
+        music: [],
+        ambience: [
+          {
+            soundName: 'thunder',
+            volume: 70,
+            bundled: false,
+            repeatMin: 20,
+            repeatMax: 90,
+          },
+          { soundName: 'rain', bundled: false },
+        ],
+        effects: [],
+      },
+    }))
+    const scene = await importScene(config, zipPath)
+    expect(scene.ambience[0]).toMatchObject({ soundName: 'thunder', repeatMin: 20, repeatMax: 90 })
+    expect(scene.ambience[1]).not.toHaveProperty('repeatMin')
+    expect(scene.ambience[1]).not.toHaveProperty('repeatMax')
+  })
+
   it('drops any hotkey present in the archive', async () => {
     const pkg = { bundled: false, hotkey: 'F2' }
     const zipPath = createManifestZip(makeManifest({
@@ -424,6 +448,34 @@ describe('importScene', () => {
           item({ source: 123 }),
         ]),
         'music item 1 source must have a name',
+      ],
+      [
+        'a negative repeatMin',
+        withMusic([
+          item({ repeatMin: -1 }),
+        ]),
+        'music item 1 repeatMin must be a number of seconds from 0',
+      ],
+      [
+        'a non-numeric repeatMin',
+        withMusic([
+          item({ repeatMin: 'often' }),
+        ]),
+        'music item 1 repeatMin must be a number of seconds from 0',
+      ],
+      [
+        'a non-numeric repeatMax',
+        withMusic([
+          item({ repeatMax: 'often' }),
+        ]),
+        'music item 1 repeatMax must be a number of seconds from 0',
+      ],
+      [
+        'a repeatMax below repeatMin',
+        withMusic([
+          item({ repeatMin: 90, repeatMax: 20 }),
+        ]),
+        'music item 1 repeatMax must not be less than repeatMin',
       ],
     ])('rejects %s before extracting anything', async (_label, manifest, message) => {
       const zipPath = createManifestZip(manifest, { 'sounds/music/validation-orphan.mp3': 'x' })

@@ -180,6 +180,33 @@ describe('exportScene', () => {
     ])
   })
 
+  it('carries an Ambience item\'s repeat interval (#708)', async () => {
+    const { createSceneStore } = await import('./scene-store')
+    const saved = await createSceneStore(config).save({
+      name: 'Storm',
+      ambience: [
+        {
+          soundId: 'thunder',
+          volume: 70,
+          repeatMin: 20,
+          repeatMax: 90,
+        },
+      ],
+    })
+    const targetZip = join(tempRoot, 'repeat.zip')
+    await exportScene(config, saved.id, targetZip)
+
+    expect(readManifest(targetZip).scene.ambience).toEqual([
+      {
+        soundName: 'thunder',
+        volume: 70,
+        bundled: false,
+        repeatMin: 20,
+        repeatMax: 90,
+      },
+    ])
+  })
+
   it('bundles the sounds it finds and references the ones missing on disk', async () => {
     writeFileSync(join(effectsDir, 'present-4.wav'), 'here')
     const { createSceneStore } = await import('./scene-store')
