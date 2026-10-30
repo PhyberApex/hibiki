@@ -22,7 +22,7 @@ description: An honest comparison of Hibiki with Kenku FM, Discord's built-in so
 There are a few good ways to get sound into a Discord voice channel for a tabletop session. This page compares Hibiki with the three you are most likely to run into: Kenku FM, Discord's own soundboard, and Syrinscape. The goal is to help you pick the right one for your table, not to win an argument.
 {: .lede}
 
-Everything here was checked in October 2026 against the sources listed at the bottom. Anything marked *unverified* could not be confirmed from an official page and should be treated as a best guess.
+Everything here was checked on 30 October 2026 against the sources listed at the bottom. Anything marked *unverified* could not be confirmed from an official page and should be treated as a best guess.
 
 
 ## Side by side
@@ -37,10 +37,10 @@ Everything here was checked in October 2026 against the sources listed at the bo
 | Scenes / soundboards | Scenes with music, ambience and effects layers | Playlists plus soundboards | Flat list of server sounds | SoundSets with moods and one-shots |
 | Ambience with random interval repeats | Yes, per ambience item | No[^kenku-random] | No | Yes, randomised elements inside SoundSets[^syrin-random] |
 | Stream a browser tab to Discord | Yes, built-in browser | Yes, built-in browser (Spotify not on Linux) | No | No |
-| Your own audio files | Yes (mp3, wav, ogg, flac) | Yes (local files) | Yes, uploads only | Limited[^syrin-own] |
+| Your own audio files | Yes (mp3, wav, ogg, flac; m4a and aac through a fallback player) | Yes (local files) | Yes, uploads only | Limited[^syrin-own] |
 | Max clip length | No cap | No cap | 5.2 seconds, 512 KB, MP3 or OGG | No cap on their content |
-| Platforms | macOS, Windows, Linux | macOS, Windows, Linux (x64 and arm64) | Discord desktop, browser and mobile | Web player, desktop and mobile apps[^syrin-platforms] |
-| Actively maintained | Yes (v1.4.0, regular releases) | Slow; last release March 2026, bug fixes only | Yes, by Discord | Yes, commercial product |
+| Platforms | macOS (Apple Silicon), Windows (x64), Linux (x64) | macOS, Windows and Linux, each as x64 and arm64 | Discord desktop, browser and mobile | Web player, desktop and mobile apps[^syrin-platforms] |
+| Actively maintained | Yes (v1.8.0 on 30 October 2026, three releases that month) | Slow; last release March 2026, bug fixes only | Yes, by Discord | Yes, commercial product |
 | Image to music suggestions | Yes, opt-in Vision to Vibe | No | No | No |
 
 
@@ -57,7 +57,7 @@ Hibiki is a young project with one main maintainer. It is not code-signed on mac
 
 Kenku FM is the closest sibling to Hibiki. It is made by the Owlbear Rodeo team, is GPL-3.0 licensed, and works the same way: you bring your own bot token, run a desktop app, and it mixes local files and a built-in browser into a Discord voice call. Its player has playlists (with shuffle and repeat) and soundboards where each sound has its own loop, volume, fade in and fade out settings. Extras that Hibiki does not have: an Elgato Stream Deck plugin driven by a local HTTP remote, mixing in OS audio inputs, sending output to several Discord servers at the same time, and a local output for streaming software. It ships Widevine DRM support so Spotify works on Windows and macOS (Linux cannot do Spotify because of Widevine's verified media path rules).
 
-On maintenance: the latest stable release is v1.5.5 from 4 March 2026, with a parallel v1.6.7-experimental track. That release added Discord's DAVE end-to-end encryption protocol, which matters because Discord has been rolling DAVE out to voice. The package pins Electron 37.6.0 (the castLabs build) and discord.js 14.25.1. The repository is not archived, but the README states the project accepts pull requests for bug fixes only, no new features. As of October 2026 there are 74 open issues, and the Stream Deck plugin repository was last pushed in 2022.
+On maintenance: the latest stable release is v1.5.5 from 4 March 2026, with a parallel v1.6.7-experimental track. That release added Discord's DAVE end-to-end encryption protocol, which matters because Discord has been rolling DAVE out to voice. The package pins Electron 37.6.0 (the castLabs build) and discord.js 14.25.1. Windows ARM builds arrived in v1.5.0 (October 2025) and have shipped unsigned since v1.5.5, which the release notes list as a known regression. The repository is not archived, but the README states the project accepts pull requests for bug fixes only, no new features. On 30 October 2026 there are 67 open issues and 7 open pull requests, the last push to the repository was the v1.5.5 release, and the Stream Deck plugin repository was last pushed in 2022. The longest-running open issue, "Audio not playing once I connect to a voice channel", got one maintainer reply on its first day pointing at v1.5.5 and has collected reports from people already on v1.5.5 through September 2026.
 
 ### Discord soundboard
 
@@ -96,9 +96,10 @@ The general picture for hosted "music bots" has been the same since 2021: YouTub
 {: #sources}
 
 - Kenku FM repository (README, license, contribution policy): <https://github.com/owlbear-rodeo/kenku-fm>
-- Kenku FM releases (v1.5.5 and v1.6.7-experimental, 4 March 2026, DAVE support): <https://github.com/owlbear-rodeo/kenku-fm/releases>
+- Kenku FM releases (v1.5.5 and v1.6.7-experimental, 4 March 2026, DAVE support and the unsigned Windows ARM regression; v1.5.0, 7 October 2025, Windows ARM; per-platform assets): <https://github.com/owlbear-rodeo/kenku-fm/releases>
 - Kenku FM package.json (Electron 37.6.0+wvcus, discord.js 14.25.1): <https://github.com/owlbear-rodeo/kenku-fm/blob/main/package.json>
-- Kenku FM open issues: <https://github.com/owlbear-rodeo/kenku-fm/issues>
+- Kenku FM open issues (67 issues and 7 pull requests on 30 October 2026): <https://github.com/owlbear-rodeo/kenku-fm/issues>
+- Kenku FM issue 165, no audio after joining, open since 4 March 2026: <https://github.com/owlbear-rodeo/kenku-fm/issues/165>
 - Kenku FM player types (soundboard loop, volume, fade in and fade out; playlist shuffle and repeat): <https://github.com/owlbear-rodeo/kenku-fm/blob/main/src/types/player.ts>
 - Kenku FM Stream Deck plugin: <https://github.com/owlbear-rodeo/kenku-fm-stream-deck>
 - Discord Soundboard help article (slots per boost tier, permissions, desktop and mobile): <https://support.discord.com/hc/en-us/articles/12612888127767>
@@ -110,7 +111,7 @@ The general picture for hosted "music bots" has been the same since 2021: YouTub
 - Rythm relaunch as a Discord Activity (June 2024): <https://alternativeto.net/news/2024/6/rythm-returns-popular-discord-music-bot-relaunches-as-activity-app-with-new-features/>
 - Rythm shutdown in 2021: <https://www.nme.com/news/discord-music-bot-rythm-follows-groovy-into-the-void-after-cease-and-desist-3045407>
 - FredBoat documentation: <https://fredboat-docs.readthedocs.io/>
-- Hibiki README and releases: <https://github.com/PhyberApex/hibiki>
+- Hibiki README and releases (v1.8.0 assets: Windows x64 installer, macOS arm64, Linux x64 deb and zip): <https://github.com/PhyberApex/hibiki>
 
 [^syrin-price]: Monthly price from the Syrinscape get started page in October 2026. The page says "or the best deal available for your account", so regional or promotional pricing may differ. Annual pricing is not listed there and is *unverified*.
 
