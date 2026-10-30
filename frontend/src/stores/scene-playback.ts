@@ -770,10 +770,16 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     })
     // The backend has made this its current track before answering, so from
     // here on its disappearance from the state push means it played out.
-    if (channel.token === token) {
-      channel.backendTarget = target
-      startMusicClock(channel, durationMs)
+    if (channel.token !== token)
+      return
+    // Cleared meanwhile (a Stop, or a newer crossfade that took this track
+    // over as its outgoing one): no clock for a track no longer on the channel.
+    if (channel.soundId === null) {
+      logInfo(`[scene] Music ${item.soundId} confirmed on ${channel.streamId} (token ${token}) after the channel was cleared, no clock`)
+      return
     }
+    channel.backendTarget = target
+    startMusicClock(channel, durationMs)
   }
 
   async function playMusic(item: SceneItem, channel: MusicChannel = primaryMusicChannel, initialVolume?: number, fadeInMs?: number) {
@@ -1283,6 +1289,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // fades out and, once silent, is torn down exactly like a normal Stop.
   function crossfadeAmbience(target: Scene, durationMs: number) {
     const targetItems = new Map(target.ambience.filter(a => a.enabled).map(a => [a.soundId, a] as const))
+    // Taken before the fade-outs below drop backend ids from `playingAmbienceIds`
+    // (a backend start is listed there from its first await on).
+    const stillLoading = [...startingAmbience].filter(id => !playingAmbienceIds.value.has(id))
 
     for (const soundId of [...playingAmbienceIds.value]) {
       const source = ambienceSource.get(soundId)
@@ -1316,6 +1325,16 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         onVolume: (v) => { el.volume = v },
         onDone: () => stopAmbience(soundId),
       })
+    }
+
+    // A renderer fallback still loading is only in `startingAmbience`, out of
+    // reach of the fades above: stop it outright so its start aborts, like
+    // stopScene does, instead of it starting under the new Scene.
+    for (const soundId of stillLoading) {
+      if (targetItems.has(soundId))
+        continue
+      logInfo(`[scene] crossfade: stopping ${soundId}, still starting up for the outgoing Scene (Scene ${target.id})`)
+      stopAmbience(soundId)
     }
 
     for (const item of targetItems.values()) {
@@ -1388,6 +1407,15 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     const outgoingChannel = primaryMusicChannel
     const outgoingHadTrack = outgoingChannel.soundId != null
     const outgoingWasBackend = outgoingChannel.source === 'backend'
+    // A newer crossfade may re-claim the outgoing channel for its own incoming
+    // track before this one's backend play lands; that track is then not ours to clear.
+    const outgoingToken = outgoingChannel.token
+    const outgoingStillOurs = (action: 'clearing' | 'stopping' | 'restoring') => {
+      if (outgoingChannel.token === outgoingToken)
+        return true
+      logInfo(`[scene] crossfade to ${targetTrack?.soundId}: not ${action} ${outgoingChannel.streamId}, re-claimed meanwhile (token ${outgoingToken} -> ${outgoingChannel.token})`)
+      return false
+    }
     const incomingChannel = targetTrack
       ? (musicChannels.find(c => c !== outgoingChannel) ?? musicChannels[1])
       : null
@@ -1406,8 +1434,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
           // If the outgoing track is still alive on the backend (preserved on
           // purpose below), restore it as primary so Stop/volume controls can
           // reach it again instead of leaving it reachable only on the
-          // backend with no surviving UI handle.
-          if (outgoingHadTrack && outgoingWasBackend) {
+          // backend with no surviving UI handle. A newer crossfade that
+          // re-claimed the outgoing channel owns primary instead.
+          if (outgoingHadTrack && outgoingWasBackend && outgoingStillOurs('restoring')) {
             primaryMusicChannel = outgoingChannel
             playingMusicId.value = outgoingChannel.soundId
             syncMusicClock()
@@ -1421,7 +1450,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
           // GuildAudioManager.playMusic, which only knows about its own prior
           // backend track. Only drop the renderer's own bookkeeping for it
           // once we know that actually happened.
-          if (outgoingHadTrack && outgoingWasBackend)
+          if (outgoingHadTrack && outgoingWasBackend && outgoingStillOurs('clearing'))
             clearMusicChannel(outgoingChannel)
         }
         else {
@@ -1437,7 +1466,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
           // an m4a one): the backend was never told about this crossfade at
           // all, so nothing else will stop the previous backend track —
           // fade/stop it directly here instead of leaving it orphaned.
-          if (outgoingHadTrack && outgoingWasBackend)
+          if (outgoingHadTrack && outgoingWasBackend && outgoingStillOurs('stopping'))
             stopMusicChannel(outgoingChannel, 'backend', durationMs)
         }
         return true
