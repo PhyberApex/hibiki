@@ -98,11 +98,16 @@ function markPersisted(seq: number, sent: Scene) {
 }
 
 // A rollback can undo several unsaved edits at once, so bring every audible
-// Ambience toggle and item volume of the open Scene back in line with it.
+// Ambience toggle and item volume of the open Scene back in line with it. An
+// item missing on one side (an undone removal, add or relink) counts as off.
 function resyncAudioAfterRollback(undone: Scene, restored: Scene) {
+  for (const item of undone.ambience) {
+    if (item.enabled && !restored.ambience.some(i => i.soundId === item.soundId))
+      stopAmbience(item.soundId)
+  }
   for (const item of restored.ambience) {
     const before = undone.ambience.find(i => i.soundId === item.soundId)
-    if (before && Boolean(before.enabled) !== Boolean(item.enabled))
+    if (Boolean(before?.enabled) !== Boolean(item.enabled))
       playback.toggleAmbience(item)
     updateAmbienceVolume(item)
   }

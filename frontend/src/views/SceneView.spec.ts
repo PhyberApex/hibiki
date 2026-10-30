@@ -2370,6 +2370,23 @@ describe('sceneView — failure handling and stale playback (#655)', () => {
     wrapper.unmount()
   })
 
+  it('restarts a removed enabled Ambience sound when the removal fails to save', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { wrapper } = await mountAtPath('/scenes/s1')
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+
+    vi.mocked(saveScene).mockRejectedValue(new Error('disk full'))
+    await wrapper.find('[aria-label="Remove Rain"]').trigger('click')
+    await flushPromises()
+
+    expect((wrapper.find('[aria-label="Enable Rain"]').element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.find('.sound-card-ambience').classes()).toContain('pulse-breathe')
+    wrapper.unmount()
+  })
+
   it('keeps the Scene playing and open when deleting it fails', async () => {
     vi.stubGlobal('confirm', () => true)
     const { deleteScene } = await import('@/api/scenes')
