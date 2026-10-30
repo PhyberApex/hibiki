@@ -26,6 +26,8 @@ interface BrowserTab {
   mediaPlaying: boolean
 }
 
+type BookmarkList = 'bar' | 'empty'
+
 const DEFAULT_BROWSER_URL = 'https://phyberapex.github.io/hibiki/'
 
 const player = usePlayerStore()
@@ -42,7 +44,10 @@ const cleanups: (() => void)[] = []
 const bookmarks = ref<Bookmark[]>([])
 const editingBookmarkUrl = ref<string | null>(null)
 const editingBookmarkName = ref('')
-const editingInputEl = ref<HTMLInputElement | null>(null)
+/** Which bookmark list the rename was started from: the bar and the empty state can both be on screen. */
+const editingBookmarkList = ref<BookmarkList>('bar')
+const barRenameInputEl = ref<HTMLInputElement[]>([])
+const emptyRenameInputEl = ref<HTMLInputElement[]>([])
 const isInitializing = ref(false)
 /** Whether the Browser is the shown route; a native view shown while it is not paints over the other views. */
 const isViewShown = ref(false)
@@ -133,14 +138,20 @@ function renameBookmark(url: string, newName: string) {
   }
 }
 
-function startEditing(bm: Bookmark) {
+function isRenaming(bm: Bookmark, list: BookmarkList) {
+  return editingBookmarkUrl.value === bm.url && editingBookmarkList.value === list
+}
+
+function startEditing(bm: Bookmark, list: BookmarkList) {
   editingBookmarkUrl.value = bm.url
+  editingBookmarkList.value = list
   editingBookmarkName.value = bm.name
   nextTick(() => {
-    const el = Array.isArray(editingInputEl.value)
-      ? editingInputEl.value[0]
-      : editingInputEl.value
-    ;(el as HTMLInputElement | undefined)?.focus()
+    // Each list renders at most one rename input, so its v-for ref array holds just that one.
+    const inputs = list === 'bar'
+      ? barRenameInputEl.value
+      : emptyRenameInputEl.value
+    inputs[0]?.focus()
   })
 }
 
@@ -373,34 +384,40 @@ watch(activeTabId, async (newId, oldId) => {
       Browser
     </h1>
     <div class="browser-tabs-bar">
-      <div class="browser-tabs-list">
-        <button
+      <div class="browser-tabs-list" role="tablist" aria-label="Browser tabs">
+        <div
           v-for="tab in tabs"
           :key="tab.id"
-          type="button"
           class="browser-tab-pill"
           :class="{ 'browser-tab-pill-active': activeTabId === tab.id }"
-          :title="tab.title"
-          @click="switchTab(tab.id)"
         >
-          <img v-if="tab.favicon" :src="tab.favicon" class="browser-tab-favicon" alt="">
-          <span class="browser-tab-title">{{ tab.title || 'New tab' }}</span>
-          <span
-            v-if="routedTabs.isRouted(tab.id)"
-            class="browser-tab-streaming"
-            :title="routedIndicatorTitle"
-          >●</span>
+          <button
+            type="button"
+            role="tab"
+            class="browser-tab-select"
+            :aria-selected="activeTabId === tab.id"
+            :title="tab.title"
+            @click="switchTab(tab.id)"
+          >
+            <img v-if="tab.favicon" :src="tab.favicon" class="browser-tab-favicon" alt="">
+            <span class="browser-tab-title">{{ tab.title || 'New tab' }}</span>
+            <span
+              v-if="routedTabs.isRouted(tab.id)"
+              class="browser-tab-streaming"
+              :title="routedIndicatorTitle"
+            >●</span>
+          </button>
           <button
             v-if="tab.id !== defaultTabId"
             type="button"
             class="browser-tab-close"
             title="Close tab"
             aria-label="Close tab"
-            @click.stop="closeTab(tab.id)"
+            @click="closeTab(tab.id)"
           >
             ×
           </button>
-        </button>
+        </div>
       </div>
       <button type="button" class="browser-tab-new" title="New tab" aria-label="New tab" @click="openTab('')">
         +
@@ -469,32 +486,35 @@ watch(activeTabId, async (newId, oldId) => {
         class="bookmark-item"
         :title="bm.url"
       >
-        <button
-          type="button"
-          class="bookmark-item-main"
-          @click="editingBookmarkUrl === bm.url ? undefined : openTab(bm.url)"
-        >
+        <div v-if="isRenaming(bm, 'bar')" class="bookmark-item-main bookmark-item-main-renaming">
           <img v-if="bm.favicon" :src="bm.favicon" class="bookmark-favicon" alt="">
-          <span v-if="editingBookmarkUrl !== bm.url" class="bookmark-name">{{ bm.name }}</span>
           <input
-            v-else
-            ref="editingInputEl"
+            ref="barRenameInputEl"
             v-model="editingBookmarkName"
             type="text"
             class="bookmark-rename-input"
-            @click.stop
+            aria-label="Bookmark name"
             @blur="commitRename"
             @keydown.enter="commitRename"
             @keydown.escape="cancelRename"
           >
+        </div>
+        <button
+          v-else
+          type="button"
+          class="bookmark-item-main"
+          @click="openTab(bm.url)"
+        >
+          <img v-if="bm.favicon" :src="bm.favicon" class="bookmark-favicon" alt="">
+          <span class="bookmark-name">{{ bm.name }}</span>
         </button>
         <button
-          v-if="editingBookmarkUrl !== bm.url"
+          v-if="!isRenaming(bm, 'bar')"
           type="button"
           class="bookmark-edit"
           title="Rename bookmark"
           aria-label="Rename bookmark"
-          @click.stop="startEditing(bm)"
+          @click="startEditing(bm, 'bar')"
         >
           ✎
         </button>
@@ -529,31 +549,40 @@ watch(activeTabId, async (newId, oldId) => {
               :key="bm.url"
               class="empty-bookmark-item-wrap"
             >
-              <button
-                type="button"
-                class="empty-bookmark-item"
+              <div
+                v-if="isRenaming(bm, 'empty')"
+                class="empty-bookmark-item empty-bookmark-item-renaming"
                 :title="bm.url"
-                @click="editingBookmarkUrl === bm.url ? undefined : openTab(bm.url)"
               >
                 <img v-if="bm.favicon" :src="bm.favicon" class="empty-bookmark-favicon" alt="">
-                <span v-if="editingBookmarkUrl !== bm.url" class="empty-bookmark-name">{{ bm.name }}</span>
                 <input
-                  v-else
+                  ref="emptyRenameInputEl"
                   v-model="editingBookmarkName"
                   type="text"
                   class="empty-bookmark-rename-input"
-                  @click.stop
+                  aria-label="Bookmark name"
                   @blur="commitRename"
                   @keydown.enter="commitRename"
                   @keydown.escape="cancelRename"
                 >
+              </div>
+              <button
+                v-else
+                type="button"
+                class="empty-bookmark-item"
+                :title="bm.url"
+                @click="openTab(bm.url)"
+              >
+                <img v-if="bm.favicon" :src="bm.favicon" class="empty-bookmark-favicon" alt="">
+                <span class="empty-bookmark-name">{{ bm.name }}</span>
               </button>
               <button
-                v-if="editingBookmarkUrl !== bm.url"
+                v-if="!isRenaming(bm, 'empty')"
                 type="button"
                 class="empty-bookmark-edit"
                 title="Rename bookmark"
-                @click.stop="startEditing(bm)"
+                aria-label="Rename bookmark"
+                @click="startEditing(bm, 'empty')"
               >
                 ✎
               </button>
@@ -609,7 +638,6 @@ watch(activeTabId, async (newId, oldId) => {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  cursor: pointer;
   max-width: 180px;
   flex-shrink: 0;
   transition: background var(--transition), color var(--transition);
@@ -617,6 +645,19 @@ watch(activeTabId, async (newId, oldId) => {
 
 .browser-tab-pill:hover {
   color: var(--color-text);
+}
+
+.browser-tab-select {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 .browser-tab-pill-active {
@@ -820,6 +861,12 @@ watch(activeTabId, async (newId, oldId) => {
   color: var(--color-text);
 }
 
+.bookmark-item-main-renaming,
+.bookmark-item-main-renaming:hover {
+  cursor: default;
+  background: transparent;
+}
+
 .bookmark-rename-input {
   flex: 1;
   min-width: 0;
@@ -947,6 +994,13 @@ watch(activeTabId, async (newId, oldId) => {
 .empty-bookmark-item:hover {
   background: var(--color-bg);
   border-color: var(--color-accent);
+}
+
+.empty-bookmark-item-renaming,
+.empty-bookmark-item-renaming:hover {
+  cursor: default;
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border);
 }
 
 .empty-bookmark-rename-input {
