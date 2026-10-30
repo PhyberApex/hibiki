@@ -5,6 +5,7 @@ import {
   getScene,
   importScene,
   listScenes,
+  moveScene,
   saveScene,
 } from './scenes'
 
@@ -47,6 +48,16 @@ describe('scenes API', () => {
       args: [
         { name: 'New' },
       ],
+    })
+  })
+
+  it('moveScene uses apiCall', async () => {
+    mockInvoke.mockResolvedValue(undefined)
+    await moveScene('x', 2)
+    expect(mockInvoke).toHaveBeenCalledWith('api', {
+      domain: 'scenes',
+      method: 'move',
+      args: ['x', 2],
     })
   })
 

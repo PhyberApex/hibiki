@@ -70,6 +70,12 @@ export function deleteScene(id: string): Promise<void> {
   return apiCall<void>('scenes', 'remove', [id])
 }
 
+/** Moves a Scene to `toIndex` in the Scene list; Previous/Next Scene follow this order. */
+export function moveScene(id: string, toIndex: number): Promise<void> {
+  requireElectron()
+  return apiCall<void>('scenes', 'move', [id, toIndex])
+}
+
 export function exportScene(id: string, targetDir: string): Promise<void> {
   requireElectron()
   return apiCall<void>('scenes', 'exportScene', [id, targetDir])

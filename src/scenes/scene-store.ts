@@ -293,6 +293,31 @@ export function createSceneStore(config: Config, options: SceneStoreOptions = {}
       })
     },
 
+    /**
+     * Moves a Scene to `toIndex` in the Scene list (clamped to the ends). The
+     * `scenes.json` array order is the Scene order the list and Previous/Next
+     * Scene follow; the Scene itself, `updatedAt` included, is left untouched.
+     */
+    async move(id: string, toIndex: number): Promise<void> {
+      if (!Number.isInteger(toIndex)) {
+        log.warn(`Rejected move of scene ${id}: position ${String(toIndex)} is not an integer`)
+        throw new Error('Scene position must be an integer')
+      }
+      return store.update((scenes) => {
+        const from = scenes.findIndex(s => s.id === id)
+        if (from === -1)
+          throw new Error(`Scene '${id}' not found`)
+        const to = Math.min(scenes.length - 1, Math.max(0, toIndex))
+        if (from === to)
+          return { next: scenes, result: undefined, skipWrite: true }
+        const next = [...scenes]
+        const [moved] = next.splice(from, 1)
+        next.splice(to, 0, moved)
+        log.info(`Moved scene "${moved.name}" (${id}) from position ${from + 1} to ${to + 1} of ${next.length}`)
+        return { next, result: undefined }
+      })
+    },
+
     async removeSoundFromAll(category: 'ambience' | 'music' | 'effects', soundId: string): Promise<void> {
       return store.update((scenes) => {
         let changed = false

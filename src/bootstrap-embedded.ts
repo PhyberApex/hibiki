@@ -142,6 +142,7 @@ export interface EmbeddedApi {
     get: (id: string) => ReturnType<ReturnType<typeof createSceneStore>['get']>
     save: (scene: { id?: string, name: string, ambience?: { soundId: string, soundName?: string, volume?: number, enabled?: boolean }[], music?: { soundId: string, soundName?: string, volume?: number, loop?: boolean }[], effects?: { soundId: string, soundName?: string, hotkey?: string }[], musicMode?: MusicMode, hotkey?: string }) => ReturnType<ReturnType<typeof createSceneStore>['save']>
     remove: (id: string) => ReturnType<ReturnType<typeof createSceneStore>['remove']>
+    move: (id: string, toIndex: number) => ReturnType<ReturnType<typeof createSceneStore>['move']>
     exportScene: (id: string, targetPath: string) => Promise<void>
     importScene: (sourcePath: string) => Promise<import('./scenes/scene-store').Scene>
   }
@@ -468,6 +469,7 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       get: id => scenes.get(id),
       save: scene => scenes.save(scene),
       remove: id => scenes.remove(id),
+      move: (id, toIndex) => scenes.move(id, toIndex),
       exportScene: (id, targetPath) => exportScene(config, id, targetPath),
       importScene: sourcePath => importScene(config, sourcePath),
     },

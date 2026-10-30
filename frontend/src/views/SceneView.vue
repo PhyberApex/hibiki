@@ -5,10 +5,10 @@ import type { SoundFile } from '@/api/sounds'
 import type { EffectSoundStatus } from '@/stores/player'
 import type { MusicProgress } from '@/stores/scene-playback'
 import { storeToRefs } from 'pinia'
-import { computed, onActivated, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { fetchVisionConfig, LOCAL_TARGET_ID, openFileDialog, saveFileDialog } from '@/api/config'
-import { deleteScene, exportScene, getScene, importScene, listScenes, saveScene } from '@/api/scenes'
+import { deleteScene, exportScene, getScene, importScene, listScenes, moveScene, saveScene } from '@/api/scenes'
 import { listAmbience, listEffects, listMusic } from '@/api/sounds'
 import { logInfo } from '@/audio/audio-element-diagnostics'
 import { normalizeMusicMode } from '@/audio/music-mode'
@@ -537,6 +537,115 @@ async function submitCreateScene() {
   }
 }
 
+// Scene order (#697): the list order is the `scenes.json` order that
+// Previous/Next Scene walk. Moves apply locally at once and are saved one at a
+// time, in order; a failed save reloads the stored order and drops the moves
+// still queued behind it, whose positions were picked against the discarded
+// order.
+const draggedSceneId = ref<string | null>(null)
+const dropTargetSceneId = ref<string | null>(null)
+const sceneOrderAnnouncement = ref('')
+let pendingSceneMoves: Promise<void> = Promise.resolve()
+let sceneMoveGeneration = 0
+
+const ARROW_STEPS: Record<string, number> = { ArrowUp: -1, ArrowDown: 1 }
+
+function sceneIndex(id: string): number {
+  return scenes.value.findIndex(s => s.id === id)
+}
+
+function moveSceneTo(id: string, toIndex: number): Promise<void> {
+  const from = sceneIndex(id)
+  if (from === -1 || toIndex < 0 || toIndex >= scenes.value.length || toIndex === from)
+    return pendingSceneMoves
+  const next = [...scenes.value]
+  const [moved] = next.splice(from, 1)
+  next.splice(toIndex, 0, moved)
+  scenes.value = next
+  sceneOrderAnnouncement.value = `${moved.name} moved to position ${toIndex + 1} of ${next.length}`
+  logInfo(`[scenes] Moving scene ${id} from position ${from + 1} to ${toIndex + 1}`)
+  const generation = sceneMoveGeneration
+  pendingSceneMoves = pendingSceneMoves.then(async () => {
+    if (generation !== sceneMoveGeneration) {
+      logInfo(`[scenes] Dropped queued move of scene ${id}: an earlier move failed and the saved order was reloaded`)
+      return
+    }
+    try {
+      await moveScene(id, toIndex)
+    }
+    catch (err) {
+      console.warn(`[scenes] move failed for scene ${id}:`, err)
+      toast.show({ type: 'error', text: `Couldn't move "${moved.name}". Try again.` })
+      await loadScenes()
+      sceneMoveGeneration++
+    }
+  })
+  return pendingSceneMoves
+}
+
+async function onSceneGripKeydown(event: KeyboardEvent, id: string) {
+  const step = ARROW_STEPS[event.key]
+  if (!step)
+    return
+  event.preventDefault()
+  void moveSceneTo(id, sceneIndex(id) + step)
+  // Re-rendering the moved row can drop focus; keep it on the grip so the GM
+  // can keep stepping.
+  await nextTick()
+  document.querySelector<HTMLElement>(`[data-scene-grip="${CSS.escape(id)}"]`)?.focus()
+}
+
+/** Where the dragged Scene would land relative to this row: above it when moving up, below when moving down. */
+function dropIndicator(id: string): string {
+  const dragged = draggedSceneId.value
+  if (!dragged || dropTargetSceneId.value !== id || dragged === id)
+    return ''
+  return sceneIndex(id) < sceneIndex(dragged)
+    ? 'scene-list-row-drop-before'
+    : 'scene-list-row-drop-after'
+}
+
+function onSceneDragStart(event: DragEvent, id: string) {
+  draggedSceneId.value = id
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', id)
+    const row = (event.currentTarget as HTMLElement | null)?.closest('li')
+    if (row)
+      event.dataTransfer.setDragImage(row, 16, 16)
+  }
+}
+
+function onSceneDragOver(event: DragEvent, id: string) {
+  if (!draggedSceneId.value)
+    return
+  event.preventDefault()
+  if (event.dataTransfer)
+    event.dataTransfer.dropEffect = 'move'
+  dropTargetSceneId.value = id
+}
+
+function onSceneDrop(event: DragEvent, id: string) {
+  const dragged = draggedSceneId.value
+  onSceneDragEnd()
+  if (!dragged)
+    return
+  event.preventDefault()
+  void moveSceneTo(dragged, sceneIndex(id))
+}
+
+function onSceneDragLeave(event: DragEvent, id: string) {
+  // Moving onto a child of the same row fires dragleave too; only clear when leaving the row.
+  const row = event.currentTarget as HTMLElement | null
+  if (dropTargetSceneId.value === id && !(event.relatedTarget instanceof Node && row?.contains(event.relatedTarget)))
+    dropTargetSceneId.value = null
+}
+
+function onSceneDragEnd() {
+  draggedSceneId.value = null
+  dropTargetSceneId.value = null
+}
+
 async function deleteCurrentScene() {
   // eslint-disable-next-line no-alert -- simple confirm for destructive action
   if (!scene.value || !confirm(`Delete "${scene.value.name}"? This can't be undone.`))
@@ -790,8 +899,33 @@ watch(sceneId, (newId) => {
       </p>
 
       <!-- Scene list -->
+      <p class="sr-only" aria-live="polite" data-testid="scene-order-status">
+        {{ sceneOrderAnnouncement }}
+      </p>
       <ul v-if="scenes.length > 0" class="scene-list">
-        <li v-for="s in scenes" :key="s.id" class="scene-list-row">
+        <li
+          v-for="s in scenes"
+          :key="s.id"
+          class="scene-list-row"
+          :class="[draggedSceneId === s.id ? 'scene-list-row-dragging' : '', dropIndicator(s.id)]"
+          @dragover="onSceneDragOver($event, s.id)"
+          @dragleave="onSceneDragLeave($event, s.id)"
+          @drop="onSceneDrop($event, s.id)"
+        >
+          <button
+            type="button"
+            class="scene-grip"
+            draggable="true"
+            :data-scene-grip="s.id"
+            :aria-label="`Reorder ${s.name}`"
+            aria-keyshortcuts="ArrowUp ArrowDown"
+            title="Drag to reorder, or press ↑ / ↓"
+            @keydown="onSceneGripKeydown($event, s.id)"
+            @dragstart="onSceneDragStart($event, s.id)"
+            @dragend="onSceneDragEnd"
+          >
+            <span aria-hidden="true">⠿</span>
+          </button>
           <RouterLink :to="`/scenes/${s.id}`" class="scene-list-item">
             <span
               v-if="player.playingSceneId === s.id"
@@ -1405,6 +1539,45 @@ watch(sceneId, (newId) => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.scene-list-row-dragging {
+  opacity: 0.5;
+}
+
+.scene-list-row-drop-before {
+  box-shadow: inset 0 2px 0 var(--color-accent);
+}
+
+.scene-list-row-drop-after {
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+
+.scene-grip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.75rem;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-dim);
+  font-size: 0.9rem;
+  cursor: grab;
+  transition: color var(--transition), background var(--transition);
+}
+
+.scene-grip:hover,
+.scene-grip:focus-visible {
+  color: var(--color-text);
+  background: var(--color-bg-card);
+}
+
+.scene-grip:active {
+  cursor: grabbing;
 }
 
 .scene-list-item {

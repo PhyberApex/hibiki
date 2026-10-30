@@ -105,6 +105,56 @@ describe('createSceneStore', () => {
     await expect(store.remove('nonexistent')).rejects.toThrow('Scene \'nonexistent\' not found')
   })
 
+  describe('move (#697)', () => {
+    async function seed() {
+      const store = createSceneStore(config)
+      const a = await store.save({ name: 'A' })
+      const b = await store.save({ name: 'B' })
+      const c = await store.save({ name: 'C' })
+      return { store, a, b, c }
+    }
+
+    it('moves a Scene to the given index and persists the new order', async () => {
+      const { store, a, c } = await seed()
+      await store.move(c.id, 0)
+      expect((await store.list()).map(s => s.name)).toEqual(['C', 'A', 'B'])
+      await store.move(a.id, 2)
+      expect((await createSceneStore(config).list()).map(s => s.name)).toEqual(['C', 'B', 'A'])
+    })
+
+    it('clamps an out-of-range index to the ends', async () => {
+      const { store, a, b } = await seed()
+      await store.move(a.id, 99)
+      expect((await store.list()).map(s => s.name)).toEqual(['B', 'C', 'A'])
+      await store.move(b.id, -5)
+      expect((await store.list()).map(s => s.name)).toEqual(['B', 'C', 'A'])
+    })
+
+    it('leaves the Scene itself untouched and new Scenes still land at the end', async () => {
+      const { store, b } = await seed()
+      await store.move(b.id, 0)
+      expect(await store.get(b.id)).toEqual(b)
+      await store.save({ name: 'D' })
+      expect((await store.list()).map(s => s.name)).toEqual(['B', 'A', 'C', 'D'])
+    })
+
+    it('does not rewrite scenes.json when the Scene is already there', async () => {
+      const { store, a } = await seed()
+      const path = join(dirname(config.database.path), 'scenes.json')
+      writeFileSync(path, readFileSync(path, 'utf8').replace(/\n?$/, '\n\n'))
+      const before = readFileSync(path, 'utf8')
+      await store.move(a.id, 0)
+      expect(readFileSync(path, 'utf8')).toBe(before)
+    })
+
+    it('throws for a missing id or a non-integer index', async () => {
+      const { store, a } = await seed()
+      await expect(store.move('nonexistent', 0)).rejects.toThrow('Scene \'nonexistent\' not found')
+      await expect(store.move(a.id, 1.5)).rejects.toThrow('Scene position must be an integer')
+      await expect(store.move(a.id, Number.NaN)).rejects.toThrow('Scene position must be an integer')
+    })
+  })
+
   it('a truncated scenes.json is preserved as a backup, and saving afterwards does not destroy it', async () => {
     const scenesPath = join(dirname(config.database.path), 'scenes.json')
     mkdirSync(dirname(scenesPath), { recursive: true })
