@@ -283,8 +283,8 @@ describe('audioEngine', () => {
       engine.playMusicFromStream(createFakeStream(), 'a', Number.NaN)
       engine.playEffectFromStream(createFakeStream(), 'browser-1', Number.NaN)
 
-      expect(createdInputs[0].params?.volume).toBe(85)
-      expect(createdInputs[1].params?.volume).toBe(90)
+      expect(createdInputs[0].params?.volume).toBe(100)
+      expect(createdInputs[1].params?.volume).toBe(100)
     })
   })
 
@@ -300,9 +300,11 @@ describe('audioEngine', () => {
       expect(createdInputs[0].params).toEqual({ volume: 100 })
     })
 
-    it('falls back to the effects default volume without an explicit one', () => {
+    it('opens music and effect streams at full volume without an explicit one, so already-scaled PCM is not attenuated again', () => {
+      engine.playMusicFromStream(createFakeStream(), 'a')
       engine.playEffectFromStream(createFakeStream())
-      expect(createdInputs[0].params.volume).toBe(90)
+      expect(createdInputs[0].params.volume).toBe(100)
+      expect(createdInputs[1].params.volume).toBe(100)
     })
 
     it('ignores a volume change for an unknown or drained effect stream', async () => {
@@ -531,6 +533,29 @@ describe('audioEngine', () => {
 
       expect(createdInputs[0].destroy).toHaveBeenCalledTimes(1)
       expect(createdInputs[1].destroy).toHaveBeenCalledTimes(1)
+    })
+
+    it('playMusicFromStream after destroy() destroys the stream, opens no input and calls onEnded', () => {
+      engine.destroy()
+      const stream = createFakeStream()
+      const onEnded = jest.fn()
+
+      engine.playMusicFromStream(stream, 'a', 50, onEnded)
+
+      expect(stream.destroyed).toBe(true)
+      expect(createdInputs).toHaveLength(0)
+      expect(onEnded).toHaveBeenCalledTimes(1)
+      expect(onEnded).toHaveBeenCalledWith()
+    })
+
+    it('playEffectFromStream after destroy() destroys the stream and opens no input', () => {
+      engine.destroy()
+      const stream = createFakeStream()
+
+      engine.playEffectFromStream(stream, 'browser-1', 50)
+
+      expect(stream.destroyed).toBe(true)
+      expect(createdInputs).toHaveLength(0)
     })
   })
 })
