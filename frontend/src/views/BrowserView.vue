@@ -14,6 +14,7 @@ import {
   showBrowserView,
 } from '@/api/browser-view'
 import { listBookmarks, saveBookmarks } from '@/api/config'
+import { logInfo } from '@/audio/audio-element-diagnostics'
 import { usePlayerStore } from '@/stores/player'
 import { useRoutedTabsStore } from '@/stores/routed-tabs'
 
@@ -33,6 +34,9 @@ const tabs = ref<BrowserTab[]>([])
 const activeTabId = ref<number | null>(null)
 const defaultTabId = ref<number | null>(null)
 const urlInput = ref('')
+const urlInputEl = ref<HTMLInputElement | null>(null)
+/** The GM typed into the URL bar since it last followed the active tab. */
+const urlEdited = ref(false)
 const containerEl = ref<HTMLElement | null>(null)
 const cleanups: (() => void)[] = []
 const bookmarks = ref<Bookmark[]>([])
@@ -40,6 +44,8 @@ const editingBookmarkUrl = ref<string | null>(null)
 const editingBookmarkName = ref('')
 const editingInputEl = ref<HTMLInputElement | null>(null)
 const isInitializing = ref(false)
+/** Whether the Browser is the shown route; a native view shown while it is not paints over the other views. */
+const isViewShown = ref(false)
 
 const activeTab = computed(() => tabs.value.find(t => t.id === activeTabId.value) ?? null)
 const isCurrentPageBookmarked = computed(() =>
@@ -54,7 +60,7 @@ const activeTabVolume = computed(() => (activeTabId.value != null
 const routeLabel = computed(() => (player.isLocalActive ? 'Mix locally' : 'Stream'))
 const routeTitle = computed(() => {
   if (!player.canPlay)
-    return 'Join a voice channel first'
+    return activeTabRouted.value ? 'Stop routing' : 'Join a voice channel first'
   if (player.isLocalActive)
     return activeTabRouted.value ? 'Play this tab raw again' : 'Mix this tab into the local output at Tab Volume × master'
   return activeTabRouted.value ? 'Stop streaming audio' : 'Stream audio to Discord'
@@ -176,9 +182,19 @@ async function openTab(url?: string) {
     })
     activeTabId.value = id
     urlInput.value = target
+    urlEdited.value = false
+    if (!isViewShown.value) {
+      logInfo(`[browser] tab ${id} created while view inactive, keeping hidden`)
+      await hideBrowserView(id).catch(() => {})
+      // The GM may have come back during the hide; onActivated left showing this tab to us.
+      if (!isViewShown.value)
+        return
+    }
     await nextTick()
     await updateViewBounds()
-    await showBrowserView(id)
+    // Leaving during the bounds update already hid this tab through onDeactivated.
+    if (isViewShown.value)
+      await showBrowserView(id)
   }
   catch (e) {
     console.error('[browser] Failed to open tab:', e)
@@ -197,6 +213,7 @@ async function closeTab(id: number) {
       : null
     activeTabId.value = next?.id ?? null
     urlInput.value = next?.url ?? ''
+    urlEdited.value = false
   }
   await updateViewBounds()
 }
@@ -210,6 +227,9 @@ async function switchTab(id: number) {
   const tab = tabs.value.find(t => t.id === id)
   if (tab)
     urlInput.value = tab.url
+  urlEdited.value = false
+  if (!isViewShown.value)
+    return
   await showBrowserView(id).catch(() => {})
   await updateViewBounds()
 }
@@ -219,6 +239,7 @@ async function navigateTo() {
   if (!url || activeTabId.value == null)
     return
   urlInput.value = url
+  urlEdited.value = false
   await loadBrowserViewURL(activeTabId.value, url)
 }
 
@@ -238,7 +259,7 @@ async function reload() {
 }
 
 async function updateViewBounds() {
-  if (!containerEl.value || activeTabId.value == null)
+  if (!isViewShown.value || !containerEl.value || activeTabId.value == null)
     return
   const rect = containerEl.value.getBoundingClientRect()
   await setBrowserViewBounds(activeTabId.value, {
@@ -265,8 +286,12 @@ onMounted(() => {
     const tab = tabById(id)
     if (tab) {
       tab.url = url as string
-      if (activeTabId.value === tab.id)
+      // Never overwrite what the GM is typing; the tab keeps the real URL for the next switch.
+      const typing = urlEdited.value && document.activeElement === urlInputEl.value
+      if (activeTabId.value === tab.id && !typing) {
         urlInput.value = url as string
+        urlEdited.value = false
+      }
     }
   }))
   cleanups.push(onBrowserViewEvent('browserView:titleUpdated', (id: unknown, title: unknown) => {
@@ -294,6 +319,12 @@ onMounted(() => {
 })
 
 onActivated(async () => {
+  isViewShown.value = true
+  // A first tab still being created from an earlier visit shows itself once it arrives.
+  if (isInitializing.value) {
+    logInfo('[browser] view shown while the first tab is still being created, waiting for it')
+    return
+  }
   if (tabs.value.length === 0) {
     isInitializing.value = true
     await openTab(DEFAULT_BROWSER_URL)
@@ -308,6 +339,7 @@ onActivated(async () => {
 })
 
 onDeactivated(async () => {
+  isViewShown.value = false
   if (activeTabId.value != null)
     await hideBrowserView(activeTabId.value).catch(() => {})
 })
@@ -328,7 +360,7 @@ onBeforeUnmount(async () => {
 watch(activeTabId, async (newId, oldId) => {
   if (oldId != null && oldId !== newId)
     await hideBrowserView(oldId).catch(() => {})
-  if (newId != null) {
+  if (newId != null && isViewShown.value) {
     await showBrowserView(newId).catch(() => {})
     await updateViewBounds()
   }
@@ -387,10 +419,12 @@ watch(activeTabId, async (newId, oldId) => {
       </button>
       <form class="url-form" @submit.prevent="navigateTo">
         <input
+          ref="urlInputEl"
           v-model="urlInput"
           class="input url-input"
           type="text"
           placeholder="Paste or type a URL…"
+          @input="urlEdited = true"
         >
       </form>
       <button
@@ -420,7 +454,7 @@ watch(activeTabId, async (newId, oldId) => {
         type="button"
         class="toolbar-btn toolbar-btn-stream"
         :class="{ 'toolbar-btn-stream-active': activeTabRouted }"
-        :disabled="!player.canPlay"
+        :disabled="!player.canPlay && !activeTabRouted"
         :title="routeTitle"
         @click="activeTabId != null && routedTabs.toggleRouting(activeTabId)"
       >
