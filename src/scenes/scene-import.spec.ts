@@ -263,6 +263,24 @@ describe('importScene', () => {
     ])
   })
 
+  it('logs when the import starts, with the bundled files and bytes, and how long it took (#710)', async () => {
+    const info = jest.spyOn(console, 'info').mockImplementation(() => {})
+    try {
+      const zipPath = createManifestZip(makeManifest({ displayName: 'Logged Import' }), {
+        'sounds/music/logged-theme.mp3': 'twelve-bytes',
+        'sounds/effects/logged-boom.wav': 'six-by',
+      })
+      await importScene(config, zipPath)
+
+      const lines = info.mock.calls.map(args => args.join(' '))
+      expect(lines).toContainEqual(expect.stringMatching(/^\[scene-import\] Import started \(2 bundled file\(s\) to write, 18 bytes; 0 reused\)$/))
+      expect(lines).toContainEqual(expect.stringMatching(/^\[scene-import\] Import finished in \d+ ms: "Logged Import"/))
+    }
+    finally {
+      info.mockRestore()
+    }
+  })
+
   it('falls back to the sound name when a bundled file is missing from the archive', async () => {
     const manifest = makeManifest({
       displayName: 'Missing Bundle',

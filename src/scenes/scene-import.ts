@@ -2,7 +2,7 @@ import type { Config } from '../config'
 import type { SoundCategory } from '../sound/sound.types'
 import type { SceneManifest, ScenePackageItem } from './scene-package.types'
 import type { Scene, SceneItem } from './scene-store'
-import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import AdmZip from 'adm-zip'
 import slugify from 'slugify'
@@ -145,11 +145,11 @@ interface BundledSound {
  * Ids already in a library folder, keyed lower-cased because Windows and macOS
  * folders are case-insensitive, with each file's size.
  */
-function readLibrary(destDir: string): Map<string, { filename: string, size: number }[]> {
+async function readLibrary(destDir: string): Promise<Map<string, { filename: string, size: number }[]>> {
   const byId = new Map<string, { filename: string, size: number }[]>()
   let filenames: string[]
   try {
-    filenames = readdirSync(destDir)
+    filenames = await readdir(destDir)
   }
   catch {
     return byId
@@ -157,7 +157,7 @@ function readLibrary(destDir: string): Map<string, { filename: string, size: num
   for (const filename of filenames) {
     let size: number
     try {
-      size = statSync(join(destDir, filename)).size
+      size = (await stat(join(destDir, filename))).size
     }
     catch {
       continue
@@ -197,13 +197,13 @@ function assertWithinLimits(entry: AdmZip.IZipEntry, total: number, limits: Scen
  * never replaces a library file: the same name and size is taken to be that
  * file and reused, any other clash on the id gets a fresh id (#652).
  */
-function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImportLimits, archiveName: string): BundledSound[] {
+async function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImportLimits, archiveName: string): Promise<BundledSound[]> {
   const planned: BundledSound[] = []
   let total = 0
   for (const category of SOUND_CATEGORIES) {
     const prefix = `${SOUNDS_PREFIX}${category}/`
     const destDir = resolveStorageDir(config, category)
-    const library = readLibrary(destDir)
+    const library = await readLibrary(destDir)
     const plannedIds = new Set<string>()
     const taken = (id: string) => library.has(id.toLowerCase()) || plannedIds.has(id.toLowerCase())
     for (const entry of zip.getEntries()) {
@@ -252,8 +252,33 @@ function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImportLimit
   return planned
 }
 
-/** Writes the planned sounds, recording each one in `written` as it lands so a rollback removes only those. */
-function writeBundledSounds(planned: BundledSound[], written: BundledSound[]): void {
+/**
+ * Inflates one entry on the zlib threadpool and yields while it runs, so the
+ * mixer keeps being fed (#710). adm-zip still checks the CRC on this thread.
+ */
+function readEntry(entry: AdmZip.IZipEntry): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const fail = (err: unknown) => reject(err instanceof Error
+      ? err
+      : new Error(`Could not read ${entry.entryName} from the archive: ${String(err)}`))
+    try {
+      entry.getDataAsync((data, err) => err
+        ? fail(err)
+        : resolve(data))
+    }
+    catch (e) {
+      // a stored entry with a bad CRC reports through the callback and then throws as well
+      fail(e)
+    }
+  })
+}
+
+/**
+ * Writes the planned sounds one at a time, recording each one in `written` as
+ * it lands so a rollback removes only those. Awaiting per file gives the event
+ * loop a turn between sounds, so playback is not starved by a large import (#710).
+ */
+async function writeBundledSounds(planned: BundledSound[], written: BundledSound[]): Promise<void> {
   for (const sound of planned) {
     const { entry, destDir, filename, soundId, reuse } = sound
     const original = basename(entry.entryName)
@@ -261,9 +286,10 @@ function writeBundledSounds(planned: BundledSound[], written: BundledSound[]): v
       log.info(`Reusing library file ${join(destDir, filename)} for ${entry.entryName} (same name and size)`)
       continue
     }
-    mkdirSync(destDir, { recursive: true })
+    const data = await readEntry(entry)
+    await mkdir(destDir, { recursive: true })
     // 'wx': a file that appeared since planning is never replaced
-    writeFileSync(join(destDir, filename), entry.getData(), { flag: 'wx' })
+    await writeFile(join(destDir, filename), data, { flag: 'wx' })
     written.push(sound)
     if (filename === original)
       log.info(`Extracted ${entry.entryName} to ${join(destDir, filename)}`)
@@ -273,10 +299,10 @@ function writeBundledSounds(planned: BundledSound[], written: BundledSound[]): v
 }
 
 /** Undoes `writeBundledSounds` when the Scene itself is not saved, so a failed import leaves no orphan files. */
-function removeWrittenSounds(written: BundledSound[]): void {
+async function removeWrittenSounds(written: BundledSound[]): Promise<void> {
   for (const { destDir, filename } of written) {
     try {
-      rmSync(join(destDir, filename), { force: true })
+      await rm(join(destDir, filename), { force: true })
       log.info(`Removed ${join(destDir, filename)}: the imported Scene was not saved`)
     }
     catch (e) {
@@ -297,8 +323,10 @@ function assertSafeSoundIds(items: SceneItem[], category: SoundCategory, archive
 
 export async function importScene(config: Config, sourceZipPath: string, limits: SceneImportLimits = SCENE_IMPORT_LIMITS): Promise<Scene> {
   log.info(`Importing from ${sourceZipPath}`)
+  const startedAt = Date.now()
   const archiveName = basename(sourceZipPath)
-  const zip = new AdmZip(sourceZipPath)
+  // adm-zip would read the archive with readFileSync; hand it the buffer instead (#710)
+  const zip = new AdmZip(await readFile(sourceZipPath))
 
   const manifestEntry = zip.getEntry(MANIFEST_JSON)
   if (!manifestEntry) {
@@ -310,10 +338,13 @@ export async function importScene(config: Config, sourceZipPath: string, limits:
     throw new Error(`Invalid scene archive: hibiki-scene.json exceeds the ${MAX_MANIFEST_BYTES}-byte limit`)
   }
 
-  const manifest = parseManifest(manifestEntry.getData().toString('utf-8'), archiveName)
+  const manifest = parseManifest((await readEntry(manifestEntry)).toString('utf-8'), archiveName)
 
   const scenes = createSceneStore(config)
-  const bundled = planBundledSounds(zip, config, limits, archiveName)
+  const bundled = await planBundledSounds(zip, config, limits, archiveName)
+  const toWrite = bundled.filter(b => !b.reuse)
+  const bytesToWrite = toWrite.reduce((sum, b) => sum + b.entry.header.size, 0)
+  log.info(`Import started (${toWrite.length} bundled file(s) to write, ${bytesToWrite} bytes; ${bundled.length - toWrite.length} reused)`)
   const bundledFileIds = new Map(bundled.map(b => [b.entry.entryName, b.soundId]))
   const items = {} as Record<SoundCategory, SceneItem[]>
   for (const category of SOUND_CATEGORIES) {
@@ -332,13 +363,14 @@ export async function importScene(config: Config, sourceZipPath: string, limits:
   let saved: Scene
   const written: BundledSound[] = []
   try {
-    writeBundledSounds(bundled, written)
+    await writeBundledSounds(bundled, written)
     saved = await scenes.save(scene)
   }
   catch (e) {
-    removeWrittenSounds(written)
+    log.warn(`Import of ${archiveName} failed after ${Date.now() - startedAt} ms`)
+    await removeWrittenSounds(written)
     throw e
   }
-  log.info(`Imported "${saved.name}" (${saved.id}); ${countRepeatIntervals(saved)} item(s) carry a repeat interval`)
+  log.info(`Import finished in ${Date.now() - startedAt} ms: "${saved.name}" (${saved.id}); ${countRepeatIntervals(saved)} item(s) carry a repeat interval`)
   return saved
 }
