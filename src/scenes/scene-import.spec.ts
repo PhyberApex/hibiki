@@ -106,6 +106,24 @@ describe('importScene', () => {
     expect(scene.music[0]!.source).toEqual({ name: 'Some Track', url: 'https://example.com', note: 'Any epic track' })
   })
 
+  it('imports an archive listing one sound twice in a category, keeping the first (#715)', async () => {
+    const zipPath = createManifestZip(makeManifest({
+      displayName: 'Doubled',
+      scene: {
+        music: [
+          { soundName: 'Theme', volume: 70, bundled: false },
+          { soundName: 'Theme', volume: 40, bundled: false },
+        ],
+        ambience: [],
+        effects: [],
+      },
+    }))
+    const scene = await importScene(config, zipPath)
+    expect(scene.music).toEqual([
+      { soundId: 'Theme', soundName: 'Theme', volume: 70 },
+    ])
+  })
+
   it('keeps an Ambience item\'s repeat interval (#708)', async () => {
     const zipPath = createManifestZip(makeManifest({
       displayName: 'Storm',

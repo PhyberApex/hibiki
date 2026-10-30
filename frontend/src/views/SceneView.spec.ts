@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { fetchSceneFadeLength, fetchVisionConfig, LOCAL_TARGET_ID } from '@/api/config'
 import { usePlayerStore } from '@/stores/player'
+import { useScenePlaybackStore } from '@/stores/scene-playback'
 import { useToastStore } from '@/stores/toast'
 import SceneView from './SceneView.vue'
 
@@ -1305,6 +1306,138 @@ describe('sceneView — Playing Scene outlives the open Scene', () => {
     vi.unstubAllGlobals()
   })
 
+  describe('deleting the open Scene while a different Scene plays (#715)', () => {
+    const storm = {
+      ...scene,
+      music: [
+        {
+          soundId: 'm-storm',
+          soundName: 'Storm Theme',
+          volume: 80,
+          loop: true,
+        },
+      ],
+    }
+    // Shares Rain (amb-1) with the Playing Scene; Fire is its own.
+    const tavern = {
+      id: 's2',
+      name: 'Tavern',
+      ambience: [
+        {
+          soundId: 'amb-2',
+          soundName: 'Fire',
+          volume: 80,
+          enabled: false,
+        },
+        {
+          soundId: 'amb-1',
+          soundName: 'Rain',
+          volume: 80,
+          enabled: false,
+        },
+      ],
+      music: [
+        {
+          soundId: 'm-tavern',
+          soundName: 'Tavern Theme',
+          volume: 80,
+          loop: true,
+        },
+      ],
+      effects: [],
+    }
+
+    beforeEach(async () => {
+      const { getScene, listScenes } = await import('@/api/scenes')
+      const { listAmbience, listMusic } = await import('@/api/sounds')
+      vi.mocked(getScene).mockImplementation(async (id: string) => {
+        if (id === 's1')
+          return JSON.parse(JSON.stringify(storm))
+        if (id === 's2')
+          return JSON.parse(JSON.stringify(tavern))
+        return null
+      })
+      vi.mocked(listScenes).mockResolvedValue([
+        JSON.parse(JSON.stringify(storm)),
+        JSON.parse(JSON.stringify(tavern)),
+      ])
+      vi.mocked(listAmbience).mockResolvedValue([
+        { id: 'amb-1', name: 'Rain', filename: 'rain.mp3' },
+        { id: 'amb-2', name: 'Fire', filename: 'fire.mp3' },
+      ] as never)
+      vi.mocked(listMusic).mockResolvedValue([
+        { id: 'm-storm', name: 'Storm Theme', filename: 'storm.mp3' },
+        { id: 'm-tavern', name: 'Tavern Theme', filename: 'tavern.mp3' },
+      ] as never)
+      vi.stubGlobal('confirm', () => true)
+    })
+
+    afterEach(async () => {
+      vi.unstubAllGlobals()
+      const { listAmbience, listMusic } = await import('@/api/sounds')
+      vi.mocked(listAmbience).mockResolvedValue([
+        { id: 'amb-1', name: 'Rain', filename: 'rain.mp3' },
+      ] as never)
+      vi.mocked(listMusic).mockResolvedValue([])
+    })
+
+    // Opens Tavern, then plays Storm the way a Scene Hotkey does: no navigation.
+    async function openTavernWhileStormPlays() {
+      await router.push('/scenes/s2')
+      await router.isReady()
+      const pinia = createPinia()
+      const wrapper = mount(SceneView, {
+        global: {
+          plugins: [pinia, router],
+          stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+        },
+      })
+      await flushPromises()
+      const player = usePlayerStore(pinia)
+      player.activeTarget = 'local'
+      await flushPromises()
+      const playback = useScenePlaybackStore(pinia)
+      await playback.playScene(JSON.parse(JSON.stringify(storm)))
+      await flushPromises()
+      expect(player.playingSceneId).toBe('s1')
+      expect(wrapper.find('.detail-title').text()).toBe('Tavern')
+      return { wrapper, player, playback }
+    }
+
+    it('keeps the Playing Scene and its shared Ambience and Music, stopping only what the deleted Scene started', async () => {
+      const { deleteScene } = await import('@/api/scenes')
+      const { wrapper, player, playback } = await openTavernWhileStormPlays()
+      // Fire, toggled on individually in the open Scene.
+      await wrapper.findAll('.sound-card-ambience')[0].find('input[type="checkbox"]').setValue(true)
+      await flushPromises()
+      expect(playback.playingAmbienceIds.has('amb-2')).toBe(true)
+      expect(playback.playingAmbienceIds.has('amb-1')).toBe(true)
+      expect(playback.playingMusicId).toBe('m-storm')
+
+      await wrapper.find('.btn-danger').trigger('click')
+      await flushPromises()
+
+      expect(deleteScene).toHaveBeenCalledWith('s2')
+      expect(player.playingSceneId).toBe('s1')
+      expect(playback.playingAmbienceIds.has('amb-1')).toBe(true)
+      expect(playback.playingAmbienceIds.has('amb-2')).toBe(false)
+      expect(playback.playingMusicId).toBe('m-storm')
+    })
+
+    it('stops a Music track the deleted Scene started individually', async () => {
+      const { wrapper, player, playback } = await openTavernWhileStormPlays()
+      await playback.playMusicTrack(JSON.parse(JSON.stringify(tavern.music[0])))
+      await flushPromises()
+      expect(playback.playingMusicId).toBe('m-tavern')
+
+      await wrapper.find('.btn-danger').trigger('click')
+      await flushPromises()
+
+      expect(player.playingSceneId).toBe('s1')
+      expect(playback.playingMusicId).toBeNull()
+    })
+  })
+
   it('works the same for Discord streaming: survives the list, marks the row, stops from there', async () => {
     await router.push('/scenes/s1')
     await router.isReady()
@@ -2460,6 +2593,93 @@ describe('sceneView — failure handling and stale playback (#655)', () => {
     expect(router.currentRoute.value.path).toBe('/scenes/s1')
     expect(toasts.toasts.some(t => t.type === 'error')).toBe(true)
     wrapper.unmount()
+  })
+})
+
+describe('sceneView — resolving a missing sound (#715)', () => {
+  const withMissing = {
+    ...JSON.parse(JSON.stringify(scene)),
+    ambience: [
+      {
+        soundId: 'amb-gone',
+        soundName: 'Old rain',
+        volume: 80,
+        enabled: false,
+      },
+      {
+        soundId: 'amb-1',
+        soundName: 'Rain',
+        volume: 80,
+        enabled: false,
+      },
+    ],
+  }
+
+  beforeEach(async () => {
+    const { getScene, saveScene } = await import('@/api/scenes')
+    const { listAmbience } = await import('@/api/sounds')
+    vi.mocked(getScene).mockResolvedValue(JSON.parse(JSON.stringify(withMissing)))
+    vi.mocked(saveScene).mockReset()
+    vi.mocked(saveScene).mockResolvedValue(undefined as never)
+    vi.mocked(listAmbience).mockResolvedValue([
+      { id: 'amb-1', name: 'Rain', filename: 'rain.mp3' },
+      { id: 'amb-2', name: 'Fire', filename: 'fire.mp3' },
+    ] as never)
+  })
+
+  afterEach(async () => {
+    const { listAmbience } = await import('@/api/sounds')
+    vi.mocked(listAmbience).mockResolvedValue([
+      { id: 'amb-1', name: 'Rain', filename: 'rain.mp3' },
+    ] as never)
+  })
+
+  async function openResolveDialog() {
+    await router.push('/scenes/s1')
+    await router.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(SceneView, {
+      global: {
+        plugins: [pinia, router],
+        stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+      },
+    })
+    await flushPromises()
+    await wrapper.find('.sound-card-ambience .btn-resolve').trigger('click')
+    const dialog = wrapper.findComponent({ name: 'ResolveSoundDialog' })
+    expect(dialog.exists()).toBe(true)
+    return {
+      wrapper,
+      dialog,
+      toasts: useToastStore(pinia),
+    }
+  }
+
+  it('offers only library sounds not already in the category', async () => {
+    const { dialog } = await openResolveDialog()
+    expect((dialog.props('sounds') as { id: string }[]).map(s => s.id)).toEqual(['amb-2'])
+  })
+
+  it('refuses to relink onto a sound already in the category', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    const { wrapper, dialog, toasts } = await openResolveDialog()
+    dialog.vm.$emit('resolved', 'amb-1', 'Rain')
+    await flushPromises()
+
+    expect(saveScene).not.toHaveBeenCalled()
+    expect(toasts.toasts.some(t => t.type === 'error' && t.text.includes('Rain'))).toBe(true)
+    expect(wrapper.findAll('.sound-card-ambience')).toHaveLength(2)
+    expect(wrapper.text()).toContain('Old rain')
+  })
+
+  it('relinks onto a sound not yet in the category', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    const { dialog } = await openResolveDialog()
+    dialog.vm.$emit('resolved', 'amb-2', 'Fire')
+    await flushPromises()
+
+    expect(saveScene).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(saveScene).mock.calls[0][0].ambience?.map(i => i.soundId)).toEqual(['amb-2', 'amb-1'])
   })
 })
 

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import AdmZip from 'adm-zip'
@@ -123,7 +123,6 @@ describe('exportScene', () => {
           volume: 80,
           loop: true,
         },
-        { soundId: 'theme-1', soundName: 'Theme again', volume: 60 },
       ],
       ambience: [
         {
@@ -137,6 +136,12 @@ describe('exportScene', () => {
         { soundId: 'boom-3', soundName: 'Boom' },
       ],
     })
+    // A save now drops a sound listed twice (#715); a scenes.json written
+    // before that can still hold one.
+    const scenesPath = join(tempRoot, 'data', 'scenes.json')
+    const stored = JSON.parse(readFileSync(scenesPath, 'utf-8'))
+    stored.find((s: { id: string }) => s.id === saved.id).music.push({ soundId: 'theme-1', soundName: 'Theme again', volume: 60 })
+    writeFileSync(scenesPath, JSON.stringify(stored))
     const targetZip = join(tempRoot, 'bundled.zip')
     await exportScene(config, saved.id, targetZip)
 

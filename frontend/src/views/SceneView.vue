@@ -502,11 +502,56 @@ function onSceneDragEnd() {
   dropTargetSceneId.value = null
 }
 
+// The open Scene need not be the Playing Scene: a Scene Hotkey or
+// Previous/Next plays another one without navigating (#715). Deleting the
+// Playing Scene, or one opened while nothing plays, tears everything down;
+// otherwise only what this Scene started individually stops, leaving the
+// Playing Scene's own Ambience and Music alone.
+async function stopDeletedScenePlayback(deleted: Scene) {
+  const playingId = player.playingSceneId
+  if (playingId === null || playingId === deleted.id) {
+    logInfo(`[scenes] Deleted scene ${deleted.id} ${playingId === null
+      ? 'with nothing playing'
+      : 'was the Playing Scene'}, stopping all playback`)
+    stopScene()
+    return
+  }
+  let playingAmbience = new Set<string>()
+  try {
+    const playing = await getScene(playingId)
+    playingAmbience = new Set(playing?.ambience.map(i => i.soundId) ?? [])
+  }
+  catch (err) {
+    console.warn(`[scenes] Couldn't read Playing Scene ${playingId} while deleting scene ${deleted.id}, stopping all of its Ambience:`, err)
+  }
+  // A Scene start or Scene Crossfade landing meanwhile already replaced what
+  // was playing; stopping by the stale Playing Scene could cut the new one.
+  if (player.playingSceneId !== playingId) {
+    logInfo(`[scenes] Deleted scene ${deleted.id}: Playing Scene changed from ${playingId} to ${player.playingSceneId}, leaving playback alone`)
+    return
+  }
+  const ambience = deleted.ambience
+    .map(i => i.soundId)
+    .filter(soundId => !playingAmbience.has(soundId))
+  for (const soundId of ambience)
+    stopAmbience(soundId)
+  const music = playingMusicId.value
+  const stopsMusic = music !== null
+    && deleted.music.some(i => i.soundId === music)
+    && playback.musicSceneId !== playingId
+  if (stopsMusic)
+    stopMusicPlayback()
+  logInfo(`[scenes] Deleted scene ${deleted.id} while Scene ${playingId} plays, keeping it; stopped its Ambience [${ambience.join(', ')}]${stopsMusic
+    ? `, Music ${music}`
+    : ''}`)
+}
+
 async function deleteCurrentScene() {
   // eslint-disable-next-line no-alert -- simple confirm for destructive action
   if (!scene.value || !confirm(`Delete "${scene.value.name}"? This can't be undone.`))
     return
-  const { id, name } = scene.value
+  const deleted = scene.value
+  const { id, name } = deleted
   logInfo(`[scenes] Deleting scene ${id}`)
   try {
     await deleteScene(id)
@@ -516,9 +561,8 @@ async function deleteCurrentScene() {
     toast.show({ type: 'error', text: `Couldn't delete "${name}". Try again.` })
     return
   }
-  // Only once it is gone: stops the Playing Scene if this is it, and any
-  // ambience/music started individually on this open Scene either way.
-  stopScene()
+  // Only once it is gone.
+  await stopDeletedScenePlayback(deleted)
   await loadScenes()
   await router.push('/scenes')
   scene.value = null
@@ -599,10 +643,23 @@ async function doImportScene() {
   }
 }
 
-async function relinkSound(item: SceneItem, soundId: string, soundName: string) {
+/** The library sounds a missing item may be relinked to: none already listed elsewhere in its category. */
+function relinkCandidates(category: SceneCategory, item: SceneItem): SoundFile[] {
+  const listed = new Set((scene.value?.[category] ?? []).filter(i => i !== item).map(i => i.soundId))
+  return librarySounds(category).filter(s => !listed.has(s.id))
+}
+
+async function relinkSound(category: SceneCategory, item: SceneItem, soundId: string, soundName: string) {
   if (!scene.value)
     return
   const previous = item.soundName ?? item.soundId
+  // A second item with the same id would share its card key and playback (#715).
+  if (scene.value[category].some(i => i !== item && i.soundId === soundId)) {
+    console.warn(`[scenes] relink of ${item.soundId} to ${soundId} refused in scene ${scene.value.id}: ${category} already lists it`)
+    toast.show({ type: 'error', text: `${soundName} is already in this scene's ${category}.` })
+    return
+  }
+  logInfo(`[scenes] Relinking ${category} item ${item.soundId} to ${soundId} in scene ${scene.value.id}`)
   item.soundId = soundId
   item.soundName = soundName
   await Promise.all([
@@ -918,8 +975,8 @@ watch(sceneId, (newId) => {
       v-if="resolveTarget"
       :item="resolveTarget.item"
       :category="resolveTarget.category"
-      :sounds="librarySounds(resolveTarget.category)"
-      @resolved="async (id: string, name: string) => { await relinkSound(resolveTarget!.item, id, name); resolveTarget = null }"
+      :sounds="relinkCandidates(resolveTarget.category, resolveTarget.item)"
+      @resolved="async (id: string, name: string) => { await relinkSound(resolveTarget!.category, resolveTarget!.item, id, name); resolveTarget = null }"
       @close="resolveTarget = null"
     />
   </main>

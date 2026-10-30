@@ -170,7 +170,20 @@ function normalizeItems(raw: unknown, category: SoundCategory, sceneName: string
     return []
   if (!Array.isArray(raw))
     rejectInput(`Scene ${category} must be a list`)
-  return raw.map((item, index) => normalizeItem(item, category, index, sceneName))
+  const items = raw.map((item, index) => normalizeItem(item, category, index, sceneName))
+  // The editor keys a category's cards and its Ambience playback by sound id,
+  // so a second item with the same id would act as the first (#715). Dropped
+  // rather than rejected: a Scene stored or exported before then may hold one,
+  // and must stay editable and importable.
+  const seen = new Set<string>()
+  return items.filter(({ soundId }) => {
+    if (!seen.has(soundId)) {
+      seen.add(soundId)
+      return true
+    }
+    log.warn(`Scene "${sceneName}": dropped a second ${category} item for sound ${soundId}`)
+    return false
+  })
 }
 
 function withoutHotkey(items: SceneItem[]): SceneItem[] {

@@ -400,6 +400,38 @@ describe('createSceneStore', () => {
       expect(await store.list()).toEqual([])
     })
 
+    it.each(['music', 'ambience', 'effects'] as const)('keeps only the first item of a sound listed twice in %s (#715)', async (category) => {
+      const store = createSceneStore(config)
+      const saved = await store.save({
+        name: 'A',
+        [category]: [
+          { soundId: 'fire', volume: 30 },
+          { soundId: 'rain' },
+          { soundId: 'fire', volume: 90 },
+        ],
+      })
+      expect(saved[category]).toEqual([
+        { soundId: 'fire', volume: 30 },
+        { soundId: 'rain' },
+      ])
+      expect((await store.get(saved.id))?.[category]).toEqual(saved[category])
+    })
+
+    it('allows the same sound in different categories', async () => {
+      const store = createSceneStore(config)
+      const saved = await store.save({
+        name: 'A',
+        ambience: [
+          { soundId: 'rain' },
+        ],
+        effects: [
+          { soundId: 'rain' },
+        ],
+      })
+      expect(saved.ambience[0].soundId).toBe('rain')
+      expect(saved.effects[0].soundId).toBe('rain')
+    })
+
     it('clamps volumes into 0-100 and drops values of the wrong type', async () => {
       const store = createSceneStore(config)
       const saved = await store.save({
