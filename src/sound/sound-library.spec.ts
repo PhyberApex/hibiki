@@ -366,6 +366,7 @@ describe('sound ids stay inside the library directory', () => {
   })
 
   afterEach(() => {
+    jest.restoreAllMocks()
     rmSync(tempRoot, { recursive: true, force: true })
   })
 
@@ -422,5 +423,53 @@ describe('sound ids stay inside the library directory', () => {
     await expect(createSoundLibrary(config).getFilePath('music', 'Tavern Song v1.2 (live)'))
       .resolves
       .toBe(join(config.audio.musicDir, 'Tavern Song v1.2 (live).mp3'))
+  })
+
+  it('strips only the trailing extension when the stem contains it too (#662)', async () => {
+    writeFileSync(join(config.audio.musicDir, 'rain.wav-mix.wav'), 'x')
+    const lib = createSoundLibrary(config)
+    const [sound] = await lib.list('music')
+    expect(sound!.id).toBe('rain.wav-mix')
+    expect(sound!.name).toBe('Rain.Wav Mix')
+    await expect(lib.getFilePath('music', sound!.id)).resolves.toBe(join(config.audio.musicDir, 'rain.wav-mix.wav'))
+  })
+
+  it('resolves an id to its own file, not to a longer name sharing the prefix (#662)', async () => {
+    writeFileSync(join(config.audio.musicDir, 'rain.wav-mix.wav'), 'x')
+    writeFileSync(join(config.audio.musicDir, 'rain.wav'), 'x')
+    const lib = createSoundLibrary(config)
+    await expect(lib.getFilePath('music', 'rain')).resolves.toBe(join(config.audio.musicDir, 'rain.wav'))
+    await expect(lib.getFilePath('music', 'rain.wav-mix')).resolves.toBe(join(config.audio.musicDir, 'rain.wav-mix.wav'))
+  })
+
+  it('warns when a listed file has an id that cannot be resolved back to it (#662)', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    writeFileSync(join(config.audio.musicDir, 'no-extension'), 'x')
+    const [sound] = await createSoundLibrary(config).list('music')
+    expect(sound!.id).toBe('no-extension')
+    expect(warn.mock.calls.flat().join(' ')).toMatch(/no-extension.*cannot be resolved/)
+  })
+
+  it('does not blame a resolvable file for sharing its id with an extensionless one (#662)', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    writeFileSync(join(config.audio.musicDir, 'rain'), 'x')
+    writeFileSync(join(config.audio.musicDir, 'rain.mp3'), 'x')
+    const lib = createSoundLibrary(config)
+    await lib.list('music')
+    const lines = warn.mock.calls.map(call => call.join(' '))
+    expect(lines.filter(line => /shares its id/.test(line))).toHaveLength(0)
+    expect(lines.filter(line => /"rain" has no extension/.test(line))).toHaveLength(1)
+    await expect(lib.getFilePath('music', 'rain')).resolves.toBe(join(config.audio.musicDir, 'rain.mp3'))
+  })
+
+  it('warns once when two listed files share an id, not on every list (#662)', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    writeFileSync(join(config.audio.musicDir, 'thunder.mp3'), 'x')
+    writeFileSync(join(config.audio.musicDir, 'thunder.ogg'), 'x')
+    const lib = createSoundLibrary(config)
+    await lib.list('music')
+    await lib.list('music')
+    const lines = warn.mock.calls.map(call => call.join(' ')).filter(line => /shares its id "thunder"/.test(line))
+    expect(lines).toHaveLength(1)
   })
 })

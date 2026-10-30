@@ -6,7 +6,7 @@ import fg from 'fast-glob'
 import slugify from 'slugify'
 import { canDecode as canDecodeFile } from '../audio/decoders'
 import { createLogger } from '../logger'
-import { isSafeSoundId, isSoundCategory } from './sound-id'
+import { idFromFilename, isSafeSoundId, isSoundCategory } from './sound-id'
 import { createSoundTagsStore } from './sound-tags.store'
 
 const log = createLogger('sounds')
@@ -34,8 +34,7 @@ function resolvePath(config: Config, category: SoundCategory, filename?: string)
 }
 
 function humanize(filename: string): string {
-  return filename
-    .replace(extname(filename), '')
+  return idFromFilename(filename)
     .replace(/[-_]+/g, ' ')
     .replace(/\b\w/g, c => c.toUpperCase())
 }
@@ -51,18 +50,34 @@ async function findFilename(config: Config, category: SoundCategory, id: string)
     throw new Error(`Invalid sound id '${String(id)}'`)
   }
   const escaped = escapeGlob(id)
-  const matches = await fg(`${escaped}.*`, { cwd: base, onlyFiles: true, dot: false })
-  if (!matches.length)
+  // `rain.*` also matches `rain.wav-mix.wav`, whose id is `rain.wav-mix`
+  const match = (await fg(`${escaped}.*`, { cwd: base, onlyFiles: true, dot: false }))
+    .find(filename => idFromFilename(filename) === id)
+  if (!match)
     throw new Error(`Sound '${id}' not found in ${category}`)
-  return matches[0]
+  return match
+}
+
+/** Why `findFilename` cannot get from `id` back to `file`, or null when it can. */
+function unresolvableIdProblem(file: string, id: string, filesById: Map<string, string>): string | null {
+  if (id === file)
+    return 'has no extension'
+  if (!isSafeSoundId(id))
+    return `has the unsafe id ${JSON.stringify(id)}`
+  const other = filesById.get(id)
+  if (other !== undefined)
+    return `shares its id ${JSON.stringify(id)} with ${JSON.stringify(other)}`
+  return null
 }
 
 function buildId(name: string): string {
-  return `${slugify(name.replace(extname(name), ''), { lower: true, strict: true })}-${Date.now()}`
+  return `${slugify(idFromFilename(name), { lower: true, strict: true })}-${Date.now()}`
 }
 
 export function createSoundLibrary(config: Config) {
   const tagsStore = createSoundTagsStore(config)
+  /** Files already warned about, so a refreshing view does not repeat the warning on every list. */
+  const warnedUnresolvable = new Set<string>()
 
   return {
     async list(category: SoundCategory): Promise<SoundFile[]> {
@@ -77,11 +92,20 @@ export function createSoundLibrary(config: Config) {
       }
       const tagsById = await tagsStore.getAll(category)
       const results: SoundFile[] = []
+      const filesById = new Map<string, string>()
       for (const file of entries) {
         const filePath = resolvePath(config, category, file)
         try {
           const stats = await stat(filePath)
-          const id = file.replace(extname(file), '')
+          const id = idFromFilename(file)
+          const problem = unresolvableIdProblem(file, id, filesById)
+          // only a file `findFilename` would return claims its id, so a later duplicate is compared with the winner
+          if (!problem)
+            filesById.set(id, file)
+          if (problem && !warnedUnresolvable.has(`${category}/${file}`)) {
+            warnedUnresolvable.add(`${category}/${file}`)
+            log.warn(`${category} file ${JSON.stringify(file)} ${problem}, so its id cannot be resolved back to it`)
+          }
           results.push({
             id,
             name: humanize(file),

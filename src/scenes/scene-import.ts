@@ -7,7 +7,7 @@ import { basename, extname, join } from 'node:path'
 import AdmZip from 'adm-zip'
 import slugify from 'slugify'
 import { createLogger } from '../logger'
-import { isSafeSoundId, SOUND_CATEGORIES } from '../sound/sound-id'
+import { idFromFilename, isSafeSoundId, SOUND_CATEGORIES } from '../sound/sound-id'
 import { createSceneStore, isRecord, normalizeMusicMode, uniqueSceneName } from './scene-store'
 
 const log = createLogger('scene-import')
@@ -130,10 +130,6 @@ interface BundledSound {
   reuse: boolean
 }
 
-function soundIdOf(filename: string): string {
-  return filename.replace(extname(filename), '')
-}
-
 /**
  * Ids already in a library folder, keyed lower-cased because Windows and macOS
  * folders are case-insensitive, with each file's size.
@@ -155,7 +151,7 @@ function readLibrary(destDir: string): Map<string, { filename: string, size: num
     catch {
       continue
     }
-    const id = soundIdOf(filename).toLowerCase()
+    const id = idFromFilename(filename).toLowerCase()
     byId.set(id, [
       ...(byId.get(id) ?? []),
       { filename, size },
@@ -207,7 +203,7 @@ function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImportLimit
         continue
       total += entry.header.size
       assertWithinLimits(entry, total, limits, archiveName)
-      const soundId = soundIdOf(filename)
+      const soundId = idFromFilename(filename)
       const sameFile = library.get(soundId.toLowerCase())?.find(f => f.filename === filename && f.size === entry.header.size)
       if (sameFile && !plannedIds.has(soundId.toLowerCase())) {
         plannedIds.add(soundId.toLowerCase())
@@ -261,7 +257,7 @@ function writeBundledSounds(planned: BundledSound[], written: BundledSound[]): v
     if (filename === original)
       log.info(`Extracted ${entry.entryName} to ${join(destDir, filename)}`)
     else
-      log.info(`Extracted ${entry.entryName} to ${join(destDir, filename)} as ${soundId}: ${soundIdOf(original)} is already in the library`)
+      log.info(`Extracted ${entry.entryName} to ${join(destDir, filename)} as ${soundId}: ${idFromFilename(original)} is already in the library`)
   }
 }
 

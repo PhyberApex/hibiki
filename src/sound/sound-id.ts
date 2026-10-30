@@ -1,4 +1,5 @@
 import type { SoundCategory } from './sound.types'
+import { parse } from 'node:path'
 
 export const SOUND_CATEGORIES: readonly SoundCategory[] = ['music', 'effects', 'ambience']
 
@@ -18,4 +19,12 @@ export function isSafeSoundId(id: unknown): id is string {
     && id !== '.'
     && id !== '..'
     && !/[/\\\0]/.test(id)
+}
+
+/**
+ * The sound id of a library file: its name with only the trailing extension
+ * removed, so `rain.wav-mix.wav` is `rain.wav-mix` (#662).
+ */
+export function idFromFilename(filename: string): string {
+  return parse(filename).name
 }
