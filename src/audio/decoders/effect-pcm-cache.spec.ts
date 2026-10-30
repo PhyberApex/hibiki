@@ -122,7 +122,7 @@ describe('effectPcmCache', () => {
   })
 
   it('evicts the least recently used entry once the entry cap is exceeded', async () => {
-    const cache = createEffectPcmCache(2)
+    const cache = createEffectPcmCache({ maxEntries: 2 })
     const decodeA = jest.fn().mockReturnValue(streamOf('a'))
     const decodeB = jest.fn().mockReturnValue(streamOf('b'))
     const decodeC = jest.fn().mockReturnValue(streamOf('c'))
@@ -138,7 +138,7 @@ describe('effectPcmCache', () => {
   })
 
   it('touching an entry on a cache hit protects it from eviction as the most recently used', async () => {
-    const cache = createEffectPcmCache(2)
+    const cache = createEffectPcmCache({ maxEntries: 2 })
     const decodeA = jest.fn().mockReturnValue(streamOf('a'))
     const decodeB = jest.fn().mockReturnValue(streamOf('b'))
     const decodeC = jest.fn().mockReturnValue(streamOf('c'))
@@ -173,5 +173,81 @@ describe('effectPcmCache', () => {
 
     expect(decode).toHaveBeenCalledTimes(2)
     expect((await collect(stream)).toString()).toBe('ok')
+  })
+
+  describe('byte budget and oversize cut-off (#664)', () => {
+    let warn: jest.SpyInstance
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    })
+    afterEach(() => warn.mockRestore())
+
+    function decoderOfMs(ms: number): jest.Mock {
+      return jest.fn().mockImplementation(() => NodeReadable.from([
+        pcmChunkOfMs(ms),
+      ]))
+    }
+
+    it('evicts least recently used entries once the total cached bytes exceed the budget', async () => {
+      const cache = createEffectPcmCache({ maxBytes: pcmChunkOfMs(250).length })
+      const decodeA = decoderOfMs(100)
+      const decodeB = decoderOfMs(100)
+      const decodeC = decoderOfMs(100)
+      await collect((await cache.get('a', decodeA)).stream)
+      await collect((await cache.get('b', decodeB)).stream)
+
+      await collect((await cache.get('c', decodeC)).stream)
+      await collect((await cache.get('b', decodeB)).stream)
+      await collect((await cache.get('c', decodeC)).stream)
+      await collect((await cache.get('a', decodeA)).stream)
+
+      // 300 ms of PCM is over the 250 ms budget, so adding 'c' evicted 'a'.
+      expect(decodeA).toHaveBeenCalledTimes(2)
+      expect(decodeB).toHaveBeenCalledTimes(1)
+      expect(decodeC).toHaveBeenCalledTimes(1)
+    })
+
+    it('plays an Effect over the per-file cut-off with its full duration but never retains it, warning with the sound name', async () => {
+      const cache = createEffectPcmCache({ maxEntryBytes: pcmChunkOfMs(500).length })
+      const decode = decoderOfMs(600)
+
+      const first = await cache.get('/effects/long-battle.mp3', decode)
+
+      expect(first.durationMs).toBe(600)
+      expect(await collect(first.stream)).toHaveLength(pcmChunkOfMs(600).length)
+      expect(warn).toHaveBeenCalledWith('[effect-pcm-cache]', expect.stringContaining('long-battle.mp3'))
+
+      const second = await cache.get('/effects/long-battle.mp3', decode)
+      expect(decode).toHaveBeenCalledTimes(2)
+      expect(second.durationMs).toBe(600)
+      expect(await collect(second.stream)).toHaveLength(pcmChunkOfMs(600).length)
+      expect(warn).toHaveBeenCalledTimes(1)
+    })
+
+    it('streams a known-oversize Effect straight from its decoder instead of waiting for the full decode', async () => {
+      const cache = createEffectPcmCache({ maxEntryBytes: pcmChunkOfMs(500).length })
+      await collect((await cache.get('long', decoderOfMs(600))).stream)
+
+      const { PassThrough } = jest.requireActual('node:stream')
+      const live = new PassThrough()
+      const result = await cache.get('long', () => live)
+
+      expect(result.stream).toBe(live)
+      expect(result.durationMs).toBe(600)
+    })
+
+    it('does not let an oversize Effect evict the cached ones', async () => {
+      const cache = createEffectPcmCache({
+        maxBytes: pcmChunkOfMs(300).length,
+        maxEntryBytes: pcmChunkOfMs(200).length,
+      })
+      const decodeSmall = decoderOfMs(100)
+      await collect((await cache.get('small', decodeSmall)).stream)
+
+      await collect((await cache.get('huge', decoderOfMs(1000))).stream)
+      await collect((await cache.get('small', decodeSmall)).stream)
+
+      expect(decodeSmall).toHaveBeenCalledTimes(1)
+    })
   })
 })

@@ -90,4 +90,30 @@ describe('createProducerStream', () => {
 
     await expect(collect(stream)).rejects.toThrow('decode failed')
   })
+
+  describe('zero-frame decodes (#664)', () => {
+    let warn: jest.SpyInstance
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    })
+    afterEach(() => warn.mockRestore())
+
+    it('warns, naming the stream, when a producer finishes without pushing any bytes', async () => {
+      const stream = createProducerStream(async (push) => {
+        await push(Buffer.alloc(0))
+      }, 'wav silent.wav')
+
+      await expect(collect(stream)).resolves.toHaveLength(0)
+      expect(warn).toHaveBeenCalledWith('[pcm-stream]', expect.stringContaining('wav silent.wav'))
+    })
+
+    it('does not warn when the producer pushed audio', async () => {
+      const stream = createProducerStream(async (push) => {
+        await push(Buffer.alloc(4))
+      }, 'wav door.wav')
+
+      await collect(stream)
+      expect(warn).not.toHaveBeenCalled()
+    })
+  })
 })

@@ -796,8 +796,9 @@ export class GuildAudioManager extends EventEmitter {
    * #408). Rejects, leaving every other instance untouched, if
    * `streamFactory` fails. Resolves with the new instance's id and
    * duration (#509) — `streamFactory` reports the duration alongside the
-   * stream since the Effect PCM cache always decodes the whole file first
-   * (see `effect-pcm-cache.ts`). If this slot is evicted or bulk-cleared
+   * stream since the Effect PCM cache decodes the whole file first, or
+   * remembers the duration of one too large to cache (see
+   * `effect-pcm-cache.ts`). If this slot is evicted or bulk-cleared
    * while its decode is in flight it still resolves with a well-formed
    * id/duration though it never started: `activeEffects` is the source of
    * truth for liveness, and `stopEffect` on such an id is a safe no-op.

@@ -20,7 +20,10 @@ export class ProducerAbortedError extends Error {
  * Node never calls `read()` on a destroyed Readable, so `destroy()` itself wakes
  * a producer parked in `push` by rejecting it with a `ProducerAbortedError`;
  * without that the producer's `finally` (freeing the decoder, closing the file)
- * never runs. `label` names the stream in the debug log.
+ * never runs. `label` names the stream in the log. A producer that finishes
+ * without pushing a single byte is logged as a warning: the stream still ends
+ * normally, so the input "plays out" instantly, and without the line a GM's
+ * "this sound does nothing" report has no trace (#664).
  */
 export function createProducerStream(
   produce: (push: (chunk: Buffer) => Promise<void>) => Promise<void>,
@@ -28,6 +31,7 @@ export function createProducerStream(
 ): Readable {
   let pending: { resolve: () => void, reject: (err: Error) => void } | null = null
   let aborted = false
+  let bytesPushed = 0
 
   const stream = new Readable({
     read() {
@@ -53,6 +57,7 @@ export function createProducerStream(
       return Promise.reject(new ProducerAbortedError())
     if (chunk.length === 0)
       return Promise.resolve()
+    bytesPushed += chunk.length
     const canContinue = stream.push(chunk)
     if (canContinue)
       return Promise.resolve()
@@ -63,8 +68,11 @@ export function createProducerStream(
 
   produce(push).then(
     () => {
-      if (!aborted)
-        stream.push(null)
+      if (aborted)
+        return
+      if (bytesPushed === 0)
+        log.warn(`${label} decoded zero frames; it will play out instantly`)
+      stream.push(null)
     },
     (err: unknown) => {
       if (err instanceof ProducerAbortedError) {

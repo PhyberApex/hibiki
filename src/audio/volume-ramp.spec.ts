@@ -93,4 +93,62 @@ describe('rampVolume', () => {
     expect(onVolume).not.toHaveBeenCalled()
     expect(onDone).not.toHaveBeenCalled()
   })
+
+  it.each([
+    NaN,
+    Infinity,
+    -Infinity,
+  ])('treats a non-finite duration (%p) as an immediate cut instead of a ramp that never completes', (durationMs) => {
+    const onVolume = jest.fn()
+    const onDone = jest.fn()
+    rampVolume({
+      from: 80,
+      to: 20,
+      durationMs,
+      onVolume,
+      onDone,
+    })
+
+    expect(onVolume).toHaveBeenCalledTimes(1)
+    expect(onVolume).toHaveBeenCalledWith(20)
+    expect(onDone).toHaveBeenCalledTimes(1)
+    jest.advanceTimersByTime(5000)
+    expect(onVolume).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    NaN,
+    Infinity,
+  ])('never reports a non-finite volume when `to` is %p: leaves the volume alone and completes', (to) => {
+    const onVolume = jest.fn()
+    const onDone = jest.fn()
+    rampVolume({
+      from: 80,
+      to,
+      durationMs: 1000,
+      onVolume,
+      onDone,
+    })
+
+    jest.advanceTimersByTime(2000)
+    expect(onVolume).not.toHaveBeenCalled()
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('jumps straight to `to` when `from` is not finite', () => {
+    const onVolume = jest.fn()
+    const onDone = jest.fn()
+    rampVolume({
+      from: NaN,
+      to: 40,
+      durationMs: 1000,
+      onVolume,
+      onDone,
+    })
+
+    jest.advanceTimersByTime(2000)
+    expect(onVolume).toHaveBeenCalledTimes(1)
+    expect(onVolume).toHaveBeenCalledWith(40)
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
 })

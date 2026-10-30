@@ -15,8 +15,17 @@ interface WavFormat {
   sampleRate: number
   bitsPerSample: number
   dataStart: number
+  /** Bytes of sample data; `Infinity` for "read to end of file". */
   dataSize: number
 }
+
+/**
+ * Data chunk sizes that mean "unknown, read to EOF": un-finalised or streamed
+ * WAVs whose writer never patched the header (some recorders leave 0,
+ * streaming writers use the 0xFFFFFFFF placeholder). Taking 0 literally made
+ * such a file decode zero frames and "play out" instantly (#664).
+ */
+const DATA_SIZE_UNKNOWN = new Set([0, 0xFFFFFFFF])
 
 /** Integer PCM at 8/16/24/32 bits or 32-bit IEEE float; anything else (ADPCM, A-law, ...) is left to the renderer. */
 function isSupportedFormat({ formatTag, bitsPerSample }: WavFormat): boolean {
@@ -81,7 +90,13 @@ async function parseWavFormat(handle: FileHandle): Promise<WavFormat> {
     else if (chunk.id === 'data') {
       if (!fmt)
         throw new Error('WAV data chunk appeared before fmt chunk')
-      return { ...fmt, dataStart: bodyOffset, dataSize: chunk.size }
+      return {
+        ...fmt,
+        dataStart: bodyOffset,
+        dataSize: DATA_SIZE_UNKNOWN.has(chunk.size)
+          ? Infinity
+          : chunk.size,
+      }
     }
 
     offset = bodyOffset + chunk.size + (chunk.size % 2)
