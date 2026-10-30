@@ -195,6 +195,26 @@ describe('routed tabs store', () => {
       expect(store.isRouted(1)).toBe(false)
       expect(error).toHaveBeenCalled()
     })
+
+    it('a capture setup that fails after the tab was captured stops the tab\'s tracks', async () => {
+      const store = useRoutedTabsStore()
+      const track = {
+        stop: vi.fn(),
+      }
+      vi.mocked(captureTabStream).mockResolvedValueOnce({
+        getTracks: () => [track],
+      } as unknown as MediaStream)
+      vi.mocked(captureFromMediaStream).mockRejectedValueOnce(new Error('no worklet'))
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      await store.setRouted(1, true)
+
+      expect(track.stop).toHaveBeenCalledTimes(1)
+      expect(stopEffectStream).toHaveBeenCalledWith('g1', 'browser-1')
+      expect(store.isRouted(1)).toBe(false)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[routed-tabs]'), expect.any(Error))
+    })
   })
 
   describe('under the Local Target', () => {

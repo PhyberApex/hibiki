@@ -44,6 +44,37 @@ describe('audio element diagnostics', () => {
     expect(console.warn).not.toHaveBeenCalled()
   })
 
+  it('a later load on a reused element is not reported by an earlier failed wait', async () => {
+    const el = new Audio()
+    const failed = waitForPlayable(el, 'first load')
+    el.dispatchEvent(new Event('error'))
+    await expect(failed).rejects.toBeDefined()
+
+    el.dispatchEvent(new Event('canplaythrough'))
+
+    // eslint-disable-next-line no-console
+    expect(console.info).not.toHaveBeenCalledWith(expect.stringContaining('first load'))
+  })
+
+  it('removes both listeners once settled, so a reused element does not accumulate them', async () => {
+    const el = new Audio()
+    const add = vi.spyOn(el, 'addEventListener')
+    const remove = vi.spyOn(el, 'removeEventListener')
+
+    for (let i = 0; i < 3; i++) {
+      const pending = waitForPlayable(el, `load ${i}`)
+      el.dispatchEvent(new Event(i % 2
+        ? 'error'
+        : 'canplaythrough'))
+      await pending.catch(() => {})
+    }
+
+    const added = add.mock.calls.map(([type, listener]) => [type, listener])
+    const removed = remove.mock.calls.map(([type, listener]) => [type, listener])
+    expect(added).toHaveLength(6)
+    expect(removed).toEqual(expect.arrayContaining(added))
+  })
+
   it('watchAudioElement logs errors and stalls, attaching only once', () => {
     const el = watchAudioElement(new Audio())
     watchAudioElement(el)
