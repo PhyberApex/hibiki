@@ -65,6 +65,10 @@ function registerApiHandler(ipcMain, api, getHotkeys) {
  * (`audio:startEffectStream` / `audio:effectChunk` / `audio:stopEffectStream`)
  * feeds `player.startEffectStream`, one layered mixer input per stream, with
  * `audio:setEffectStreamVolume` adjusting a keyed stream live (a Routed Tab).
+ *
+ * Streams end only on an explicit stop from the renderer, so a renderer that
+ * crashes or reloads would leave them as silent, still-"playing" mixer inputs:
+ * main calls the returned `endAll(reason)` whenever the renderer goes away.
  */
 function registerAudioStreamHandlers(ipcMain, player) {
   /** Map<guildId, Map<streamId|undefined, PassThrough>> - multiple music streams per guild, mixed by backend */
@@ -97,6 +101,28 @@ function registerAudioStreamHandlers(ipcMain, player) {
     return stream
   }
 
+  /**
+   * Hands a freshly registered stream to the player. A stream the player did
+   * not take (it threw, or returned anything but `true`, as for the Local
+   * Target) has no consumer, so it is dropped from the registry instead of
+   * buffering every later chunk.
+   */
+  const handOver = (lane, streams, streamId, guildId, start) => {
+    let accepted
+    try {
+      accepted = start(streams.get(streamId))
+    }
+    catch (err) {
+      ipcLog.warn(`${lane} ${streamId} for guild ${guildId} refused by the player; dropping it`)
+      end(streams, streamId)
+      throw err
+    }
+    if (accepted !== true) {
+      ipcLog.info(`${lane} ${streamId} for guild ${guildId} not taken by the player; dropping it`)
+      end(streams, streamId)
+    }
+  }
+
   const unknownKey = (lane, guildId, streamId) => `${lane}:${guildId}:${streamId}`
 
   const write = (lane, stream, guildId, streamId, chunk) => {
@@ -115,10 +141,11 @@ function registerAudioStreamHandlers(ipcMain, player) {
   }
 
   ipcMain.handle('audio:startStream', async (_, { guildId, metadata, streamId }) => {
-    const stream = replace(streamsFor(audioStreams, guildId), streamId)
+    const streams = streamsFor(audioStreams, guildId)
+    replace(streams, streamId)
     warnedUnknown.delete(unknownKey('audio:chunk', guildId, streamId))
     ipcLog.info(`audio:startStream ${streamId} for guild ${guildId}`)
-    player.startStream(guildId, stream, metadata, streamId)
+    handOver('audio:startStream', streams, streamId, guildId, stream => player.startStream(guildId, stream, metadata, streamId))
   })
 
   ipcMain.on('audio:chunk', (_, { guildId, streamId, chunk }) => {
@@ -135,12 +162,13 @@ function registerAudioStreamHandlers(ipcMain, player) {
 
   ipcMain.handle('audio:startEffectStream', async (_, { guildId, streamId, volume }) => {
     const id = streamId || `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-    const stream = replace(streamsFor(effectStreams, guildId), id)
+    const streams = streamsFor(effectStreams, guildId)
+    replace(streams, id)
     warnedUnknown.delete(unknownKey('audio:effectChunk', guildId, id))
     ipcLog.info(`audio:startEffectStream ${id} for guild ${guildId}${volume !== undefined
       ? ` at volume ${volume}`
       : ''}`)
-    player.startEffectStream(guildId, stream, id, volume)
+    handOver('audio:startEffectStream', streams, id, guildId, stream => player.startEffectStream(guildId, stream, id, volume))
     return id
   })
 
@@ -170,6 +198,37 @@ function registerAudioStreamHandlers(ipcMain, player) {
       streams.clear()
     }
   })
+
+  /**
+   * Ends every stream on both lanes, e.g. after the renderer crashed or
+   * reloaded and nobody is left to stop them. Music streams are also stopped
+   * in the player so its state no longer reports them; an effect stream's
+   * mixer input drains and removes itself once its source has ended.
+   */
+  const endAll = (reason) => {
+    for (const [guildId, streams] of audioStreams) {
+      for (const streamId of streams.keys()) {
+        end(streams, streamId)
+        ipcLog.info(`Ended music stream ${streamId} for guild ${guildId}: ${reason}`)
+        try {
+          player.stopStream(guildId, streamId)
+        }
+        catch (err) {
+          ipcLog.error(`Could not stop music stream ${streamId} for guild ${guildId}:`, err)
+        }
+      }
+    }
+    for (const [guildId, streams] of effectStreams) {
+      for (const streamId of streams.keys()) {
+        end(streams, streamId)
+        ipcLog.info(`Ended effect stream ${streamId} for guild ${guildId}: ${reason}`)
+      }
+    }
+    audioStreams.clear()
+    effectStreams.clear()
+  }
+
+  return { endAll }
 }
 
 module.exports = { createLocalSink, registerApiHandler, registerAudioStreamHandlers }

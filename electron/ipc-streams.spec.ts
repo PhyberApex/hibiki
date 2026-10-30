@@ -16,9 +16,9 @@ function fakeIpcMain() {
 
 function fakePlayer() {
   return {
-    startStream: jest.fn(),
+    startStream: jest.fn(() => true),
     stopStream: jest.fn(),
-    startEffectStream: jest.fn(),
+    startEffectStream: jest.fn(() => true),
     setEffectStreamVolume: jest.fn(),
   }
 }
@@ -286,6 +286,143 @@ describe('registerAudioStreamHandlers: effect lane', () => {
     await expect(ipc.invoke('audio:stopEffectStream', { guildId: 'g9', streamId: 'x' })).resolves.toBeUndefined()
 
     expect(spies.warn).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('registerAudioStreamHandlers: start failures', () => {
+  it('leaves no entry when player.startStream throws, so later chunks are dropped', async () => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    player.startStream.mockImplementation(() => {
+      throw new Error('Not connected to a voice channel. Join first.')
+    })
+    registerAudioStreamHandlers(ipc, player)
+
+    await expect(ipc.invoke('audio:startStream', { guildId: 'g1', streamId: 's1' })).rejects.toThrow('Not connected')
+    const stream: Readable = player.startStream.mock.calls[0][1]
+    expect(stream.writableEnded).toBe(true)
+
+    ipc.send('audio:chunk', {
+      guildId: 'g1',
+      streamId: 's1',
+      chunk: new Uint8Array([1]),
+    })
+    expect(stream.readableLength).toBe(0)
+    expect(spies.warn).toHaveBeenCalledWith('[ipc]', expect.stringContaining('unknown stream s1 in guild g1'))
+  })
+
+  it('leaves no entry when player.startEffectStream throws', async () => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    player.startEffectStream.mockImplementation(() => {
+      throw new Error('Not connected to a voice channel. Join first.')
+    })
+    registerAudioStreamHandlers(ipc, player)
+
+    await expect(ipc.invoke('audio:startEffectStream', { guildId: 'g1', streamId: 'browser-1' })).rejects.toThrow('Not connected')
+    const stream: Readable = player.startEffectStream.mock.calls[0][1]
+    expect(stream.writableEnded).toBe(true)
+
+    ipc.send('audio:effectChunk', {
+      guildId: 'g1',
+      streamId: 'browser-1',
+      chunk: new Uint8Array([1]),
+    })
+    expect(stream.readableLength).toBe(0)
+  })
+
+  it.each([
+    false,
+    undefined,
+  ])('leaves no entry when the player does not take the stream (returns %s, as for the Local Target)', async (accepted) => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    player.startStream.mockReturnValue(accepted as boolean)
+    player.startEffectStream.mockReturnValue(accepted as boolean)
+    registerAudioStreamHandlers(ipc, player)
+
+    await ipc.invoke('audio:startStream', { guildId: 'local', streamId: 's1' })
+    await ipc.invoke('audio:startEffectStream', { guildId: 'local', streamId: 'browser-1' })
+    const music: Readable = player.startStream.mock.calls[0][1]
+    const effect: Readable = player.startEffectStream.mock.calls[0][1]
+
+    ipc.send('audio:chunk', {
+      guildId: 'local',
+      streamId: 's1',
+      chunk: new Uint8Array([1]),
+    })
+    ipc.send('audio:effectChunk', {
+      guildId: 'local',
+      streamId: 'browser-1',
+      chunk: new Uint8Array([1]),
+    })
+    expect(music.writableEnded).toBe(true)
+    expect(effect.writableEnded).toBe(true)
+    expect(music.readableLength).toBe(0)
+    expect(effect.readableLength).toBe(0)
+  })
+})
+
+describe('registerAudioStreamHandlers: endAll', () => {
+  it('ends every stream on both lanes, tells the player to stop the Music streams and logs each id', async () => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    const streams = registerAudioStreamHandlers(ipc, player)
+
+    await ipc.invoke('audio:startStream', { guildId: 'g1', streamId: 's1' })
+    await ipc.invoke('audio:startStream', { guildId: 'g2', streamId: 's2' })
+    await ipc.invoke('audio:startEffectStream', { guildId: 'g1', streamId: 'browser-3' })
+    const all: Readable[] = [
+      ...player.startStream.mock.calls.map(c => c[1]),
+      ...player.startEffectStream.mock.calls.map(c => c[1]),
+    ]
+    all.forEach(collect)
+    const allEnded = Promise.all(all.map(ended))
+
+    streams.endAll('renderer crashed')
+    await allEnded
+
+    expect(player.stopStream).toHaveBeenCalledWith('g1', 's1')
+    expect(player.stopStream).toHaveBeenCalledWith('g2', 's2')
+    expect(player.stopStream).toHaveBeenCalledTimes(2)
+    for (const id of ['s1', 's2', 'browser-3'])
+      expect(spies.info).toHaveBeenCalledWith('[ipc]', expect.stringMatching(new RegExp(`${id}.*renderer crashed`)))
+  })
+
+  it('forgets every stream, so late chunks are dropped and a second endAll is a no-op', async () => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    const streams = registerAudioStreamHandlers(ipc, player)
+
+    await ipc.invoke('audio:startStream', { guildId: 'g1', streamId: 's1' })
+    await ipc.invoke('audio:startEffectStream', { guildId: 'g1', streamId: 'browser-3' })
+    streams.endAll('reload')
+    ipc.send('audio:effectChunk', {
+      guildId: 'g1',
+      streamId: 'browser-3',
+      chunk: new Uint8Array([1]),
+    })
+    expect(spies.warn).toHaveBeenCalledWith('[ipc]', expect.stringContaining('unknown stream browser-3 in guild g1'))
+
+    player.stopStream.mockClear()
+    streams.endAll('closed')
+    expect(player.stopStream).not.toHaveBeenCalled()
+  })
+
+  it('keeps tearing down the other streams when player.stopStream throws', async () => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    const streams = registerAudioStreamHandlers(ipc, player)
+    await ipc.invoke('audio:startStream', { guildId: 'g1', streamId: 's1' })
+    await ipc.invoke('audio:startStream', { guildId: 'g2', streamId: 's2' })
+    player.stopStream.mockImplementationOnce(() => {
+      throw new Error('boom')
+    })
+
+    expect(() => streams.endAll('closed')).not.toThrow()
+    expect(player.stopStream).toHaveBeenCalledTimes(2)
+    expect(player.startStream.mock.calls[1][1].writableEnded).toBe(true)
+    expect(spies.error).toHaveBeenCalled()
   })
 })
 

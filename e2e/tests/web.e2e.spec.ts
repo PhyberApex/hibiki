@@ -480,6 +480,34 @@ test.describe('Hibiki Electron E2E', () => {
     }
   })
 
+  test('a crashed renderer leaves no chunked-IPC music stream playing (#653)', async ({ electronApp, page }) => {
+    if (!isE2eConfigured())
+      test.skip()
+
+    const log = await logSinceNow(electronApp)
+    await page.goto('hibiki://app/scenes')
+    await page.locator('.channel-item').first().waitFor({ timeout: 30_000 })
+    await invokeApi(page, 'player', 'join', [
+      { guildId, channelId: voiceChannelId },
+    ])
+    await page.evaluate(({ g }) => (window as any).hibiki.invoke('audio:startStream', {
+      guildId: g,
+      streamId: 'e2e-crash',
+      metadata: {
+        id: 'e2e-crash',
+        name: 'e2e crash stream',
+        filename: 'e2e.m4a',
+        category: 'music',
+      },
+    }), { g: guildId })
+    await expect.poll(async () => (await targetState(page, guildId))?.track?.id).toBe('e2e-crash')
+
+    await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer())
+
+    await expect.poll(log).toContain(`Ended music stream e2e-crash for guild ${guildId}: renderer gone`)
+    await expect.poll(log).toContain(`Renderer music stream e2e-crash stopped in guild ${guildId}`)
+  })
+
   test('upload song, music list includes it', async ({ page }) => {
     const timestamp = String(Date.now())
     const unique = `e2e-upload-song-${timestamp}`
