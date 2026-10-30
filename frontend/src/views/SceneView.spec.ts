@@ -2510,6 +2510,7 @@ describe('sceneView — Scene order (#697)', () => {
     expect(names(wrapper)).toEqual(['Bravo', 'Alpha', 'Charlie'])
     expect(moveScene).toHaveBeenLastCalledWith('a', 1)
     expect(document.activeElement).toBe(grip(wrapper, 'Alpha').element)
+    expect(wrapper.find('[data-testid="scene-order-status"]').text()).toBe('Alpha moved to position 2 of 3')
 
     await grip(wrapper, 'Charlie').trigger('keydown', { key: 'ArrowUp' })
     await flushPromises()
@@ -2538,6 +2539,9 @@ describe('sceneView — Scene order (#697)', () => {
     await rows[0].trigger('dragover')
     expect(rows[0].classes()).toContain('scene-list-row-drop-before')
     expect(rows[2].classes()).toContain('scene-list-row-dragging')
+    await rows[0].trigger('dragleave')
+    expect(rows[0].classes()).not.toContain('scene-list-row-drop-before')
+    await rows[0].trigger('dragover')
     await rows[0].trigger('drop')
     await flushPromises()
     expect(names(wrapper)).toEqual(['Charlie', 'Alpha', 'Bravo'])
@@ -2556,6 +2560,26 @@ describe('sceneView — Scene order (#697)', () => {
     await flushPromises()
     expect(names(wrapper)).toEqual(['Alpha', 'Bravo', 'Charlie'])
     expect(moveScene).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('saves quick successive moves one at a time, in order', async () => {
+    const { moveScene } = await import('@/api/scenes')
+    const settle: (() => void)[] = []
+    vi.mocked(moveScene).mockImplementation(() => new Promise<void>(resolve => settle.push(resolve)))
+    const { wrapper } = await mountList()
+
+    await grip(wrapper, 'Alpha').trigger('keydown', { key: 'ArrowDown' })
+    await grip(wrapper, 'Alpha').trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    expect(names(wrapper)).toEqual(['Bravo', 'Charlie', 'Alpha'])
+    expect(moveScene).toHaveBeenCalledTimes(1)
+    settle[0]()
+    await flushPromises()
+    expect(moveScene).toHaveBeenCalledTimes(2)
+    expect(moveScene).toHaveBeenLastCalledWith('a', 2)
+    settle[1]()
+    await flushPromises()
     wrapper.unmount()
   })
 

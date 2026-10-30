@@ -538,41 +538,48 @@ async function submitCreateScene() {
 }
 
 // Scene order (#697): the list order is the `scenes.json` order that
-// Previous/Next Scene walk. Moves apply locally first, then save; a failed
-// save reloads the stored order.
+// Previous/Next Scene walk. Moves apply locally at once and are saved one at a
+// time, in order; a failed save reloads the stored order.
 const draggedSceneId = ref<string | null>(null)
 const dropTargetSceneId = ref<string | null>(null)
+const sceneOrderAnnouncement = ref('')
+let pendingSceneMoves: Promise<void> = Promise.resolve()
 
-async function moveSceneTo(id: string, toIndex: number) {
-  const from = scenes.value.findIndex(s => s.id === id)
+const ARROW_STEPS: Record<string, number> = { ArrowUp: -1, ArrowDown: 1 }
+
+function sceneIndex(id: string): number {
+  return scenes.value.findIndex(s => s.id === id)
+}
+
+function moveSceneTo(id: string, toIndex: number): Promise<void> {
+  const from = sceneIndex(id)
   if (from === -1 || toIndex < 0 || toIndex >= scenes.value.length || toIndex === from)
-    return
+    return pendingSceneMoves
   const next = [...scenes.value]
   const [moved] = next.splice(from, 1)
   next.splice(toIndex, 0, moved)
   scenes.value = next
+  sceneOrderAnnouncement.value = `${moved.name} moved to position ${toIndex + 1} of ${next.length}`
   logInfo(`[scenes] Moving scene ${id} from position ${from + 1} to ${toIndex + 1}`)
-  try {
-    await moveScene(id, toIndex)
-  }
-  catch (err) {
-    console.warn(`[scenes] move failed for scene ${id}:`, err)
-    toast.show({ type: 'error', text: `Couldn't move "${moved.name}". Try again.` })
-    await loadScenes()
-  }
+  pendingSceneMoves = pendingSceneMoves.then(async () => {
+    try {
+      await moveScene(id, toIndex)
+    }
+    catch (err) {
+      console.warn(`[scenes] move failed for scene ${id}:`, err)
+      toast.show({ type: 'error', text: `Couldn't move "${moved.name}". Try again.` })
+      await loadScenes()
+    }
+  })
+  return pendingSceneMoves
 }
 
 async function onSceneGripKeydown(event: KeyboardEvent, id: string) {
-  const step = event.key === 'ArrowUp'
-    ? -1
-    : event.key === 'ArrowDown'
-      ? 1
-      : 0
-  if (step === 0)
+  const step = ARROW_STEPS[event.key]
+  if (!step)
     return
   event.preventDefault()
-  const from = scenes.value.findIndex(s => s.id === id)
-  await moveSceneTo(id, from + step)
+  void moveSceneTo(id, sceneIndex(id) + step)
   // Re-rendering the moved row can drop focus; keep it on the grip so the GM
   // can keep stepping.
   await nextTick()
@@ -584,9 +591,7 @@ function dropIndicator(id: string): string {
   const dragged = draggedSceneId.value
   if (!dragged || dropTargetSceneId.value !== id || dragged === id)
     return ''
-  const from = scenes.value.findIndex(s => s.id === dragged)
-  const to = scenes.value.findIndex(s => s.id === id)
-  return to < from
+  return sceneIndex(id) < sceneIndex(dragged)
     ? 'scene-list-row-drop-before'
     : 'scene-list-row-drop-after'
 }
@@ -617,7 +622,14 @@ function onSceneDrop(event: DragEvent, id: string) {
   if (!dragged)
     return
   event.preventDefault()
-  void moveSceneTo(dragged, scenes.value.findIndex(s => s.id === id))
+  void moveSceneTo(dragged, sceneIndex(id))
+}
+
+function onSceneDragLeave(event: DragEvent, id: string) {
+  // Moving onto a child of the same row fires dragleave too; only clear when leaving the row.
+  const row = event.currentTarget as HTMLElement | null
+  if (dropTargetSceneId.value === id && !(event.relatedTarget instanceof Node && row?.contains(event.relatedTarget)))
+    dropTargetSceneId.value = null
 }
 
 function onSceneDragEnd() {
@@ -878,6 +890,9 @@ watch(sceneId, (newId) => {
       </p>
 
       <!-- Scene list -->
+      <p class="sr-only" aria-live="polite" data-testid="scene-order-status">
+        {{ sceneOrderAnnouncement }}
+      </p>
       <ul v-if="scenes.length > 0" class="scene-list">
         <li
           v-for="s in scenes"
@@ -885,6 +900,7 @@ watch(sceneId, (newId) => {
           class="scene-list-row"
           :class="[draggedSceneId === s.id ? 'scene-list-row-dragging' : '', dropIndicator(s.id)]"
           @dragover="onSceneDragOver($event, s.id)"
+          @dragleave="onSceneDragLeave($event, s.id)"
           @drop="onSceneDrop($event, s.id)"
         >
           <button
