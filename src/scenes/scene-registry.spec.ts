@@ -102,6 +102,42 @@ describe('createSceneRegistry', () => {
     await expect(createSceneRegistry(config).fetchIndex()).rejects.toThrow('unexpected network call')
   })
 
+  describe('offline with a stale cache (#709)', () => {
+    const staleAt = () => new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString()
+    let warn: jest.SpyInstance
+
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      warn.mockRestore()
+    })
+
+    it('fetchIndex serves the stale cache and warns when the fetch fails', async () => {
+      writeCache({ ...remoteIndex, version: 8 }, staleAt())
+      await expect(createSceneRegistry(config).fetchIndex()).resolves.toMatchObject({ version: 8 })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(warn).toHaveBeenCalledWith('[scene-registry]', expect.stringMatching(/unexpected network call.*cached index from .*25 h old/))
+    })
+
+    it('fetchIndex serves the stale cache when the index comes back malformed', async () => {
+      writeCache({ ...remoteIndex, version: 8 }, staleAt())
+      respondWith({ version: 1 })
+      await expect(createSceneRegistry(config).fetchIndex()).resolves.toMatchObject({ version: 8 })
+    })
+
+    it('fetchIndex(true) still throws when the fetch fails, cache or not', async () => {
+      writeCache({ ...remoteIndex, version: 8 }, staleAt())
+      await expect(createSceneRegistry(config).fetchIndex(true)).rejects.toThrow('unexpected network call')
+    })
+
+    it('fetchIndex still throws when the fetch fails and there is no cache', async () => {
+      await expect(createSceneRegistry(config).fetchIndex()).rejects.toThrow('unexpected network call')
+      expect(warn).not.toHaveBeenCalledWith('[scene-registry]', expect.stringContaining('cached index'))
+    })
+  })
+
   it('keeps the cache under HIBIKI_USER_DATA when set', async () => {
     const userData = join(tempRoot, 'user-data')
     mkdirSync(join(userData, 'data'), { recursive: true })
