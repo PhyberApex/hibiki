@@ -242,5 +242,44 @@ describe('resolveSoundDialog', () => {
       await wrapper.find('.resolve-overlay').trigger('click')
       expect(wrapper.emitted('close')).toHaveLength(1)
     })
+
+    it('emits close on Escape and stops listening once unmounted', () => {
+      const onClose = vi.fn()
+      const wrapper = mount(ResolveSoundDialog, {
+        props: {
+          item: { soundId: 'missing-id', soundName: 'Thunder' },
+          category: 'ambience',
+          sounds: [rain],
+          onClose,
+        },
+      })
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      expect(onClose).toHaveBeenCalledTimes(1)
+      wrapper.unmount()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores keys other than Escape', () => {
+      const wrapper = mountDialog()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+      expect(wrapper.emitted('close')).toBeUndefined()
+    })
+  })
+
+  describe('focus', () => {
+    it('is modal and moves focus to the first control on open', () => {
+      const wrapper = mount(ResolveSoundDialog, {
+        props: {
+          item: { soundId: 'missing-id', soundName: 'Thunder' },
+          category: 'ambience',
+          sounds: [rain],
+        },
+        attachTo: document.body,
+      })
+      expect(wrapper.find('[role="dialog"]').attributes('aria-modal')).toBe('true')
+      expect(document.activeElement).toBe(wrapper.find('button[aria-label="Close"]').element)
+      wrapper.unmount()
+    })
   })
 })

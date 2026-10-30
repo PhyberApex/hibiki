@@ -39,6 +39,20 @@ describe('hotkeyRecorder', () => {
     expect(button(wrapper).text()).toContain('Press a key')
   })
 
+  it('ignores the auto-repeat of the Enter that armed it', async () => {
+    const wrapper = mountRecorder()
+    await button(wrapper).trigger('keydown', { code: 'Enter', key: 'Enter' })
+    await button(wrapper).trigger('click')
+    await button(wrapper).trigger('keydown', { code: 'Enter', key: 'Enter', repeat: true })
+    await button(wrapper).trigger('keydown', { code: 'Enter', key: 'Enter', repeat: true })
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(button(wrapper).text()).toContain('Press a key')
+    await button(wrapper).trigger('keydown', { code: 'F13' })
+    expect(wrapper.emitted('update:modelValue')).toEqual([
+      ['F13'],
+    ])
+  })
+
   it('ignores keys while not armed', async () => {
     const wrapper = mountRecorder()
     await button(wrapper).trigger('keydown', { code: 'F13' })
