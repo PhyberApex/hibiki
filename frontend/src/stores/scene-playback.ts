@@ -770,15 +770,16 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     })
     // The backend has made this its current track before answering, so from
     // here on its disappearance from the state push means it played out.
-    if (channel.token === token && channel.soundId === null) {
-      // Cleared meanwhile by a newer crossfade that took this track over as
-      // its outgoing one: no clock for a track no longer on the channel.
+    if (channel.token !== token)
+      return
+    // Cleared meanwhile (a Stop, or a newer crossfade that took this track
+    // over as its outgoing one): no clock for a track no longer on the channel.
+    if (channel.soundId === null) {
       logInfo(`[scene] Music ${item.soundId} confirmed on ${channel.streamId} (token ${token}) after the channel was cleared, no clock`)
+      return
     }
-    else if (channel.token === token) {
-      channel.backendTarget = target
-      startMusicClock(channel, durationMs)
-    }
+    channel.backendTarget = target
+    startMusicClock(channel, durationMs)
   }
 
   async function playMusic(item: SceneItem, channel: MusicChannel = primaryMusicChannel, initialVolume?: number, fadeInMs?: number) {
@@ -1409,7 +1410,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     // A newer crossfade may re-claim the outgoing channel for its own incoming
     // track before this one's backend play lands; that track is then not ours to clear.
     const outgoingToken = outgoingChannel.token
-    const outgoingStillOurs = (action: string) => {
+    const outgoingStillOurs = (action: 'clearing' | 'stopping') => {
       if (outgoingChannel.token === outgoingToken)
         return true
       logInfo(`[scene] crossfade to ${targetTrack?.soundId}: not ${action} ${outgoingChannel.streamId}, re-claimed meanwhile (token ${outgoingToken} -> ${outgoingChannel.token})`)
