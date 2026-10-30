@@ -301,7 +301,8 @@ function onAdd(event: Event) {
   font-size: 0.75rem;
 }
 
-/* Compact session layout (899.98px, kept in sync with SceneView and App.vue):
+/* Compact session layout (899.98px, not 900px: see App.vue; keep in sync
+   with it and the other components/scene files):
    the GM can still fire Effects, but not add, remove or relink them. */
 @media (max-width: 899.98px) {
   .add-select,

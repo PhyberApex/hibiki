@@ -213,7 +213,8 @@ const nowPlayingLabel = computed(() => {
   color: var(--color-text-muted);
 }
 
-/* Compact session layout (899.98px, kept in sync with SceneView and App.vue):
+/* Compact session layout (899.98px, not 900px: see App.vue; keep in sync
+   with it and the other components/scene files):
    the summary stands in for the hidden Ambience and Music cards. */
 @media (max-width: 899.98px) {
   .now-playing-line {

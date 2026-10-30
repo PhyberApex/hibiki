@@ -796,7 +796,7 @@ watch(sceneId, (newId) => {
             type="button"
             class="btn-stop-list"
             :aria-label="`Stop ${s.name}`"
-            @click="stopScene"
+            @click="stopScene()"
           >
             Stop
           </button>
@@ -829,7 +829,6 @@ watch(sceneId, (newId) => {
       </div>
     </template>
 
-    <!-- ═══════ DETAIL STATE ═══════ -->
     <!-- ═══════ DETAIL STATE ═══════ -->
     <template v-else>
       <SceneHeader

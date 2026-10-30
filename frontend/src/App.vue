@@ -841,7 +841,8 @@ const showStorageWarnings = computed(() =>
 /* Compact session layout: sidebar collapses into a header.
    899.98px (not 900px) keeps "900px and above unchanged" exact — max-width is
    inclusive, so matching exactly 900 here would also catch the 900px boundary.
-   Kept in sync with the matching breakpoint in SceneView.vue. */
+   Kept in sync with the matching breakpoint in the components/scene cards,
+   header and playback bar. */
 @media (max-width: 899.98px) {
   .sidebar {
     display: none;

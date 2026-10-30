@@ -141,7 +141,8 @@ const emit = defineEmits<{
   font-size: 0.85em;
 }
 
-/* Compact session layout (899.98px, kept in sync with SceneView and App.vue):
+/* Compact session layout (899.98px, not 900px: see App.vue; keep in sync
+   with it and the other components/scene files):
    Scene editing is hidden. */
 @media (max-width: 899.98px) {
   .detail-actions {

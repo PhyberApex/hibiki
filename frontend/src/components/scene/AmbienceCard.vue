@@ -219,7 +219,8 @@ function updateRepeat(item: SceneItem, field: 'repeatMin' | 'repeatMax', value: 
   color: var(--color-text);
 }
 
-/* Compact session layout (899.98px, kept in sync with SceneView and App.vue):
+/* Compact session layout (899.98px, not 900px: see App.vue; keep in sync
+   with it and the other components/scene files):
    Scene editing is hidden, Effects + playback only. */
 @media (max-width: 899.98px) {
   .scene-section-ambience {
