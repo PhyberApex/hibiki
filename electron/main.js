@@ -6,6 +6,7 @@ const { createHotkeys } = require('./hotkeys')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createLogger, setupFileLogging } = require('./logger')
 const { guardMainWindowNavigation, isWebUrl } = require('./navigation-guard')
+const { parseRange, resolveAppPath } = require('./protocol')
 const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
@@ -327,26 +328,30 @@ function serveSoundFile(request, filePath) {
   }[ext] || 'application/octet-stream'
 
   const rangeHeader = request.headers.get('range')
-  if (rangeHeader) {
-    const match = rangeHeader.match(/bytes=(\d+)-(\d*)/)
-    if (match) {
-      const start = Number.parseInt(match[1], 10)
-      const end = match[2]
-        ? Number.parseInt(match[2], 10)
-        : totalSize - 1
-      const chunkSize = end - start + 1
-      protocolLog.debug(`${path.basename(filePath)} 206 bytes ${start}-${end}/${totalSize}`)
-      return fileResponse(filePath, {
-        status: 206,
-        headers: {
-          'Content-Type': mime,
-          'Content-Length': String(chunkSize),
-          'Content-Range': `bytes ${start}-${end}/${totalSize}`,
-          'Accept-Ranges': 'bytes',
-          'Access-Control-Allow-Origin': SOUND_ALLOWED_ORIGIN,
-        },
-      }, { start, end })
-    }
+  const range = parseRange(rangeHeader, totalSize)
+  if (range.kind === 'unsatisfiable') {
+    protocolLog.debug(`${path.basename(filePath)} 416 range "${rangeHeader}" outside ${totalSize} bytes`)
+    return new Response(null, {
+      status: 416,
+      headers: {
+        'Content-Range': `bytes */${totalSize}`,
+        'Access-Control-Allow-Origin': SOUND_ALLOWED_ORIGIN,
+      },
+    })
+  }
+  if (range.kind === 'partial') {
+    const { start, end } = range
+    protocolLog.debug(`${path.basename(filePath)} 206 bytes ${start}-${end}/${totalSize}`)
+    return fileResponse(filePath, {
+      status: 206,
+      headers: {
+        'Content-Type': mime,
+        'Content-Length': String(end - start + 1),
+        'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+        'Accept-Ranges': 'bytes',
+        'Access-Control-Allow-Origin': SOUND_ALLOWED_ORIGIN,
+      },
+    }, { start, end })
   }
 
   protocolLog.debug(`${path.basename(filePath)} 200 full ${totalSize} bytes${rangeHeader
@@ -388,12 +393,11 @@ function registerHibikiProtocol(api, webDistDir) {
     }
 
     if (host === 'app') {
-      let filePath = pathname === '/'
-        ? path.join(webDistDir, 'index.html')
-        : path.join(webDistDir, pathname)
-      // SPA fallback: serve index.html for routes that don't match a static file
-      if (!fs.existsSync(filePath))
-        filePath = path.join(webDistDir, 'index.html')
+      const filePath = resolveAppPath(webDistDir, pathname)
+      if (!filePath) {
+        protocolLog.warn(`Rejected hibiki://app${pathname}: malformed or outside the app bundle`)
+        return new Response('Not Found', { status: 404 })
+      }
       const ext = path.extname(filePath).toLowerCase()
       const mime = {
         '.html': 'text/html',
