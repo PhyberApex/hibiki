@@ -702,10 +702,10 @@ export class GuildAudioManager extends EventEmitter {
     await startStream(options.fadeInMs ?? 0, false)
 
     if (this.ambienceGenerations.get(soundId) !== myGeneration || this.engineDestroyed) {
-      // The initial start itself was superseded or the Target torn down (the check inside
-      // startStream already aborted it before it registered with the
-      // engine, so there is nothing of ours left to tear down) — leave
-      // whatever the newer call set up untouched.
+      // The initial start itself was superseded or the Target torn down
+      // (the check inside startStream already aborted it before it
+      // registered with the engine, so there is nothing of ours left to
+      // tear down) — leave whatever the newer call set up untouched.
       return
     }
 
