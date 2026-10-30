@@ -43,6 +43,13 @@ function validateItem(raw: unknown, where: string): string | null {
     if (raw[key] !== undefined && typeof raw[key] !== 'boolean')
       return `${where} ${key} must be true or false`
   }
+  for (const key of ['repeatMin', 'repeatMax']) {
+    const value = raw[key]
+    if (value !== undefined && !(typeof value === 'number' && Number.isFinite(value) && value >= 0))
+      return `${where} ${key} must be a number of seconds from 0`
+  }
+  if (typeof raw.repeatMin === 'number' && typeof raw.repeatMax === 'number' && raw.repeatMax < raw.repeatMin)
+    return `${where} repeatMax must not be less than repeatMin`
   if (raw.bundledPath !== undefined && typeof raw.bundledPath !== 'string')
     return `${where} bundledPath must be a string`
   if (raw.source !== undefined && !(isRecord(raw.source) && typeof raw.source.name === 'string'))
@@ -116,6 +123,10 @@ function manifestItemToSceneItem(
     item.enabled = pkg.enabled
   if (pkg.loop !== undefined)
     item.loop = pkg.loop
+  if (pkg.repeatMin !== undefined)
+    item.repeatMin = pkg.repeatMin
+  if (pkg.repeatMax !== undefined)
+    item.repeatMax = pkg.repeatMax
   if (pkg.source)
     item.source = pkg.source
   return item
@@ -328,6 +339,7 @@ export async function importScene(config: Config, sourceZipPath: string, limits:
     removeWrittenSounds(written)
     throw e
   }
-  log.info(`Imported "${saved.name}" (${saved.id})`)
+  const withRepeat = SOUND_CATEGORIES.reduce((n, category) => n + items[category].filter(i => i.repeatMin !== undefined || i.repeatMax !== undefined).length, 0)
+  log.info(`Imported "${saved.name}" (${saved.id}); ${withRepeat} item(s) carried a repeat interval`)
   return saved
 }

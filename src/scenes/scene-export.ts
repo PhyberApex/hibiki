@@ -60,6 +60,10 @@ function toPackageItem(
     pkg.enabled = item.enabled
   if (item.loop !== undefined)
     pkg.loop = item.loop
+  if (item.repeatMin !== undefined)
+    pkg.repeatMin = item.repeatMin
+  if (item.repeatMax !== undefined)
+    pkg.repeatMax = item.repeatMax
   if (item.source)
     pkg.source = item.source
   return pkg
