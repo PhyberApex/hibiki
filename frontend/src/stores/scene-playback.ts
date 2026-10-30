@@ -799,7 +799,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       el.onended = () => onMusicPlayedOut(channel, token)
       el.onerror = () => clearMusicChannel(channel)
       await el.play()
-      // An m4a track has no stored duration; its element knows it once playable.
+      // With no stored duration (its header could not be read), the element knows it once playable.
       if (channel.token === token) {
         startMusicClock(channel, track.durationMs ?? (Number.isFinite(el.duration) && el.duration > 0
           ? Math.round(el.duration * 1000)

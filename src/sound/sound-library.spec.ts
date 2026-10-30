@@ -552,3 +552,34 @@ describe('music durations (#695)', () => {
     expect(durationsFile(config)).toEqual({})
   })
 })
+
+describe('music durations: concurrent lazy measurement', () => {
+  it('two lists at once parse each never-measured file only once', async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-sound-durations-race-'))
+    const config = {
+      discord: { token: '' },
+      audio: {
+        storageRoot: tempRoot,
+        musicDir: join(tempRoot, 'music'),
+        effectsDir: join(tempRoot, 'effects'),
+        webDistDir: 'web-dist',
+      },
+      database: {
+        path: join(tempRoot, 'data', 'hibiki.json'),
+      },
+    }
+    mkdirSync(config.audio.musicDir, { recursive: true })
+    copyFileSync(join(FIXTURES_DIR, 'fixture-stereo-44100.ogg'), join(config.audio.musicDir, 'a.ogg'))
+    const durationModule = await import('./sound-duration')
+    const spy = jest.spyOn(durationModule, 'readDurationMs')
+    const lib = createSoundLibrary(config)
+    const [first, second] = await Promise.all([
+      lib.list('music'),
+      lib.list('music'),
+    ])
+    expect(first[0]!.durationMs).toBe(300)
+    expect(second[0]!.durationMs).toBe(300)
+    expect(spy).toHaveBeenCalledTimes(1)
+    spy.mockRestore()
+  })
+})

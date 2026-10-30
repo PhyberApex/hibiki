@@ -105,10 +105,20 @@ export function createSoundLibrary(config: Config) {
   const tagsStore = createSoundTagsStore(config)
   const durationsStore = createSoundDurationsStore(config)
 
+  /** One in-flight lazy measurement per category, so concurrent lists do not parse the same files twice. */
+  const measuring = new Map<SoundCategory, Promise<unknown>>()
+
   /** Durations for `files` of `category`, measuring and storing any never measured before (existing files, files dropped in by hand or an import). */
   async function durationsFor(category: SoundCategory, files: { id: string, path: string }[]): Promise<Map<string, number | null>> {
     if (!isMeasured(category))
       return new Map()
+    const prior = measuring.get(category) ?? Promise.resolve()
+    const run = prior.then(() => measureMissing(category, files))
+    measuring.set(category, run.catch(() => undefined))
+    return run
+  }
+
+  async function measureMissing(category: SoundCategory, files: { id: string, path: string }[]): Promise<Map<string, number | null>> {
     const known = await durationsStore.getAll(category)
     const measured = new Map<string, number | null>()
     for (const { id, path } of files) {
@@ -127,6 +137,7 @@ export function createSoundLibrary(config: Config) {
       ...measured,
     ])
   }
+
   /** Files already warned about, so a refreshing view does not repeat the warning on every list. */
   const warnedUnresolvable = new Set<string>()
 
