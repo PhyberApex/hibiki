@@ -401,7 +401,8 @@ async function onSceneFadeLengthChange(event: Event) {
 }
 
 async function changeVisionProvider(event: Event) {
-  const provider = (event.target as HTMLSelectElement).value as VisionProviderId
+  const select = event.target as HTMLSelectElement
+  const provider = select.value as VisionProviderId
   savingVisionProvider.value = true
   visionMessage.value = null
   try {
@@ -409,6 +410,9 @@ async function changeVisionProvider(event: Event) {
     syncVisionAdvancedInputs()
   }
   catch (e) {
+    console.warn(`[settings] Vision Provider ${provider} rejected:`, e)
+    // The key label, Base URL/Model fields and saveVisionKey follow the stored provider; the select must too.
+    select.value = visionConfig.value?.provider ?? 'claude'
     visionMessage.value = {
       type: 'error',
       text: e instanceof Error

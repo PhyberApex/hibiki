@@ -85,10 +85,37 @@ export function acceleratorFromEvent(event: KeyEventLike): string | undefined {
   return parts.join('+')
 }
 
-/** A bare letter or digit (Shift at most) would be stolen from every other app while Hibiki runs. */
+/** Keys other apps need for typing and navigation, beyond letters and digits. */
+const TYPING_KEYS = new Set([
+  'Space',
+  'Enter',
+  'Tab',
+  'Backspace',
+  'Delete',
+  'Up',
+  'Down',
+  'Left',
+  'Right',
+  '-',
+  '=',
+  '[',
+  ']',
+  '\\',
+  ';',
+  '\'',
+  ',',
+  '.',
+  '/',
+  '`',
+])
+
+/**
+ * A bare typing key (letter, digit, Space, Enter, Tab, Backspace, Delete, an arrow or punctuation;
+ * Shift at most) would be stolen from every other app while Hibiki runs.
+ */
 export function isBareTypingKey(accelerator: string): boolean {
   const parts = accelerator.split('+')
-  const key = parts[parts.length - 1]
+  const key = parts[parts.length - 1] ?? ''
   const modifiers = parts.slice(0, -1).filter(m => m !== 'Shift')
-  return modifiers.length === 0 && /^[A-Z0-9]$/i.test(key)
+  return modifiers.length === 0 && (/^[A-Z0-9]$/i.test(key) || TYPING_KEYS.has(key))
 }

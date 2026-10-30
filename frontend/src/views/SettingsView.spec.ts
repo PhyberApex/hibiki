@@ -691,6 +691,18 @@ describe('settingsView', () => {
       expect(wrapper.text()).toContain('endpoint configured below')
     })
 
+    it('restores the provider select when switching the Vision Provider fails', async () => {
+      vi.mocked(updateVisionProvider).mockRejectedValueOnce(new Error('disk full'))
+      const wrapper = mountSettings()
+      await flushPromises()
+      const select = wrapper.find<HTMLSelectElement>('#vision-provider')
+      await select.setValue('openai-compatible')
+      await flushPromises()
+      expect(select.element.value).toBe('claude')
+      expect(wrapper.find('#vision-base-url').exists()).toBe(false)
+      expect(wrapper.text()).toContain('disk full')
+    })
+
     it('saves a custom Base URL for the OpenAI-compatible provider', async () => {
       vi.mocked(fetchVisionConfig).mockResolvedValue({ ...UNCONFIGURED_VISION, provider: 'openai-compatible' })
       vi.mocked(updateVisionOpenAiBaseUrl).mockResolvedValue({
