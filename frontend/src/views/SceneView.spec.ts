@@ -2338,6 +2338,24 @@ describe('sceneView — failure handling and stale playback (#655)', () => {
     wrapper.unmount()
   })
 
+  it('turns a toggled-off Ambience sound back on when the toggle fails to save', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { wrapper } = await mountAtPath('/scenes/s1')
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.sound-card-ambience').classes()).toContain('pulse-breathe')
+
+    vi.mocked(saveScene).mockRejectedValue(new Error('disk full'))
+    await wrapper.find('[aria-label="Enable Rain"]').setValue(false)
+    await flushPromises()
+
+    expect((wrapper.find('[aria-label="Enable Rain"]').element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.find('.sound-card-ambience').classes()).toContain('pulse-breathe')
+    wrapper.unmount()
+  })
+
   it('brings a removed item back when the removal fails to save', async () => {
     const { saveScene } = await import('@/api/scenes')
     vi.mocked(saveScene).mockRejectedValue(new Error('disk full'))

@@ -89,11 +89,32 @@ function rememberPersisted(s: Scene | null) {
   persistedSeq = saveSeq
 }
 
+/** Records a save that reached disk; saves can only move the baseline forward. */
+function markPersisted(seq: number, sent: Scene) {
+  if (seq > persistedSeq && persistedScene?.id === sent.id) {
+    persistedScene = sent
+    persistedSeq = seq
+  }
+}
+
+// A rollback can undo several unsaved edits at once, so bring every audible
+// Ambience toggle and item volume of the open Scene back in line with it.
+function resyncAudioAfterRollback(undone: Scene, restored: Scene) {
+  for (const item of restored.ambience) {
+    const before = undone.ambience.find(i => i.soundId === item.soundId)
+    if (before && Boolean(before.enabled) !== Boolean(item.enabled))
+      playback.toggleAmbience(item)
+    updateAmbienceVolume(item)
+  }
+  for (const item of restored.music)
+    updateMusicVolume(item)
+}
+
 // Every in-place edit of the open Scene saves through here. A failure is
 // logged, toasted and, when no later save is in flight, rolled back to the
 // last persisted Scene (a later save carries this edit too, so its own outcome
-// decides). `onRollback` re-syncs audio with the restored Scene.
-async function persistScene(what: string, onRollback?: (restored: Scene) => void) {
+// decides).
+async function persistScene(what: string) {
   const current = scene.value
   if (!current)
     return
@@ -101,10 +122,8 @@ async function persistScene(what: string, onRollback?: (restored: Scene) => void
   const sent = cloneScene(current)
   try {
     await saveScene(current)
-    if (seq > persistedSeq && persistedScene?.id === sent.id) {
-      persistedScene = sent
-      persistedSeq = seq
-    }
+    markPersisted(seq, sent)
+    logInfo(`[scenes] Saved ${what} in scene ${sent.id}`)
   }
   catch (err) {
     const rollBack = seq === saveSeq && scene.value?.id === sent.id && persistedScene?.id === sent.id
@@ -114,9 +133,10 @@ async function persistScene(what: string, onRollback?: (restored: Scene) => void
     toast.show({ type: 'error', text: `Couldn't save ${what}. ${rollBack
       ? 'The change was undone.'
       : 'Try again.'}` })
-    if (rollBack && persistedScene) {
+    if (rollBack && persistedScene && scene.value) {
+      const undone = scene.value
       scene.value = cloneScene(persistedScene)
-      onRollback?.(scene.value)
+      resyncAudioAfterRollback(undone, scene.value)
     }
   }
 }
@@ -199,9 +219,11 @@ async function bindHotkey(errorKey: string, target: { hotkey?: string }, value: 
     delete target.hotkey
   const { [errorKey]: _cleared, ...rest } = hotkeyErrors.value
   hotkeyErrors.value = rest
+  const seq = ++saveSeq
+  const sent = cloneScene(scene.value)
   try {
     await saveScene(scene.value)
-    rememberPersisted(scene.value)
+    markPersisted(seq, sent)
     // The Scene list shows the Scene Hotkey chip, so refresh it from the store.
     await loadScenes()
   }
@@ -400,24 +422,8 @@ async function loadSounds() {
 function toggleAmbience(item: SceneItem) {
   persistScene(`${item.soundName ?? item.soundId} ${item.enabled
     ? 'on'
-    : 'off'}`, (restored) => {
-    const back = restored.ambience.find(i => i.soundId === item.soundId)
-    if (back)
-      playback.toggleAmbience(back)
-  })
+    : 'off'}`)
   playback.toggleAmbience(item)
-}
-
-function saveItemVolume(category: 'ambience' | 'music', item: SceneItem) {
-  persistScene(`the volume of ${item.soundName ?? item.soundId}`, (restored) => {
-    const back = restored[category].find(i => i.soundId === item.soundId)
-    if (!back)
-      return
-    if (category === 'ambience')
-      updateAmbienceVolume(back)
-    else
-      updateMusicVolume(back)
-  })
 }
 
 async function addToScene(category: 'ambience' | 'music' | 'effects', sound: SoundFile) {
@@ -1005,7 +1011,7 @@ watch(sceneId, (newId) => {
                     class="volume-slider"
                     :aria-label="`Volume for ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
                     @input="updateAmbienceVolume(item)"
-                    @change="saveItemVolume('ambience', item)"
+                    @change="persistScene(`the volume of ${item.soundName ?? item.soundId}`)"
                   >
                   <label class="toggle">
                     <input
@@ -1155,7 +1161,7 @@ watch(sceneId, (newId) => {
                     class="volume-slider"
                     :aria-label="`Volume for ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
                     @input="updateMusicVolume(item)"
-                    @change="saveItemVolume('music', item)"
+                    @change="persistScene(`the volume of ${item.soundName ?? item.soundId}`)"
                   >
                   <label v-if="musicMode === 'single'" class="toggle" title="Loop">
                     <input v-model="item.loop" type="checkbox" :aria-label="`Loop ${item.soundName ?? resolveSoundName('music', item.soundId)}`" @change="persistScene(`the loop of ${item.soundName ?? item.soundId}`)">
