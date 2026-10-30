@@ -19,6 +19,7 @@ import {
   updateVisionProvider,
 } from '@/api/config'
 import { fetchHotkeyStatus } from '@/api/hotkeys'
+import { copyDiagnostics } from '@/api/logs'
 import { fetchUpdateCheckSettings, updateUpdateCheckEnabled } from '@/api/updates'
 import { fetchUsageStats, updateUsageStatsEnabled } from '@/api/usage-stats'
 import { useAccessibilityStore } from '@/stores/accessibility'
@@ -92,6 +93,12 @@ vi.mock('@/api/updates', () => ({
 vi.mock('@/api/usage-stats', () => ({
   fetchUsageStats: vi.fn().mockResolvedValue({ enabled: false, prompted: false }),
   updateUsageStatsEnabled: vi.fn().mockResolvedValue({ enabled: true, prompted: false }),
+}))
+
+vi.mock('@/api/logs', () => ({
+  fetchLogPath: vi.fn().mockResolvedValue('/data/logs/hibiki.log'),
+  openLogFolder: vi.fn().mockResolvedValue(undefined),
+  copyDiagnostics: vi.fn().mockResolvedValue({ lines: 330 }),
 }))
 
 vi.mock('@/api/hotkeys', () => ({
@@ -324,6 +331,26 @@ describe('settingsView', () => {
       expect(items.join('\n')).toContain('Scene played')
       expect(items.join('\n')).toContain('never the key')
       expect(wrapper.find('[data-testid="usage-stats-privacy-link"]').attributes('href')).toBe('https://phyberapex.github.io/hibiki/privacy')
+    })
+  })
+
+  describe('diagnostics section', () => {
+    it('copies the diagnostics summary and confirms it', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      await wrapper.find('[data-testid="copy-diagnostics"]').trigger('click')
+      await flushPromises()
+      expect(copyDiagnostics).toHaveBeenCalledTimes(1)
+      expect(wrapper.find('[data-testid="diagnostics-message"]').text()).toContain('copied to the clipboard')
+    })
+
+    it('says so when copying fails', async () => {
+      vi.mocked(copyDiagnostics).mockRejectedValueOnce(new Error('clipboard busy'))
+      const wrapper = mountSettings()
+      await flushPromises()
+      await wrapper.find('[data-testid="copy-diagnostics"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostics-message"]').text()).toContain('clipboard busy')
     })
   })
 

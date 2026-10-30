@@ -1,7 +1,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { Readable } = require('node:stream')
-const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { buildDiagnosticsSummary, LOG_TAIL_LINES, readLogTail } = require('./diagnostics')
 const { createHotkeys } = require('./hotkeys')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createUncaughtExceptionHandler, exitWithError } = require('./lifecycle')
@@ -51,6 +52,7 @@ const rendererLog = createLogger('renderer')
 const appLog = createLogger('app')
 const dialogLog = createLogger('dialog')
 const captureLog = createLogger('capture')
+const diagnosticsLog = createLogger('diagnostics')
 
 let appHandle = null
 let mainWindow = null
@@ -465,8 +467,10 @@ app.whenReady().then(async () => {
   const { getEmbeddedApp } = require(path.join(botRoot, 'dist', 'bootstrap-embedded.js'))
   let handle
   let api
+  let secretCodec
   try {
-    const embedded = await getEmbeddedApp(await createSecretCodec(), {
+    secretCodec = await createSecretCodec()
+    const embedded = await getEmbeddedApp(secretCodec, {
       localSink: createLocalSink(() => mainWindow),
       appVersion: app.getVersion(),
       usageStats: {
@@ -587,6 +591,34 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('logs:getPath', () => logging.logFile)
   ipcMain.handle('logs:openFolder', () => shell.openPath(logging.logsDir))
+  // Settings → Diagnostics "Copy diagnostics" (#698): the content is never logged, only that it was copied.
+  ipcMain.handle('diagnostics:copy', async () => {
+    diagnosticsLog.info('Copy diagnostics requested')
+    const summary = await buildDiagnosticsSummary({
+      environment: {
+        appVersion: app.getVersion(),
+        electronVersion: process.versions.electron,
+        nodeVersion: process.versions.node,
+        platform: process.platform,
+        arch: process.arch,
+        locale: app.getLocale(),
+      },
+      api,
+      hotkeyStatus: hotkeys?.getStatus() ?? null,
+      secretStorageAvailable: secretCodec.available,
+      readLogTail: () => readLogTail(logging.logFile, LOG_TAIL_LINES),
+    })
+    try {
+      clipboard.writeText(summary)
+    }
+    catch (err) {
+      diagnosticsLog.error('Could not write the diagnostics summary to the clipboard:', err)
+      throw err
+    }
+    const lines = summary.split('\n').length - 1
+    diagnosticsLog.info(`Diagnostics summary copied to the clipboard (${lines} lines)`)
+    return { lines }
+  })
 
   ipcMain.handle('shell:openExternal', (_, url) => {
     if (isWebUrl(url))

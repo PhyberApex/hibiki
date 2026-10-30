@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchLogPath, openLogFolder } from './logs'
+import { copyDiagnostics, fetchLogPath, openLogFolder } from './logs'
 
 describe('logs API', () => {
   afterEach(() => {
@@ -25,5 +25,17 @@ describe('logs API', () => {
     ;(window as any).hibiki = { invoke }
     await openLogFolder()
     expect(invoke).toHaveBeenCalledWith('logs:openFolder')
+  })
+
+  it('copyDiagnostics rejects outside Electron', async () => {
+    await expect(copyDiagnostics()).rejects.toThrow('Electron API not available')
+  })
+
+  it('copyDiagnostics asks the main process to copy the summary', async () => {
+    const invoke = vi.fn().mockResolvedValue({ lines: 330 })
+    ;(window as any).hibiki = { invoke }
+
+    await expect(copyDiagnostics()).resolves.toEqual({ lines: 330 })
+    expect(invoke).toHaveBeenCalledWith('diagnostics:copy')
   })
 })
