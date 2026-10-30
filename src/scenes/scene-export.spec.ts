@@ -136,7 +136,7 @@ describe('exportScene', () => {
         { soundId: 'boom-3', soundName: 'Boom' },
       ],
     })
-    // A save now refuses a sound listed twice (#715); a scenes.json written
+    // A save now drops a sound listed twice (#715); a scenes.json written
     // before that can still hold one.
     const scenesPath = join(tempRoot, 'data', 'scenes.json')
     const stored = JSON.parse(readFileSync(scenesPath, 'utf-8'))

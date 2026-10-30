@@ -400,17 +400,21 @@ describe('createSceneStore', () => {
       expect(await store.list()).toEqual([])
     })
 
-    it.each(['music', 'ambience', 'effects'])('rejects a sound listed twice in %s (#715)', async (category) => {
+    it.each(['music', 'ambience', 'effects'] as const)('keeps only the first item of a sound listed twice in %s (#715)', async (category) => {
       const store = createSceneStore(config)
-      await expect(store.save({
+      const saved = await store.save({
         name: 'A',
         [category]: [
-          { soundId: 'fire' },
+          { soundId: 'fire', volume: 30 },
           { soundId: 'rain' },
-          { soundId: 'fire' },
+          { soundId: 'fire', volume: 90 },
         ],
-      } as never)).rejects.toThrow(`Scene ${category} lists sound fire twice`)
-      expect(await store.list()).toEqual([])
+      })
+      expect(saved[category]).toEqual([
+        { soundId: 'fire', volume: 30 },
+        { soundId: 'rain' },
+      ])
+      expect((await store.get(saved.id))?.[category]).toEqual(saved[category])
     })
 
     it('allows the same sound in different categories', async () => {

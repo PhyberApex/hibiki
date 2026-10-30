@@ -524,6 +524,12 @@ async function stopDeletedScenePlayback(deleted: Scene) {
   catch (err) {
     console.warn(`[scenes] Couldn't read Playing Scene ${playingId} while deleting scene ${deleted.id}, stopping all of its Ambience:`, err)
   }
+  // A Scene start or Scene Crossfade landing meanwhile already replaced what
+  // was playing; stopping by the stale Playing Scene could cut the new one.
+  if (player.playingSceneId !== playingId) {
+    logInfo(`[scenes] Deleted scene ${deleted.id}: Playing Scene changed from ${playingId} to ${player.playingSceneId}, leaving playback alone`)
+    return
+  }
   const ambience = deleted.ambience
     .map(i => i.soundId)
     .filter(soundId => !playingAmbience.has(soundId))
