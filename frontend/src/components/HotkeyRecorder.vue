@@ -21,7 +21,7 @@ const armed = ref(false)
 
 const warning = computed(() =>
   props.modelValue && isBareTypingKey(props.modelValue)
-    ? 'A bare letter or digit is taken from every other app while Hibiki runs.'
+    ? 'A key without Ctrl, Alt or Super is taken from every other app while Hibiki runs.'
     : null,
 )
 

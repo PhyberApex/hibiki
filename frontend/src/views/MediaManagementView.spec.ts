@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import { fetchDiscordConfig } from '@/api/config'
@@ -136,6 +136,51 @@ describe('mediaManagementView under KeepAlive', () => {
     showMedia.value = true
     await flushPromises()
     expect(wrapper.text()).not.toContain('Add your Discord bot token')
+    expect(wrapper.text()).toContain('Token saved, not connected')
+  })
+})
+
+describe('mediaManagementView with a saved token', () => {
+  function mountWithToken() {
+    vi.mocked(fetchDiscordConfig).mockResolvedValue({ tokenConfigured: true, encrypted: true })
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const player = usePlayerStore()
+    player.activeTarget = 'discord'
+    const wrapper = mount(MediaManagementView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    })
+    return { wrapper, player }
+  }
+
+  afterEach(() => {
+    vi.mocked(fetchDiscordConfig).mockResolvedValue({ tokenConfigured: false, encrypted: true })
+  })
+
+  it('points to Settings instead of connecting forever when the bot is not ready and not reconnecting', async () => {
+    const { wrapper } = mountWithToken()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Connecting to Discord')
+    expect(wrapper.find('[data-testid="setup-token-not-connected"]').text().replace(/\s+/g, ' ')).toBe('Token saved, not connected. Check Settings')
+    expect(wrapper.text()).not.toContain('Add your Discord bot token')
+  })
+
+  it('shows the connecting banner only while a reconnect runs', async () => {
+    const { wrapper, player } = mountWithToken()
+    await flushPromises()
+    player.reconnecting = true
+    await nextTick()
     expect(wrapper.text()).toContain('Connecting to Discord')
+    expect(wrapper.find('[data-testid="setup-token-not-connected"]').exists()).toBe(false)
+  })
+
+  it('shows no guidance once the bot is ready', async () => {
+    const { wrapper, player } = mountWithToken()
+    await flushPromises()
+    player.botStatus = { ready: true }
+    await nextTick()
+    expect(wrapper.find('.setup-guide').exists()).toBe(false)
   })
 })

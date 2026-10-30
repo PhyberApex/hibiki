@@ -106,6 +106,9 @@ No. Only the Game Master runs Hibiki. Players just sit in the voice channel.
 **How does it compare to Kenku FM, Syrinscape, or Tabletop Audio?**
 See the [comparison page](https://phyberapex.github.io/hibiki/compare).
 
+**I used Kenku FM. What changes?**
+The same bot token works, your files move into Hibiki's Sound Library, and playlists and soundboards become Scenes. The [Coming from Kenku FM](https://phyberapex.github.io/hibiki/kenku) page walks through it, including what to check when the bot joins but nobody hears audio.
+
 ## Quick start (from source)
 
 ```bash

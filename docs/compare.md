@@ -51,7 +51,7 @@ Everything here was checked in October 2026 against the sources listed at the bo
 
 Hibiki is a free, MIT-licensed Electron app. You create a Discord bot in the developer portal, paste its token into Settings, and the bot joins a voice channel in your server. Scenes have three layers: music (one track at a time, optionally looped), ambience (loops that can also repeat at a random interval you set), and effects (one-shot buttons). The Browser tab opens any website in an embedded browser and streams its audio to the channel. Scenes export as `.hibiki.zip` bundles, and a public registry plus free CC0 scene packs give you a starting point. Vision to Vibe is an opt-in feature that sends a battle map or mood board to Claude or any OpenAI-compatible endpoint (including a local Ollama) and suggests music and ambience from your own tagged library.
 
-Hibiki is a young project with one main maintainer. It is not code-signed on macOS, so you clear the quarantine flag once on first launch.
+Hibiki is a young project with one main maintainer. It is not code-signed on macOS, so you clear the quarantine flag once on first launch. If you are switching over from Kenku FM, the [Coming from Kenku FM]({{ site.baseurl }}/kenku) page covers reusing your bot and moving your library.
 
 ### Kenku FM
 

@@ -79,9 +79,12 @@ describe('hotkeyRecorder', () => {
     expect(mountRecorder().find('[data-testid="hotkey-recorder-clear"]').exists()).toBe(false)
   })
 
-  it('warns inline on a bare letter or digit but not on F-keys or modifier combos', () => {
+  it('warns inline on a bare typing key but not on F-keys or modifier combos', () => {
     expect(mountRecorder({ modelValue: 'K' }).find('[data-testid="hotkey-recorder-warning"]').exists()).toBe(true)
     expect(mountRecorder({ modelValue: '5' }).find('[data-testid="hotkey-recorder-warning"]').exists()).toBe(true)
+    expect(mountRecorder({ modelValue: 'Space' }).find('[data-testid="hotkey-recorder-warning"]').exists()).toBe(true)
+    expect(mountRecorder({ modelValue: 'Enter' }).find('[data-testid="hotkey-recorder-warning"]').exists()).toBe(true)
+    expect(mountRecorder({ modelValue: 'Ctrl+Space' }).find('[data-testid="hotkey-recorder-warning"]').exists()).toBe(false)
     expect(mountRecorder({ modelValue: 'F13' }).find('[data-testid="hotkey-recorder-warning"]').exists()).toBe(false)
     expect(mountRecorder({ modelValue: 'Ctrl+K' }).find('[data-testid="hotkey-recorder-warning"]').exists()).toBe(false)
   })

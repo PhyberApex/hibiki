@@ -57,8 +57,11 @@ function onUpdated() {
 }
 
 // The bot only matters for the Discord Target; Local needs no token or connection.
-const showSetupGuide = computed(() => !player.isLocalActive && !player.botStatus?.ready && tokenConfigured.value === false)
-const showConnecting = computed(() => !player.isLocalActive && !player.botStatus?.ready && tokenConfigured.value !== false)
+const botNotReady = computed(() => !player.isLocalActive && !player.botStatus?.ready)
+// BotStatus has no failed state: only a running reconnect is "connecting", a saved token that
+// cannot connect (invalid, revoked) gets the setup guide pointing at Settings instead.
+const showConnecting = computed(() => botNotReady.value && player.reconnecting)
+const showSetupGuide = computed(() => botNotReady.value && !player.reconnecting && tokenConfigured.value !== null)
 </script>
 
 <template>
@@ -83,7 +86,13 @@ const showConnecting = computed(() => !player.isLocalActive && !player.botStatus
       <ol class="setup-steps">
         <li class="setup-step">
           <span class="step-number">1</span>
-          <div class="step-content">
+          <div v-if="tokenConfigured" class="step-content" data-testid="setup-token-not-connected">
+            Token saved, not connected.
+            <RouterLink to="/settings" class="step-link">
+              Check Settings
+            </RouterLink>
+          </div>
+          <div v-else class="step-content">
             <RouterLink to="/settings" class="step-link">
               Add your Discord bot token
             </RouterLink>
