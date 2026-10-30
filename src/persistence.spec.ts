@@ -198,6 +198,31 @@ describe('createAppConfig with a secret codec', () => {
     expect(readStoredConfig()['discord.token']).toBe('enc:v1:enc(legacy-plain)')
   })
 
+  it('a set that lands while a legacy plaintext secret is migrating wins over the migration', async () => {
+    writeStoredConfig({ 'discord.token': 'legacy-plain' })
+    const codec = fakeCodec()
+    let releaseMigration!: () => void
+    const migrationGate = new Promise<void>((resolve) => {
+      releaseMigration = resolve
+    })
+    const encrypt = codec.encrypt
+    codec.encrypt = async (value) => {
+      if (value === 'legacy-plain')
+        await migrationGate
+      return encrypt(value)
+    }
+
+    const appConfig = createAppConfig(secretConfig, codec)
+    const migratingGet = appConfig.get('discord.token')
+    await new Promise(resolve => setImmediate(resolve))
+    await appConfig.set('discord.token', 'new-token')
+    releaseMigration()
+
+    expect(await migratingGet).toBe('legacy-plain')
+    expect(readStoredConfig()['discord.token']).toBe('enc:v1:enc(new-token)')
+    expect(await appConfig.get('discord.token')).toBe('new-token')
+  })
+
   it('re-encrypts a secret when decryption reports the key has rotated', async () => {
     writeStoredConfig({ 'discord.token': 'enc:v1:old(abc123)', 'storage.path': '/tmp/music' })
 

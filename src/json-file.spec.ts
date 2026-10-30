@@ -1,8 +1,20 @@
+import type { FileHandle } from 'node:fs/promises'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
+import { open, readdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { clearStorageWarnings, createJsonFileStore, getStorageWarnings } from './json-file'
+import { clearStorageWarnings, createJsonFileStore, getStorageWarnings, writeJsonFileAtomic } from './json-file'
+
+jest.mock('node:fs/promises', () => {
+  const actual = jest.requireActual('node:fs/promises')
+  return {
+    ...actual,
+    open: jest.fn(actual.open),
+  }
+})
+
+const openMock = open as jest.MockedFunction<typeof open>
+const { open: realOpen } = jest.requireActual<typeof import('node:fs/promises')>('node:fs/promises')
 
 describe('createJsonFileStore', () => {
   let tempRoot: string
@@ -131,5 +143,57 @@ describe('createJsonFileStore', () => {
 
     const final = await store.read()
     expect(final.count).toBe(20)
+  })
+})
+
+describe('writeJsonFileAtomic', () => {
+  let tempRoot: string
+
+  beforeEach(() => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-json-atomic-'))
+  })
+
+  afterEach(() => {
+    openMock.mockImplementation(realOpen)
+  })
+
+  /** Records every handle `open` hands out, with a spy on its `sync`. */
+  function trackOpenedHandles(failDirectorySync?: NodeJS.ErrnoException) {
+    const opened: { path: string, sync: jest.SpyInstance }[] = []
+    openMock.mockImplementation(async (...args: Parameters<typeof open>) => {
+      const handle: FileHandle = await realOpen(...args)
+      const sync = jest.spyOn(handle, 'sync')
+      if (failDirectorySync && args[0] === tempRoot)
+        sync.mockRejectedValue(failDirectorySync)
+      opened.push({
+        path: String(args[0]),
+        sync,
+      })
+      return handle
+    })
+    return opened
+  }
+
+  it('fsyncs the temp file before renaming it, then fsyncs the directory', async () => {
+    const opened = trackOpenedHandles()
+    const filePath = join(tempRoot, 'scenes.json')
+
+    await writeJsonFileAtomic(filePath, ['a'])
+
+    const tmpHandle = opened.find(h => h.path === `${filePath}.tmp`)
+    expect(tmpHandle?.sync).toHaveBeenCalledTimes(1)
+    const dirHandle = opened.find(h => h.path === tempRoot)
+    expect(dirHandle?.sync).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toEqual(['a'])
+  })
+
+  it('still completes the write when the platform cannot fsync a directory', async () => {
+    trackOpenedHandles(Object.assign(new Error('EPERM'), { code: 'EPERM' }))
+    const filePath = join(tempRoot, 'app-config.json')
+
+    await expect(writeJsonFileAtomic(filePath, { a: '1' })).resolves.toBeUndefined()
+
+    expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toEqual({ a: '1' })
+    expect(await readdir(tempRoot)).toEqual(['app-config.json'])
   })
 })

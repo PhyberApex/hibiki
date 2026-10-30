@@ -78,6 +78,14 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
   const filePath = getConfigFilePath(config)
   const store = createJsonFileStore<Record<string, string>>(filePath, { defaultValue: {}, isValid: isPlainObject })
   const encryptForStorage = async (plaintext: string) => ENCRYPTED_PREFIX + await codec.encrypt(plaintext)
+  /** Writes `replacement` only if `key` still holds `expected`, so a `set` that landed meanwhile wins. */
+  const replaceIfUnchanged = (key: string, expected: string, replacement: string) =>
+    store.update(latest => latest[key] === expected
+      ? {
+          next: { ...latest, [key]: replacement },
+          result: true,
+        }
+      : { next: latest, result: false, skipWrite: true })
 
   return {
     async get(key: string): Promise<string | null> {
@@ -101,14 +109,7 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
         if (decrypted.shouldReEncrypt && codec.available) {
           try {
             const reEncrypted = await encryptForStorage(decrypted.result)
-            // Only replace the value we decrypted; a concurrent `set` wins.
-            const written = await store.update(latest => latest[key] === raw
-              ? {
-                  next: { ...latest, [key]: reEncrypted },
-                  result: true,
-                }
-              : { next: latest, result: false })
-            if (written)
+            if (await replaceIfUnchanged(key, raw, reEncrypted))
               log.info(`Re-encrypted secret "${key}" after an encryption key rotation`)
           }
           catch (err) {
@@ -122,10 +123,10 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
       if (codec.available) {
         log.info(`Migrating plaintext secret "${key}" to encrypted storage`)
         const encrypted = await encryptForStorage(raw)
-        await store.update(latest => ({
-          next: { ...latest, [key]: encrypted },
-          result: undefined,
-        }))
+        if (await replaceIfUnchanged(key, raw, encrypted))
+          log.info(`Migrated plaintext secret "${key}" to encrypted storage`)
+        else
+          log.info(`Skipped migrating plaintext secret "${key}": it was changed while being encrypted`)
       }
       return raw
     },
