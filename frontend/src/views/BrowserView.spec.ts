@@ -309,6 +309,68 @@ describe('browserView', () => {
       expect(createBrowserView).toHaveBeenCalledTimes(1)
     })
 
+    it('leaving the Browser while the default tab is still being created keeps it hidden until return', async () => {
+      const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+      let resolveCreate!: (id: number) => void
+      vi.mocked(createBrowserView).mockImplementationOnce(() => new Promise((resolve) => {
+        resolveCreate = resolve
+      }))
+      await mountBrowser()
+
+      showBrowser.value = false
+      await flush()
+      resolveCreate(1)
+      await flush()
+
+      expect(showBrowserView).not.toHaveBeenCalled()
+      expect(setBrowserViewBounds).not.toHaveBeenCalled()
+      expect(hideBrowserView).toHaveBeenCalledWith(1)
+      expect(info).toHaveBeenCalledWith('[browser] tab 1 created while view inactive, keeping hidden')
+
+      showBrowser.value = true
+      await flush()
+      expect(showBrowserView).toHaveBeenCalledWith(1)
+      expect(setBrowserViewBounds).toHaveBeenCalledWith(1, expect.any(Object))
+      expect(createBrowserView).toHaveBeenCalledTimes(1)
+    })
+
+    it('returning to the Browser before the first tab arrives opens it only once and shows it', async () => {
+      let resolveCreate!: (id: number) => void
+      vi.mocked(createBrowserView).mockImplementationOnce(() => new Promise((resolve) => {
+        resolveCreate = resolve
+      }))
+      await mountBrowser()
+      showBrowser.value = false
+      await flush()
+      showBrowser.value = true
+      await flush()
+
+      resolveCreate(1)
+      await flush()
+
+      expect(createBrowserView).toHaveBeenCalledTimes(1)
+      expect(tabPills()).toHaveLength(1)
+      expect(showBrowserView).toHaveBeenCalledWith(1)
+    })
+
+    it('leaving the Browser while a tab switch is in flight does not show the new tab', async () => {
+      await mountBrowser()
+      await openNewTab(2)
+      let resolveHide!: () => void
+      vi.mocked(hideBrowserView).mockImplementationOnce(() => new Promise((resolve) => {
+        resolveHide = resolve
+      }))
+      vi.mocked(showBrowserView).mockClear()
+
+      await tabPills()[0]!.trigger('click')
+      showBrowser.value = false
+      await flush()
+      resolveHide()
+      await flush()
+
+      expect(showBrowserView).not.toHaveBeenCalled()
+    })
+
     it('destroys every tab on unmount', async () => {
       await mountBrowser()
       await openNewTab(2)
@@ -402,6 +464,24 @@ describe('browserView', () => {
 
       expect(loadBrowserViewURL).toHaveBeenCalledWith(1, 'https://example.com')
       expect(urlValue()).toBe('https://example.com')
+    })
+
+    it('a navigation while the GM is typing in the URL bar leaves the typed text alone', async () => {
+      await mountBrowser()
+      const input = wrapper!.find('.url-input')
+      ;(input.element as HTMLInputElement).focus()
+      await input.setValue('tabletopaud')
+
+      browserEvents.get('browserView:didNavigate')!(1, 'https://example.com/redirected')
+      await nextTick()
+
+      expect(urlValue()).toBe('tabletopaud')
+
+      // The tab still records where it is, so leaving the input and switching back shows the real URL.
+      ;(input.element as HTMLInputElement).blur()
+      browserEvents.get('browserView:didNavigate')!(1, 'https://example.com/next')
+      await nextTick()
+      expect(urlValue()).toBe('https://example.com/next')
     })
 
     it('submitting an empty URL does nothing', async () => {
@@ -682,6 +762,27 @@ describe('browserView', () => {
       expect(captureStop).toHaveBeenCalled()
       expect(stopEffectStream).toHaveBeenCalledWith('g1', 'browser-2')
       expect(destroyBrowserView).toHaveBeenCalledWith(2)
+    })
+
+    it('a routed tab can be un-routed after the bot left voice', async () => {
+      await mountBrowser()
+      await routeButton().trigger('click')
+      await flush()
+
+      usePlayerStore().playerState = []
+      await flush()
+
+      expect(useRoutedTabsStore().isRouted(1)).toBe(true)
+      expect(routeButton().attributes('disabled')).toBeUndefined()
+      expect(routeButton().attributes('title')).toBe('Stop routing')
+
+      await routeButton().trigger('click')
+      await flush()
+
+      expect(useRoutedTabsStore().isRouted(1)).toBe(false)
+      expect(tabPills()[0]!.find('.browser-tab-streaming').exists()).toBe(false)
+      expect(routeButton().attributes('disabled')).toBeDefined()
+      expect(routeButton().attributes('title')).toBe('Join a voice channel first')
     })
 
     it('a routing failure logs a [browser] error and leaves the tab un-routed', async () => {
