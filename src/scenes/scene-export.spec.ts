@@ -207,6 +207,37 @@ describe('exportScene', () => {
     ])
   })
 
+  it('logs when the export starts and how long it took, with the bundled bytes (#710)', async () => {
+    writeFileSync(join(musicDir, 'logged-6.mp3'), 'ten-bytes!')
+    const { createSceneStore } = await import('./scene-store')
+    const saved = await createSceneStore(config).save({
+      name: 'Logged Export',
+      music: [
+        { soundId: 'logged-6', soundName: 'Logged' },
+      ],
+    })
+    const info = jest.spyOn(console, 'info').mockImplementation(() => {})
+    try {
+      const targetZip = join(tempRoot, 'logged.zip')
+      await exportScene(config, saved.id, targetZip)
+
+      const lines = info.mock.calls.map(args => args.join(' '))
+      expect(lines).toContain('[scene-export] Export started (1 sound(s) to bundle)')
+      expect(lines).toContainEqual(expect.stringMatching(/^\[scene-export\] Export finished in \d+ ms: 1 sound\(s\), 10 bytes, \d+-byte archive written to /))
+    }
+    finally {
+      info.mockRestore()
+    }
+  })
+
+  it('creates the target folder when it does not exist yet', async () => {
+    const { createSceneStore } = await import('./scene-store')
+    const saved = await createSceneStore(config).save({ name: 'Nested Target' })
+    const targetZip = join(tempRoot, 'not-yet', 'there', 'nested.zip')
+    await exportScene(config, saved.id, targetZip)
+    expect(readManifest(targetZip).displayName).toBe('Nested Target')
+  })
+
   it('bundles the sounds it finds and references the ones missing on disk', async () => {
     writeFileSync(join(effectsDir, 'present-4.wav'), 'here')
     const { createSceneStore } = await import('./scene-store')
