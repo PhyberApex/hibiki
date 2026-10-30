@@ -40,7 +40,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 12.16.0
+          version: 12.16.1
 
       # Packaging stays on Node 24 (the .nvmrc line the app targets): newer
       # majors removed fs.rmdir's `recursive` option, which maker-squirrel's
