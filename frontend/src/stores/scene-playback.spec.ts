@@ -187,6 +187,17 @@ describe('scene playback store', () => {
       return store
     }
 
+    it('claims the Playing Scene before awaiting anything, so the Hotkey chain can release on the call (#714)', async () => {
+      const store = setupStore()
+      const release = holdFirstAmbience()
+
+      const starting = store.playScene(twoAmbienceScene)
+
+      expect(usePlayerStore().playingSceneId).toBe(twoAmbienceScene.id)
+      release()
+      await starting
+    })
+
     it('a Stop while the first Ambience is starting leaves the rest of the Scene unstarted', async () => {
       const store = setupStore()
       const release = holdFirstAmbience()
