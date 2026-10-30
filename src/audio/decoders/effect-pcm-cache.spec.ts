@@ -250,4 +250,68 @@ describe('effectPcmCache', () => {
       expect(decodeSmall).toHaveBeenCalledTimes(1)
     })
   })
+  describe('warm', () => {
+    it('decodes an uncached Effect into the cache so the first trigger needs no decode', async () => {
+      const cache = createEffectPcmCache()
+      const decode = jest.fn().mockReturnValue(streamOf('a', 'b'))
+
+      await expect(cache.warm('/effects/thunder.mp3', decode)).resolves.toBe(true)
+      const { stream } = await cache.get('/effects/thunder.mp3', decode)
+
+      expect(decode).toHaveBeenCalledTimes(1)
+      expect((await collect(stream)).toString()).toBe('ab')
+    })
+
+    it('does not decode an Effect that is already cached, but refreshes its recency', async () => {
+      const cache = createEffectPcmCache({ maxEntries: 2 })
+      const decodeA = jest.fn().mockImplementation(() => streamOf('a'))
+      const decodeB = jest.fn().mockImplementation(() => streamOf('b'))
+      await cache.warm('a', decodeA)
+      await cache.warm('b', decodeB)
+
+      await cache.warm('a', decodeA)
+      await cache.warm('c', () => streamOf('c'))
+      await cache.get('a', decodeA)
+      await cache.get('b', decodeB)
+
+      expect(decodeA).toHaveBeenCalledTimes(1)
+      expect(decodeB).toHaveBeenCalledTimes(2)
+    })
+
+    it('reports an Effect over the cut-off as not kept, and does not decode it again', async () => {
+      const cache = createEffectPcmCache({ maxEntryBytes: PCM_BYTES_PER_MS * 100 })
+      const decode = jest.fn().mockImplementation(() => NodeReadable.from([
+        pcmChunkOfMs(200),
+      ]))
+      await expect(cache.warm('long', decode)).resolves.toBe(false)
+
+      await expect(cache.warm('long', decode)).resolves.toBe(false)
+
+      expect(decode).toHaveBeenCalledTimes(1)
+    })
+
+    it('rejects when the decode fails and leaves nothing cached', async () => {
+      const cache = createEffectPcmCache()
+      const failing = jest.fn().mockRejectedValue(new Error('corrupt'))
+
+      await expect(cache.warm('bad', failing)).rejects.toThrow('corrupt')
+
+      const decode = jest.fn().mockReturnValue(streamOf('ok'))
+      await cache.get('bad', decode)
+      expect(decode).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps 32 Effects by default, evicting the least recently used beyond that', async () => {
+      const cache = createEffectPcmCache()
+      const decoders = Array.from({ length: 33 }, (_, i) => jest.fn().mockImplementation(() => streamOf(String(i))))
+      for (const [i, decode] of decoders.entries())
+        await cache.warm(`fx${i}`, decode)
+
+      await cache.get('fx1', decoders[1]!)
+      await cache.get('fx0', decoders[0]!)
+
+      expect(decoders[1]).toHaveBeenCalledTimes(1)
+      expect(decoders[0]).toHaveBeenCalledTimes(2)
+    })
+  })
 })

@@ -9,8 +9,8 @@ const log = createLogger('effect-pcm-cache')
 /** Bytes per millisecond of 48 kHz stereo signed 16-bit PCM — the fixed format every decoder produces (see ADR-0003), so a decoded buffer's length alone gives its duration. */
 const PCM_BYTES_PER_MS = (MIXER_SAMPLE_RATE * MIXER_CHANNELS * 2) / 1000
 
-/** Effects are expected to be short (a door slam, a thunderclap). */
-const DEFAULT_MAX_ENTRIES = 16
+/** Effects are expected to be short (a door slam, a thunderclap); room for a couple of warmed Scenes' worth (#696). */
+const DEFAULT_MAX_ENTRIES = 32
 /** Total decoded PCM kept across every entry: 64 MiB, a little under six minutes of audio. */
 const DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 /** One Effect decoding to more than a minute of PCM (~11.5 MB) is never cached (#664). */
@@ -116,6 +116,27 @@ export class EffectPcmCache {
       stream: NodeReadable.from(Buffer.from(buffer)),
       durationMs: durationOf(buffer),
     }
+  }
+
+  /**
+   * Decodes `key` into the cache ahead of its first trigger (#696), so that
+   * trigger lands as fast as a repeat. Already cached: only its recency is
+   * refreshed. Known to be over `maxEntryBytes`: nothing to do, it streams
+   * uncached anyway. Otherwise runs (or joins) the same decode `get` would.
+   * Resolves `false` when the Effect turned out (or was already known) to be
+   * over `maxEntryBytes`, so nothing is retained. Rejects when the decode
+   * fails, leaving nothing cached.
+   */
+  async warm(key: string, decode: () => Readable | Promise<Readable>): Promise<boolean> {
+    if (this.oversize.has(key))
+      return false
+    const cached = this.cache.get(key)
+    if (cached !== undefined) {
+      this.bump(key, cached)
+      return true
+    }
+    await this.decodeOnce(key, decode)
+    return !this.oversize.has(key)
   }
 
   private decodeOnce(key: string, decode: () => Readable | Promise<Readable>): Promise<Buffer> {

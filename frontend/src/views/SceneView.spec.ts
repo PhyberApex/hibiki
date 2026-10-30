@@ -53,6 +53,12 @@ vi.mock('@/api/player', async (importOriginal) => {
     playEffect: vi.fn().mockResolvedValue(undefined),
     stopEffects: vi.fn().mockResolvedValue(undefined),
     stopEffect: vi.fn().mockResolvedValue(undefined),
+    warmEffects: vi.fn().mockResolvedValue({
+      warmed: 0,
+      skipped: 0,
+      oversize: 0,
+      failed: 0,
+    }),
   }
 })
 

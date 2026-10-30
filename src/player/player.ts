@@ -32,6 +32,16 @@ export type LocalSinkHealth
     | { type: 'deviceLost', message?: string }
     | { type: 'failed', message?: string }
 
+/** Per-Scene outcome of `warmEffects`. */
+export interface WarmEffectsResult {
+  warmed: number
+  /** No backend decoder: played through the renderer fallback instead. */
+  skipped: number
+  /** Decodes to more than the cache cut-off: streams uncached on every trigger. */
+  oversize: number
+  failed: number
+}
+
 export interface PlayerOptions {
   /** Where the Local Target's mix goes; without one the Local Target cannot play. */
   localSink?: LocalSink
@@ -300,6 +310,49 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
     return manager.playEffect(() => effectPcmCache.get(path, () => createPcmStream(path)), soundId, options)
   }
 
+  /**
+   * Decodes a Scene's Effects into the shared PCM cache ahead of their first
+   * trigger (#696), one at a time in the Scene's Effect list order so a big
+   * Scene never spins up a burst of WASM decoders. Target-independent: the
+   * cache is keyed by file path and shared across Targets. An Effect with no
+   * backend decoder takes the renderer fallback when played, so it is
+   * skipped here; one over the cache cut-off is decoded once but not kept
+   * (it streams uncached anyway); one that cannot be found or decoded counts as failed and
+   * warming carries on with the rest.
+   */
+  async function warmEffects(sceneId: string, soundIds: string[]): Promise<WarmEffectsResult> {
+    const unique = [
+      ...new Set(soundIds),
+    ]
+    log.info(`Warming ${unique.length} Effect(s) for Scene ${sceneId}`)
+    const result: WarmEffectsResult = {
+      warmed: 0,
+      skipped: 0,
+      oversize: 0,
+      failed: 0,
+    }
+    for (const soundId of unique) {
+      try {
+        if (!await sounds.canDecode('effects', soundId)) {
+          log.debug(`Not warming Effect ${soundId} for Scene ${sceneId}: no backend decoder`)
+          result.skipped++
+          continue
+        }
+        const path = await sounds.getFilePath('effects', soundId)
+        if (await effectPcmCache.warm(path, () => createPcmStream(path)))
+          result.warmed++
+        else
+          result.oversize++
+      }
+      catch (err) {
+        log.warn(`Failed to warm Effect ${soundId} for Scene ${sceneId}:`, err)
+        result.failed++
+      }
+    }
+    log.info(`Warmed Effects for Scene ${sceneId}: ${result.warmed} warmed, ${result.skipped} skipped (no backend decoder), ${result.oversize} too long to cache, ${result.failed} failed`)
+    return result
+  }
+
   /** Ends every backend-decoded Effect instance for this guild (distinct from the chunked-IPC `audio:stopEffectStream` path). */
   function stopEffects(guildId: string): void {
     log.info(`stopEffects in guild ${guildId}`)
@@ -420,6 +473,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
     stopAmbience,
     setAmbienceVolume,
     playEffect,
+    warmEffects,
     stopEffects,
     stopEffect,
     reportLocalSinkHealth,
