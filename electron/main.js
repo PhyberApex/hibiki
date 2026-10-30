@@ -7,7 +7,7 @@ const { createHotkeys } = require('./hotkeys')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createUncaughtExceptionHandler, exitWithError } = require('./lifecycle')
 const { createLogger, setupFileLogging } = require('./logger')
-const { describeScheme, describeUrl, forwardMainFrameNavigation, guardMainWindowNavigation, isWebUrl } = require('./navigation-guard')
+const { describeScheme, describeUrl, forwardMainFrameNavigation, guardMainWindowNavigation, isWebUrl, releaseOnMainFrameNavigation } = require('./navigation-guard')
 const { installPermissionPolicy } = require('./permissions')
 const { parseRange, resolveAppPath } = require('./protocol')
 const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
@@ -144,11 +144,11 @@ function createWindow(loadUrl) {
     releaseRendererResources(win, `renderer gone (${details.reason})`)
   })
   // A reload or crash recovery starts a fresh renderer that knows nothing of the old one's streams and Browser tabs.
-  // `isSameDocument` excludes the router's pushState navigations; the initial load has nothing to release.
-  win.webContents.on('did-start-navigation', (details) => {
-    if (details.isMainFrame && !details.isSameDocument)
-      releaseRendererResources(win, 'renderer navigated')
-  })
+  // The initial load has nothing to release; a navigation the guard blocks keeps the renderer, so it releases nothing.
+  win.webContents.on('did-start-navigation', releaseOnMainFrameNavigation({
+    appUrl: loadUrl,
+    release: () => releaseRendererResources(win, 'renderer navigated'),
+  }))
   win.webContents.on('unresponsive', () => windowLog.warn('Renderer became unresponsive'))
   win.webContents.on('responsive', () => windowLog.info('Renderer responsive again'))
   win.on('closed', () => {

@@ -88,11 +88,34 @@ function forwardMainFrameNavigation(send) {
   }
 }
 
+/**
+ * Main window `did-start-navigation` listener that calls `release` when the
+ * renderer is about to be replaced (a reload, crash recovery). Chromium
+ * emits `did-start-navigation` before `will-navigate`, so a navigation off
+ * `appUrl`'s scheme and host reaches it too, although
+ * `guardMainWindowNavigation` cancels it and the renderer stays; releasing
+ * then would cut its streams and Browser tabs (#707). `isSameDocument`
+ * excludes the router's pushState navigations.
+ */
+function releaseOnMainFrameNavigation({ appUrl, release }) {
+  const appOrigin = schemeAndHost(appUrl)
+  return (details) => {
+    if (!details.isMainFrame || details.isSameDocument)
+      return
+    if (appOrigin === null || schemeAndHost(details.url) !== appOrigin) {
+      log.debug(`Kept renderer resources: navigation to ${describeUrl(details.url)} leaves the app and will be blocked`)
+      return
+    }
+    release()
+  }
+}
+
 module.exports = {
   describeScheme,
   describeUrl,
   forwardMainFrameNavigation,
   guardMainWindowNavigation,
   isWebUrl,
+  releaseOnMainFrameNavigation,
   schemeAndHost,
 }

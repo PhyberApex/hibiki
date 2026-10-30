@@ -1,6 +1,7 @@
-import { describeScheme, describeUrl, forwardMainFrameNavigation, guardMainWindowNavigation, isWebUrl } from './navigation-guard'
+import { describeScheme, describeUrl, forwardMainFrameNavigation, guardMainWindowNavigation, isWebUrl, releaseOnMainFrameNavigation } from './navigation-guard'
 
 const spies = {
+  debug: jest.spyOn(console, 'debug').mockImplementation(() => {}),
   info: jest.spyOn(console, 'info').mockImplementation(() => {}),
   warn: jest.spyOn(console, 'warn').mockImplementation(() => {}),
 }
@@ -150,5 +151,57 @@ describe('forwardMainFrameNavigation', () => {
     expect(send.mock.calls).toEqual([
       ['https://dndbeyond.com/'],
     ])
+  })
+})
+
+describe('releaseOnMainFrameNavigation', () => {
+  function listening(appUrl = 'hibiki://app/') {
+    const release = jest.fn()
+    return {
+      listener: releaseOnMainFrameNavigation({ appUrl, release }),
+      release,
+    }
+  }
+
+  it('releases on a cross-document main-frame navigation within the app, such as a reload', () => {
+    const { listener, release } = listening()
+
+    listener({ url: 'hibiki://app/scenes', isMainFrame: true, isSameDocument: false })
+
+    expect(release).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores same-document and subframe navigations', () => {
+    const { listener, release } = listening()
+
+    listener({ url: 'hibiki://app/settings', isMainFrame: true, isSameDocument: true })
+    listener({ url: 'hibiki://app/frame', isMainFrame: false, isSameDocument: false })
+
+    expect(release).not.toHaveBeenCalled()
+  })
+
+  // Chromium emits did-start-navigation before will-navigate, so these reach the listener before the guard cancels them (#707).
+  it.each([
+    'https://example.com/elsewhere?token=secret',
+    'file:///home/gm/Downloads/page.html',
+    'hibiki://sound/music/x',
+    'not a url',
+  ])('keeps everything on a navigation to %s, which the guard blocks', (url) => {
+    const { listener, release } = listening()
+
+    listener({ url, isMainFrame: true, isSameDocument: false })
+
+    expect(release).not.toHaveBeenCalled()
+    expect(spies.debug).toHaveBeenCalledWith('[window]', expect.stringContaining('Kept renderer resources'))
+    expect(spies.debug.mock.calls.flat().join(' ')).not.toContain('secret')
+  })
+
+  it('releases on navigations within an http dev server the window loaded', () => {
+    const { listener, release } = listening('http://localhost:5173/')
+
+    listener({ url: 'http://localhost:5173/', isMainFrame: true, isSameDocument: false })
+    listener({ url: 'http://localhost:5174/', isMainFrame: true, isSameDocument: false })
+
+    expect(release).toHaveBeenCalledTimes(1)
   })
 })

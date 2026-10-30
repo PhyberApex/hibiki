@@ -9,7 +9,8 @@ import { closeElectronApp, getMainWindow, launchElectronApp } from '../electron-
 
 /**
  * A reloaded or crashed main renderer cannot close the Browser tabs the old
- * one opened (#653): main closes them itself. Needs no Discord token.
+ * one opened (#653): main closes them itself. A navigation the guard blocks
+ * keeps the renderer, and with it every tab (#707). Needs no Discord token.
  */
 
 let userDataDir: string
@@ -83,6 +84,21 @@ test.afterAll(async () => {
   await new Promise<void>(resolve => server?.close(() => resolve()))
   if (userDataDir)
     rmSync(userDataDir, { recursive: true, force: true })
+})
+
+test('a navigation the guard blocks keeps the Browser tabs open', async () => {
+  await openTab()
+  const tabIds = await attachedTabIds()
+  const logBefore = logText().length
+
+  await page.evaluate(() => {
+    window.location.href = 'https://example.com/elsewhere'
+  })
+
+  await expect.poll(() => logText().slice(logBefore)).toContain('Blocked navigation of the main window to https://example.com')
+  expect(page.url()).toMatch(/^hibiki:\/\/app\//)
+  expect(await attachedTabIds()).toEqual(tabIds)
+  expect(logText().slice(logBefore)).not.toContain('renderer navigated')
 })
 
 test('a reload of the main window closes the Browser tabs the old renderer opened', async () => {
