@@ -259,6 +259,161 @@ describe('scene playback store', () => {
     expect(playEffect).toHaveBeenCalledWith('local', 'fx-1', expect.objectContaining({ volume: 80 }))
   })
 
+  describe('a Stop while an Ambience sound or Effect is still starting up', () => {
+    const mediaProto = HTMLMediaElement.prototype
+    const originalMedia = { load: mediaProto.load, play: mediaProto.play, pause: mediaProto.pause }
+    let loadingEls: HTMLMediaElement[]
+    let playingEls: HTMLMediaElement[]
+    let pausedEls: HTMLMediaElement[]
+
+    function holdDecodeProbe() {
+      let release!: (decodable: boolean) => void
+      vi.mocked(canDecode).mockReturnValueOnce(new Promise((resolve) => {
+        release = resolve
+      }))
+      return (decodable: boolean) => release(decodable)
+    }
+
+    beforeEach(() => {
+      loadingEls = []
+      playingEls = []
+      pausedEls = []
+      // Loads never finish on their own: each test fires `canplaythrough` itself.
+      Object.defineProperty(mediaProto, 'load', {
+        configurable: true,
+        value(this: HTMLMediaElement) {
+          if (this.getAttribute('src'))
+            loadingEls.push(this)
+        },
+      })
+      Object.defineProperty(mediaProto, 'play', {
+        configurable: true,
+        value(this: HTMLMediaElement) {
+          playingEls.push(this)
+          return Promise.resolve()
+        },
+      })
+      Object.defineProperty(mediaProto, 'pause', {
+        configurable: true,
+        value(this: HTMLMediaElement) {
+          pausedEls.push(this)
+        },
+      })
+    })
+
+    afterEach(() => {
+      for (const [key, value] of Object.entries(originalMedia))
+        Object.defineProperty(mediaProto, key, { configurable: true, value })
+      vi.mocked(canDecode).mockResolvedValue(true)
+      vi.mocked(playAmbience).mockResolvedValue(undefined)
+    })
+
+    it('an Ambience toggled off while its decode probe is pending never starts on the backend', async () => {
+      const store = useScenePlaybackStore()
+      const item = { ...scene.ambience[0] }
+      const releaseProbe = holdDecodeProbe()
+
+      store.toggleAmbience(item)
+      await vi.waitFor(() => expect(canDecode).toHaveBeenCalledWith('ambience', 'amb-1'))
+      store.toggleAmbience({ ...item, enabled: false })
+      releaseProbe(true)
+      await flushPromises()
+
+      expect(playAmbience).not.toHaveBeenCalled()
+      expect(store.playingAmbienceIds.has('amb-1')).toBe(false)
+    })
+
+    it('a Scene Stop while an Ambience decode probe is pending never starts that Ambience', async () => {
+      const store = useScenePlaybackStore()
+      const releaseProbe = holdDecodeProbe()
+
+      const starting = store.playScene({
+        ...scene,
+        createdAt: '',
+        updatedAt: '',
+        music: [],
+      })
+      await vi.waitFor(() => expect(canDecode).toHaveBeenCalledWith('ambience', 'amb-1'))
+      store.stopScene()
+      releaseProbe(true)
+      await starting
+
+      expect(playAmbience).not.toHaveBeenCalled()
+      expect(store.playingAmbienceIds.size).toBe(0)
+    })
+
+    it('an Ambience toggled off while its backend play is in flight is stopped again once that play lands', async () => {
+      const store = useScenePlaybackStore()
+      const item = { ...scene.ambience[0] }
+      let releasePlay!: () => void
+      vi.mocked(playAmbience).mockReturnValueOnce(new Promise<void>((resolve) => {
+        releasePlay = resolve
+      }))
+
+      store.toggleAmbience(item)
+      await vi.waitFor(() => expect(playAmbience).toHaveBeenCalledTimes(1))
+      store.toggleAmbience({ ...item, enabled: false })
+      releasePlay()
+      await flushPromises()
+
+      expect(store.playingAmbienceIds.has('amb-1')).toBe(false)
+      expect(stopAmbience).toHaveBeenCalledTimes(2)
+      expect(stopAmbience).toHaveBeenLastCalledWith('local', 'amb-1', {})
+    })
+
+    it('a newer play of the same Ambience is not stopped by the superseded one landing', async () => {
+      const store = useScenePlaybackStore()
+      const item = { ...scene.ambience[0] }
+      let releasePlay!: () => void
+      vi.mocked(playAmbience).mockReturnValueOnce(new Promise<void>((resolve) => {
+        releasePlay = resolve
+      }))
+
+      store.toggleAmbience(item)
+      await vi.waitFor(() => expect(playAmbience).toHaveBeenCalledTimes(1))
+      store.toggleAmbience({ ...item, enabled: false })
+      store.toggleAmbience(item)
+      await vi.waitFor(() => expect(playAmbience).toHaveBeenCalledTimes(2))
+      releasePlay()
+      await flushPromises()
+
+      expect(store.playingAmbienceIds.has('amb-1')).toBe(true)
+      expect(stopAmbience).toHaveBeenCalledTimes(1)
+    })
+
+    it('renderer-fallback Ambience toggled off while its element is loading never plays', async () => {
+      vi.mocked(canDecode).mockResolvedValue(false)
+      const store = useScenePlaybackStore()
+      const item = { ...scene.ambience[0] }
+
+      store.toggleAmbience(item)
+      await vi.waitFor(() => expect(loadingEls).toHaveLength(1))
+      const el = loadingEls[0]!
+      store.toggleAmbience({ ...item, enabled: false })
+      el.dispatchEvent(new Event('canplaythrough'))
+      await flushPromises()
+
+      expect(playingEls).toEqual([])
+      expect(pausedEls).toContain(el)
+      expect(store.playingAmbienceIds.has('amb-1')).toBe(false)
+    })
+
+    it('an Effect whose element is still loading when all Effects stop never plays', async () => {
+      vi.mocked(canDecode).mockResolvedValue(false)
+      const store = useScenePlaybackStore()
+
+      const playing = store.playEffect(scene.effects[0])
+      await vi.waitFor(() => expect(loadingEls).toHaveLength(1))
+      const el = loadingEls[0]!
+      store.stopAllEffectInstances()
+      el.dispatchEvent(new Event('canplaythrough'))
+      await playing
+
+      expect(playingEls).toEqual([])
+      expect(usePlayerStore().activeEffectCount()).toBe(0)
+    })
+  })
+
   it('steps the master volume from the stored value, clamped, and persists it', async () => {
     const store = useScenePlaybackStore()
     vi.mocked(fetchMasterVolume).mockResolvedValueOnce(65)
