@@ -58,12 +58,26 @@ async function findFilename(config: Config, category: SoundCategory, id: string)
   return match
 }
 
+/** Why `findFilename` cannot get from `id` back to `file`, or null when it can. */
+function unresolvableIdProblem(file: string, id: string, filesById: Map<string, string>): string | null {
+  if (id === file)
+    return 'has no extension'
+  if (!isSafeSoundId(id))
+    return `has the unsafe id ${JSON.stringify(id)}`
+  const other = filesById.get(id)
+  if (other !== undefined)
+    return `shares its id ${JSON.stringify(id)} with ${JSON.stringify(other)}`
+  return null
+}
+
 function buildId(name: string): string {
   return `${slugify(idFromFilename(name), { lower: true, strict: true })}-${Date.now()}`
 }
 
 export function createSoundLibrary(config: Config) {
   const tagsStore = createSoundTagsStore(config)
+  /** Files already warned about, so a refreshing view does not repeat the warning on every list. */
+  const warnedUnresolvable = new Set<string>()
 
   return {
     async list(category: SoundCategory): Promise<SoundFile[]> {
@@ -78,13 +92,18 @@ export function createSoundLibrary(config: Config) {
       }
       const tagsById = await tagsStore.getAll(category)
       const results: SoundFile[] = []
+      const filesById = new Map<string, string>()
       for (const file of entries) {
         const filePath = resolvePath(config, category, file)
         try {
           const stats = await stat(filePath)
           const id = idFromFilename(file)
-          if (id === file)
-            log.warn(`${category} file ${JSON.stringify(file)} has no extension, so its id cannot be resolved back to it`)
+          const problem = unresolvableIdProblem(file, id, filesById)
+          filesById.set(id, file)
+          if (problem && !warnedUnresolvable.has(`${category}/${file}`)) {
+            warnedUnresolvable.add(`${category}/${file}`)
+            log.warn(`${category} file ${JSON.stringify(file)} ${problem}, so its id cannot be resolved back to it`)
+          }
           results.push({
             id,
             name: humanize(file),

@@ -449,4 +449,15 @@ describe('sound ids stay inside the library directory', () => {
     expect(sound!.id).toBe('no-extension')
     expect(warn.mock.calls.flat().join(' ')).toMatch(/no-extension.*cannot be resolved/)
   })
+
+  it('warns once when two listed files share an id, not on every list (#662)', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    writeFileSync(join(config.audio.musicDir, 'thunder.mp3'), 'x')
+    writeFileSync(join(config.audio.musicDir, 'thunder.ogg'), 'x')
+    const lib = createSoundLibrary(config)
+    await lib.list('music')
+    await lib.list('music')
+    const lines = warn.mock.calls.map(call => call.join(' ')).filter(line => /shares its id "thunder"/.test(line))
+    expect(lines).toHaveLength(1)
+  })
 })
