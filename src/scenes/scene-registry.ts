@@ -12,7 +12,8 @@ const log = createLogger('scene-registry')
 
 export const REGISTRY_INDEX_URL = 'https://raw.githubusercontent.com/PhyberApex/hibiki/main/registry/index.json'
 const CACHE_FILENAME = 'registry-cache.json'
-const STALE_MS = 24 * 60 * 60 * 1000 // 24 hours
+const HOUR_MS = 60 * 60 * 1000
+const STALE_MS = 24 * HOUR_MS
 /** Without it a stalled connection pins the renderer's `getIndex` for undici's multi-minute defaults (#652). */
 export const DEFAULT_REGISTRY_FETCH_TIMEOUT_MS = 10_000
 
@@ -133,30 +134,46 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
     }
   }
 
-  return {
-    async fetchIndex(forceRefresh = false): Promise<RegistryIndex> {
-      if (!forceRefresh) {
-        const cached = await readOwnCache()
-        if (cached) {
-          const age = Date.now() - new Date(cached.fetchedAt).getTime()
-          if (age < STALE_MS)
-            return cached.data
-        }
-      }
+  /** Fetches the index and caches it; throws on any failure, leaving the cache untouched. */
+  async function fetchAndCache(): Promise<RegistryIndex> {
+    log.info(`Fetching registry index from ${indexUrl}…`)
+    const data = await fetchIndexBody()
+    if (!isRegistryIndex(data)) {
+      log.warn(`Registry index from ${indexUrl} is malformed: no scenes list; not caching it`)
+      throw new Error(`Registry index is malformed (${indexUrl})`)
+    }
+    await writeCache(cachePath, {
+      fetchedAt: new Date().toISOString(),
+      url: indexUrl,
+      data,
+    })
+    log.info(`Registry index cached (${data.scenes.length} scenes)`)
+    return data
+  }
 
-      log.info(`Fetching registry index from ${indexUrl}…`)
-      const data = await fetchIndexBody()
-      if (!isRegistryIndex(data)) {
-        log.warn(`Registry index from ${indexUrl} is malformed: no scenes list; not caching it`)
-        throw new Error(`Registry index is malformed (${indexUrl})`)
+  return {
+    /**
+     * The cached index while it is fresh, else a fresh fetch. Without
+     * `forceRefresh`, a failed fetch falls back to a stale cache so the
+     * Registry still lists entries offline (#709); an explicit refresh throws.
+     */
+    async fetchIndex(forceRefresh = false): Promise<RegistryIndex> {
+      if (forceRefresh)
+        return fetchAndCache()
+      const cached = await readOwnCache()
+      if (!cached)
+        return fetchAndCache()
+      const age = Date.now() - new Date(cached.fetchedAt).getTime()
+      if (age < STALE_MS)
+        return cached.data
+      try {
+        return await fetchAndCache()
       }
-      await writeCache(cachePath, {
-        fetchedAt: new Date().toISOString(),
-        url: indexUrl,
-        data,
-      })
-      log.info(`Registry index cached (${data.scenes.length} scenes)`)
-      return data
+      catch (e) {
+        const hours = Math.round(age / HOUR_MS)
+        log.warn(`Registry index fetch failed (${(e as Error).message}); serving the cached index from ${cached.fetchedAt} (${hours} h old)`)
+        return cached.data
+      }
     },
 
     async getIndex(): Promise<RegistryIndex> {
