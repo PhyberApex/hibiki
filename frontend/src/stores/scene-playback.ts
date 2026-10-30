@@ -595,8 +595,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   }
 
   async function playAmbience(item: SceneItem, initialVolume?: number, fadeInMs = 0) {
-    if (!targetId.value || !canPlay.value)
+    if (!targetId.value || !canPlay.value) {
+      logCannotPlay('playAmbience', item.soundId)
       return
+    }
     const token = claimAmbienceIntent(item.soundId, false)
     startingAmbience.add(item.soundId)
     ambienceItemVolumes.set(item.soundId, item.volume ?? 80)
@@ -691,6 +693,12 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     }
   }
 
+  // A play call on a Discord Target with no joined channel (or no guild) does
+  // nothing; the log line is what makes that diagnosable (#713).
+  function logCannotPlay(action: string, soundId: string) {
+    logInfo(`[scene] ${action} ${soundId} ignored: Target ${targetId.value ?? 'none'} cannot play`)
+  }
+
   function clearMusicChannel(channel: MusicChannel) {
     channel.soundId = null
     channel.source = null
@@ -783,8 +791,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   }
 
   async function playMusic(item: SceneItem, channel: MusicChannel = primaryMusicChannel, initialVolume?: number, fadeInMs?: number) {
-    if (!targetId.value || !canPlay.value)
+    if (!targetId.value || !canPlay.value) {
+      logCannotPlay('playMusic', item.soundId)
       return
+    }
     try {
       const track = musicSounds.value.find(s => s.id === item.soundId)
       if (!track) {
@@ -831,7 +841,14 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         captureSessions.set(channel.streamId, sess)
       }
       el.onended = () => onMusicPlayedOut(channel, token)
-      el.onerror = () => clearMusicChannel(channel)
+      // Released like any other Music teardown, so a Discord Target's stream
+      // and capture session end with it rather than outliving the track.
+      el.onerror = () => {
+        if (channel.token !== token)
+          return
+        console.warn(`[scene] music ${item.soundId} errored mid-play, channel ${channel.streamId} released`)
+        stopMusicChannel(channel, 'renderer')
+      }
       await el.play()
       // With no stored duration (its header could not be read), the element knows it once playable.
       if (channel.token === token) {
@@ -1083,8 +1100,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   }
 
   async function playEffect(item: SceneItem) {
-    if (!targetId.value || !canPlay.value)
+    if (!targetId.value || !canPlay.value) {
+      logCannotPlay('playEffect', item.soundId)
       return
+    }
     effectFlash.trigger(item.soundId)
 
     const path = selectBackendPlaybackPath(await canDecodeEffectsCached(item.soundId))
