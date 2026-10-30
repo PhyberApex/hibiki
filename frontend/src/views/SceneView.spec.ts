@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { fetchSceneFadeLength, fetchVisionConfig, LOCAL_TARGET_ID } from '@/api/config'
 import { usePlayerStore } from '@/stores/player'
+import { useToastStore } from '@/stores/toast'
 import SceneView from './SceneView.vue'
 
 vi.mock('@/api/scenes', () => ({
@@ -2183,5 +2184,225 @@ describe('sceneView — accessible editor controls', () => {
       'Volume for Tavern Theme',
       'Loop Tavern Theme',
     ]))
+  })
+})
+
+describe('sceneView — failure handling and stale playback (#655)', () => {
+  beforeAll(stubMediaElement)
+
+  const withMusic = {
+    ...JSON.parse(JSON.stringify(scene)),
+    music: [
+      {
+        soundId: 'm1',
+        soundName: 'Tavern Theme',
+        volume: 80,
+        loop: true,
+      },
+    ],
+  }
+
+  beforeEach(async () => {
+    const { getScene, listScenes, saveScene, deleteScene } = await import('@/api/scenes')
+    const { canDecode, listMusic } = await import('@/api/sounds')
+    vi.mocked(getScene).mockResolvedValue(JSON.parse(JSON.stringify(withMusic)))
+    vi.mocked(listScenes).mockResolvedValue([])
+    vi.mocked(saveScene).mockReset()
+    vi.mocked(saveScene).mockResolvedValue(undefined as never)
+    vi.mocked(deleteScene).mockReset()
+    vi.mocked(deleteScene).mockResolvedValue(undefined)
+    vi.mocked(canDecode).mockResolvedValue(true)
+    vi.mocked(listMusic).mockResolvedValue([
+      { id: 'm1', name: 'Tavern Theme', filename: 'tavern.mp3' } as never,
+    ])
+  })
+
+  afterEach(async () => {
+    const { canDecode, listMusic } = await import('@/api/sounds')
+    vi.mocked(canDecode).mockResolvedValue(false)
+    vi.mocked(listMusic).mockResolvedValue([])
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  afterAll(() => {
+    Object.defineProperty(mediaProto, 'load', { configurable: true, value: originalMedia.load })
+    Object.defineProperty(mediaProto, 'play', { configurable: true, value: originalMedia.play })
+    Object.defineProperty(mediaProto, 'pause', { configurable: true, value: originalMedia.pause })
+  })
+
+  async function mountAtPath(path: string) {
+    await router.push(path)
+    await router.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(SceneView, {
+      global: {
+        plugins: [pinia, router],
+        stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+      },
+    })
+    await flushPromises()
+    const player = usePlayerStore(pinia)
+    player.activeTarget = 'local'
+    await flushPromises()
+    return {
+      wrapper,
+      player,
+      toasts: useToastStore(pinia),
+    }
+  }
+
+  it('creates one Scene when Enter is pressed twice before the first save resolves', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    let resolveSave!: (s: unknown) => void
+    vi.mocked(saveScene).mockImplementation(() => new Promise((resolve) => {
+      resolveSave = resolve as (s: unknown) => void
+    }))
+    const { wrapper } = await mountAtPath('/scenes')
+    await wrapper.findAll('button').find(b => b.text() === 'New scene')!.trigger('click')
+    const input = wrapper.find('.create-scene-input')
+    await input.setValue('Dungeon')
+    await input.trigger('keydown', { key: 'Enter' })
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(saveScene).toHaveBeenCalledTimes(1)
+    resolveSave({ ...withMusic, id: 'new-1', name: 'Dungeon' })
+    await flushPromises()
+    wrapper.unmount()
+  })
+
+  it('stops the playing Music track when it is removed from the Scene', async () => {
+    const { stopMusic } = await import('@/api/player')
+    vi.mocked(stopMusic).mockClear()
+    const { wrapper } = await mountAtPath('/scenes/s1')
+    await wrapper.find('[aria-label="Play Tavern Theme"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[aria-label="Stop music"]').exists()).toBe(true)
+
+    await wrapper.find('[aria-label="Remove Tavern Theme"]').trigger('click')
+    await flushPromises()
+
+    expect(stopMusic).toHaveBeenCalledWith('local', {})
+    wrapper.unmount()
+  })
+
+  it('stops a removed Effect\'s instances', async () => {
+    const { wrapper, player } = await mountAtPath('/scenes/s1')
+    const stopEffectSound = vi.spyOn(player, 'stopEffectSound')
+    await wrapper.find('[aria-label="Remove Thunder"]').trigger('click')
+    await flushPromises()
+    expect(stopEffectSound).toHaveBeenCalledWith('fx-1')
+    wrapper.unmount()
+  })
+
+  it('shows the load error instead of the empty state when the Scene list fails to load', async () => {
+    const { listScenes } = await import('@/api/scenes')
+    vi.mocked(listScenes).mockRejectedValue(new Error('scenes.json is corrupt'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { wrapper } = await mountAtPath('/scenes')
+
+    expect(wrapper.find('[data-testid="scene-load-error"]').text()).toContain('scenes.json is corrupt')
+    expect(wrapper.find('.scene-empty').exists()).toBe(false)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[scenes]'), expect.any(Error))
+    wrapper.unmount()
+  })
+
+  it('shows the load error instead of "Loading…" forever when the Scene fails to load', async () => {
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockRejectedValue(new Error('scene not readable'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { wrapper } = await mountAtPath('/scenes/s1')
+
+    expect(wrapper.find('[data-testid="scene-load-error"]').text()).toContain('scene not readable')
+    expect(wrapper.find('.detail-title').text()).not.toBe('Loading…')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[scenes]'), expect.any(Error))
+    wrapper.unmount()
+  })
+
+  it('rolls a failed item save back, logs it and shows an error toast', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    vi.mocked(saveScene).mockRejectedValue(new Error('disk full'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { wrapper, toasts } = await mountAtPath('/scenes/s1')
+
+    const slider = wrapper.find('[aria-label="Volume for Rain"]')
+    await slider.setValue('30')
+    await slider.trigger('change')
+    await flushPromises()
+
+    expect((wrapper.find('[aria-label="Volume for Rain"]').element as HTMLInputElement).value).toBe('80')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[scenes] save failed'), expect.any(Error))
+    expect(toasts.toasts.some(t => t.type === 'error')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('turns a toggled-off Ambience sound back on when the toggle fails to save', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { wrapper } = await mountAtPath('/scenes/s1')
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.sound-card-ambience').classes()).toContain('pulse-breathe')
+
+    vi.mocked(saveScene).mockRejectedValue(new Error('disk full'))
+    await wrapper.find('[aria-label="Enable Rain"]').setValue(false)
+    await flushPromises()
+
+    expect((wrapper.find('[aria-label="Enable Rain"]').element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.find('.sound-card-ambience').classes()).toContain('pulse-breathe')
+    wrapper.unmount()
+  })
+
+  it('brings a removed item back when the removal fails to save', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    vi.mocked(saveScene).mockRejectedValue(new Error('disk full'))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { wrapper } = await mountAtPath('/scenes/s1')
+
+    await wrapper.find('[aria-label="Remove Door slam"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[aria-label="Remove Door slam"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('restarts a removed enabled Ambience sound when the removal fails to save', async () => {
+    const { saveScene } = await import('@/api/scenes')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { wrapper } = await mountAtPath('/scenes/s1')
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+
+    vi.mocked(saveScene).mockRejectedValue(new Error('disk full'))
+    await wrapper.find('[aria-label="Remove Rain"]').trigger('click')
+    await flushPromises()
+
+    expect((wrapper.find('[aria-label="Enable Rain"]').element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.find('.sound-card-ambience').classes()).toContain('pulse-breathe')
+    wrapper.unmount()
+  })
+
+  it('keeps the Scene playing and open when deleting it fails', async () => {
+    vi.stubGlobal('confirm', () => true)
+    const { deleteScene } = await import('@/api/scenes')
+    vi.mocked(deleteScene).mockRejectedValue(new Error('locked'))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { wrapper, player, toasts } = await mountAtPath('/scenes/s1')
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.btn-danger').trigger('click')
+    await flushPromises()
+
+    expect(player.playingSceneId).toBe('s1')
+    expect(router.currentRoute.value.path).toBe('/scenes/s1')
+    expect(toasts.toasts.some(t => t.type === 'error')).toBe(true)
+    wrapper.unmount()
   })
 })

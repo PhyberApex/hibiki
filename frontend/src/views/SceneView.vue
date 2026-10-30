@@ -17,10 +17,12 @@ import ResolveSoundDialog from '@/components/ResolveSoundDialog.vue'
 import VisionToVibeDialog from '@/components/VisionToVibeDialog.vue'
 import { usePlayerStore } from '@/stores/player'
 import { SCENE_START_FLASH, useScenePlaybackStore } from '@/stores/scene-playback'
+import { useToastStore } from '@/stores/toast'
 
 const route = useRoute()
 const router = useRouter()
 const player = usePlayerStore()
+const toast = useToastStore()
 // Scene orchestration (play/stop, Scene Crossfade, renderer-fallback audio)
 // lives in the store so it survives leaving this view; the view renders state
 // and calls store actions.
@@ -44,7 +46,10 @@ const visionProvider = ref<VisionProviderId>('claude')
 const visionEndpoint = ref('')
 const showVisionDialog = ref(false)
 const resolveTarget = ref<{ category: 'ambience' | 'music' | 'effects', item: SceneItem } | null>(null)
-const loadError = ref<string | null>(null)
+// One per load so a later success only clears its own failure.
+const scenesLoadError = ref<string | null>(null)
+const sceneLoadError = ref<string | null>(null)
+const soundsLoadError = ref<string | null>(null)
 const exportImportMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
 
 // The store reads the open Scene's live copy for Music Mode advances, Target
@@ -66,7 +71,79 @@ function setMusicMode(mode: MusicMode) {
     return
   logInfo(`[scenes] Music Mode ${musicMode.value} -> ${mode} in scene ${scene.value.id}`)
   scene.value.musicMode = mode
-  saveScene(scene.value).catch(e => console.warn(`[scenes] Saving Music Mode ${mode} for scene ${scene.value?.id} failed:`, e))
+  persistScene(`Music Mode ${mode}`)
+}
+
+// The Scene as last persisted: an edit whose save fails rolls back to it, so
+// the editor never shows a change that is not on disk.
+let persistedScene: Scene | null = null
+let saveSeq = 0
+let persistedSeq = 0
+
+function cloneScene(s: Scene): Scene {
+  return JSON.parse(JSON.stringify(s))
+}
+
+function rememberPersisted(s: Scene | null) {
+  persistedScene = s && cloneScene(s)
+  persistedSeq = saveSeq
+}
+
+/** Records a save that reached disk; saves can only move the baseline forward. */
+function markPersisted(seq: number, sent: Scene) {
+  if (seq > persistedSeq && persistedScene?.id === sent.id) {
+    persistedScene = sent
+    persistedSeq = seq
+  }
+}
+
+// A rollback can undo several unsaved edits at once, so bring every audible
+// Ambience toggle and item volume of the open Scene back in line with it. An
+// item missing on one side (an undone removal, add or relink) counts as off.
+function resyncAudioAfterRollback(undone: Scene, restored: Scene) {
+  for (const item of undone.ambience) {
+    if (item.enabled && !restored.ambience.some(i => i.soundId === item.soundId))
+      stopAmbience(item.soundId)
+  }
+  for (const item of restored.ambience) {
+    const before = undone.ambience.find(i => i.soundId === item.soundId)
+    if (Boolean(before?.enabled) !== Boolean(item.enabled))
+      playback.toggleAmbience(item)
+    updateAmbienceVolume(item)
+  }
+  for (const item of restored.music)
+    updateMusicVolume(item)
+}
+
+// Every in-place edit of the open Scene saves through here. A failure is
+// logged, toasted and, when no later save is in flight, rolled back to the
+// last persisted Scene (a later save carries this edit too, so its own outcome
+// decides).
+async function persistScene(what: string) {
+  const current = scene.value
+  if (!current)
+    return
+  const seq = ++saveSeq
+  const sent = cloneScene(current)
+  try {
+    await saveScene(current)
+    markPersisted(seq, sent)
+    logInfo(`[scenes] Saved ${what} in scene ${sent.id}`)
+  }
+  catch (err) {
+    const rollBack = seq === saveSeq && scene.value?.id === sent.id && persistedScene?.id === sent.id
+    console.warn(`[scenes] save failed (${what}) for scene ${sent.id}${rollBack
+      ? ', rolled back'
+      : ''}:`, err)
+    toast.show({ type: 'error', text: `Couldn't save ${what}. ${rollBack
+      ? 'The change was undone.'
+      : 'Try again.'}` })
+    if (rollBack && persistedScene && scene.value) {
+      const undone = scene.value
+      scene.value = cloneScene(persistedScene)
+      resyncAudioAfterRollback(undone, scene.value)
+    }
+  }
 }
 
 const INTERVAL_OPTIONS = [
@@ -147,8 +224,11 @@ async function bindHotkey(errorKey: string, target: { hotkey?: string }, value: 
     delete target.hotkey
   const { [errorKey]: _cleared, ...rest } = hotkeyErrors.value
   hotkeyErrors.value = rest
+  const seq = ++saveSeq
+  const sent = cloneScene(scene.value)
   try {
     await saveScene(scene.value)
+    markPersisted(seq, sent)
     // The Scene list shows the Scene Hotkey chip, so refresh it from the store.
     await loadScenes()
   }
@@ -173,7 +253,7 @@ function updateRepeat(item: SceneItem, field: 'repeatMin' | 'repeatMax', value: 
     item.repeatMax = value
   if (field === 'repeatMax' && value < (item.repeatMin ?? 0))
     item.repeatMin = value
-  saveScene(scene.value!).catch(() => {})
+  persistScene(`the repeat interval of ${item.soundName ?? item.soundId}`)
 }
 
 const sceneId = computed(() => {
@@ -277,24 +357,36 @@ const saveGlobalVolume = () => playback.saveMasterVolume()
 async function loadScenes() {
   try {
     scenes.value = await listScenes()
+    scenesLoadError.value = null
   }
   catch (err) {
-    loadError.value = err instanceof Error
+    console.warn('[scenes] load failed: Scene list:', err)
+    scenesLoadError.value = err instanceof Error
       ? err.message
       : 'Couldn\'t load scenes. Try again.'
   }
 }
 
 async function loadScene() {
+  sceneLoadError.value = null
   if (sceneId.value === undefined || !sceneId.value) {
     scene.value = null
+    rememberPersisted(null)
     return
   }
+  const id = sceneId.value
   try {
-    scene.value = await getScene(sceneId.value)
+    const loaded = await getScene(id)
+    scene.value = loaded
+    rememberPersisted(loaded)
+    if (!loaded) {
+      console.warn(`[scenes] load failed: scene ${id} not found`)
+      sceneLoadError.value = 'This scene no longer exists.'
+    }
   }
   catch (err) {
-    loadError.value = err instanceof Error
+    console.warn(`[scenes] load failed: scene ${id}:`, err)
+    sceneLoadError.value = err instanceof Error
       ? err.message
       : 'Couldn\'t load this scene. Try again.'
   }
@@ -322,16 +414,20 @@ async function loadSounds() {
     ambienceSounds.value = ambience
     musicSounds.value = music
     effectsSounds.value = effects
+    soundsLoadError.value = null
   }
   catch (err) {
-    loadError.value = err instanceof Error
+    console.warn('[scenes] load failed: sound library:', err)
+    soundsLoadError.value = err instanceof Error
       ? err.message
       : 'Couldn\'t load sounds. Try again.'
   }
 }
 
 function toggleAmbience(item: SceneItem) {
-  saveScene(scene.value!).catch(() => {})
+  persistScene(`${item.soundName ?? item.soundId} ${item.enabled
+    ? 'on'
+    : 'off'}`)
   playback.toggleAmbience(item)
 }
 
@@ -348,7 +444,7 @@ async function addToScene(category: 'ambience' | 'music' | 'effects', sound: Sou
     enabled: category === 'ambience',
     loop: category === 'music',
   })
-  await saveScene(scene.value).catch(() => {})
+  await persistScene(`${sound.name} to the scene`)
 }
 
 async function removeFromScene(category: 'ambience' | 'music' | 'effects', soundId: string) {
@@ -357,10 +453,22 @@ async function removeFromScene(category: 'ambience' | 'music' | 'effects', sound
   const list = scene.value[category]
   const idx = list.findIndex((i: SceneItem) => i.soundId === soundId)
   if (idx >= 0) {
-    list.splice(idx, 1)
-    if (category === 'ambience')
+    const [removed] = list.splice(idx, 1)
+    // The per-track Stop lives on the removed card, so stop what it was playing.
+    if (category === 'ambience') {
       stopAmbience(soundId)
-    await saveScene(scene.value).catch(() => {})
+    }
+    else if (category === 'music') {
+      if (playingMusicId.value === soundId) {
+        logInfo(`[scenes] Removed playing Music track ${soundId} from scene ${scene.value.id}, stopping it`)
+        stopMusicPlayback()
+      }
+    }
+    else {
+      player.stopEffectSound(soundId)
+        .catch(e => console.warn(`[scenes] Stopping removed Effect ${soundId} failed:`, e))
+    }
+    await persistScene(`the removal of ${removed.soundName ?? soundId}`)
   }
 }
 
@@ -389,7 +497,7 @@ function cancelCreateScene() {
 
 async function submitCreateScene() {
   const name = newSceneName.value.trim()
-  if (!name)
+  if (!name || createSceneBusy.value)
     return
   createSceneBusy.value = true
   exportImportMessage.value = null
@@ -422,11 +530,20 @@ async function deleteCurrentScene() {
   // eslint-disable-next-line no-alert -- simple confirm for destructive action
   if (!scene.value || !confirm(`Delete "${scene.value.name}"? This can't be undone.`))
     return
-  // Stops the Playing Scene if this is it, and any ambience/music started
-  // individually on this open Scene either way.
+  const { id, name } = scene.value
+  logInfo(`[scenes] Deleting scene ${id}`)
+  try {
+    await deleteScene(id)
+  }
+  catch (err) {
+    console.warn(`[scenes] delete failed for scene ${id}:`, err)
+    toast.show({ type: 'error', text: `Couldn't delete "${name}". Try again.` })
+    return
+  }
+  // Only once it is gone: stops the Playing Scene if this is it, and any
+  // ambience/music started individually on this open Scene either way.
   stopScene()
-  await deleteScene(scene.value.id)
-  scenes.value = await listScenes()
+  await loadScenes()
   await router.push('/scenes')
   scene.value = null
 }
@@ -518,10 +635,11 @@ function isSoundMissing(category: 'ambience' | 'music' | 'effects', soundId: str
 async function relinkSound(category: 'ambience' | 'music' | 'effects', item: SceneItem, soundId: string, soundName: string) {
   if (!scene.value)
     return
+  const previous = item.soundName ?? item.soundId
   item.soundId = soundId
   item.soundName = soundName
   await Promise.all([
-    saveScene(scene.value).catch(() => {}),
+    persistScene(`the relink of ${previous} to ${soundName}`),
     loadSounds(),
   ])
 }
@@ -651,6 +769,15 @@ watch(sceneId, (newId) => {
         {{ exportImportMessage.text }}
       </p>
 
+      <p
+        v-if="scenesLoadError || soundsLoadError"
+        class="status-message status-message-error"
+        role="alert"
+        data-testid="scene-load-error"
+      >
+        {{ scenesLoadError ?? soundsLoadError }}
+      </p>
+
       <!-- Scene list -->
       <ul v-if="scenes.length > 0" class="scene-list">
         <li v-for="s in scenes" :key="s.id" class="scene-list-row">
@@ -685,7 +812,7 @@ watch(sceneId, (newId) => {
       </ul>
 
       <!-- Empty state: no scenes at all -->
-      <div v-else class="scene-empty">
+      <div v-else-if="!scenesLoadError" class="scene-empty">
         <h2 class="empty-title">
           Get started with scenes
         </h2>
@@ -719,7 +846,7 @@ watch(sceneId, (newId) => {
         </RouterLink>
         <div class="detail-title-row">
           <h1 class="detail-title">
-            {{ scene?.name ?? 'Loading…' }}
+            {{ scene?.name ?? (sceneLoadError ? 'Scene unavailable' : 'Loading…') }}
           </h1>
           <HotkeyRecorder
             v-if="scene"
@@ -765,6 +892,15 @@ watch(sceneId, (newId) => {
         :class="[exportImportMessage.type === 'success' ? 'status-message-success' : 'status-message-error']"
       >
         {{ exportImportMessage.text }}
+      </p>
+
+      <p
+        v-if="sceneLoadError || soundsLoadError"
+        class="status-message status-message-error"
+        role="alert"
+        data-testid="scene-load-error"
+      >
+        {{ sceneLoadError ?? soundsLoadError }}
       </p>
 
       <div
@@ -880,7 +1016,7 @@ watch(sceneId, (newId) => {
                     class="volume-slider"
                     :aria-label="`Volume for ${item.soundName ?? resolveSoundName('ambience', item.soundId)}`"
                     @input="updateAmbienceVolume(item)"
-                    @change="saveScene(scene)"
+                    @change="persistScene(`the volume of ${item.soundName ?? item.soundId}`)"
                   >
                   <label class="toggle">
                     <input
@@ -1030,10 +1166,10 @@ watch(sceneId, (newId) => {
                     class="volume-slider"
                     :aria-label="`Volume for ${item.soundName ?? resolveSoundName('music', item.soundId)}`"
                     @input="updateMusicVolume(item)"
-                    @change="saveScene(scene)"
+                    @change="persistScene(`the volume of ${item.soundName ?? item.soundId}`)"
                   >
                   <label v-if="musicMode === 'single'" class="toggle" title="Loop">
-                    <input v-model="item.loop" type="checkbox" :aria-label="`Loop ${item.soundName ?? resolveSoundName('music', item.soundId)}`" @change="saveScene(scene)">
+                    <input v-model="item.loop" type="checkbox" :aria-label="`Loop ${item.soundName ?? resolveSoundName('music', item.soundId)}`" @change="persistScene(`the loop of ${item.soundName ?? item.soundId}`)">
                   </label>
                   <button
                     type="button"
