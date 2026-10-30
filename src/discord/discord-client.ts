@@ -38,6 +38,8 @@ function attachClientLogging(client: Client): Client {
 
 export function createDiscordClient(config: Config, appConfig: AppConfig) {
   let client = attachClientLogging(new Client(CLIENT_OPTIONS))
+  /** The raw `Client.login` of every client still logging in; see `retire`. */
+  const loginsInFlight = new WeakMap<Client, Promise<unknown>>()
 
   async function login(): Promise<void> {
     let token = config.discord.token
@@ -50,62 +52,108 @@ export function createDiscordClient(config: Config, appConfig: AppConfig) {
       return
     }
     log.info('Logging in…')
+    // Pinned for the whole attempt: a reconnect or logout swaps `client` while
+    // this login may still be pending, and its settling must not touch the new one.
+    const attempt = client
 
     let timeout: ReturnType<typeof setTimeout> | undefined
     let onReady = () => {}
     const readyPromise = new Promise<void>((resolve, reject) => {
       timeout = setTimeout(() => reject(new Error('Discord client ready timeout')), READY_TIMEOUT_MS)
       onReady = () => resolve()
-      client.on(Events.ClientReady, onReady)
+      attempt.on(Events.ClientReady, onReady)
     })
     // The timer runs during `client.login` too, before anything awaits it: a
     // slow login that ends ready would otherwise leave this rejection unhandled.
     // Awaiting `readyPromise` below still sees the timeout.
     readyPromise.catch(() => {})
 
+    const loggingIn = attempt.login(token)
+    loginsInFlight.set(attempt, loggingIn)
     try {
-      await client.login(token)
-      if (!client.isReady())
+      await loggingIn
+      if (!attempt.isReady())
         await readyPromise
     }
     catch (err) {
-      log.error('Login failed:', err)
+      if (attempt !== client)
+        log.warn('Login superseded by a reconnect or logout ended without completing:', err)
+      else
+        log.error('Login failed:', err)
       throw err
     }
     finally {
       // Also on a failed login, so neither the timer nor the listener outlives it.
       clearTimeout(timeout)
-      client.off(Events.ClientReady, onReady)
+      attempt.off(Events.ClientReady, onReady)
+      loginsInFlight.delete(attempt)
     }
 
-    log.info('Login complete')
+    log.info(attempt === client
+      ? 'Login complete'
+      : 'Login superseded by a reconnect or logout completed; that client is being destroyed')
   }
 
-  async function destroy(): Promise<void> {
-    if (client.isReady()) {
-      log.info('Destroying client')
-      await client.destroy()
-    }
+  function readinessLabel(): string {
+    return `client ${client.isReady()
+      ? 'ready'
+      : 'not ready'}`
   }
 
   /**
-   * Takes the bot offline even while a login is still in flight (unlike
-   * `destroy`, which only acts on a ready client), leaving a fresh client
-   * for the next `login`/`reconnect`.
+   * Destroys the client whether or not it is ready, so a login still in flight
+   * on quit is torn down too (#651). discord.js's `destroy()` is safe on a
+   * client that never logged in.
    */
-  async function logout(): Promise<void> {
-    log.info(`Logging out (client ${client.isReady()
-      ? 'ready'
-      : 'not ready'})`)
+  async function destroy(): Promise<void> {
+    log.info(`Destroying client (${readinessLabel()})`)
+    await client.destroy()
+  }
+
+  /**
+   * Destroys a client that has been swapped out, ready or not (#651). One still
+   * logging in is destroyed only once its `Client.login` settles: a `destroy()`
+   * landing while discord.js still fetches the gateway info marks the client
+   * destroyed before any shard exists, the login then opens a live session
+   * anyway, and every later `destroy()` is a no-op. `Client.login` resolves
+   * once the shards are ready, when `destroy()` does close them; a failed login
+   * has already been destroyed by discord.js.
+   */
+  async function retire(old: Client): Promise<void> {
+    const loggingIn = loginsInFlight.get(old)
+    if (!loggingIn) {
+      await old.destroy()
+      return
+    }
+    log.info('Old client is still logging in; destroying it once that login settles')
+    loggingIn.then(
+      async () => {
+        log.info('Destroying the superseded client now that its login settled')
+        await old.destroy()
+      },
+      () => {},
+    ).catch(err => log.warn('Could not destroy the superseded client:', err))
+  }
+
+  /** Swaps in a fresh client first, then retires the old one. */
+  async function replaceClient(): Promise<void> {
     const old = client
     client = attachClientLogging(new Client(CLIENT_OPTIONS))
-    await old.destroy()
+    await retire(old)
+  }
+
+  /**
+   * Takes the bot offline even while a login is still in flight, leaving a
+   * fresh client for the next `login`/`reconnect`.
+   */
+  async function logout(): Promise<void> {
+    log.info(`Logging out (${readinessLabel()})`)
+    await replaceClient()
   }
 
   async function reconnect(): Promise<void> {
-    log.info('Reconnecting…')
-    await destroy()
-    client = attachClientLogging(new Client(CLIENT_OPTIONS))
+    log.info(`Reconnecting… (${readinessLabel()})`)
+    await replaceClient()
     await login()
   }
 

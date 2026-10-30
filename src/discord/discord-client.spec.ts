@@ -96,6 +96,23 @@ function loginBecomesReady(client: FakeClient, guilds: unknown[] = []) {
   })
 }
 
+/** A login held open (a slow gateway) until the test settles it. */
+function loginPendingUntilFinished(client: FakeClient) {
+  const finish = {
+    resolve: () => {},
+    reject: (_err: Error) => {},
+  }
+  client.login.mockImplementation(() => new Promise((resolve, reject) => {
+    finish.resolve = () => resolve('ok')
+    finish.reject = reject
+  }))
+  return finish
+}
+
+function flushPromises(): Promise<void> {
+  return new Promise(resolve => jest.requireActual('node:timers').setImmediate(resolve))
+}
+
 function channel(id: string, name: string | null, voice: boolean) {
   return {
     id,
@@ -326,13 +343,25 @@ describe('createDiscordClient', () => {
       await discord.destroy()
 
       expect(latestClient().destroy).toHaveBeenCalled()
-      expect(info).toHaveBeenCalledWith('[discord]', 'Destroying client')
+      expect(info).toHaveBeenCalledWith('[discord]', 'Destroying client (client ready)')
     })
 
-    it('leaves a client that is not ready alone', async () => {
+    it('destroys a client whose login is still in flight, so quitting cannot leave it to come up later', async () => {
+      // `destroy` is what the shutdown handler calls on quit.
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
+      const client = latestClient()
+      client.login.mockImplementation(() => new Promise((_resolve, reject) => {
+        client.destroy.mockImplementation(async () => {
+          reject(new Error('client destroyed'))
+        })
+      }))
+      const pendingLogin = expect(discord.login()).rejects.toThrow('client destroyed')
+
       await discord.destroy()
-      expect(latestClient().destroy).not.toHaveBeenCalled()
+
+      await pendingLogin
+      expect(client.destroy).toHaveBeenCalledTimes(1)
+      expect(info).toHaveBeenCalledWith('[discord]', 'Destroying client (client not ready)')
     })
   })
 
@@ -366,7 +395,82 @@ describe('createDiscordClient', () => {
       expect(fresh.login).toHaveBeenCalledWith(TOKEN)
       expect(discord.getClient()).toBe(fresh)
       expect(discord.getBotStatus().ready).toBe(true)
-      expect(info).toHaveBeenCalledWith('[discord]', 'Reconnecting…')
+      expect(info).toHaveBeenCalledWith('[discord]', 'Reconnecting… (client ready)')
+    })
+
+    it('destroys a client whose login is still in flight exactly once, as soon as that login settles', async () => {
+      const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
+      const old = latestClient()
+      const finishOldLogin = loginPendingUntilFinished(old)
+      const firstLogin = discord.login()
+      mockOnCreate = client => loginBecomesReady(client)
+
+      await discord.reconnect()
+
+      // Destroying now could land during discord.js's gateway fetch, where it cannot stop the login.
+      expect(old.destroy).not.toHaveBeenCalled()
+      const fresh = latestClient()
+      expect(discord.getClient()).toBe(fresh)
+      expect(discord.getBotStatus().ready).toBe(true)
+
+      // The slow gateway comes through: the old client's shards turn ready.
+      becomeReady(old)
+      finishOldLogin.resolve()
+      await firstLogin
+      await flushPromises()
+
+      expect(old.destroy).toHaveBeenCalledTimes(1)
+      expect(fresh.destroy).not.toHaveBeenCalled()
+      expect(discord.getClient()).toBe(fresh)
+      expect(info).toHaveBeenCalledWith('[discord]', 'Reconnecting… (client not ready)')
+      expect(info).toHaveBeenCalledWith('[discord]', 'Old client is still logging in; destroying it once that login settles')
+      expect(info).toHaveBeenCalledWith('[discord]', 'Login superseded by a reconnect or logout completed; that client is being destroyed')
+      // Only the fresh client's login reports completion.
+      expect(info.mock.calls.filter(args => args[1] === 'Login complete')).toHaveLength(1)
+      expect(info).toHaveBeenCalledWith('[discord]', 'Destroying the superseded client now that its login settled')
+    })
+
+    it('destroys a superseded client whose login resolves before ready without touching the fresh one', async () => {
+      jest.useFakeTimers()
+      const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
+      const old = latestClient()
+      const finishOldLogin = loginPendingUntilFinished(old)
+      const firstLogin = expect(discord.login()).rejects.toThrow('Discord client ready timeout')
+      mockOnCreate = client => loginBecomesReady(client)
+      const reconnecting = discord.reconnect()
+      await jest.advanceTimersByTimeAsync(0)
+      await reconnecting
+      const fresh = latestClient()
+      const freshListeners = fresh.listenerCount(Events.ClientReady)
+
+      finishOldLogin.resolve()
+      await jest.advanceTimersByTimeAsync(15_000)
+      await firstLogin
+
+      expect(old.destroy).toHaveBeenCalledTimes(1)
+      expect(fresh.destroy).not.toHaveBeenCalled()
+      expect(fresh.listenerCount(Events.ClientReady)).toBe(freshListeners)
+      expect(discord.getClient()).toBe(fresh)
+      expect(warn).toHaveBeenCalledWith('[discord]', 'Login superseded by a reconnect or logout ended without completing:', expect.any(Error))
+      expect(error).not.toHaveBeenCalled()
+    })
+
+    it('leaves a superseded client whose login fails to discord.js, which destroys it itself', async () => {
+      const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
+      const old = latestClient()
+      const finishOldLogin = loginPendingUntilFinished(old)
+      const failure = new Error('gateway unreachable')
+      const firstLogin = expect(discord.login()).rejects.toBe(failure)
+      mockOnCreate = client => loginBecomesReady(client)
+      await discord.reconnect()
+
+      finishOldLogin.reject(failure)
+      await firstLogin
+      await flushPromises()
+
+      expect(old.destroy).not.toHaveBeenCalled()
+      expect(warn).toHaveBeenCalledWith('[discord]', 'Login superseded by a reconnect or logout ended without completing:', failure)
+      expect(error).not.toHaveBeenCalled()
     })
 
     it('logs a failing re-login at error and rethrows it', async () => {
