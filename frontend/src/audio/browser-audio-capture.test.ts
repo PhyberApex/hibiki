@@ -333,6 +333,7 @@ describe('browser-audio-capture', () => {
           addModule: vi.fn(async (_url: string) => {}),
         },
         destination: {},
+        setSinkId: vi.fn(async (_sinkId: string) => {}),
       }
       vi.stubGlobal('AudioContext', class {
         constructor() { return ctx as any }
@@ -356,6 +357,18 @@ describe('browser-audio-capture', () => {
     async function load() {
       vi.resetModules()
       return import('./browser-audio-capture')
+    }
+
+    /** Points the Output Device at `deviceId` (`null` = system default) on the router the freshly loaded capture module uses. */
+    async function routeTo(deviceId: string | null) {
+      const { outputDeviceRouter } = await import('./output-device')
+      outputDeviceRouter.setDevices([
+        { deviceId: 'desk', label: 'Desk speakers' },
+        { deviceId: 'headset', label: 'Headset' },
+      ])
+      outputDeviceRouter.setChoice(deviceId === null
+        ? null
+        : { deviceId, label: deviceId })
     }
 
     afterEach(() => {
@@ -462,6 +475,77 @@ describe('browser-audio-capture', () => {
       ctx.state = 'closed'
       await captureFromAudioElement(element, vi.fn())
       expect(ctx.createMediaElementSource).toHaveBeenCalledTimes(2)
+    })
+
+    it('routes a new element context to the current Output Device', async () => {
+      const { ctx } = stubAudio()
+      const { captureFromAudioElement } = await load()
+      await routeTo('desk')
+      await captureFromAudioElement(document.createElement('audio'), vi.fn())
+      expect(ctx.setSinkId).toHaveBeenCalledExactlyOnceWith('desk')
+    })
+
+    it('leaves a new element context on the system default when no device is chosen', async () => {
+      const { ctx } = stubAudio()
+      const { captureFromAudioElement } = await load()
+      await captureFromAudioElement(document.createElement('audio'), vi.fn())
+      expect(ctx.setSinkId).not.toHaveBeenCalled()
+    })
+
+    it('still captures when the initial Output Device cannot be opened', async () => {
+      const { ctx } = stubAudio()
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      ctx.setSinkId.mockRejectedValueOnce(new Error('device gone'))
+      const { captureFromAudioElement } = await load()
+      await routeTo('desk')
+      await expect(captureFromAudioElement(document.createElement('audio'), vi.fn())).resolves.toHaveProperty('stop')
+      await vi.waitFor(() => expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^\[audio\] /), expect.any(Error)))
+    })
+
+    it('moves a captured element context to the new Output Device, and keeps it after stop()', async () => {
+      const { ctx } = stubAudio()
+      const { captureFromAudioElement } = await load()
+      const session = await captureFromAudioElement(document.createElement('audio'), vi.fn())
+      await routeTo('desk')
+      expect(ctx.setSinkId).toHaveBeenLastCalledWith('desk')
+      session.stop()
+      expect(ctx.setSinkId).toHaveBeenCalledOnce()
+      await routeTo('headset')
+      expect(ctx.setSinkId).toHaveBeenLastCalledWith('headset')
+      await routeTo(null)
+      expect(ctx.setSinkId).toHaveBeenLastCalledWith('')
+    })
+
+    it('warns and keeps following the router when moving an element context fails', async () => {
+      const { ctx } = stubAudio()
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      ctx.setSinkId.mockRejectedValueOnce(new Error('device gone'))
+      const { captureFromAudioElement } = await load()
+      await captureFromAudioElement(document.createElement('audio'), vi.fn())
+      await routeTo('desk')
+      await vi.waitFor(() => expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^\[audio\] /), expect.any(Error)))
+      await routeTo('headset')
+      expect(ctx.setSinkId).toHaveBeenLastCalledWith('headset')
+    })
+
+    it('stops following the router once the element context is released', async () => {
+      const { ctx } = stubAudio()
+      const { captureFromAudioElement, releaseAudioElementContext } = await load()
+      const element = document.createElement('audio')
+      await captureFromAudioElement(element, vi.fn())
+      releaseAudioElementContext(element)
+      await routeTo('desk')
+      expect(ctx.setSinkId).not.toHaveBeenCalled()
+    })
+
+    it('subscribes a reused element context to the router only once', async () => {
+      const { ctx } = stubAudio()
+      const { captureFromAudioElement } = await load()
+      const element = document.createElement('audio')
+      await captureFromAudioElement(element, vi.fn())
+      await captureFromAudioElement(element, vi.fn())
+      await routeTo('desk')
+      expect(ctx.setSinkId).toHaveBeenCalledOnce()
     })
 
     it('captureTabStream asks for the tab by its media source id, audio only', async () => {
