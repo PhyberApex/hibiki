@@ -242,8 +242,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
 
   function applyAmbienceVolume(soundId: string, itemVolume: number) {
     if (ambienceSource.get(soundId) === 'backend') {
-      if (targetId.value)
-        setBackendAmbienceVolume(targetId.value, soundId, computeVolume(itemVolume) * 100).catch(() => {})
+      if (targetId.value) {
+        setBackendAmbienceVolume(targetId.value, soundId, computeVolume(itemVolume) * 100)
+          .catch(e => console.warn(`[scene] setAmbienceVolume ${soundId} failed on the backend:`, e))
+      }
       return
     }
     const el = ambienceAudioEls.get(soundId)
@@ -253,8 +255,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
 
   function applyMusicVolume(channel: MusicChannel) {
     if (channel.source === 'backend') {
-      if (targetId.value)
-        setBackendMusicVolume(targetId.value, computeVolume(channel.itemVolume) * 100).catch(() => {})
+      if (targetId.value) {
+        setBackendMusicVolume(targetId.value, computeVolume(channel.itemVolume) * 100)
+          .catch(e => console.warn(`[scene] setMusicVolume ${channel.soundId} failed on the backend:`, e))
+      }
     }
     else {
       channel.el.volume = computeVolume(channel.itemVolume)
@@ -286,7 +290,6 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       if (crossfadeRamp.directionOf(ambienceFadeKey(soundId)) === 'out')
         continue
       const itemVolume = ambienceItemVolumes.get(soundId)
-        ?? openScene.value?.ambience.find(a => a.soundId === soundId)?.volume
       if (itemVolume === undefined) {
         logDebug(`[scene] master volume: no item volume known for Ambience ${soundId}, left as is`)
         continue
@@ -485,6 +488,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       if (previousSource !== 'backend') {
         ambienceSource.delete(item.soundId)
         playingAmbienceIds.value.delete(item.soundId)
+        ambienceItemVolumes.delete(item.soundId)
       }
     }
     finally {
