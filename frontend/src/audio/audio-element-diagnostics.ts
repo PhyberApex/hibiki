@@ -8,6 +8,7 @@
 
 const WATCHED = new WeakSet<HTMLAudioElement>()
 const LOAD_WARNING_MS = 5_000
+const LOAD_TIMEOUT_MS = 30_000
 
 /** Tagged info line for the renderer; the main process captures info lines that start with `[` into hibiki.log. */
 export function logInfo(message: string): void {
@@ -42,7 +43,10 @@ export function watchAudioElement(el: HTMLAudioElement): HTMLAudioElement {
 /**
  * Resolves once the element can play through, rejects on a media error, and
  * warns in the log if neither has happened after `LOAD_WARNING_MS`, so a
- * silently hanging load is visible instead of just "nothing happened".
+ * silently hanging load is visible instead of just "nothing happened". After
+ * `LOAD_TIMEOUT_MS` it gives up and rejects: a load that never answers must
+ * fail the start it belongs to, not hold up a Scene start (and with it every
+ * queued Hotkey) for the rest of the session (#714).
  */
 export function waitForPlayable(el: HTMLAudioElement, label: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -50,10 +54,16 @@ export function waitForPlayable(el: HTMLAudioElement, label: string): Promise<vo
     const timer = setTimeout(() => {
       console.warn(`[audio] ${label} still not playable after ${LOAD_WARNING_MS} ms: ${describe(el)}`)
     }, LOAD_WARNING_MS)
+    const timeout = setTimeout(() => {
+      cleanup()
+      console.error(`[audio] ${label} not playable after ${LOAD_TIMEOUT_MS} ms, giving up: ${describe(el)}`)
+      reject(new Error(`${label} not playable after ${LOAD_TIMEOUT_MS} ms`))
+    }, LOAD_TIMEOUT_MS)
     // The element is reused across plays, so whichever listener did not fire
     // must go too, or it reports on a later, unrelated load.
     function cleanup() {
       clearTimeout(timer)
+      clearTimeout(timeout)
       el.removeEventListener('canplaythrough', onPlayable)
       el.removeEventListener('error', onError)
     }

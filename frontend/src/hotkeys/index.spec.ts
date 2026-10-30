@@ -94,6 +94,44 @@ describe('startHotkeyDispatch', () => {
     expect(vi.mocked(dispatchHotkey).mock.calls.map(c => c[0])).toEqual(['F13', 'F13'])
   })
 
+  it('a Scene press whose start never finishes does not hold up a following Stop press', async () => {
+    playback.playScene.mockReturnValue(new Promise(() => {}))
+    vi.mocked(dispatchHotkey).mockImplementationOnce(async (_accelerator, deps) => {
+      await deps.playScene({ id: 'storm' } as Parameters<HotkeyDeps['playScene']>[0])
+      return 'played'
+    })
+    const { fire } = install()
+    fire('F13')
+    fire('F16')
+    await flushPromises()
+    expect(playback.playScene).toHaveBeenCalledOnce()
+    expect(vi.mocked(dispatchHotkey).mock.calls.map(c => c[0])).toEqual(['F13', 'F16'])
+  })
+
+  it('logs the failure of a Scene start that rejects after the press was handled', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    playback.playScene.mockRejectedValue(new Error('boom'))
+    vi.mocked(dispatchHotkey).mockImplementationOnce(async (_accelerator, deps) => {
+      await deps.playScene({ id: 'storm' } as Parameters<HotkeyDeps['playScene']>[0])
+      return 'played'
+    })
+    const { fire } = install()
+    fire('F13')
+    await flushPromises()
+    expect(error).toHaveBeenCalledWith('[hotkeys] Scene storm start failed:', expect.any(Error))
+    error.mockRestore()
+  })
+
+  it('logs when a press is dispatched and when it was handled', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const { fire } = install()
+    fire('F13')
+    await flushPromises()
+    expect(info).toHaveBeenCalledWith('[hotkeys] F13 dispatching')
+    expect(info).toHaveBeenCalledWith(expect.stringMatching(/^\[hotkeys\] F13 handled: played after \d+ ms$/))
+    info.mockRestore()
+  })
+
   it('returns the unsubscribe that removes the listener', () => {
     const { stop, off } = install()
     stop()
@@ -109,7 +147,9 @@ describe('startHotkeyDispatch', () => {
     expect(deps.playingSceneId()).toBe('storm')
     expect(deps.activeTargetId()).toBe('local')
     expect(deps.canPlay()).toBe(true)
-    expect(deps.playScene).toBe(playback.playScene)
+    playback.playScene.mockResolvedValue(undefined)
+    await deps.playScene({ id: 'storm' } as Parameters<HotkeyDeps['playScene']>[0])
+    expect(playback.playScene).toHaveBeenCalledWith({ id: 'storm' })
     expect(deps.stopAllEffects).toBe(playback.stopAllEffectInstances)
 
     vi.mocked(fetchHotkeySettings).mockResolvedValue({ enabled: true, stopHotkey: 'F16' } as HotkeySettings)

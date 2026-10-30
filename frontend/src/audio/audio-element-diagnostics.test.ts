@@ -33,6 +33,28 @@ describe('audio element diagnostics', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('[audio] effect test still not playable after 5000 ms'))
   })
 
+  it('gives up after thirty seconds: rejects, logs and drops its listeners', async () => {
+    const el = new Audio()
+    const remove = vi.spyOn(el, 'removeEventListener')
+    const pending = waitForPlayable(el, 'ambience rain')
+    const settled = vi.fn()
+    pending.catch(settled)
+
+    vi.advanceTimersByTime(29_999)
+    await Promise.resolve()
+    expect(settled).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(1)
+    await expect(pending).rejects.toThrow('ambience rain not playable after 30000 ms')
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('[audio] ambience rain not playable after 30000 ms, giving up'))
+    expect(remove).toHaveBeenCalledWith('canplaythrough', expect.any(Function))
+    expect(remove).toHaveBeenCalledWith('error', expect.any(Function))
+
+    el.dispatchEvent(new Event('canplaythrough'))
+    // eslint-disable-next-line no-console
+    expect(console.info).not.toHaveBeenCalled()
+  })
+
   it('rejects on a media error and skips the warning', async () => {
     const el = new Audio()
     const pending = waitForPlayable(el, 'music test')
