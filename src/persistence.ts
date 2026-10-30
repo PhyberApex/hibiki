@@ -107,7 +107,7 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
                   next: { ...latest, [key]: reEncrypted },
                   result: true,
                 }
-              : { next: latest, result: false })
+              : { next: latest, result: false, skipWrite: true })
             if (written)
               log.info(`Re-encrypted secret "${key}" after an encryption key rotation`)
           }
@@ -122,10 +122,15 @@ export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC)
       if (codec.available) {
         log.info(`Migrating plaintext secret "${key}" to encrypted storage`)
         const encrypted = await encryptForStorage(raw)
-        await store.update(latest => ({
-          next: { ...latest, [key]: encrypted },
-          result: undefined,
-        }))
+        // Only replace the plaintext we read; a concurrent `set` wins.
+        const written = await store.update(latest => latest[key] === raw
+          ? {
+              next: { ...latest, [key]: encrypted },
+              result: true,
+            }
+          : { next: latest, result: false, skipWrite: true })
+        if (!written)
+          log.info(`Skipped migrating plaintext secret "${key}": it was changed while being encrypted`)
       }
       return raw
     },

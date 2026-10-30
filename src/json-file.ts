@@ -1,4 +1,5 @@
-import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import type { FileHandle } from 'node:fs/promises'
+import { copyFile, mkdir, open, readFile, rename } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { createLogger } from './logger'
 
@@ -50,12 +51,12 @@ function enqueue<R>(filePath: string, task: () => Promise<R>): Promise<R> {
   return settled
 }
 
-async function backupCorruptFile(filePath: string): Promise<void> {
+async function backupCorruptFile(filePath: string, reason: string): Promise<void> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   const backupPath = `${filePath}.corrupt-${timestamp}.bak`
   await copyFile(filePath, backupPath)
   warnings.push({ file: filePath, backupPath })
-  log.warn(`Corrupt store backed up to ${backupPath}`)
+  log.warn(`Corrupt store ${filePath} (${reason}) backed up to ${backupPath}; resetting it to the default`)
 }
 
 async function readJsonFile<T>(filePath: string, options: JsonFileOptions<T>): Promise<T> {
@@ -74,13 +75,15 @@ async function readJsonFile<T>(filePath: string, options: JsonFileOptions<T>): P
     data = JSON.parse(raw)
   }
   catch {
-    await backupCorruptFile(filePath)
+    await backupCorruptFile(filePath, raw.trim() === ''
+      ? 'empty, likely an interrupted write'
+      : 'unparseable JSON')
     await writeJsonFileAtomic(filePath, options.defaultValue)
     return options.defaultValue
   }
 
   if (!options.isValid(data)) {
-    await backupCorruptFile(filePath)
+    await backupCorruptFile(filePath, 'unexpected shape')
     await writeJsonFileAtomic(filePath, options.defaultValue)
     return options.defaultValue
   }
@@ -88,12 +91,47 @@ async function readJsonFile<T>(filePath: string, options: JsonFileOptions<T>): P
   return data as T
 }
 
-/** Writes `<file>.tmp` then renames over the live file, so a crash mid-write never leaves a half-written file. */
+/** Windows cannot open or fsync a directory; the rename is already durable there. */
+const UNSUPPORTED_DIR_SYNC_CODES = new Set(['EISDIR', 'EPERM', 'EINVAL'])
+
+/** Best-effort: makes the rename itself durable. Never throws, the data is already in place. */
+async function syncDirectory(dir: string): Promise<void> {
+  let handle: FileHandle | undefined
+  try {
+    handle = await open(dir, 'r')
+    await handle.sync()
+  }
+  catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code && UNSUPPORTED_DIR_SYNC_CODES.has(code))
+      log.debug(`Directory fsync unsupported for ${dir} (${code})`)
+    else
+      log.warn(`Could not fsync directory ${dir}`, err)
+  }
+  finally {
+    await handle?.close().catch(() => undefined)
+  }
+}
+
+/**
+ * Writes `<file>.tmp`, fsyncs it, renames it over the live file and fsyncs
+ * the directory, so neither a crash mid-write nor a power loss right after
+ * the rename leaves a half-written or zero-length file.
+ */
 export async function writeJsonFileAtomic(filePath: string, data: unknown): Promise<void> {
-  await mkdir(dirname(filePath), { recursive: true })
+  const dir = dirname(filePath)
+  await mkdir(dir, { recursive: true })
   const tmpPath = `${filePath}.tmp`
-  await writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf-8')
+  const handle = await open(tmpPath, 'w')
+  try {
+    await handle.writeFile(JSON.stringify(data, null, 2), 'utf-8')
+    await handle.sync()
+  }
+  finally {
+    await handle.close()
+  }
   await rename(tmpPath, filePath)
+  await syncDirectory(dir)
 }
 
 export function createJsonFileStore<T>(filePath: string, options: JsonFileOptions<T>): JsonFileStore<T> {
