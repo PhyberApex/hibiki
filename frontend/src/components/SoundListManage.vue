@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SoundFile } from '@/api/sounds'
-import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import {
   deleteSound,
   listAmbience,
@@ -12,11 +12,13 @@ import {
   uploadSoundsBulk,
 } from '@/api/sounds'
 import { logInfo } from '@/audio/audio-element-diagnostics'
+import { usePlayerStore } from '@/stores/player'
 import { useToastStore } from '@/stores/toast'
 
 const props = defineProps<{ type: 'music' | 'effects' | 'ambience' }>()
 const emit = defineEmits<{ updated: [] }>()
 const toastStore = useToastStore()
+const player = usePlayerStore()
 
 const categoryHint: Record<string, string> = {
   music: 'Background tracks that play one at a time — tavern themes, battle scores, travel music.',
@@ -224,17 +226,24 @@ function stop() {
 
 async function togglePlay(id: string) {
   if (playingId.value === id) {
+    logInfo(`[media] preview stopped (type=${props.type}, sound=${id})`)
     stop()
     return
   }
   playingId.value = id
   await nextTick()
+  // A stop (panel left, Scene played) inside that tick wins over the start.
+  if (playingId.value !== id)
+    return
   const el = audioEl.value
   if (el) {
+    logInfo(`[media] preview play (type=${props.type}, sound=${id})`)
     el.src = soundStreamUrl(props.type, id)
     el.load()
-    el.play().catch(() => {
-      stop()
+    el.play().catch((err) => {
+      console.warn(`[media] preview play failed (type=${props.type}, sound=${id})`, err)
+      if (playingId.value === id)
+        stop()
     })
   }
 }
@@ -308,16 +317,21 @@ onActivated(() => {
 
 // The preview is not part of any Output Target mix and its only Stop button
 // lives on this panel, so leaving the panel (KeepAlive tab switch, view switch
-// or unmount) must not leave it playing out of reach.
-function stopPreviewOnLeave(reason: 'deactivate' | 'unmount') {
+// or unmount) must not leave it playing out of reach, and a Scene starting
+// (e.g. from a Global Hotkey while Media is open) must not play over it.
+function stopPreview(reason: 'deactivate' | 'unmount' | 'scene play') {
   if (playingId.value === null)
     return
   logInfo(`[media] preview stopped on ${reason} (type=${props.type}, sound=${playingId.value})`)
   stop()
 }
 
-onDeactivated(() => stopPreviewOnLeave('deactivate'))
-onBeforeUnmount(() => stopPreviewOnLeave('unmount'))
+onDeactivated(() => stopPreview('deactivate'))
+onBeforeUnmount(() => stopPreview('unmount'))
+watch(() => player.playingSceneId, (sceneId) => {
+  if (sceneId !== null)
+    stopPreview('scene play')
+})
 </script>
 
 <template>

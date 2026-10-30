@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, KeepAlive, ref } from 'vue'
+import { usePlayerStore } from '@/stores/player'
 import { useToastStore } from '@/stores/toast'
 import SoundListManage from './SoundListManage.vue'
 
@@ -632,6 +633,67 @@ describe('soundListManage', () => {
       await flushPromises()
       expect(wrapper.find('.sound-item-playing').exists()).toBe(false)
       expect(wrapper.find('.icon-play').exists()).toBe(true)
+    })
+
+    it('stops the preview when the hosting view is deactivated (nested KeepAlive)', async () => {
+      const viewShown = ref(true)
+      const MediaView = defineComponent({
+        setup() {
+          return () => h(KeepAlive, null, [
+            h(SoundListManage, { type: 'music' }),
+          ])
+        },
+      })
+      const App = defineComponent({
+        setup() {
+          return () => h(KeepAlive, null, [
+            viewShown.value
+              ? h(MediaView)
+              : h('div', 'scenes view'),
+          ])
+        },
+      })
+      const wrapper = mount(App)
+      await flushPromises()
+      await wrapper.find('.sound-play-btn').trigger('click')
+      await flushPromises()
+      const audio = wrapper.find('audio').element as HTMLAudioElement
+      const pause = vi.mocked(HTMLMediaElement.prototype.pause)
+      pause.mockClear()
+
+      viewShown.value = false
+      await flushPromises()
+
+      expect(pause).toHaveBeenCalled()
+      expect(audio.hasAttribute('src')).toBe(false)
+    })
+
+    it('stops the preview when a Scene starts playing', async () => {
+      const wrapper = mount(SoundListManage, {
+        props: { type: 'music' },
+      })
+      await flushPromises()
+      await wrapper.find('.sound-play-btn').trigger('click')
+      await flushPromises()
+      const audio = wrapper.find('audio').element as HTMLAudioElement
+      expect(audio.getAttribute('src')).toBe('hibiki://sound/music/s1')
+
+      usePlayerStore().playingSceneId = 'scene-1'
+      await flushPromises()
+
+      expect(audio.hasAttribute('src')).toBe(false)
+      expect(wrapper.find('.icon-play').exists()).toBe(true)
+    })
+
+    it('does not start the preview when the panel is left before playback begins', async () => {
+      const { wrapper, shown } = mountInKeepAlive()
+      await flushPromises()
+      const play = vi.mocked(HTMLMediaElement.prototype.play)
+      void wrapper.find('.sound-play-btn').trigger('click')
+      shown.value = false
+      await flushPromises()
+
+      expect(play).not.toHaveBeenCalled()
     })
 
     it('stops the preview when the panel is unmounted', async () => {
