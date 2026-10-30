@@ -213,31 +213,33 @@ async function saveToken() {
   saving.value = true
   message.value = null
   try {
-    discordConfig.value = await updateDiscordToken(token)
-  }
-  catch (e) {
-    console.warn('[settings] Discord token save failed:', e)
-    message.value = {
-      type: 'error',
-      text: e instanceof Error
-        ? e.message
-        : 'Couldn\'t save token. Copy the full token from the Discord Developer Portal and try again.',
+    try {
+      discordConfig.value = await updateDiscordToken(token)
     }
-    saving.value = false
-    return
-  }
-  tokenInput.value = ''
-  message.value = { type: 'success', text: 'Token saved. Connecting…' }
-  try {
-    await player.doReconnect()
+    catch (e) {
+      console.warn('[settings] Discord token save failed:', e)
+      message.value = {
+        type: 'error',
+        text: e instanceof Error
+          ? e.message
+          : 'Couldn\'t save token. Copy the full token from the Discord Developer Portal and try again.',
+      }
+      return
+    }
+    tokenInput.value = ''
+    message.value = { type: 'success', text: 'Token saved. Connecting…' }
+    try {
+      await player.doReconnect()
+    }
+    catch (e) {
+      console.warn('[settings] connect after saving the token failed:', e)
+      message.value = { type: 'error', text: `Token saved, but the bot couldn't connect: ${connectFailureText(e)}` }
+      return
+    }
     if (player.botStatus?.ready)
       message.value = { type: 'success', text: 'Token saved. Bot connected.' }
     else
       message.value = { type: 'success', text: 'Token saved. Bot didn\'t connect — click Connect below to try again.' }
-  }
-  catch (e) {
-    console.warn('[settings] connect after saving the token failed:', e)
-    message.value = { type: 'error', text: `Token saved, but the bot couldn't connect: ${connectFailureText(e)}` }
   }
   finally {
     saving.value = false
@@ -570,7 +572,12 @@ async function saveHotkeySettings(next: HotkeySettings) {
 
 /** Keeps the last list on a failed fetch, so a flaky status call does not hide known refusals. */
 async function refreshHotkeyFailures() {
-  hotkeyFailures.value = (await fetchHotkeyStatus().catch(() => null))?.failures ?? hotkeyFailures.value
+  try {
+    hotkeyFailures.value = (await fetchHotkeyStatus()).failures
+  }
+  catch (e) {
+    console.warn('[settings] Couldn\'t refresh the hotkey status:', e)
+  }
 }
 
 async function toggleHotkeys(event: Event) {
