@@ -151,11 +151,14 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // from a player:stateChanged push that races ahead of (for a play) or
   // behind (for a stop) our own call actually taking effect there.
   const pendingBackendAmbienceCalls = new Set<string>()
-  // The start each soundId's Ambience is currently meant to be: bumped by
-  // every playAmbience and every stopAmbience, so a start still awaiting its
-  // decode probe, backend call or element load sees it was overtaken.
-  const ambienceStartTokens = new Map<string, number>()
-  let ambienceStartSeq = 0
+  // The latest play or Stop of each soundId's Ambience. A start still awaiting
+  // its decode probe, backend call or element load checks it after every
+  // await: a newer token means it was overtaken, and `stopped` by which.
+  const ambienceIntents = new Map<string, { token: number, stopped: boolean }>()
+  let ambienceIntentSeq = 0
+  // soundIds whose current start is still in flight, not yet in
+  // `playingAmbienceIds`: a Scene Stop must reach them too.
+  const startingAmbience = new Set<string>()
 
   const musicChannels: MusicChannel[] = [
     {
@@ -324,14 +327,14 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       stopAmbience(item.soundId)
   }
 
-  function supersedeAmbienceStart(soundId: string): number {
-    const token = ++ambienceStartSeq
-    ambienceStartTokens.set(soundId, token)
+  function claimAmbienceIntent(soundId: string, stopped: boolean): number {
+    const token = ++ambienceIntentSeq
+    ambienceIntents.set(soundId, { token, stopped })
     return token
   }
 
   function isAmbienceStartCurrent(soundId: string, token: number): boolean {
-    return ambienceStartTokens.get(soundId) === token
+    return ambienceIntents.get(soundId)?.token === token
   }
 
   function sendBackendAmbienceStop(soundId: string, fadeOutMs = 0) {
@@ -341,12 +344,13 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     stopBackendAmbience(targetId.value, soundId, fadeOutMs > 0
       ? { fadeOutMs }
       : {})
-      .catch(() => {})
+      .catch(e => console.warn(`[scene] stopAmbience ${soundId} failed on the backend:`, e))
       .finally(() => pendingBackendAmbienceCalls.delete(soundId))
   }
 
   function stopAmbience(soundId: string, fadeOutMs = 0) {
-    supersedeAmbienceStart(soundId)
+    claimAmbienceIntent(soundId, true)
+    startingAmbience.delete(soundId)
     releaseAmbience(soundId, fadeOutMs)
   }
 
@@ -415,11 +419,14 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         fadeInMs,
       })
       if (!isAmbienceStartCurrent(item.soundId, token)) {
-        logInfo(`[scene] playAmbience ${item.soundId} superseded during start-up`)
         // The Stop that overtook this start may have reached the backend
         // before the play took hold there; stop again unless a newer play
-        // already owns the sound.
-        if (ambienceSource.get(item.soundId) !== 'backend')
+        // owns the sound by now.
+        const stopped = ambienceIntents.get(item.soundId)?.stopped ?? false
+        logInfo(`[scene] playAmbience ${item.soundId} superseded during start-up${stopped
+          ? ', stopping it again on the backend'
+          : ''}`)
+        if (stopped)
           sendBackendAmbienceStop(item.soundId)
       }
     }
@@ -449,15 +456,28 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   async function playAmbience(item: SceneItem, initialVolume?: number, fadeInMs = 0) {
     if (!targetId.value || !canPlay.value)
       return
-    const token = supersedeAmbienceStart(item.soundId)
-    const superseded = () => {
+    const token = claimAmbienceIntent(item.soundId, false)
+    startingAmbience.add(item.soundId)
+    try {
+      await startAmbience(item, token, initialVolume, fadeInMs)
+    }
+    finally {
+      if (isAmbienceStartCurrent(item.soundId, token))
+        startingAmbience.delete(item.soundId)
+    }
+  }
+
+  async function startAmbience(item: SceneItem, token: number, initialVolume: number | undefined, fadeInMs: number) {
+    const abortIfSuperseded = (failure?: unknown) => {
       if (isAmbienceStartCurrent(item.soundId, token))
         return false
-      logInfo(`[scene] playAmbience ${item.soundId} superseded during start-up`)
+      logInfo(`[scene] playAmbience ${item.soundId} superseded during start-up${failure === undefined
+        ? ''
+        : ` (then failed: ${failure})`}`)
       return true
     }
     const path = selectBackendPlaybackPath(await canDecodeAmbienceCached(item.soundId))
-    if (superseded())
+    if (abortIfSuperseded())
       return
     if (path === 'backend') {
       // Its own try/catch never rethrows (see above) — unlike the renderer
@@ -480,19 +500,19 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       logInfo(`[scene] playAmbience ${item.soundId} via renderer fallback (${streamed ? 'streamed to Discord' : 'local'})`)
       if (streamed)
         await startEffectStream(target, streamId)
-      if (superseded())
+      if (abortIfSuperseded())
         return
       el.src = soundStreamUrl('ambience', item.soundId)
       el.loop = isLooping(item)
       el.volume = initialVolume ?? computeVolume(item.volume ?? 80)
       el.load()
       await waitForPlayable(el, `ambience ${item.soundId} (renderer fallback)`)
-      if (superseded())
+      if (abortIfSuperseded())
         return
       if (streamed) {
         const onChunk = (chunk: ArrayBuffer) => sendEffectChunk(target, chunk, streamId)
         const sess = await captureFromAudioElement(el, onChunk)
-        if (superseded()) {
+        if (abortIfSuperseded()) {
           sess.stop()
           return
         }
@@ -514,13 +534,13 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       }
 
       await el.play()
-      if (superseded())
+      if (abortIfSuperseded())
         return
       playingAmbienceIds.value.add(item.soundId)
       ambienceSource.set(item.soundId, 'renderer')
     }
     catch (e) {
-      if (superseded())
+      if (abortIfSuperseded(e))
         return
       console.error('[scene] playAmbience failed:', e)
       stopAmbience(item.soundId)
@@ -924,30 +944,32 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       removed = true
       teardownEffectAudioEl(id, el, streamed)
     })
-    const superseded = () => {
+    const abortIfRemoved = (failure?: unknown) => {
       if (!removed)
         return false
-      logInfo(`[scene] playEffect ${item.soundId} (${id}) stopped during start-up`)
+      logInfo(`[scene] playEffect ${item.soundId} (${id}) stopped during start-up${failure === undefined
+        ? ''
+        : ` (then failed: ${failure})`}`)
       return true
     }
     logInfo(`[scene] playEffect ${item.soundId} via renderer fallback (${streamed ? 'streamed to Discord' : 'local'}) as ${id}`)
     try {
       if (streamed)
         await startEffectStream(target, id)
-      if (superseded())
+      if (abortIfRemoved())
         return
       el.src = soundStreamUrl('effects', item.soundId)
       el.volume = (item.volume ?? 80) / 100 * (masterVolume.value / 100)
       el.load()
       await waitForPlayable(el, `effect ${item.soundId} (renderer fallback)`)
-      if (superseded())
+      if (abortIfRemoved())
         return
       if (Number.isFinite(el.duration))
         player.setEffectInstanceDuration(id, el.duration * 1000)
       if (streamed) {
         const onChunk = (chunk: ArrayBuffer) => sendEffectChunk(target, chunk, id)
         const sess = await captureFromAudioElement(el, onChunk)
-        if (superseded()) {
+        if (abortIfRemoved()) {
           sess.stop()
           return
         }
@@ -958,7 +980,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       await el.play()
     }
     catch (e) {
-      if (superseded())
+      if (abortIfRemoved(e))
         return
       console.error('[scene] playEffect failed:', e)
       player.removeRendererEffectInstance(id)
@@ -1034,12 +1056,11 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   function stopScene() {
     sceneIntent++
     pendingHandoverSceneId.value = null
-    for (const soundId of [...playingAmbienceIds.value])
+    for (const soundId of new Set([
+      ...playingAmbienceIds.value,
+      ...startingAmbience,
+    ]))
       stopAmbience(soundId)
-    // An Ambience start still awaiting its decode probe is not playing yet,
-    // but must not start once it lands either.
-    for (const soundId of ambienceStartTokens.keys())
-      supersedeAmbienceStart(soundId)
     stopMusic()
     stopAllEffectInstances()
     player.clearPlayingScene()

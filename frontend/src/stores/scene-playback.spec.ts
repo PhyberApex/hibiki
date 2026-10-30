@@ -361,6 +361,57 @@ describe('scene playback store', () => {
       expect(stopAmbience).toHaveBeenLastCalledWith('local', 'amb-1', {})
     })
 
+    it('an Ambience toggled off is stopped again even when a state push re-reported it before its play landed', async () => {
+      const store = useScenePlaybackStore()
+      const item = { ...scene.ambience[0] }
+      let releasePlay!: () => void
+      vi.mocked(playAmbience).mockReturnValueOnce(new Promise<void>((resolve) => {
+        releasePlay = resolve
+      }))
+
+      store.toggleAmbience(item)
+      await vi.waitFor(() => expect(playAmbience).toHaveBeenCalledTimes(1))
+      store.toggleAmbience({ ...item, enabled: false })
+      await flushPromises()
+      usePlayerStore().playerState = [
+        {
+          targetId: 'local',
+          kind: 'local',
+          guildId: 'local',
+          isIdle: false,
+          track: null,
+          ambience: ['amb-1'],
+          source: 'live',
+        },
+      ] as never
+      await flushPromises()
+      releasePlay()
+      await flushPromises()
+
+      expect(stopAmbience).toHaveBeenCalledTimes(2)
+    })
+
+    it('a Scene Stop while a renderer-fallback Ambience is loading leaves its element paused and unplayed', async () => {
+      vi.mocked(canDecode).mockResolvedValue(false)
+      const store = useScenePlaybackStore()
+
+      const starting = store.playScene({
+        ...scene,
+        createdAt: '',
+        updatedAt: '',
+        music: [],
+      })
+      await vi.waitFor(() => expect(loadingEls).toHaveLength(1))
+      const el = loadingEls[0]!
+      store.stopScene()
+      el.dispatchEvent(new Event('canplaythrough'))
+      await starting
+
+      expect(playingEls).toEqual([])
+      expect(pausedEls).toContain(el)
+      expect(store.playingAmbienceIds.size).toBe(0)
+    })
+
     it('a newer play of the same Ambience is not stopped by the superseded one landing', async () => {
       const store = useScenePlaybackStore()
       const item = { ...scene.ambience[0] }
