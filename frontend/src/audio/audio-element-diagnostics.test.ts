@@ -44,6 +44,20 @@ describe('audio element diagnostics', () => {
     expect(console.warn).not.toHaveBeenCalled()
   })
 
+  it('an error after the element became playable neither logs nor rejects', async () => {
+    const el = new Audio()
+    const pending = waitForPlayable(el, 'music test')
+    el.dispatchEvent(new Event('canplaythrough'))
+    await expect(pending).resolves.toBeUndefined()
+
+    el.dispatchEvent(new Event('error'))
+    vi.advanceTimersByTime(5_000)
+
+    await expect(pending).resolves.toBeUndefined()
+    expect(console.warn).not.toHaveBeenCalled()
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
   it('a later load on a reused element is not reported by an earlier failed wait', async () => {
     const el = new Audio()
     const failed = waitForPlayable(el, 'first load')

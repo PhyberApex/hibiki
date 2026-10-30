@@ -213,7 +213,7 @@ describe('routed tabs store', () => {
       expect(track.stop).toHaveBeenCalledTimes(1)
       expect(stopEffectStream).toHaveBeenCalledWith('g1', 'browser-1')
       expect(store.isRouted(1)).toBe(false)
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[routed-tabs]'), expect.any(Error))
+      expect(warn).toHaveBeenCalledWith('[browser] tab 1 capture setup on g1 failed, tracks stopped')
     })
   })
 

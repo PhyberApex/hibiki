@@ -98,7 +98,7 @@ export const useRoutedTabsStore = defineStore('routedTabs', () => {
       // "being captured" until GC unless its tracks are stopped here.
       if (stream) {
         stream.getTracks().forEach(track => track.stop())
-        console.warn('[routed-tabs] capture setup failed, tracks stopped:', err)
+        console.warn(`[browser] tab ${tabId} capture setup on ${guildId} failed, tracks stopped`)
       }
       stopEffectStream(guildId, streamId).catch(() => {})
       throw err
