@@ -314,7 +314,6 @@ describe('browser-audio-capture', () => {
 
   describe('failure and lifecycle paths', () => {
     function stubAudio(state = 'running') {
-      const contextOptions: unknown[] = []
       const worklets: Array<{ port: { onmessage: ((e: MessageEvent) => void) | null }, connect: ReturnType<typeof vi.fn>, disconnect: ReturnType<typeof vi.fn> }> = []
       const source = {
         connect: vi.fn(),
@@ -337,10 +336,7 @@ describe('browser-audio-capture', () => {
         setSinkId: vi.fn(async (_sinkId: string) => {}),
       }
       vi.stubGlobal('AudioContext', class {
-        constructor(options?: unknown) {
-          contextOptions.push(options)
-          return ctx as any
-        }
+        constructor() { return ctx as any }
       })
       vi.stubGlobal('AudioWorkletNode', class {
         constructor() {
@@ -355,12 +351,7 @@ describe('browser-audio-capture', () => {
       })
       vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:worklet')
       vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
-      return {
-        ctx,
-        source,
-        worklets,
-        contextOptions,
-      }
+      return { ctx, source, worklets }
     }
 
     async function load() {
@@ -368,14 +359,14 @@ describe('browser-audio-capture', () => {
       return import('./browser-audio-capture')
     }
 
-    /** The router instance the freshly loaded capture module subscribed to. */
-    async function routeTo(deviceId: string) {
+    /** Points the Output Device at `deviceId` (`null` = system default) on the router the freshly loaded capture module uses. */
+    async function routeTo(deviceId: string | null) {
       const { outputDeviceRouter } = await import('./output-device')
       outputDeviceRouter.setDevices([
         { deviceId: 'desk', label: 'Desk speakers' },
         { deviceId: 'headset', label: 'Headset' },
       ])
-      outputDeviceRouter.setChoice(deviceId === ''
+      outputDeviceRouter.setChoice(deviceId === null
         ? null
         : { deviceId, label: deviceId })
     }
@@ -486,19 +477,29 @@ describe('browser-audio-capture', () => {
       expect(ctx.createMediaElementSource).toHaveBeenCalledTimes(2)
     })
 
-    it('opens an element context on the current Output Device', async () => {
-      const { contextOptions } = stubAudio()
+    it('routes a new element context to the current Output Device', async () => {
+      const { ctx } = stubAudio()
       const { captureFromAudioElement } = await load()
       await routeTo('desk')
       await captureFromAudioElement(document.createElement('audio'), vi.fn())
-      expect(contextOptions[0]).toEqual({ sampleRate: 48000, sinkId: 'desk' })
+      expect(ctx.setSinkId).toHaveBeenCalledExactlyOnceWith('desk')
     })
 
-    it('opens an element context on the system default without a sinkId when no device is chosen', async () => {
-      const { contextOptions } = stubAudio()
+    it('leaves a new element context on the system default when no device is chosen', async () => {
+      const { ctx } = stubAudio()
       const { captureFromAudioElement } = await load()
       await captureFromAudioElement(document.createElement('audio'), vi.fn())
-      expect(contextOptions[0]).toEqual({ sampleRate: 48000 })
+      expect(ctx.setSinkId).not.toHaveBeenCalled()
+    })
+
+    it('still captures when the initial Output Device cannot be opened', async () => {
+      const { ctx } = stubAudio()
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      ctx.setSinkId.mockRejectedValueOnce(new Error('device gone'))
+      const { captureFromAudioElement } = await load()
+      await routeTo('desk')
+      await expect(captureFromAudioElement(document.createElement('audio'), vi.fn())).resolves.toHaveProperty('stop')
+      await vi.waitFor(() => expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^\[audio\] /), expect.any(Error)))
     })
 
     it('moves a captured element context to the new Output Device, and keeps it after stop()', async () => {
@@ -511,7 +512,7 @@ describe('browser-audio-capture', () => {
       expect(ctx.setSinkId).toHaveBeenCalledOnce()
       await routeTo('headset')
       expect(ctx.setSinkId).toHaveBeenLastCalledWith('headset')
-      await routeTo('')
+      await routeTo(null)
       expect(ctx.setSinkId).toHaveBeenLastCalledWith('')
     })
 

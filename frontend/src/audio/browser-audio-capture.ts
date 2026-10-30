@@ -143,23 +143,22 @@ type SinkableContext = AudioContext & { setSinkId?: (sinkId: string) => Promise<
  * routes it; the context has to follow the Output Device instead (#650).
  */
 function openElementContext(): { ctx: AudioContext, unsubscribeSinkId: () => void } {
-  const initialSinkId = outputDeviceRouter.sinkId
-  const ctx = new AudioContext({
-    sampleRate: SAMPLE_RATE,
-    ...(initialSinkId
-      ? { sinkId: initialSinkId }
-      : {}),
-  } as AudioContextOptions) as SinkableContext
-  const unsubscribeSinkId = outputDeviceRouter.subscribe((sinkId) => {
+  const ctx = new AudioContext({ sampleRate: SAMPLE_RATE }) as SinkableContext
+  // setSinkId rather than the constructor's sinkId, so a device that fails to
+  // open degrades to a warning instead of failing the Discord capture.
+  const route = (sinkId: string) => {
     if (!ctx.setSinkId || ctx.state === 'closed')
       return
-    logInfo(`[audio] moving a captured audio element to output ${sinkId === ''
+    logInfo(`[audio] routing a captured audio element to ${sinkId === ''
       ? 'the system default'
-      : sinkId}`)
+      : `output ${sinkId}`}`)
     ctx.setSinkId(sinkId).catch((err) => {
       console.warn('[audio] could not move a captured audio element to the Output Device:', err)
     })
-  })
+  }
+  if (outputDeviceRouter.sinkId !== '')
+    route(outputDeviceRouter.sinkId)
+  const unsubscribeSinkId = outputDeviceRouter.subscribe(route)
   return { ctx, unsubscribeSinkId }
 }
 
