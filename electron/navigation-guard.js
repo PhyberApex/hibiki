@@ -46,6 +46,14 @@ function schemeAndHost(url) {
 }
 
 /**
+ * Whether `url` stays on the app whose scheme and host is `appOrigin`; the
+ * one rule both the guard and the release listener judge a navigation by.
+ */
+function staysOnApp(appOrigin, url) {
+  return appOrigin !== null && schemeAndHost(url) === appOrigin
+}
+
+/**
  * Keeps the main window on the app it loaded (#638). The window carries the
  * preload, so any page it navigates to, or opens as a child window, would
  * get the whole `api` channel. `window.open` and `target="_blank"` links to
@@ -68,7 +76,7 @@ function guardMainWindowNavigation(webContents, { appUrl, openExternal }) {
   })
 
   webContents.on('will-navigate', (event) => {
-    if (appOrigin !== null && schemeAndHost(event.url) === appOrigin)
+    if (staysOnApp(appOrigin, event.url))
       return
     event.preventDefault()
     log.warn(`Blocked navigation of the main window to ${describeUrl(event.url)}`)
@@ -102,7 +110,7 @@ function releaseOnMainFrameNavigation({ appUrl, release }) {
   return (details) => {
     if (!details.isMainFrame || details.isSameDocument)
       return
-    if (appOrigin === null || schemeAndHost(details.url) !== appOrigin) {
+    if (!staysOnApp(appOrigin, details.url)) {
       log.debug(`Kept renderer resources: navigation to ${describeUrl(details.url)} leaves the app and will be blocked`)
       return
     }
