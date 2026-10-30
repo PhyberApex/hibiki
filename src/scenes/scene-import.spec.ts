@@ -470,6 +470,19 @@ describe('importScene', () => {
       expect(existsSync(join(config.audio.effectsDir, 'many-2.wav'))).toBe(false)
     })
 
+    it('removes the extracted sounds again when the Scene cannot be saved', async () => {
+      const userData = mkdtempSync(join(tmpdir(), 'hibiki-import-unsaved-'))
+      // scenes.json reads as empty, but its atomic write cannot replace a non-empty directory
+      mkdirSync(join(userData, 'data', 'scenes.json.tmp', 'blocker'), { recursive: true })
+      process.env.HIBIKI_USER_DATA = userData
+      const zipPath = createManifestZip(bundledManifest('Unsaved', 'sounds/music/unsaved-1.mp3'), {
+        'sounds/music/unsaved-1.mp3': 'x',
+      })
+      await expect(importScene(config, zipPath)).rejects.toThrow(/EISDIR|EPERM|ENOTEMPTY/)
+      expect(existsSync(join(config.audio.musicDir, 'unsaved-1.mp3'))).toBe(false)
+      delete process.env.HIBIKI_USER_DATA
+    })
+
     it('reuses an existing library file of the same name and size', async () => {
       mkdirSync(config.audio.musicDir, { recursive: true })
       writeFileSync(join(config.audio.musicDir, 'same-1.mp3'), 'abc')

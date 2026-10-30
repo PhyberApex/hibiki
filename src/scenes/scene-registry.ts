@@ -5,7 +5,8 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { writeJsonFileAtomic } from '../json-file'
 import { createLogger } from '../logger'
-import { createSceneStore, normalizeMusicMode, uniqueSceneName } from './scene-store'
+import { SOUND_CATEGORIES } from '../sound/sound-id'
+import { createSceneStore, isRecord, normalizeMusicMode, uniqueSceneName } from './scene-store'
 
 const log = createLogger('scene-registry')
 
@@ -36,10 +37,6 @@ function getCachePath(config: Config): string {
   return join(dir, CACHE_FILENAME)
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 /** Only the part every caller relies on; each entry is checked when it is installed. */
 function isRegistryIndex(data: unknown): data is RegistryIndex {
   return isRecord(data) && Array.isArray(data.scenes)
@@ -50,7 +47,7 @@ function isInstallableEntry(entry: RegistryEntry): boolean {
   return typeof entry.name === 'string'
     && entry.name.trim() !== ''
     && isRecord(scene)
-    && (['music', 'ambience', 'effects'] as const).every(category =>
+    && SOUND_CATEGORIES.every(category =>
       Array.isArray(scene[category]) && scene[category].every(isRecord))
 }
 
@@ -118,11 +115,15 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
     return null
   }
 
-  async function request(): Promise<Response> {
+  /** The index's parsed JSON body; the timeout covers the body download as well as the connection. */
+  async function fetchIndexBody(): Promise<unknown> {
     try {
-      return await fetch(indexUrl, {
+      const response = await fetch(indexUrl, {
         signal: AbortSignal.timeout(timeoutMs),
       })
+      if (!response.ok)
+        throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText} (${indexUrl})`)
+      return await response.json()
     }
     catch (e) {
       if ((e as Error).name !== 'TimeoutError')
@@ -144,11 +145,7 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
       }
 
       log.info(`Fetching registry index from ${indexUrl}…`)
-      const response = await request()
-      if (!response.ok)
-        throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText} (${indexUrl})`)
-
-      const data: unknown = await response.json()
+      const data = await fetchIndexBody()
       if (!isRegistryIndex(data)) {
         log.warn(`Registry index from ${indexUrl} is malformed: no scenes list; not caching it`)
         throw new Error(`Registry index is malformed (${indexUrl})`)

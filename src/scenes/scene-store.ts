@@ -1,10 +1,11 @@
 import type { Config } from '../config'
+import type { SoundCategory } from '../sound/sound.types'
 import type { ActionHotkeys } from './hotkeys'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { createJsonFileStore } from '../json-file'
 import { createLogger } from '../logger'
-import { isSafeSoundId } from '../sound/sound-id'
+import { isSafeSoundId, SOUND_CATEGORIES } from '../sound/sound-id'
 import { assertSceneHotkeysAvailable, normalizeOptionalAccelerator } from './hotkeys'
 
 export interface SoundSource {
@@ -87,11 +88,8 @@ export interface SceneStoreOptions {
   getActionHotkeys?: () => Promise<ActionHotkeys>
 }
 
-type SceneCategory = 'music' | 'ambience' | 'effects'
-
-const SCENE_CATEGORIES: readonly SceneCategory[] = ['music', 'ambience', 'effects']
-
-function isRecord(value: unknown): value is Record<string, unknown> {
+/** A plain object (not null, not an array): what every untrusted Scene shape is checked against first. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
@@ -116,7 +114,7 @@ function normalizeSource(raw: unknown): SoundSource | undefined {
  * into 0-100. Everything else (wrong types, unknown keys) is dropped with a
  * warn. Effect Hotkeys are kept here and normalised by the caller.
  */
-function normalizeItem(raw: unknown, category: SceneCategory, index: number, sceneName: string): SceneItem {
+function normalizeItem(raw: unknown, category: SoundCategory, index: number, sceneName: string): SceneItem {
   const where = `Scene ${category} item ${index + 1}`
   if (!isRecord(raw) || !isSafeSoundId(raw.soundId))
     rejectInput(`${where} has no valid sound id`)
@@ -148,8 +146,10 @@ function normalizeItem(raw: unknown, category: SceneCategory, index: number, sce
     item.source = source
   else if (raw.source !== undefined)
     dropped.push('source')
-  if (raw.hotkey !== undefined)
-    item.hotkey = raw.hotkey as string
+  if (typeof raw.hotkey === 'string')
+    item.hotkey = raw.hotkey
+  else if (raw.hotkey !== undefined && raw.hotkey !== null)
+    dropped.push('hotkey')
   if (item.volume !== undefined && item.volume !== raw.volume)
     log.warn(`Scene "${sceneName}": ${category} item ${raw.soundId} volume ${String(raw.volume)} clamped to ${item.volume}`)
   if (dropped.length > 0)
@@ -157,7 +157,7 @@ function normalizeItem(raw: unknown, category: SceneCategory, index: number, sce
   return item
 }
 
-function normalizeItems(raw: unknown, category: SceneCategory, sceneName: string): SceneItem[] {
+function normalizeItems(raw: unknown, category: SoundCategory, sceneName: string): SceneItem[] {
   if (raw === undefined)
     return []
   if (!Array.isArray(raw))
@@ -194,14 +194,14 @@ interface SceneInput {
  * Registry install): it rejects what has no sensible reading and normalises
  * the rest, so `scenes.json` only ever holds the shape `Scene` declares (#652).
  */
-function normalizeSceneInput(raw: unknown): { id?: string, name: string, items: Record<SceneCategory, SceneItem[]> } {
+function normalizeSceneInput(raw: unknown): { id?: string, name: string, items: Record<SoundCategory, SceneItem[]> } {
   if (!isRecord(raw))
     rejectInput('Scene must be an object')
   if (typeof raw.name !== 'string' || raw.name.trim() === '')
     rejectInput('Scene name must be a non-empty string')
   const name = raw.name
-  const items = {} as Record<SceneCategory, SceneItem[]>
-  for (const category of SCENE_CATEGORIES)
+  const items = {} as Record<SoundCategory, SceneItem[]>
+  for (const category of SOUND_CATEGORIES)
     items[category] = normalizeItems(raw[category], category, name)
   if (raw.id !== undefined && (typeof raw.id !== 'string' || raw.id === ''))
     log.warn(`Scene "${name}": ignoring invalid id ${JSON.stringify(raw.id)}, generating one`)

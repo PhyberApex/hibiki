@@ -2,13 +2,13 @@ import type { Config } from '../config'
 import type { SoundCategory } from '../sound/sound.types'
 import type { SceneManifest, ScenePackageItem } from './scene-package.types'
 import type { Scene, SceneItem } from './scene-store'
-import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import AdmZip from 'adm-zip'
 import slugify from 'slugify'
 import { createLogger } from '../logger'
 import { isSafeSoundId, SOUND_CATEGORIES } from '../sound/sound-id'
-import { createSceneStore, normalizeMusicMode, uniqueSceneName } from './scene-store'
+import { createSceneStore, isRecord, normalizeMusicMode, uniqueSceneName } from './scene-store'
 
 const log = createLogger('scene-import')
 
@@ -30,10 +30,6 @@ export interface SceneImportLimits {
 export const SCENE_IMPORT_LIMITS: SceneImportLimits = {
   maxFileBytes: 512 * 1024 * 1024,
   maxTotalBytes: 2 * 1024 * 1024 * 1024,
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function validateItem(raw: unknown, where: string): string | null {
@@ -262,12 +258,27 @@ function writeBundledSounds(planned: BundledSound[]): void {
   }
 }
 
+/** Undoes `writeBundledSounds` when the Scene itself is not saved, so a failed import leaves no orphan files. */
+function removeWrittenSounds(planned: BundledSound[]): void {
+  for (const { destDir, filename, reuse } of planned) {
+    if (reuse)
+      continue
+    try {
+      rmSync(join(destDir, filename), { force: true })
+      log.info(`Removed ${join(destDir, filename)}: the imported Scene was not saved`)
+    }
+    catch (e) {
+      log.warn(`Could not remove ${join(destDir, filename)} after a failed import:`, e)
+    }
+  }
+}
+
 /** A Scene item's sound id is later globbed inside a category folder, so it must be one safe path segment (#637). */
-function assertSafeSoundIds(items: SceneItem[], category: SoundCategory): void {
+function assertSafeSoundIds(items: SceneItem[], category: SoundCategory, archiveName: string): void {
   for (const item of items) {
     if (isSafeSoundId(item.soundId))
       continue
-    log.warn(`Rejected archive: ${category} item has unsafe sound id ${JSON.stringify(item.soundId)}`)
+    log.warn(`Rejected archive ${archiveName}: ${category} item has unsafe sound id ${JSON.stringify(item.soundId)}`)
     throw new Error(`Invalid hibiki-scene.json: ${category} item '${String(item.soundId)}' is not a valid sound id`)
   }
 }
@@ -295,10 +306,8 @@ export async function importScene(config: Config, sourceZipPath: string, limits:
   const items = {} as Record<SoundCategory, SceneItem[]>
   for (const category of SOUND_CATEGORIES) {
     items[category] = manifest.scene[category].map(pkg => manifestItemToSceneItem(pkg, bundledFileIds))
-    assertSafeSoundIds(items[category], category)
+    assertSafeSoundIds(items[category], category, archiveName)
   }
-  writeBundledSounds(bundled)
-
   const name = uniqueSceneName(
     [manifest.displayName, manifest.name].find(n => n?.trim()) ?? 'Imported scene',
     await scenes.list(),
@@ -308,7 +317,15 @@ export async function importScene(config: Config, sourceZipPath: string, limits:
     ...items,
     musicMode: normalizeMusicMode(manifest.scene.musicMode),
   }
-  const saved = await scenes.save(scene)
+  let saved: Scene
+  try {
+    writeBundledSounds(bundled)
+    saved = await scenes.save(scene)
+  }
+  catch (e) {
+    removeWrittenSounds(bundled)
+    throw e
+  }
   log.info(`Imported "${saved.name}" (${saved.id})`)
   return saved
 }

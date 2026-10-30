@@ -374,6 +374,9 @@ describe('createSceneStore', () => {
             source: 123,
           },
         ],
+        effects: [
+          { soundId: 'boom', hotkey: 5 },
+        ],
       } as never)
       expect(saved.music).toEqual([
         { soundId: 'loud', volume: 100 },
@@ -383,6 +386,9 @@ describe('createSceneStore', () => {
       ])
       expect(saved.ambience).toEqual([
         { soundId: 'rain' },
+      ])
+      expect(saved.effects).toEqual([
+        { soundId: 'boom' },
       ])
     })
 

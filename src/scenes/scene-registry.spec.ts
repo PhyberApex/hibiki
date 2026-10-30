@@ -326,6 +326,17 @@ describe('createSceneRegistry', () => {
       expect(existsSync(cachePath())).toBe(false)
     })
 
+    it('fetchIndex gives up when the body stalls after the headers arrive', async () => {
+      fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => new Response(new ReadableStream({
+        start(controller) {
+          init?.signal?.addEventListener('abort', () => controller.error(init.signal!.reason))
+        },
+      })))
+      await expect(createSceneRegistry(config, REGISTRY_INDEX_URL, { timeoutMs: 20 }).fetchIndex(true))
+        .rejects
+        .toThrow('Registry index request timed out after 20 ms')
+    })
+
     it.each([
       [
         'an object without scenes',
