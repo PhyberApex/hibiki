@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent, h, KeepAlive, ref } from 'vue'
 import { useToastStore } from '@/stores/toast'
 import SoundListManage from './SoundListManage.vue'
 
@@ -570,6 +571,84 @@ describe('soundListManage', () => {
       await wrapper.find('input.tags-input').trigger('keydown.enter')
       await flushPromises()
       expect(lastToast('error')).toContain('disk full')
+    })
+  })
+
+  describe('preview playback', () => {
+    beforeEach(async () => {
+      vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+      vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+      vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
+      const { listMusic } = await import('@/api/sounds')
+      vi.mocked(listMusic).mockResolvedValue([
+        {
+          id: 's1',
+          name: 'Long Track',
+          filename: 'long.mp3',
+          category: 'music',
+          createdAt: '2024-01-01T00:00:00Z',
+        },
+      ])
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    function mountInKeepAlive() {
+      const shown = ref(true)
+      const Host = defineComponent({
+        setup() {
+          return () => h(KeepAlive, null, [
+            shown.value
+              ? h(SoundListManage, { type: 'music' })
+              : h('div', 'other panel'),
+          ])
+        },
+      })
+      return {
+        wrapper: mount(Host),
+        shown,
+      }
+    }
+
+    it('stops the preview when the panel is deactivated', async () => {
+      const { wrapper, shown } = mountInKeepAlive()
+      await flushPromises()
+      await wrapper.find('.sound-play-btn').trigger('click')
+      await flushPromises()
+      const audio = wrapper.find('audio').element as HTMLAudioElement
+      expect(audio.getAttribute('src')).toBe('hibiki://sound/music/s1')
+      const pause = vi.mocked(HTMLMediaElement.prototype.pause)
+      pause.mockClear()
+
+      shown.value = false
+      await flushPromises()
+
+      expect(pause).toHaveBeenCalled()
+      expect(audio.hasAttribute('src')).toBe(false)
+
+      shown.value = true
+      await flushPromises()
+      expect(wrapper.find('.sound-item-playing').exists()).toBe(false)
+      expect(wrapper.find('.icon-play').exists()).toBe(true)
+    })
+
+    it('stops the preview when the panel is unmounted', async () => {
+      const wrapper = mount(SoundListManage, {
+        props: { type: 'music' },
+      })
+      await flushPromises()
+      await wrapper.find('.sound-play-btn').trigger('click')
+      await flushPromises()
+      const audio = wrapper.find('audio').element as HTMLAudioElement
+      const pause = vi.mocked(HTMLMediaElement.prototype.pause)
+      pause.mockClear()
+
+      wrapper.unmount()
+
+      expect(pause).toHaveBeenCalled()
+      expect(audio.hasAttribute('src')).toBe(false)
     })
   })
 })

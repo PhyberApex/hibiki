@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SoundFile } from '@/api/sounds'
-import { computed, nextTick, onActivated, onMounted, ref } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
 import {
   deleteSound,
   listAmbience,
@@ -11,6 +11,7 @@ import {
   uploadSound,
   uploadSoundsBulk,
 } from '@/api/sounds'
+import { logInfo } from '@/audio/audio-element-diagnostics'
 import { useToastStore } from '@/stores/toast'
 
 const props = defineProps<{ type: 'music' | 'effects' | 'ambience' }>()
@@ -304,6 +305,19 @@ onMounted(() => {
 onActivated(() => {
   loadSounds()
 })
+
+// The preview is not part of any Output Target mix and its only Stop button
+// lives on this panel, so leaving the panel (KeepAlive tab switch, view switch
+// or unmount) must not leave it playing out of reach.
+function stopPreviewOnLeave(reason: 'deactivate' | 'unmount') {
+  if (playingId.value === null)
+    return
+  logInfo(`[media] preview stopped on ${reason} (type=${props.type}, sound=${playingId.value})`)
+  stop()
+}
+
+onDeactivated(() => stopPreviewOnLeave('deactivate'))
+onBeforeUnmount(() => stopPreviewOnLeave('unmount'))
 </script>
 
 <template>
