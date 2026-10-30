@@ -102,15 +102,15 @@ function registerAudioStreamHandlers(ipcMain, player) {
   }
 
   /**
-   * Hands a freshly registered stream to the player. A stream the player did
+   * Registers a fresh stream under `streamId` (ending any previous one) and hands it to the player. A stream the player did
    * not take (it threw, or returned anything but `true`, as for the Local
    * Target) has no consumer, so it is dropped from the registry instead of
    * buffering every later chunk.
    */
-  const handOver = (lane, streams, streamId, guildId, start) => {
+  const openStream = (lane, streams, streamId, guildId, start) => {
     let accepted
     try {
-      accepted = start(streams.get(streamId))
+      accepted = start(replace(streams, streamId))
     }
     catch (err) {
       ipcLog.warn(`${lane} ${streamId} for guild ${guildId} refused by the player; dropping it`)
@@ -142,10 +142,9 @@ function registerAudioStreamHandlers(ipcMain, player) {
 
   ipcMain.handle('audio:startStream', async (_, { guildId, metadata, streamId }) => {
     const streams = streamsFor(audioStreams, guildId)
-    replace(streams, streamId)
     warnedUnknown.delete(unknownKey('audio:chunk', guildId, streamId))
     ipcLog.info(`audio:startStream ${streamId} for guild ${guildId}`)
-    handOver('audio:startStream', streams, streamId, guildId, stream => player.startStream(guildId, stream, metadata, streamId))
+    openStream('audio:startStream', streams, streamId, guildId, stream => player.startStream(guildId, stream, metadata, streamId))
   })
 
   ipcMain.on('audio:chunk', (_, { guildId, streamId, chunk }) => {
@@ -163,12 +162,11 @@ function registerAudioStreamHandlers(ipcMain, player) {
   ipcMain.handle('audio:startEffectStream', async (_, { guildId, streamId, volume }) => {
     const id = streamId || `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const streams = streamsFor(effectStreams, guildId)
-    replace(streams, id)
     warnedUnknown.delete(unknownKey('audio:effectChunk', guildId, id))
     ipcLog.info(`audio:startEffectStream ${id} for guild ${guildId}${volume !== undefined
       ? ` at volume ${volume}`
       : ''}`)
-    handOver('audio:startEffectStream', streams, id, guildId, stream => player.startEffectStream(guildId, stream, id, volume))
+    openStream('audio:startEffectStream', streams, id, guildId, stream => player.startEffectStream(guildId, stream, id, volume))
     return id
   })
 

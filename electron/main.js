@@ -57,7 +57,7 @@ let appHandle = null
 let mainWindow = null
 let hotkeys = null
 /** `registerAudioStreamHandlers`' handle; `endAll` tears down the renderer's chunked-IPC streams when it goes away. */
-let audioStreams = null
+let audioStreamHandlers = null
 
 /**
  * On Linux without a keyring, `safeStorage` reports encryption as available
@@ -145,7 +145,7 @@ function createWindow(loadUrl) {
 
 function registerIpcHandlers(api) {
   registerApiHandler(ipcMain, api, () => hotkeys)
-  audioStreams = registerAudioStreamHandlers(ipcMain, api.player)
+  audioStreamHandlers = registerAudioStreamHandlers(ipcMain, api.player)
 }
 
 const browserViews = new Map()
@@ -172,7 +172,7 @@ function destroyAllBrowserViews(win, reason) {
 
 /** Ends whatever the main window's renderer left behind in main: its chunked-IPC audio streams and its Browser tabs. */
 function releaseRendererResources(win, reason) {
-  audioStreams?.endAll(reason)
+  audioStreamHandlers?.endAll(reason)
   destroyAllBrowserViews(win, reason)
 }
 
