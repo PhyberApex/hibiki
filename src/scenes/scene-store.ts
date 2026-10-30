@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { createJsonFileStore } from '../json-file'
 import { createLogger } from '../logger'
+import { isSafeSoundId } from '../sound/sound-id'
 import { assertSceneHotkeysAvailable, normalizeOptionalAccelerator } from './hotkeys'
 
 export interface SoundSource {
@@ -18,6 +19,9 @@ export interface SceneItem {
   volume?: number
   enabled?: boolean
   loop?: boolean
+  /** Ambience repeat interval in seconds, set by the renderer; both 0 (or absent) loops seamlessly. */
+  repeatMin?: number
+  repeatMax?: number
   source?: SoundSource
   /** Effect Hotkey (Electron accelerator). Only meaningful on `effects` items. Personal to this machine. */
   hotkey?: string
@@ -33,6 +37,18 @@ export function normalizeMusicMode(raw: unknown): MusicMode {
   return MUSIC_MODES.includes(raw as MusicMode)
     ? raw as MusicMode
     : 'single'
+}
+
+/**
+ * `name`, or `name (imported)` repeated until no existing Scene has it, ignoring
+ * case. Used by Scene Import and Registry install so neither shadows a Scene.
+ */
+export function uniqueSceneName(name: string, existing: readonly Scene[]): string {
+  const taken = new Set(existing.map(s => String(s.name).toLowerCase()))
+  let unique = name
+  while (taken.has(unique.toLowerCase()))
+    unique = `${unique} (imported)`
+  return unique
 }
 
 export interface Scene {
@@ -71,6 +87,84 @@ export interface SceneStoreOptions {
   getActionHotkeys?: () => Promise<ActionHotkeys>
 }
 
+type SceneCategory = 'music' | 'ambience' | 'effects'
+
+const SCENE_CATEGORIES: readonly SceneCategory[] = ['music', 'ambience', 'effects']
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function rejectInput(message: string): never {
+  log.warn(`Rejected scene save: ${message}`)
+  throw new Error(message)
+}
+
+function normalizeSource(raw: unknown): SoundSource | undefined {
+  if (!isRecord(raw) || typeof raw.name !== 'string')
+    return undefined
+  const source: SoundSource = { name: raw.name }
+  if (typeof raw.url === 'string')
+    source.url = raw.url
+  if (typeof raw.note === 'string')
+    source.note = raw.note
+  return source
+}
+
+/**
+ * Keeps only the known item fields with the right type; a volume is clamped
+ * into 0-100. Everything else (wrong types, unknown keys) is dropped with a
+ * warn. Effect Hotkeys are kept here and normalised by the caller.
+ */
+function normalizeItem(raw: unknown, category: SceneCategory, index: number, sceneName: string): SceneItem {
+  const where = `Scene ${category} item ${index + 1}`
+  if (!isRecord(raw) || !isSafeSoundId(raw.soundId))
+    rejectInput(`${where} has no valid sound id`)
+  const item: SceneItem = { soundId: raw.soundId }
+  const dropped: string[] = []
+  if (typeof raw.soundName === 'string')
+    item.soundName = raw.soundName
+  else if (raw.soundName !== undefined)
+    dropped.push('soundName')
+  if (typeof raw.volume === 'number' && Number.isFinite(raw.volume))
+    item.volume = Math.min(100, Math.max(0, raw.volume))
+  else if (raw.volume !== undefined)
+    dropped.push('volume')
+  for (const key of ['enabled', 'loop'] as const) {
+    if (typeof raw[key] === 'boolean')
+      item[key] = raw[key]
+    else if (raw[key] !== undefined)
+      dropped.push(key)
+  }
+  for (const key of ['repeatMin', 'repeatMax'] as const) {
+    const value = raw[key]
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0)
+      item[key] = value
+    else if (value !== undefined)
+      dropped.push(key)
+  }
+  const source = normalizeSource(raw.source)
+  if (source)
+    item.source = source
+  else if (raw.source !== undefined)
+    dropped.push('source')
+  if (raw.hotkey !== undefined)
+    item.hotkey = raw.hotkey as string
+  if (item.volume !== undefined && item.volume !== raw.volume)
+    log.warn(`Scene "${sceneName}": ${category} item ${raw.soundId} volume ${String(raw.volume)} clamped to ${item.volume}`)
+  if (dropped.length > 0)
+    log.warn(`Scene "${sceneName}": dropped invalid ${dropped.join(', ')} on ${category} item ${raw.soundId}`)
+  return item
+}
+
+function normalizeItems(raw: unknown, category: SceneCategory, sceneName: string): SceneItem[] {
+  if (raw === undefined)
+    return []
+  if (!Array.isArray(raw))
+    rejectInput(`Scene ${category} must be a list`)
+  return raw.map((item, index) => normalizeItem(item, category, index, sceneName))
+}
+
 function withoutHotkey(items: SceneItem[]): SceneItem[] {
   return items.map(({ hotkey: _hotkey, ...rest }) => rest)
 }
@@ -83,6 +177,38 @@ function normalizeEffects(effects: SceneItem[]): SceneItem[] {
       ? { ...rest, hotkey }
       : rest
   })
+}
+
+interface SceneInput {
+  id?: string
+  name: string
+  ambience?: SceneItem[]
+  music?: SceneItem[]
+  effects?: SceneItem[]
+  musicMode?: MusicMode
+  hotkey?: string
+}
+
+/**
+ * The one gate every Scene write goes through (renderer, Scene Import,
+ * Registry install): it rejects what has no sensible reading and normalises
+ * the rest, so `scenes.json` only ever holds the shape `Scene` declares (#652).
+ */
+function normalizeSceneInput(raw: unknown): { id?: string, name: string, items: Record<SceneCategory, SceneItem[]> } {
+  if (!isRecord(raw))
+    rejectInput('Scene must be an object')
+  if (typeof raw.name !== 'string' || raw.name.trim() === '')
+    rejectInput('Scene name must be a non-empty string')
+  const name = raw.name
+  const items = {} as Record<SceneCategory, SceneItem[]>
+  for (const category of SCENE_CATEGORIES)
+    items[category] = normalizeItems(raw[category], category, name)
+  if (raw.id !== undefined && (typeof raw.id !== 'string' || raw.id === ''))
+    log.warn(`Scene "${name}": ignoring invalid id ${JSON.stringify(raw.id)}, generating one`)
+  const id = typeof raw.id === 'string' && raw.id !== ''
+    ? raw.id
+    : undefined
+  return { id, name, items }
 }
 
 export function createSceneStore(config: Config, options: SceneStoreOptions = {}) {
@@ -99,28 +225,21 @@ export function createSceneStore(config: Config, options: SceneStoreOptions = {}
       return scenes.find(s => s.id === id) ?? null
     },
 
-    async save(scene: {
-      id?: string
-      name: string
-      ambience?: SceneItem[]
-      music?: SceneItem[]
-      effects?: SceneItem[]
-      musicMode?: MusicMode
-      hotkey?: string
-    }): Promise<Scene> {
+    async save(scene: SceneInput): Promise<Scene> {
+      const input = normalizeSceneInput(scene)
       const actionHotkeys = await options.getActionHotkeys?.()
       return store.update((scenes) => {
         const now = new Date().toISOString()
-        const existing = scene.id
-          ? scenes.find(s => s.id === scene.id)
+        const existing = input.id
+          ? scenes.find(s => s.id === input.id)
           : null
 
         const saved: Scene = {
-          id: existing?.id ?? scene.id ?? randomUUID(),
-          name: scene.name,
-          ambience: withoutHotkey(scene.ambience ?? []),
-          music: withoutHotkey(scene.music ?? []),
-          effects: normalizeEffects(scene.effects ?? []),
+          id: existing?.id ?? input.id ?? randomUUID(),
+          name: input.name,
+          ambience: withoutHotkey(input.items.ambience),
+          music: withoutHotkey(input.items.music),
+          effects: normalizeEffects(input.items.effects),
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
         }
