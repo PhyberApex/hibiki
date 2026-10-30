@@ -79,8 +79,8 @@ describe('readLogTail', () => {
     await expect(readLogTail(file, 300)).resolves.toEqual(['a', 'b'])
   })
 
-  it('returns null when the log cannot be read', async () => {
-    await expect(readLogTail(path.join(dir, 'missing.log'), 300)).resolves.toBeNull()
+  it('rejects when the log cannot be read', async () => {
+    await expect(readLogTail(path.join(dir, 'missing.log'), 300)).rejects.toThrow()
   })
 })
 
@@ -200,21 +200,31 @@ describe('buildDiagnosticsSummary', () => {
   })
 
   it('notes an unreadable log instead of failing', async () => {
+    const log = {
+      warn: jest.fn(),
+    }
     const text = await build({
-      loadLogTail: async () => null,
+      loadLogTail: async () => { throw new Error('ENOENT') },
+      log,
     })
 
     expect(text).toContain('(log file could not be read)')
+    expect(log.warn).toHaveBeenCalledWith('Diagnostics summary: could not read the log tail:', expect.any(Error))
   })
 
-  it('keeps going when a settings reader fails', async () => {
+  it('keeps going when a settings reader fails, and logs the failure', async () => {
+    const log = {
+      warn: jest.fn(),
+    }
     const text = await build({
       api: fakeApi({
         getVision: jest.fn().mockRejectedValue(new Error('boom')),
       }),
       hotkeyStatus: null,
+      log,
     })
 
+    expect(log.warn).toHaveBeenCalledWith('Diagnostics summary: could not read Vision settings:', expect.any(Error))
     expect(text).toContain('Vision Provider: unknown')
     expect(text).toContain('Vision key: unknown')
     expect(text).toContain('Global Hotkeys: unknown')

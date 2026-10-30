@@ -4,27 +4,22 @@ const path = require('node:path')
 /** How much of `hibiki.log` the Diagnostics summary carries. */
 const LOG_TAIL_LINES = 300
 
-/** The last `maxLines` lines of `file`, or `null` when it cannot be read. The log rotates at 5 MB, so reading it whole is fine. */
+/** The last `maxLines` lines of `file`; rejects when it cannot be read. The log rotates at 5 MB, so reading it whole is fine. */
 async function readLogTail(file, maxLines) {
-  let raw
-  try {
-    raw = await fs.promises.readFile(file, 'utf-8')
-  }
-  catch {
-    return null
-  }
+  const raw = await fs.promises.readFile(file, 'utf-8')
   const lines = raw.split(/\r?\n/)
   if (lines.at(-1) === '')
     lines.pop()
   return lines.slice(-maxLines)
 }
 
-/** Resolves to `fallback` instead of rejecting, so one broken reader cannot cost the GM the whole summary. */
-async function settle(read, fallback) {
+/** Resolves to `fallback` instead of rejecting, so one broken reader cannot cost the GM the whole summary; the failure is still logged. */
+async function settle(label, read, fallback, log) {
   try {
     return await read()
   }
-  catch {
+  catch (err) {
+    log?.warn(`Diagnostics summary: could not read ${label}:`, err)
     return fallback
   }
 }
@@ -94,16 +89,16 @@ function redactHomeDir(text, homeDir) {
  * name only the file, and the home folder is replaced with `~` everywhere
  * (log tail included), since a full path carries the OS user name.
  */
-async function buildDiagnosticsSummary({ environment, api, hotkeyStatus, secretStorageAvailable, loadLogTail, homeDir }) {
+async function buildDiagnosticsSummary({ environment, api, hotkeyStatus, secretStorageAvailable, loadLogTail, homeDir, log }) {
   const config = api.config
   const [target, device, discord, vision, usageStats, storageWarnings, logTail] = await Promise.all([
-    settle(() => config.getActiveOutputTarget(), undefined),
-    settle(() => config.getLocalOutputDevice(), undefined),
-    settle(() => config.getDiscord(), null),
-    settle(() => config.getVision(), null),
-    settle(() => config.getUsageStats(), null),
-    settle(() => config.getStorageWarnings(), null),
-    settle(() => loadLogTail(), null),
+    settle('Output Target', () => config.getActiveOutputTarget(), undefined, log),
+    settle('Output Device', () => config.getLocalOutputDevice(), undefined, log),
+    settle('Discord settings', () => config.getDiscord(), null, log),
+    settle('Vision settings', () => config.getVision(), null, log),
+    settle('Usage Stats settings', () => config.getUsageStats(), null, log),
+    settle('storage warnings', () => config.getStorageWarnings(), null, log),
+    settle('the log tail', () => loadLogTail(), null, log),
   ])
 
   const lines = [

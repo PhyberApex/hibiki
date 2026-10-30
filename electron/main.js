@@ -608,6 +608,7 @@ app.whenReady().then(async () => {
         secretStorageAvailable: secretCodec.available,
         loadLogTail: () => readLogTail(logging.logFile, LOG_TAIL_LINES),
         homeDir: app.getPath('home'),
+        log: diagnosticsLog,
       })
       clipboard.writeText(summary)
       const lines = summary.split('\n').length - 1
