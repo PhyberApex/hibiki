@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onActivated, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { fetchDiscordConfig } from '@/api/config'
 import { listAmbience, listEffects, listMusic } from '@/api/sounds'
@@ -31,15 +31,25 @@ async function loadCounts() {
   }
 }
 
-onMounted(async () => {
+async function loadTokenConfigured() {
   try {
     const config = await fetchDiscordConfig()
     tokenConfigured.value = config.tokenConfigured
   }
-  catch {
+  catch (e) {
+    console.warn('[media] Couldn\'t load the Discord config:', e)
     tokenConfigured.value = false
   }
+}
+
+onMounted(() => {
+  void loadTokenConfigured()
   loadCounts()
+})
+
+// Kept alive under KeepAlive: a token saved or removed in Settings since the last visit changes the setup guide.
+onActivated(() => {
+  void loadTokenConfigured()
 })
 
 function onUpdated() {
