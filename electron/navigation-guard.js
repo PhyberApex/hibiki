@@ -19,6 +19,16 @@ function describeUrl(url) {
   }
 }
 
+/** What a log line may say about a URL handed to `shell.openExternal`: its scheme alone. */
+function describeScheme(url) {
+  try {
+    return new URL(url).protocol
+  }
+  catch {
+    return 'an unparseable URL'
+  }
+}
+
 /** Whether `url` is a web page the system browser should open; the only kind Hibiki ever hands to `shell.openExternal`. */
 function isWebUrl(url) {
   return typeof url === 'string' && /^https?:\/\//i.test(url)
@@ -65,4 +75,23 @@ function guardMainWindowNavigation(webContents, { appUrl, openExternal }) {
   })
 }
 
-module.exports = { describeUrl, guardMainWindowNavigation, isWebUrl }
+/**
+ * `did-start-navigation` listener that hands main-frame URLs to `send`.
+ * Reads the `details` object: the positional `(event, url, isInPlace,
+ * isMainFrame)` arguments are deprecated, and once removed `isMainFrame`
+ * would be `undefined` and the tab URL bar would stop updating (#660).
+ */
+function forwardMainFrameNavigation(send) {
+  return (details) => {
+    if (details.isMainFrame)
+      send(details.url)
+  }
+}
+
+module.exports = {
+  describeScheme,
+  describeUrl,
+  forwardMainFrameNavigation,
+  guardMainWindowNavigation,
+  isWebUrl,
+}
