@@ -113,9 +113,26 @@ export function createSoundLibrary(config: Config) {
     if (!isMeasured(category))
       return new Map()
     const prior = measuring.get(category) ?? Promise.resolve()
-    const run = prior.then(() => measureMissing(category, files))
-    measuring.set(category, run.catch(() => undefined))
+    // A timer is never worth failing the list over: a sidecar error leaves every duration unknown.
+    const run = prior.then(() => measureMissing(category, files)).catch((err) => {
+      log.error(`Could not read or store ${category} durations in the sidecar, timers stay off:`, err)
+      return new Map<string, number | null>()
+    })
+    measuring.set(category, run)
     return run
+  }
+
+  /** The stored duration of one sound, never measuring: playback must not wait behind a lazy measurement pass or fail on the sidecar. */
+  async function storedDuration(category: SoundCategory, id: string): Promise<number | null | undefined> {
+    if (!isMeasured(category))
+      return undefined
+    try {
+      return (await durationsStore.getAll(category)).get(id)
+    }
+    catch (err) {
+      log.error(`Could not read the stored duration of ${category}/${id}:`, err)
+      return undefined
+    }
   }
 
   async function measureMissing(category: SoundCategory, files: { id: string, path: string }[]): Promise<Map<string, number | null>> {
@@ -205,12 +222,10 @@ export function createSoundLibrary(config: Config) {
     async getFile(category: SoundCategory, id: string): Promise<SoundFile & { path: string }> {
       const filename = await findFilename(config, category, id)
       const path = resolvePath(config, category, filename)
-      const [stats, tags, durations] = await Promise.all([
+      const [stats, tags, durationMs] = await Promise.all([
         stat(path),
         tagsStore.get(category, id),
-        durationsFor(category, [
-          { id, path },
-        ]),
+        storedDuration(category, id),
       ])
       return {
         id,
@@ -220,7 +235,7 @@ export function createSoundLibrary(config: Config) {
         size: stats.size,
         createdAt: stats.birthtime.toISOString(),
         tags,
-        ...durationField(durations.get(id)),
+        ...durationField(durationMs),
         path,
       }
     },
@@ -272,9 +287,15 @@ export function createSoundLibrary(config: Config) {
       let durationMs: number | null = null
       if (isMeasured(category)) {
         durationMs = await measure(category, safeId, target)
-        await durationsStore.setMany(category, new Map([
-          [safeId, durationMs],
-        ]))
+        try {
+          await durationsStore.setMany(category, new Map([
+            [safeId, durationMs],
+          ]))
+        }
+        catch (err) {
+          // The file is saved; an unstored duration is only measured again on the next list.
+          log.error(`Could not store the duration of ${category}/${safeId}:`, err)
+        }
       }
       log.info(`Saved ${category} "${filename}" (${stats.size} bytes${durationMs === null
         ? ''

@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSoundLibrary } from './sound-library'
@@ -550,6 +550,33 @@ describe('music durations (#695)', () => {
     })
     await lib.remove('music', saved.id)
     expect(durationsFile(config)).toEqual({})
+  })
+
+  it('getFile never measures, so playback does not wait on a lazy measurement pass', async () => {
+    const config = makeConfig()
+    mkdirSync(config.audio.musicDir, { recursive: true })
+    copyFileSync(join(FIXTURES_DIR, 'fixture-stereo-44100.flac'), join(config.audio.musicDir, 'battle.flac'))
+    const file = await createSoundLibrary(config).getFile('music', 'battle')
+    expect(file.durationMs).toBeUndefined()
+    expect(existsSync(join(config.audio.storageRoot, 'data', 'sound-durations.json'))).toBe(false)
+  })
+
+  it('a broken sidecar leaves durations unknown instead of failing list, getFile or save', async () => {
+    const config = makeConfig()
+    mkdirSync(config.audio.musicDir, { recursive: true })
+    copyFileSync(join(FIXTURES_DIR, 'fixture-stereo-44100.flac'), join(config.audio.musicDir, 'battle.flac'))
+    // a directory where the sidecar file should be: every read and write of it fails
+    mkdirSync(join(config.audio.storageRoot, 'data', 'sound-durations.json'), { recursive: true })
+    const lib = createSoundLibrary(config)
+    const [listed] = await lib.list('music')
+    expect(listed!.id).toBe('battle')
+    expect(listed!.durationMs).toBeUndefined()
+    await expect(lib.getFile('music', 'battle')).resolves.toMatchObject({ id: 'battle' })
+    const saved = await lib.save('music', {
+      buffer: readFileSync(join(FIXTURES_DIR, 'fixture-stereo-44100.ogg')),
+      originalname: 'tavern.ogg',
+    })
+    expect(saved.durationMs).toBe(300)
   })
 })
 
