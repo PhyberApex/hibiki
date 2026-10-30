@@ -6,7 +6,7 @@ import fg from 'fast-glob'
 import slugify from 'slugify'
 import { canDecode as canDecodeFile } from '../audio/decoders'
 import { createLogger } from '../logger'
-import { isSafeSoundId, isSoundCategory } from './sound-id'
+import { idFromFilename, isSafeSoundId, isSoundCategory } from './sound-id'
 import { createSoundTagsStore } from './sound-tags.store'
 
 const log = createLogger('sounds')
@@ -34,8 +34,7 @@ function resolvePath(config: Config, category: SoundCategory, filename?: string)
 }
 
 function humanize(filename: string): string {
-  return filename
-    .replace(extname(filename), '')
+  return idFromFilename(filename)
     .replace(/[-_]+/g, ' ')
     .replace(/\b\w/g, c => c.toUpperCase())
 }
@@ -51,14 +50,16 @@ async function findFilename(config: Config, category: SoundCategory, id: string)
     throw new Error(`Invalid sound id '${String(id)}'`)
   }
   const escaped = escapeGlob(id)
-  const matches = await fg(`${escaped}.*`, { cwd: base, onlyFiles: true, dot: false })
-  if (!matches.length)
+  // `rain.*` also matches `rain.wav-mix.wav`, whose id is `rain.wav-mix`
+  const match = (await fg(`${escaped}.*`, { cwd: base, onlyFiles: true, dot: false }))
+    .find(filename => idFromFilename(filename) === id)
+  if (!match)
     throw new Error(`Sound '${id}' not found in ${category}`)
-  return matches[0]
+  return match
 }
 
 function buildId(name: string): string {
-  return `${slugify(name.replace(extname(name), ''), { lower: true, strict: true })}-${Date.now()}`
+  return `${slugify(idFromFilename(name), { lower: true, strict: true })}-${Date.now()}`
 }
 
 export function createSoundLibrary(config: Config) {
@@ -81,7 +82,9 @@ export function createSoundLibrary(config: Config) {
         const filePath = resolvePath(config, category, file)
         try {
           const stats = await stat(filePath)
-          const id = file.replace(extname(file), '')
+          const id = idFromFilename(file)
+          if (id === file)
+            log.warn(`${category} file ${JSON.stringify(file)} has no extension, so its id cannot be resolved back to it`)
           results.push({
             id,
             name: humanize(file),

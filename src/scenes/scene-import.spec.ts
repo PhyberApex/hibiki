@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import AdmZip from 'adm-zip'
+import { createSoundLibrary } from '../sound/sound-library'
 import { importScene } from './scene-import'
 
 describe('importScene', () => {
@@ -532,6 +533,28 @@ describe('importScene', () => {
       const ids = readdirSync(config.audio.musicDir).filter(f => f.startsWith('foo-1')).map(f => f.replace(/\.[^.]+$/, ''))
       expect(new Set(ids).size).toBe(ids.length)
       expect(readFileSync(join(config.audio.musicDir, `${soundId}.ogg`), 'utf-8')).toBe('ogg')
+    })
+
+    it('strips only the trailing extension when the stem contains it too (#662)', async () => {
+      const zipPath = createManifestZip(bundledManifest('Ext In Stem', 'sounds/music/drizzle.wav-mix.wav'), {
+        'sounds/music/drizzle.wav-mix.wav': 'drizzle',
+      })
+      const scene = await importScene(config, zipPath)
+      const soundId = scene.music[0]!.soundId
+      expect(soundId).toBe('drizzle.wav-mix')
+      await expect(createSoundLibrary(config).getFilePath('music', soundId))
+        .resolves
+        .toBe(join(config.audio.musicDir, 'drizzle.wav-mix.wav'))
+    })
+
+    it('sees a library file whose stem contains its extension as taken (#662)', async () => {
+      mkdirSync(config.audio.musicDir, { recursive: true })
+      writeFileSync(join(config.audio.musicDir, 'hail.mp3-mix.mp3'), 'the GM\'s own hail')
+      const zipPath = createManifestZip(bundledManifest('Ext In Stem Clash', 'sounds/music/hail.mp3-mix.ogg'), {
+        'sounds/music/hail.mp3-mix.ogg': 'archive hail',
+      })
+      const scene = await importScene(config, zipPath)
+      expect(scene.music[0]!.soundId).toMatch(/^hailmp3-mix-\d+$/)
     })
   })
 })
