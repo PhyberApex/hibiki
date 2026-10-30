@@ -353,6 +353,32 @@ describe('browserView', () => {
       expect(showBrowserView).toHaveBeenCalledWith(1)
     })
 
+    it('returning while a first tab created in the background is being hidden shows it', async () => {
+      vi.spyOn(console, 'info').mockImplementation(() => {})
+      let resolveCreate!: (id: number) => void
+      vi.mocked(createBrowserView).mockImplementationOnce(() => new Promise((resolve) => {
+        resolveCreate = resolve
+      }))
+      let resolveHide!: () => void
+      vi.mocked(hideBrowserView).mockImplementationOnce(() => new Promise((resolve) => {
+        resolveHide = resolve
+      }))
+      await mountBrowser()
+      showBrowser.value = false
+      await flush()
+      resolveCreate(1)
+      await flush()
+      expect(hideBrowserView).toHaveBeenCalledWith(1)
+
+      showBrowser.value = true
+      await flush()
+      resolveHide()
+      await flush()
+
+      expect(showBrowserView).toHaveBeenLastCalledWith(1)
+      expect(setBrowserViewBounds).toHaveBeenCalledWith(1, expect.any(Object))
+    })
+
     it('leaving the Browser while a tab switch is in flight does not show the new tab', async () => {
       await mountBrowser()
       await openNewTab(2)
@@ -477,11 +503,24 @@ describe('browserView', () => {
 
       expect(urlValue()).toBe('tabletopaud')
 
-      // The tab still records where it is, so leaving the input and switching back shows the real URL.
+      // Once the GM leaves the input, the URL bar follows the tab again.
       ;(input.element as HTMLInputElement).blur()
       browserEvents.get('browserView:didNavigate')!(1, 'https://example.com/next')
       await nextTick()
       expect(urlValue()).toBe('https://example.com/next')
+    })
+
+    it('a redirect after submitting a URL still reaches the URL bar', async () => {
+      await mountBrowser()
+      const input = wrapper!.find('.url-input')
+      ;(input.element as HTMLInputElement).focus()
+      await input.setValue('example.com')
+      await wrapper!.find('.url-form').trigger('submit')
+
+      browserEvents.get('browserView:didNavigate')!(1, 'https://www.example.com/')
+      await nextTick()
+
+      expect(urlValue()).toBe('https://www.example.com/')
     })
 
     it('submitting an empty URL does nothing', async () => {

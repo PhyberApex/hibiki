@@ -35,6 +35,8 @@ const activeTabId = ref<number | null>(null)
 const defaultTabId = ref<number | null>(null)
 const urlInput = ref('')
 const urlInputEl = ref<HTMLInputElement | null>(null)
+/** The GM typed into the URL bar since it last followed the active tab. */
+const urlEdited = ref(false)
 const containerEl = ref<HTMLElement | null>(null)
 const cleanups: (() => void)[] = []
 const bookmarks = ref<Bookmark[]>([])
@@ -43,7 +45,7 @@ const editingBookmarkName = ref('')
 const editingInputEl = ref<HTMLInputElement | null>(null)
 const isInitializing = ref(false)
 /** Whether the Browser is the shown route; a native view shown while it is not paints over the other views. */
-const isActive = ref(false)
+const isViewShown = ref(false)
 
 const activeTab = computed(() => tabs.value.find(t => t.id === activeTabId.value) ?? null)
 const isCurrentPageBookmarked = computed(() =>
@@ -180,15 +182,18 @@ async function openTab(url?: string) {
     })
     activeTabId.value = id
     urlInput.value = target
-    if (!isActive.value) {
+    urlEdited.value = false
+    if (!isViewShown.value) {
       logInfo(`[browser] tab ${id} created while view inactive, keeping hidden`)
       await hideBrowserView(id).catch(() => {})
-      return
+      // The GM may have come back during the hide; onActivated left showing this tab to us.
+      if (!isViewShown.value)
+        return
     }
     await nextTick()
     await updateViewBounds()
     // Leaving during the bounds update already hid this tab through onDeactivated.
-    if (isActive.value)
+    if (isViewShown.value)
       await showBrowserView(id)
   }
   catch (e) {
@@ -208,6 +213,7 @@ async function closeTab(id: number) {
       : null
     activeTabId.value = next?.id ?? null
     urlInput.value = next?.url ?? ''
+    urlEdited.value = false
   }
   await updateViewBounds()
 }
@@ -221,7 +227,8 @@ async function switchTab(id: number) {
   const tab = tabs.value.find(t => t.id === id)
   if (tab)
     urlInput.value = tab.url
-  if (!isActive.value)
+  urlEdited.value = false
+  if (!isViewShown.value)
     return
   await showBrowserView(id).catch(() => {})
   await updateViewBounds()
@@ -232,6 +239,7 @@ async function navigateTo() {
   if (!url || activeTabId.value == null)
     return
   urlInput.value = url
+  urlEdited.value = false
   await loadBrowserViewURL(activeTabId.value, url)
 }
 
@@ -251,7 +259,7 @@ async function reload() {
 }
 
 async function updateViewBounds() {
-  if (!isActive.value || !containerEl.value || activeTabId.value == null)
+  if (!isViewShown.value || !containerEl.value || activeTabId.value == null)
     return
   const rect = containerEl.value.getBoundingClientRect()
   await setBrowserViewBounds(activeTabId.value, {
@@ -279,8 +287,11 @@ onMounted(() => {
     if (tab) {
       tab.url = url as string
       // Never overwrite what the GM is typing; the tab keeps the real URL for the next switch.
-      if (activeTabId.value === tab.id && document.activeElement !== urlInputEl.value)
+      const typing = urlEdited.value && document.activeElement === urlInputEl.value
+      if (activeTabId.value === tab.id && !typing) {
         urlInput.value = url as string
+        urlEdited.value = false
+      }
     }
   }))
   cleanups.push(onBrowserViewEvent('browserView:titleUpdated', (id: unknown, title: unknown) => {
@@ -308,10 +319,12 @@ onMounted(() => {
 })
 
 onActivated(async () => {
-  isActive.value = true
+  isViewShown.value = true
   // A first tab still being created from an earlier visit shows itself once it arrives.
-  if (isInitializing.value)
+  if (isInitializing.value) {
+    logInfo('[browser] view shown while the first tab is still being created, waiting for it')
     return
+  }
   if (tabs.value.length === 0) {
     isInitializing.value = true
     await openTab(DEFAULT_BROWSER_URL)
@@ -326,7 +339,7 @@ onActivated(async () => {
 })
 
 onDeactivated(async () => {
-  isActive.value = false
+  isViewShown.value = false
   if (activeTabId.value != null)
     await hideBrowserView(activeTabId.value).catch(() => {})
 })
@@ -347,7 +360,7 @@ onBeforeUnmount(async () => {
 watch(activeTabId, async (newId, oldId) => {
   if (oldId != null && oldId !== newId)
     await hideBrowserView(oldId).catch(() => {})
-  if (newId != null && isActive.value) {
+  if (newId != null && isViewShown.value) {
     await showBrowserView(newId).catch(() => {})
     await updateViewBounds()
   }
@@ -411,6 +424,7 @@ watch(activeTabId, async (newId, oldId) => {
           class="input url-input"
           type="text"
           placeholder="Paste or type a URL…"
+          @input="urlEdited = true"
         >
       </form>
       <button
