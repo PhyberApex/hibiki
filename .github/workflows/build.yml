@@ -42,10 +42,15 @@ jobs:
         with:
           version: 12.16.0
 
+      # Packaging stays on Node 24 (the .nvmrc line the app targets): newer
+      # majors removed fs.rmdir's `recursive` option, which maker-squirrel's
+      # electron-winstaller still uses, so the Windows make step fails on
+      # Node 26 (#705). renovate.json caps this file's Node below 25; lift
+      # both once maker-squirrel ships an electron-winstaller using fs.rm.
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 26.12.1
+          node-version: 24.22.2
           cache: pnpm
 
       - name: Install dependencies
