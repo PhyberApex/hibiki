@@ -83,6 +83,14 @@ function isSceneArray(data: unknown): data is Scene[] {
 
 const log = createLogger('scenes')
 
+/** How many items across a Scene's categories carry a repeat interval; export and import log it (#708). */
+export function countRepeatIntervals(scene: Pick<Scene, SoundCategory>): number {
+  return SOUND_CATEGORIES.reduce(
+    (count, category) => count + scene[category].filter(item => item.repeatMin !== undefined || item.repeatMax !== undefined).length,
+    0,
+  )
+}
+
 export interface SceneStoreOptions {
   /** Current Action Hotkeys, so Scene and Effect Hotkeys can be checked against them. */
   getActionHotkeys?: () => Promise<ActionHotkeys>

@@ -8,7 +8,7 @@ import AdmZip from 'adm-zip'
 import slugify from 'slugify'
 import { createLogger } from '../logger'
 import { idFromFilename, isSafeSoundId, SOUND_CATEGORIES } from '../sound/sound-id'
-import { createSceneStore, isRecord, normalizeMusicMode, uniqueSceneName } from './scene-store'
+import { countRepeatIntervals, createSceneStore, isRecord, normalizeMusicMode, uniqueSceneName } from './scene-store'
 
 const log = createLogger('scene-import')
 
@@ -339,7 +339,6 @@ export async function importScene(config: Config, sourceZipPath: string, limits:
     removeWrittenSounds(written)
     throw e
   }
-  const withRepeat = SOUND_CATEGORIES.reduce((n, category) => n + items[category].filter(i => i.repeatMin !== undefined || i.repeatMax !== undefined).length, 0)
-  log.info(`Imported "${saved.name}" (${saved.id}); ${withRepeat} item(s) carried a repeat interval`)
+  log.info(`Imported "${saved.name}" (${saved.id}); ${countRepeatIntervals(saved)} item(s) carry a repeat interval`)
   return saved
 }

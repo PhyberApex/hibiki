@@ -457,6 +457,13 @@ describe('importScene', () => {
         'music item 1 repeatMin must be a number of seconds from 0',
       ],
       [
+        'a non-numeric repeatMin',
+        withMusic([
+          item({ repeatMin: 'often' }),
+        ]),
+        'music item 1 repeatMin must be a number of seconds from 0',
+      ],
+      [
         'a non-numeric repeatMax',
         withMusic([
           item({ repeatMax: 'often' }),
