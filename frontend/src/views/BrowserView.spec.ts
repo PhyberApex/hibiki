@@ -140,6 +140,10 @@ function tabPills() {
   return wrapper!.findAll('.browser-tab-pill')
 }
 
+function selectTab(index: number) {
+  return tabPills()[index]!.find('[role="tab"]').trigger('click')
+}
+
 function button(label: string) {
   return wrapper!.find(`button[aria-label="${label}"]`)
 }
@@ -233,7 +237,7 @@ describe('browserView', () => {
       vi.mocked(showBrowserView).mockClear()
       vi.mocked(setBrowserViewBounds).mockClear()
 
-      await tabPills()[0]!.trigger('click')
+      await selectTab(0)
       await flush()
 
       expect(hideBrowserView).toHaveBeenCalledWith(2)
@@ -243,11 +247,25 @@ describe('browserView', () => {
       expect(urlValue()).toBe(DEFAULT_URL)
     })
 
+    it('renders each tab as a tab control with a sibling close button, never a button inside a button', async () => {
+      await mountBrowser()
+      await openNewTab(2)
+
+      expect(wrapper!.find('.browser-tabs-list').attributes('role')).toBe('tablist')
+      expect(wrapper!.findAll('.browser-tabs-bar button button')).toHaveLength(0)
+      const tabControls = wrapper!.findAll('[role="tab"]')
+      expect(tabControls).toHaveLength(2)
+      expect(tabControls[0]!.attributes('aria-selected')).toBe('false')
+      expect(tabControls[1]!.attributes('aria-selected')).toBe('true')
+      const close = tabPills()[1]!.find('.browser-tab-close')
+      expect(close.element.parentElement).toBe(tabPills()[1]!.element)
+    })
+
     it('clicking the already active tab does nothing', async () => {
       await mountBrowser()
       vi.mocked(hideBrowserView).mockClear()
 
-      await tabPills()[0]!.trigger('click')
+      await selectTab(0)
       await flush()
 
       expect(hideBrowserView).not.toHaveBeenCalled()
@@ -269,7 +287,7 @@ describe('browserView', () => {
     it('closing an inactive tab keeps the active one', async () => {
       await mountBrowser()
       await openNewTab(2)
-      await tabPills()[0]!.trigger('click')
+      await selectTab(0)
       await flush()
 
       await tabPills()[1]!.find('.browser-tab-close').trigger('click')
@@ -388,7 +406,7 @@ describe('browserView', () => {
       }))
       vi.mocked(showBrowserView).mockClear()
 
-      await tabPills()[0]!.trigger('click')
+      await selectTab(0)
       showBrowser.value = false
       await flush()
       resolveHide()
@@ -642,6 +660,23 @@ describe('browserView', () => {
       expect(wrapper!.findAll('.bookmark-name')[1]!.text()).toBe('Renamed')
     })
 
+    it('keeps the rename input a sibling of the open button, so Enter commits without opening the bookmark', async () => {
+      withBookmarks()
+      await mountBrowser()
+
+      await wrapper!.findAll('.bookmark-edit')[0]!.trigger('click')
+      await flush()
+
+      expect(wrapper!.findAll('.bookmarks-bar button input')).toHaveLength(0)
+      const input = wrapper!.find('.bookmark-rename-input')
+      await input.setValue('TTA')
+      await input.trigger('keydown', { key: 'Enter' })
+      await flush()
+
+      expect(createBrowserView).toHaveBeenCalledTimes(1)
+      expect(wrapper!.findAll('.bookmark-name')[0]!.text()).toBe('TTA')
+    })
+
     it('a blank rename falls back to the URL', async () => {
       withBookmarks()
       await mountBrowser()
@@ -691,8 +726,20 @@ describe('browserView', () => {
       expect(items).toHaveLength(2)
       expect(items[0]!.find('img.empty-bookmark-favicon').attributes('src')).toBe('https://tabletopaudio.com/icon.png')
 
+      await wrapper!.findAll('.empty-bookmark-edit')[1]!.trigger('click')
+      await flush()
+      // Focus lands in the empty-state field the GM asked for, not in the bookmarks bar above it.
+      expect(wrapper!.findAll('.empty-bookmarks button input')).toHaveLength(0)
+      expect(wrapper!.find('.bookmark-rename-input').exists()).toBe(false)
+      const secondInput = wrapper!.find('.empty-bookmark-rename-input')
+      expect(document.activeElement).toBe(secondInput.element)
+      await secondInput.trigger('keydown', { key: 'Escape' })
+      await flush()
+
       await wrapper!.findAll('.empty-bookmark-edit')[0]!.trigger('click')
+      await flush()
       const input = wrapper!.find('.empty-bookmark-rename-input')
+      expect(document.activeElement).toBe(input.element)
       await input.setValue('TTA')
       await input.trigger('keydown', { key: 'Enter' })
       await flush()
@@ -771,7 +818,7 @@ describe('browserView', () => {
       await openNewTab(2)
 
       expect(wrapper!.find('.tab-volume-value').text()).toBe('100')
-      await tabPills()[0]!.trigger('click')
+      await selectTab(0)
       await flush()
       expect(wrapper!.find('.tab-volume-value').text()).toBe('30')
     })
