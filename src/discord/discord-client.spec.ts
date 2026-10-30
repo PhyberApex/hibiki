@@ -326,13 +326,25 @@ describe('createDiscordClient', () => {
       await discord.destroy()
 
       expect(latestClient().destroy).toHaveBeenCalled()
-      expect(info).toHaveBeenCalledWith('[discord]', 'Destroying client')
+      expect(info).toHaveBeenCalledWith('[discord]', 'Destroying client (client ready)')
     })
 
-    it('leaves a client that is not ready alone', async () => {
+    it('destroys a client whose login is still in flight, so quitting cannot leave it to come up later', async () => {
+      // `destroy` is what the shutdown handler calls on quit.
       const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
+      const client = latestClient()
+      client.login.mockImplementation(() => new Promise((_resolve, reject) => {
+        client.destroy.mockImplementation(async () => {
+          reject(new Error('client destroyed'))
+        })
+      }))
+      const pendingLogin = expect(discord.login()).rejects.toThrow('client destroyed')
+
       await discord.destroy()
-      expect(latestClient().destroy).not.toHaveBeenCalled()
+
+      await pendingLogin
+      expect(client.destroy).toHaveBeenCalledTimes(1)
+      expect(info).toHaveBeenCalledWith('[discord]', 'Destroying client (client not ready)')
     })
   })
 
@@ -366,7 +378,56 @@ describe('createDiscordClient', () => {
       expect(fresh.login).toHaveBeenCalledWith(TOKEN)
       expect(discord.getClient()).toBe(fresh)
       expect(discord.getBotStatus().ready).toBe(true)
-      expect(info).toHaveBeenCalledWith('[discord]', 'Reconnecting…')
+      expect(info).toHaveBeenCalledWith('[discord]', 'Reconnecting… (client ready)')
+    })
+
+    it('destroys a client whose login is still in flight exactly once before logging in a fresh one', async () => {
+      const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
+      const old = latestClient()
+      // A slow gateway: the login only settles once the client is destroyed.
+      old.login.mockImplementation(() => new Promise((_resolve, reject) => {
+        old.destroy.mockImplementation(async () => {
+          reject(new Error('client destroyed'))
+        })
+      }))
+      const firstLogin = expect(discord.login()).rejects.toThrow('client destroyed')
+      mockOnCreate = client => loginBecomesReady(client)
+
+      await discord.reconnect()
+
+      await firstLogin
+      const fresh = latestClient()
+      expect(old.destroy).toHaveBeenCalledTimes(1)
+      expect(fresh).not.toBe(old)
+      expect(fresh.destroy).not.toHaveBeenCalled()
+      expect(discord.getClient()).toBe(fresh)
+      expect(discord.getBotStatus().ready).toBe(true)
+      expect(info).toHaveBeenCalledWith('[discord]', 'Reconnecting… (client not ready)')
+    })
+
+    it('a stale login settling after a reconnect leaves the fresh client alone', async () => {
+      jest.useFakeTimers()
+      const discord = createDiscordClient(makeConfig(TOKEN), makeAppConfig())
+      const old = latestClient()
+      let finishOldLogin: (value: string) => void = () => {}
+      old.login.mockImplementation(() => new Promise((resolve) => {
+        finishOldLogin = resolve
+      }))
+      const firstLogin = expect(discord.login()).rejects.toThrow('Discord client ready timeout')
+      mockOnCreate = client => loginBecomesReady(client)
+      const reconnecting = discord.reconnect()
+      await jest.advanceTimersByTimeAsync(0)
+      await reconnecting
+      const fresh = latestClient()
+      const freshListeners = fresh.listenerCount(Events.ClientReady)
+
+      // The destroyed client's login resolves without it ever becoming ready.
+      finishOldLogin('ok')
+      await jest.advanceTimersByTimeAsync(15_000)
+      await firstLogin
+
+      expect(fresh.listenerCount(Events.ClientReady)).toBe(freshListeners)
+      expect(discord.getClient()).toBe(fresh)
     })
 
     it('logs a failing re-login at error and rethrows it', async () => {
