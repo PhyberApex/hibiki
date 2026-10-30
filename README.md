@@ -174,6 +174,7 @@ Hibiki stores data as JSON files:
 
 - **`app-config.json`** — Discord token (when set in Settings), bookmarks, custom storage path, Vision to Vibe API key and toggle, the update check toggle and the last dismissed update.
 - **`sound-tags.json`** — Free-form tags you add to your Music/Ambience files (used by Vision to Vibe matching).
+- **`sound-durations.json`** — Each Music track's length, read from the file's header at upload (or the first time an older file is listed), so the playing track can show an elapsed / total timer.
 - **`scenes.json`** — Scene definitions (soundboards with music, ambience, effects).
 - **Sound files** — stored on disk under `music/`, `effects/`, `ambience/` directories.
 

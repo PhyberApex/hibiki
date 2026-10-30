@@ -461,6 +461,55 @@ describe('sceneView — compact layout now-playing summary', () => {
     expect(wrapper.find('.now-playing-line').text()).toContain('1 ambience')
   })
 
+  it('shows elapsed / total on the playing Music track when its duration is known (#695)', async () => {
+    const { listMusic } = await import('@/api/sounds')
+    vi.mocked(listMusic).mockResolvedValueOnce([
+      {
+        id: 'm1',
+        name: 'Tavern Theme',
+        filename: 'tavern.mp3',
+        category: 'music',
+        durationMs: 184_000,
+      },
+      {
+        id: 'm2',
+        name: 'Unknown Length',
+        filename: 'odd.mp3',
+        category: 'music',
+      },
+    ])
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValueOnce({
+      ...JSON.parse(JSON.stringify(scene)),
+      music: [
+        {
+          soundId: 'm1',
+          soundName: 'Tavern Theme',
+          volume: 80,
+          loop: false,
+        },
+        {
+          soundId: 'm2',
+          soundName: 'Unknown Length',
+          volume: 80,
+          loop: false,
+        },
+      ],
+    })
+    const wrapper = await mountScene()
+    expect(wrapper.find('.music-timer').exists()).toBe(false)
+    await wrapper.find('.btn-play-scene').trigger('click')
+    await flushPromises()
+    const timers = wrapper.findAll('.music-timer')
+    expect(timers).toHaveLength(1)
+    expect(timers[0]!.text()).toBe('0:00 / 3:04')
+    expect(wrapper.find('.music-progress-fill').exists()).toBe(true)
+
+    await wrapper.find('button[aria-label="Stop music"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.music-timer').exists()).toBe(false)
+  })
+
   it('shows "Scene playing" (never "Nothing playing") while Stop is still the active action, even after a track ends on its own', async () => {
     const { listMusic } = await import('@/api/sounds')
     vi.mocked(listMusic).mockResolvedValueOnce([

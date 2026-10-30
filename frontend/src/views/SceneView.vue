@@ -3,6 +3,7 @@ import type { OutputTargetKind, VisionProviderId } from '@/api/config'
 import type { MusicMode, Scene, SceneItem } from '@/api/scenes'
 import type { SoundFile } from '@/api/sounds'
 import type { EffectSoundStatus } from '@/stores/player'
+import type { MusicProgress } from '@/stores/scene-playback'
 import { storeToRefs } from 'pinia'
 import { computed, onActivated, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
@@ -27,7 +28,7 @@ const toast = useToastStore()
 // lives in the store so it survives leaving this view; the view renders state
 // and calls store actions.
 const playback = useScenePlaybackStore()
-const { masterVolume: globalVolume, playingMusicId, playingAmbienceIds, musicSounds } = storeToRefs(playback)
+const { masterVolume: globalVolume, playingMusicId, musicProgress, playingAmbienceIds, musicSounds } = storeToRefs(playback)
 const { effectFlash, sceneTransitionFlash } = playback
 const { playScene: playSceneFor, stopScene, stopAmbience, playMusicTrack, playEffect, stopMusicPlayback, stopAllEffectInstances, updateAmbienceVolume, updateMusicVolume } = playback
 
@@ -175,23 +176,33 @@ function formatInterval(seconds: number): string {
 }
 
 /** `m:ss` for an elapsed/total timer label (whole seconds, per #509's acceptance criteria). */
-function formatEffectSeconds(ms: number): string {
+function formatTimerSeconds(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
   const m = Math.floor(totalSeconds / 60)
   const s = totalSeconds % 60
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-/** `m:ss / m:ss` (elapsed / total) for a sound's longest-remaining active instance. */
-function effectTimerLabel(status: EffectSoundStatus): string {
-  return `${formatEffectSeconds(status.elapsedMs)} / ${formatEffectSeconds(status.totalMs)}`
+/** Elapsed / total of an Effect's longest-remaining instance (#509) or the playing Music track (#695). */
+type TimerProgress = Pick<EffectSoundStatus, 'elapsedMs' | 'totalMs'>
+
+/** `m:ss / m:ss` (elapsed / total). */
+function timerLabel(progress: TimerProgress): string {
+  return `${formatTimerSeconds(progress.elapsedMs)} / ${formatTimerSeconds(progress.totalMs)}`
 }
 
 /** 0-100 fill percentage, or 0 while the duration isn't known yet. */
-function effectProgressPercent(status: EffectSoundStatus): number {
-  if (status.totalMs <= 0)
+function progressPercent(progress: TimerProgress): number {
+  if (progress.totalMs <= 0)
     return 0
-  return Math.min(100, (status.elapsedMs / status.totalMs) * 100)
+  return Math.min(100, (progress.elapsedMs / progress.totalMs) * 100)
+}
+
+/** The playing Music track's progress when `soundId` is that track, else null. */
+function musicProgressFor(soundId: string): MusicProgress | null {
+  return musicProgress.value?.soundId === soundId
+    ? musicProgress.value
+    : null
 }
 
 // One `player.effectStatus()` scan per Effect item per reactive tick, shared by the whole card.
@@ -1127,11 +1138,20 @@ watch(sceneId, (newId) => {
               v-for="item in scene.music"
               :key="item.soundId"
               class="sound-card"
-              :class="{ 'sound-card-has-hint': isSoundMissing('music', item.soundId) }"
+              :class="{
+                'sound-card-has-hint': isSoundMissing('music', item.soundId),
+                'sound-card-music-timed': musicProgressFor(item.soundId),
+              }"
             >
+              <span
+                v-if="musicProgressFor(item.soundId)"
+                class="music-progress-fill"
+                :style="{ width: `${progressPercent(musicProgressFor(item.soundId)!)}%` }"
+              />
               <div class="sound-card-main-row">
                 <div class="sound-card-info">
                   <span class="sound-name">{{ item.soundName ?? resolveSoundName('music', item.soundId) }}</span>
+                  <span v-if="musicProgressFor(item.soundId)" class="music-timer">{{ timerLabel(musicProgressFor(item.soundId)!) }}</span>
                   <span v-if="isSoundMissing('music', item.soundId)" class="sound-missing-badge">
                     missing
                   </span>
@@ -1241,11 +1261,11 @@ watch(sceneId, (newId) => {
                 <span
                   v-if="status"
                   class="effect-progress-fill"
-                  :style="{ width: `${effectProgressPercent(status)}%` }"
+                  :style="{ width: `${progressPercent(status)}%` }"
                 />
                 <span class="effect-trigger-content">
                   <span class="effect-name">{{ item.soundName ?? resolveSoundName('effects', item.soundId) }}</span>
-                  <span v-if="status" class="effect-timer">{{ effectTimerLabel(status) }}</span>
+                  <span v-if="status" class="effect-timer">{{ timerLabel(status) }}</span>
                 </span>
                 <span v-if="isSoundMissing('effects', item.soundId)" class="sound-missing-badge">
                   missing
@@ -1817,6 +1837,28 @@ watch(sceneId, (newId) => {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   color: var(--color-text);
+}
+
+.sound-card-music-timed {
+  position: relative;
+  overflow: hidden;
+}
+
+/* The playing Music track's progress (#695): a thin bar along the card's
+   bottom edge, no transition, so a Stop removes it at once. */
+.music-progress-fill {
+  position: absolute;
+  inset: auto auto 0 0;
+  height: 2px;
+  background: var(--color-music);
+  opacity: 0.7;
+}
+
+.music-timer {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .sound-card-info {

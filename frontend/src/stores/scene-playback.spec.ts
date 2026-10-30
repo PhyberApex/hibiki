@@ -1004,6 +1004,84 @@ describe('scene playback store: Music Mode', () => {
     expect(playingEls).toHaveLength(2)
     expect(store.playingMusicId).toBeNull()
   })
+
+  describe('progress timer (#695)', () => {
+    beforeEach(() => {
+      // Frozen at the real now, never rewound: a crossfade an earlier test left
+      // ticking on a real interval reads this Date, and a clock behind its start
+      // would ramp an element's volume out of range (IndexSizeError).
+      const now = Date.now()
+      vi.useFakeTimers({
+        toFake: ['Date', 'setInterval', 'clearInterval'],
+      })
+      vi.setSystemTime(now)
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      delete (mediaProto as { duration?: number }).duration
+    })
+
+    function withDurations(store: ReturnType<typeof setup>, durations: Record<string, number>) {
+      store.musicSounds = store.musicSounds.map(s => ({ ...s, durationMs: durations[s.id] }))
+    }
+
+    it('shows elapsed / total of the playing track from its known duration, restarting at the advance', async () => {
+      const scene = musicScene('sequential')
+      const store = setup(scene)
+      withDurations(store, { m1: 184_000, m2: 90_000 })
+      await store.playScene(scene)
+      expect(store.musicProgress).toEqual({ soundId: 'm1', elapsedMs: 0, totalMs: 184_000 })
+
+      vi.advanceTimersByTime(65_000)
+      expect(store.musicProgress).toEqual({ soundId: 'm1', elapsedMs: 65_000, totalMs: 184_000 })
+
+      await playsOut('m1')
+      expect(store.musicProgress).toEqual({ soundId: 'm2', elapsedMs: 0, totalMs: 90_000 })
+    })
+
+    it('a looping single track wraps; a non-looping one holds at its total', async () => {
+      const looping = musicScene(undefined)
+      const store = setup(looping)
+      withDurations(store, { m1: 10_000, m2: 10_000 })
+      await store.playScene(looping)
+      vi.advanceTimersByTime(23_000)
+      expect(store.musicProgress?.elapsedMs).toBe(3_000)
+
+      store.stopScene()
+      const once = musicScene('sequential', ['m2'])
+      store.openScene = once
+      await store.playScene(once)
+      vi.advanceTimersByTime(12_000)
+      expect(store.musicProgress?.elapsedMs).toBe(10_000)
+    })
+
+    it('has no timer for a track whose duration is unknown, and none once Music stops', async () => {
+      const scene = musicScene('sequential')
+      const store = setup(scene)
+      withDurations(store, { m2: 90_000 })
+      await store.playScene(scene)
+      expect(store.playingMusicId).toBe('m1')
+      expect(store.musicProgress).toBeNull()
+
+      await store.playMusicTrack(scene.music[1]!)
+      expect(store.musicProgress?.soundId).toBe('m2')
+      store.stopMusicPlayback()
+      expect(store.musicProgress).toBeNull()
+    })
+
+    it('the renderer fallback reads the duration off its audio element when none is stored', async () => {
+      vi.mocked(canDecode).mockResolvedValue(false)
+      Object.defineProperty(mediaProto, 'duration', {
+        configurable: true,
+        get: () => 42.5,
+      })
+      const scene = musicScene('sequential')
+      const store = setup(scene)
+      await store.playScene(scene)
+      expect(store.musicProgress).toEqual({ soundId: 'm1', elapsedMs: 0, totalMs: 42_500 })
+    })
+  })
 })
 
 describe('scene playback store: Usage Stats', () => {

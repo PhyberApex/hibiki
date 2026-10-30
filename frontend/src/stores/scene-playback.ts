@@ -76,6 +76,8 @@ function createDecodeCache(category: 'music' | 'ambience' | 'effects'): (soundId
 // (Music Mode advance, ADR-0006). `backendTarget` is the Target a 'backend'
 // track was confirmed started on; until then its end cannot be detected.
 // `itemVolume` is the track's own 0-100 Scene item volume, before the master.
+// `startedAt` (epoch ms, once the start is confirmed), `durationMs` (null when
+// unknown) and `loop` drive the Music progress timer (#695).
 interface MusicChannel {
   el: HTMLAudioElement
   streamId: string
@@ -84,6 +86,15 @@ interface MusicChannel {
   token: number
   backendTarget: string | null
   itemVolume: number
+  startedAt: number | null
+  durationMs: number | null
+  loop: boolean
+}
+
+export interface MusicProgress {
+  soundId: string
+  elapsedMs: number
+  totalMs: number
 }
 
 // Where a Scene's Music Mode stands (CONTEXT.md, ADR-0006): the Scene the
@@ -176,6 +187,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       token: 0,
       backendTarget: null,
       itemVolume: 80,
+      startedAt: null,
+      durationMs: null,
+      loop: false,
     },
     {
       el: createAudioEl(),
@@ -185,10 +199,68 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       token: 0,
       backendTarget: null,
       itemVolume: 80,
+      startedAt: null,
+      durationMs: null,
+      loop: false,
     },
   ]
   let primaryMusicChannel = musicChannels[0]
   const crossfadeRamp = new CrossfadeRamp()
+
+  // The primary Music track's clock (#695), ticking on the renderer's own
+  // clock like the Effect timers: null while nothing plays, the start is not
+  // yet confirmed or the track's duration is unknown (no timer then).
+  const musicClock = shallowRef<{ soundId: string, startedAt: number, durationMs: number, loop: boolean } | null>(null)
+  const musicTick = ref(Date.now())
+  let musicTickTimer: ReturnType<typeof setInterval> | undefined
+
+  function syncMusicClock() {
+    const channel = primaryMusicChannel
+    musicClock.value = channel.soundId !== null && channel.startedAt !== null && channel.durationMs !== null
+      ? {
+          soundId: channel.soundId,
+          startedAt: channel.startedAt,
+          durationMs: channel.durationMs,
+          loop: channel.loop,
+        }
+      : null
+    if (musicClock.value && musicTickTimer === undefined) {
+      musicTick.value = Date.now()
+      musicTickTimer = setInterval(() => {
+        musicTick.value = Date.now()
+      }, 250)
+    }
+    else if (!musicClock.value && musicTickTimer !== undefined) {
+      clearInterval(musicTickTimer)
+      musicTickTimer = undefined
+    }
+  }
+
+  // Elapsed / total of the playing Music track; a looping track wraps, any
+  // other holds at its total until its end is reported.
+  const musicProgress = computed<MusicProgress | null>(() => {
+    const clock = musicClock.value
+    if (!clock)
+      return null
+    const elapsed = Math.max(0, musicTick.value - clock.startedAt)
+    return {
+      soundId: clock.soundId,
+      elapsedMs: clock.loop
+        ? elapsed % clock.durationMs
+        : Math.min(clock.durationMs, elapsed),
+      totalMs: clock.durationMs,
+    }
+  })
+
+  // Marks `channel`'s start confirmed now, with the duration it will run for.
+  function startMusicClock(channel: MusicChannel, durationMs: number | null) {
+    channel.startedAt = Date.now()
+    channel.durationMs = durationMs
+    logInfo(`[scene] Music ${channel.soundId} started on ${channel.streamId}, ${durationMs === null
+      ? 'duration unknown, no timer'
+      : `duration ${durationMs} ms`}`)
+    syncMusicClock()
+  }
 
   // Music Mode (ADR-0006). `musicSceneId` is the Scene the current Music track
   // was started from; the advance follows that Scene, Playing Scene or not.
@@ -594,8 +666,28 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   function clearMusicChannel(channel: MusicChannel) {
     channel.soundId = null
     channel.source = null
+    channel.startedAt = null
+    channel.durationMs = null
     if (primaryMusicChannel === channel)
       playingMusicId.value = null
+    syncMusicClock()
+  }
+
+  // Claims `channel` for a start of `item`: its clock waits for the start to be confirmed.
+  function claimMusicChannel(channel: MusicChannel, item: SceneItem, source: 'renderer' | 'backend'): number {
+    const token = ++musicStartSeq
+    channel.soundId = item.soundId
+    channel.source = source
+    channel.token = token
+    channel.backendTarget = null
+    channel.itemVolume = item.volume ?? 80
+    channel.startedAt = null
+    channel.durationMs = null
+    channel.loop = item.loop ?? false
+    if (channel === primaryMusicChannel)
+      playingMusicId.value = item.soundId
+    syncMusicClock()
+    return token
   }
 
   // Fully tears down one music channel: cancels any crossfade ramp targeting
@@ -636,20 +728,13 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // mixer in the main process, so there's no audio element/chunked IPC here —
   // the backend owns its own crossfade (fading the previous track out while
   // this one fades in), driven by `fadeInMs`.
-  async function playMusicBackend(item: SceneItem, channel: MusicChannel, fadeInMs: number) {
+  async function playMusicBackend(item: SceneItem, channel: MusicChannel, fadeInMs: number, durationMs: number | null) {
     if (!targetId.value)
       return
     if (channel.source && channel.source !== 'backend')
       stopMusicChannel(channel, channel.source)
     const target = targetId.value
-    const token = ++musicStartSeq
-    channel.soundId = item.soundId
-    channel.source = 'backend'
-    channel.token = token
-    channel.backendTarget = null
-    channel.itemVolume = item.volume ?? 80
-    if (channel === primaryMusicChannel)
-      playingMusicId.value = item.soundId
+    const token = claimMusicChannel(channel, item, 'backend')
     await playBackendMusic(target, item.soundId, {
       volume: computeVolume(item.volume ?? 80) * 100,
       loop: item.loop ?? false,
@@ -657,8 +742,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     })
     // The backend has made this its current track before answering, so from
     // here on its disappearance from the state push means it played out.
-    if (channel.token === token)
+    if (channel.token === token) {
       channel.backendTarget = target
+      startMusicClock(channel, durationMs)
+    }
   }
 
   async function playMusic(item: SceneItem, channel: MusicChannel = primaryMusicChannel, initialVolume?: number, fadeInMs?: number) {
@@ -678,7 +765,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
 
       const path = selectBackendPlaybackPath(await canDecodeMusicCached(item.soundId))
       if (path === 'backend') {
-        await playMusicBackend(item, channel, fadeInMs ?? 0)
+        await playMusicBackend(item, channel, fadeInMs ?? 0, track.durationMs ?? null)
         return
       }
 
@@ -688,14 +775,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       const target = targetId.value
       if (channel.source)
         stopMusicChannel(channel, channel.source)
-      const token = ++musicStartSeq
-      channel.soundId = item.soundId
-      channel.source = 'renderer'
-      channel.token = token
-      channel.backendTarget = null
-      channel.itemVolume = item.volume ?? 80
-      if (channel === primaryMusicChannel)
-        playingMusicId.value = item.soundId
+      const token = claimMusicChannel(channel, item, 'renderer')
       logInfo(`[scene] playMusic ${item.soundId} via renderer fallback (${streamed ? 'streamed to Discord' : 'local'}) on channel ${channel.streamId}`)
       if (streamed) {
         await startAudioStream(target, {
@@ -719,6 +799,12 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       el.onended = () => onMusicPlayedOut(channel, token)
       el.onerror = () => clearMusicChannel(channel)
       await el.play()
+      // With no stored duration (its header could not be read), the element knows it once playable.
+      if (channel.token === token) {
+        startMusicClock(channel, track.durationMs ?? (Number.isFinite(el.duration) && el.duration > 0
+          ? Math.round(el.duration * 1000)
+          : null))
+      }
     }
     catch (e) {
       console.error('[scene] playMusic failed:', e)
@@ -1279,6 +1365,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
 
     if (incomingChannel) {
       primaryMusicChannel = incomingChannel
+      syncMusicClock()
       // The backend path (ADR-0003) drives its own fade-in via fadeInMs.
       started = playMusic(targetTrack!, incomingChannel, 0, durationMs).then(() => {
         // playMusic swallows its own failures internally (console.error +
@@ -1293,6 +1380,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
           if (outgoingHadTrack && outgoingWasBackend) {
             primaryMusicChannel = outgoingChannel
             playingMusicId.value = outgoingChannel.soundId
+            syncMusicClock()
           }
           return false
         }
@@ -1411,6 +1499,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     musicSounds,
     masterVolume,
     playingMusicId,
+    musicProgress,
     musicSceneId,
     playingAmbienceIds,
     effectFlash,

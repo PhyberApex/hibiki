@@ -9,6 +9,8 @@ export interface SoundFile {
   path?: string
   createdAt?: string
   tags?: string[]
+  /** Music only (#695): read from the file's header; absent when it could not be read. */
+  durationMs?: number
 }
 
 function requireElectron(): void {

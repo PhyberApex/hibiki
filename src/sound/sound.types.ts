@@ -8,4 +8,6 @@ export interface SoundFile {
   category: SoundCategory
   createdAt: string
   tags: string[]
+  /** Music only (#695): read from the file's header; absent when it could not be read. */
+  durationMs?: number
 }
