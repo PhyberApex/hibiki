@@ -46,6 +46,14 @@ function schemeAndHost(url) {
 }
 
 /**
+ * Whether `url` stays on the app whose scheme and host is `appOrigin`; the
+ * one rule both the guard and the release listener judge a navigation by.
+ */
+function staysOnApp(appOrigin, url) {
+  return appOrigin !== null && schemeAndHost(url) === appOrigin
+}
+
+/**
  * Keeps the main window on the app it loaded (#638). The window carries the
  * preload, so any page it navigates to, or opens as a child window, would
  * get the whole `api` channel. `window.open` and `target="_blank"` links to
@@ -68,7 +76,7 @@ function guardMainWindowNavigation(webContents, { appUrl, openExternal }) {
   })
 
   webContents.on('will-navigate', (event) => {
-    if (appOrigin !== null && schemeAndHost(event.url) === appOrigin)
+    if (staysOnApp(appOrigin, event.url))
       return
     event.preventDefault()
     log.warn(`Blocked navigation of the main window to ${describeUrl(event.url)}`)
@@ -88,11 +96,34 @@ function forwardMainFrameNavigation(send) {
   }
 }
 
+/**
+ * Main window `did-start-navigation` listener that calls `release` when the
+ * renderer is about to be replaced (a reload, crash recovery). Chromium
+ * emits `did-start-navigation` before `will-navigate`, so a navigation off
+ * `appUrl`'s scheme and host reaches it too, although
+ * `guardMainWindowNavigation` cancels it and the renderer stays; releasing
+ * then would cut its streams and Browser tabs (#707). `isSameDocument`
+ * excludes the router's pushState navigations.
+ */
+function releaseOnMainFrameNavigation({ appUrl, release }) {
+  const appOrigin = schemeAndHost(appUrl)
+  return (details) => {
+    if (!details.isMainFrame || details.isSameDocument)
+      return
+    if (!staysOnApp(appOrigin, details.url)) {
+      log.debug(`Kept renderer resources: navigation to ${describeUrl(details.url)} leaves the app and will be blocked`)
+      return
+    }
+    release()
+  }
+}
+
 module.exports = {
   describeScheme,
   describeUrl,
   forwardMainFrameNavigation,
   guardMainWindowNavigation,
   isWebUrl,
+  releaseOnMainFrameNavigation,
   schemeAndHost,
 }
