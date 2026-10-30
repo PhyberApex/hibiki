@@ -1185,8 +1185,8 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         ambienceItemVolumes.delete(soundId)
         continue
       }
-      // Already on its way out from an earlier switch — let it finish; a
-      // second Scene switch never resurrects or restarts an outgoing fade.
+      // Already on its way out from an earlier switch — let it finish; only a
+      // Scene that wants it back (below) turns an outgoing fade around.
       if (crossfadeRamp.directionOf(ambienceFadeKey(soundId)) === 'out')
         continue
       const el = ambienceAudioEls.get(soundId)
@@ -1221,6 +1221,13 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         const el = ambienceAudioEls.get(item.soundId)
         if (!el)
           continue
+        // Still fading out of an earlier switch, whose onDone would stop it:
+        // the ramp never turns an 'out' fade around, so drop it and glide back
+        // in from wherever it got to.
+        if (crossfadeRamp.directionOf(ambienceFadeKey(item.soundId)) === 'out') {
+          logInfo(`[scene] crossfade: retargeting ${item.soundId} from out to in`)
+          crossfadeRamp.cancel(ambienceFadeKey(item.soundId))
+        }
         crossfadeRamp.fade(ambienceFadeKey(item.soundId), {
           direction: 'in',
           from: el.volume,
