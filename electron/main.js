@@ -1,13 +1,14 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { Readable } = require('node:stream')
-const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
 const { buildDiagnosticsSummary, LOG_TAIL_LINES, readLogTail } = require('./diagnostics')
 const { createHotkeys } = require('./hotkeys')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createUncaughtExceptionHandler, exitWithError } = require('./lifecycle')
 const { createLogger, setupFileLogging } = require('./logger')
 const { describeScheme, describeUrl, forwardMainFrameNavigation, guardMainWindowNavigation, isWebUrl } = require('./navigation-guard')
+const { installPermissionPolicy } = require('./permissions')
 const { parseRange, resolveAppPath } = require('./protocol')
 const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
 
@@ -51,7 +52,6 @@ const protocolLog = createLogger('protocol')
 const rendererLog = createLogger('renderer')
 const appLog = createLogger('app')
 const dialogLog = createLogger('dialog')
-const captureLog = createLogger('capture')
 const diagnosticsLog = createLogger('diagnostics')
 
 let appHandle = null
@@ -515,31 +515,7 @@ app.whenReady().then(async () => {
   registerBrowserViewHandlers()
   registerHibikiProtocol(api, webDistDir)
 
-  // Where the OS offers a system picker, Electron shows it and never calls
-  // this handler, so a log line from here means the fallback was taken.
-  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    captureLog.info(`Display media requested (audio: ${request.audioRequested ? 'yes' : 'no'}); system picker not used, choosing a source`)
-    desktopCapturer.getSources({
-      types: ['screen', 'window'],
-    })
-      .then((sources) => {
-        if (sources.length === 0) {
-          captureLog.warn('No screen or window sources to capture; denying the request')
-          callback({})
-          return
-        }
-        const opts = { video: sources[0] }
-        if (request.audioRequested)
-          opts.audio = 'loopback'
-        captureLog.info(`Capturing ${sources[0].id}, first of ${sources.length} source(s)${opts.audio ? ' with loopback audio' : ''}`)
-        callback(opts)
-      })
-      .catch((err) => {
-        captureLog.error('Display media request failed:', err)
-        callback({})
-      })
-  }, { useSystemPicker: true })
-  captureLog.info('Display media handler registered; the OS system picker is preferred where available')
+  installPermissionPolicy(session.defaultSession)
 
   /**
    * Registers a file dialog handler that logs the request and the GM's choice.

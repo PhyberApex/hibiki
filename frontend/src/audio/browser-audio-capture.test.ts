@@ -289,29 +289,6 @@ describe('browser-audio-capture', () => {
     })
   })
 
-  describe('captureDisplayMedia', () => {
-    it('throws when no audio tracks in stream', async () => {
-      const mockStream = {
-        getAudioTracks: vi.fn().mockReturnValue([]),
-        getTracks: vi.fn().mockReturnValue([]),
-      }
-
-      vi.stubGlobal('navigator', {
-        mediaDevices: {
-          getDisplayMedia: vi.fn().mockResolvedValue(mockStream),
-        },
-      })
-
-      vi.resetModules()
-      const { captureDisplayMedia } = await import('./browser-audio-capture')
-      const onChunk = vi.fn()
-
-      await expect(captureDisplayMedia(onChunk)).rejects.toThrow('No audio in selected source')
-
-      vi.unstubAllGlobals()
-    })
-  })
-
   describe('failure and lifecycle paths', () => {
     function stubAudio(state = 'running') {
       const worklets: Array<{ port: { onmessage: ((e: MessageEvent) => void) | null }, connect: ReturnType<typeof vi.fn>, disconnect: ReturnType<typeof vi.fn> }> = []
@@ -562,22 +539,6 @@ describe('browser-audio-capture', () => {
         },
         video: false,
       })
-    })
-
-    it('captureDisplayMedia captures a picked source that has audio', async () => {
-      const { ctx } = stubAudio()
-      const stream = {
-        getAudioTracks: () => [{}],
-        getTracks: () => [],
-      }
-      vi.stubGlobal('navigator', {
-        mediaDevices: {
-          getDisplayMedia: vi.fn(async () => stream),
-        },
-      })
-      const { captureDisplayMedia } = await load()
-      await expect(captureDisplayMedia(vi.fn())).resolves.toHaveProperty('stop')
-      expect(ctx.createMediaStreamSource).toHaveBeenCalledWith(stream)
     })
   })
 })

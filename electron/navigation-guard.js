@@ -94,4 +94,5 @@ module.exports = {
   forwardMainFrameNavigation,
   guardMainWindowNavigation,
   isWebUrl,
+  schemeAndHost,
 }
