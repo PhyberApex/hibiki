@@ -289,6 +289,17 @@ describe('createWavPcmStream', () => {
     expect(out).toHaveLength(N)
   })
 
+  it.each([
+    0,
+    0xFFFFFFFF,
+  ])('reads to the end of the file when the data chunk declares size %p (an un-finalised or streamed WAV, #664)', async (declaredDataSize) => {
+    const out = frames(await decode(buildWav({
+      data: repeat(Buffer.from([0x00, 0x40]), N * 2),
+      declaredDataSize,
+    })))
+    expect(out).toHaveLength(N)
+  })
+
   it('stops at the end of the file when data is truncated, dropping a trailing partial frame', async () => {
     const data = Buffer.concat([
       repeat(Buffer.from([0x00, 0x40]), N * 2),

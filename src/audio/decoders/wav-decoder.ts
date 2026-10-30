@@ -2,8 +2,11 @@ import type { FileHandle } from 'node:fs/promises'
 import type { Readable } from 'node:stream'
 import { open } from 'node:fs/promises'
 import { basename } from 'node:path'
+import { createLogger } from '../../logger'
 import { PcmResampler } from './pcm-resample'
 import { createProducerStream } from './pcm-stream'
+
+const log = createLogger('wav-decoder')
 
 const WAVE_FORMAT_PCM = 1
 const WAVE_FORMAT_IEEE_FLOAT = 3
@@ -15,8 +18,17 @@ interface WavFormat {
   sampleRate: number
   bitsPerSample: number
   dataStart: number
+  /** Bytes of sample data; `Infinity` for "read to end of file". */
   dataSize: number
 }
+
+/**
+ * Data chunk sizes that mean "unknown, read to EOF": un-finalised or streamed
+ * WAVs whose writer never patched the header (some recorders leave 0,
+ * streaming writers use the 0xFFFFFFFF placeholder). Taking 0 literally made
+ * such a file decode zero frames and "play out" instantly (#664).
+ */
+const DATA_SIZE_UNKNOWN = new Set([0, 0xFFFFFFFF])
 
 /** Integer PCM at 8/16/24/32 bits or 32-bit IEEE float; anything else (ADPCM, A-law, ...) is left to the renderer. */
 function isSupportedFormat({ formatTag, bitsPerSample }: WavFormat): boolean {
@@ -81,7 +93,13 @@ async function parseWavFormat(handle: FileHandle): Promise<WavFormat> {
     else if (chunk.id === 'data') {
       if (!fmt)
         throw new Error('WAV data chunk appeared before fmt chunk')
-      return { ...fmt, dataStart: bodyOffset, dataSize: chunk.size }
+      return {
+        ...fmt,
+        dataStart: bodyOffset,
+        dataSize: DATA_SIZE_UNKNOWN.has(chunk.size)
+          ? Infinity
+          : chunk.size,
+      }
     }
 
     offset = bodyOffset + chunk.size + (chunk.size % 2)
@@ -134,6 +152,8 @@ export function createWavPcmStream(filePath: string): Readable {
       const format = await parseWavFormat(handle)
       if (!isSupportedFormat(format))
         throw new Error(`Unsupported WAV format: tag ${format.formatTag}, ${format.bitsPerSample}-bit`)
+      if (format.dataSize === Infinity)
+        log.warn(`${basename(filePath)} declares no data chunk size; reading samples to end of file`)
       const resampler = new PcmResampler(format.sampleRate, format.channels)
       const bytesPerFrame = (format.bitsPerSample / 8) * format.channels
       const chunkFrames = 16384

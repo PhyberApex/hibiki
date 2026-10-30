@@ -36,6 +36,29 @@ const DEFAULT_VOLUMES = { music: 85, effects: 90 }
 const CLAMP = (v: number) => Math.min(100, Math.max(0, Math.round(v)))
 
 /**
+ * Volumes arrive from the renderer over IPC unvalidated; `CLAMP(NaN)` is
+ * `NaN`, and a mixer input at volume `NaN` multiplies every sample by it into
+ * silence (#664). Callers treat `false` as a logged no-op.
+ */
+function isValidVolume(volume: number, what: string): boolean {
+  if (Number.isFinite(volume))
+    return true
+  log.warn(`Ignoring non-finite volume ${volume} for ${what}`)
+  return false
+}
+
+function musicLabel(streamId: string | undefined): string {
+  return streamId ?? '(default)'
+}
+
+/** `CLAMP(volume)`, or `fallback` (with a warning) when `volume` is not finite. */
+function initialVolumeOr(volume: number, fallback: number, what: string): number {
+  return isValidVolume(volume, what)
+    ? CLAMP(volume)
+    : fallback
+}
+
+/**
  * One Discord frame of 48 kHz stereo 16-bit PCM (20 ms). Written into every
  * fresh mixer output so the voice player leaves `buffering` immediately
  * instead of waiting for the first sound.
@@ -194,9 +217,10 @@ export class AudioEngine {
    */
   playMusicFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.music, onEnded?: (err?: Error) => void) {
     this.stopMusicStream(streamId)
-    const label = streamId ?? '(default)'
-    log.debug(`Mixer input opened for ${label} at volume ${CLAMP(initialVolume)}`)
-    const active = this.spawnInputFromStream(stream, label, CLAMP(initialVolume), (ended, err) => {
+    const label = musicLabel(streamId)
+    const volume = initialVolumeOr(initialVolume, DEFAULT_VOLUMES.music, `music stream ${label}`)
+    log.debug(`Mixer input opened for ${label} at volume ${volume}`)
+    const active = this.spawnInputFromStream(stream, label, volume, (ended, err) => {
       if (this.musicStreams.get(streamId) !== ended)
         return
       log.debug(`Mixer input for ${label} ${err ? 'closed after a source error' : 'drained'}`)
@@ -220,8 +244,9 @@ export class AudioEngine {
    */
   playEffectFromStream(stream: Readable, streamId?: string, initialVolume: number = DEFAULT_VOLUMES.effects) {
     const id = streamId ?? `effect-${++this.anonymousEffectSeq}`
-    log.debug(`Effect mixer input opened for ${id} at volume ${CLAMP(initialVolume)}`)
-    const effectStream = this.spawnInputFromStream(stream, id, CLAMP(initialVolume), (ended) => {
+    const volume = initialVolumeOr(initialVolume, DEFAULT_VOLUMES.effects, `effect stream ${id}`)
+    log.debug(`Effect mixer input opened for ${id} at volume ${volume}`)
+    const effectStream = this.spawnInputFromStream(stream, id, volume, (ended) => {
       ended.input.destroy()
       if (this.effectStreams.get(id) === ended)
         this.effectStreams.delete(id)
@@ -231,10 +256,10 @@ export class AudioEngine {
     this.syncLocalSink()
   }
 
-  /** Sets a keyed effect stream's volume live (the mixer input applies `params.volume` immediately). No-op for an unknown id. */
+  /** Sets a keyed effect stream's volume live (the mixer input applies `params.volume` immediately). No-op for an unknown id or a non-finite volume. */
   setEffectStreamVolume(streamId: string, volume: number): void {
     const active = this.effectStreams.get(streamId)
-    if (!active)
+    if (!active || !isValidVolume(volume, `effect stream ${streamId}`))
       return
     active.volume = CLAMP(volume)
     active.input.params = { volume: active.volume }
@@ -249,11 +274,11 @@ export class AudioEngine {
    * Sets a music stream's volume immediately, cancelling any in-progress
    * ramp on it. `node-audio-mixer` inputs apply `params.volume` live (see
    * ADR-0003), so this needs no gain `Transform`. No-op if the stream has
-   * already ended.
+   * already ended or `volume` is not finite.
    */
   setStreamVolume(streamId: string | undefined, volume: number): void {
     const active = this.musicStreams.get(streamId)
-    if (!active)
+    if (!active || !isValidVolume(volume, `music stream ${musicLabel(streamId)}`))
       return
     active.cancelRamp?.()
     active.cancelRamp = undefined
@@ -264,14 +289,21 @@ export class AudioEngine {
   /**
    * Ramps a music stream's volume from its current value to `to` over
    * `durationMs`, replacing any ramp already in progress on it. No-op if the
-   * stream has already ended.
+   * stream has already ended. A non-finite `to` leaves the stream (and any
+   * ramp already running on it) untouched but still calls `onDone`, so a
+   * fade-then-stop chain is not left hanging; a non-finite duration is an
+   * immediate set.
    */
   rampStreamVolume(streamId: string | undefined, to: number, durationMs: number, onDone?: () => void): void {
     const active = this.musicStreams.get(streamId)
     if (!active)
       return
+    if (!isValidVolume(to, `music stream ${musicLabel(streamId)} ramp`)) {
+      onDone?.()
+      return
+    }
     active.cancelRamp?.()
-    if (durationMs <= 0) {
+    if (!Number.isFinite(durationMs) || durationMs <= 0) {
       this.setStreamVolume(streamId, to)
       onDone?.()
       return
@@ -341,7 +373,7 @@ export class AudioEngine {
     const active = this.musicStreams.get(streamId)
     if (!active)
       return
-    log.debug(`Mixer input for ${streamId ?? '(default)'} cut`)
+    log.debug(`Mixer input for ${musicLabel(streamId)} cut`)
     active.cancelRamp?.()
     this.teardown(active)
     this.musicStreams.delete(streamId)

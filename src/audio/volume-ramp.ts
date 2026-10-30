@@ -17,9 +17,22 @@ const TICK_MS = 50
  * wall-clock elapsed time (not tick count) so a throttled timer still lands
  * on `to` once it fires again instead of drifting behind. A duration of 0
  * (or less) applies `to` immediately and synchronously.
+ *
+ * Inputs arrive from the renderer over IPC unvalidated, and one `NaN` would
+ * otherwise make every tick's progress `NaN`: the ramp never completes and
+ * the input is multiplied by `NaN` into silence (#664). So a non-finite
+ * duration or `from` is an immediate cut to `to`, and a non-finite `to`
+ * leaves the volume alone and just completes.
  */
 export function rampVolume(options: RampOptions): RampHandle {
-  if (options.durationMs <= 0) {
+  if (!Number.isFinite(options.to)) {
+    options.onDone?.()
+    return {
+      cancel: () => {},
+    }
+  }
+
+  if (!Number.isFinite(options.durationMs) || options.durationMs <= 0 || !Number.isFinite(options.from)) {
     options.onVolume(options.to)
     options.onDone?.()
     return {

@@ -231,6 +231,63 @@ describe('audioEngine', () => {
     })
   })
 
+  describe('non-finite volumes from IPC (#664)', () => {
+    it('setStreamVolume ignores a non-finite volume and keeps the current one', () => {
+      engine.playMusicFromStream(createFakeStream(), 'a', 50)
+
+      engine.setStreamVolume('a', Number.NaN)
+      engine.setStreamVolume('a', Infinity)
+
+      expect(createdInputs[0].params?.volume).toBe(50)
+    })
+
+    it('setEffectStreamVolume ignores a non-finite volume and keeps the current one', () => {
+      engine.playEffectFromStream(createFakeStream(), 'browser-1', 40)
+
+      engine.setEffectStreamVolume('browser-1', Number.NaN)
+
+      expect(createdInputs[0].params).toEqual({ volume: 40 })
+    })
+
+    it('rampStreamVolume to a non-finite volume leaves the volume and any running ramp alone but still calls onDone', () => {
+      jest.useFakeTimers()
+      try {
+        engine.playMusicFromStream(createFakeStream(), 'a', 0)
+        const firstDone = jest.fn()
+        const onDone = jest.fn()
+        engine.rampStreamVolume('a', 100, 1000, firstDone)
+
+        engine.rampStreamVolume('a', Number.NaN, 1000, onDone)
+        expect(onDone).toHaveBeenCalledTimes(1)
+
+        jest.advanceTimersByTime(1000)
+        expect(createdInputs[0].params?.volume).toBe(100)
+        expect(firstDone).toHaveBeenCalledTimes(1)
+      }
+      finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('rampStreamVolume with a non-finite duration sets the volume immediately', () => {
+      engine.playMusicFromStream(createFakeStream(), 'a', 50)
+      const onDone = jest.fn()
+
+      engine.rampStreamVolume('a', 20, Number.NaN, onDone)
+
+      expect(createdInputs[0].params?.volume).toBe(20)
+      expect(onDone).toHaveBeenCalledTimes(1)
+    })
+
+    it('opens an input with a non-finite initial volume at the default volume instead of NaN', () => {
+      engine.playMusicFromStream(createFakeStream(), 'a', Number.NaN)
+      engine.playEffectFromStream(createFakeStream(), 'browser-1', Number.NaN)
+
+      expect(createdInputs[0].params?.volume).toBe(85)
+      expect(createdInputs[1].params?.volume).toBe(90)
+    })
+  })
+
   describe('keyed effect streams', () => {
     it('opens a keyed effect stream at the given volume and sets it live afterwards', () => {
       engine.playEffectFromStream(createFakeStream(), 'browser-1', 40)
