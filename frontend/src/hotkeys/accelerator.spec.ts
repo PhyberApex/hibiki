@@ -53,7 +53,24 @@ describe('acceleratorFromEvent', () => {
 })
 
 describe('isBareTypingKey', () => {
-  it.each(['A', 'z', '7', 'Shift+A', 'Shift+3'])('flags %s', (accelerator) => {
+  it.each([
+    'A',
+    'z',
+    '7',
+    'Shift+A',
+    'Shift+3',
+    'Space',
+    'Enter',
+    'Tab',
+    'Backspace',
+    'Delete',
+    'Up',
+    'Left',
+    'Shift+Right',
+    ',',
+    'Shift+/',
+    '`',
+  ])('flags %s', (accelerator) => {
     expect(isBareTypingKey(accelerator)).toBe(true)
   })
 
@@ -61,8 +78,12 @@ describe('isBareTypingKey', () => {
     'Ctrl+A',
     'Alt+Shift+1',
     'F13',
-    'Space',
+    'Ctrl+Space',
+    'Alt+Enter',
+    'Super+Up',
+    'Home',
     'num5',
+    'MediaPlayPause',
     'Super+Q',
   ])('allows %s', (accelerator) => {
     expect(isBareTypingKey(accelerator)).toBe(false)

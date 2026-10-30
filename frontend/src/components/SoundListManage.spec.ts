@@ -696,6 +696,71 @@ describe('soundListManage', () => {
       expect(play).not.toHaveBeenCalled()
     })
 
+    it('stops the preview before deleting the sound it is playing', async () => {
+      const { deleteSound } = await import('@/api/sounds')
+      const wrapper = mount(SoundListManage, {
+        props: { type: 'music' },
+      })
+      await flushPromises()
+      await wrapper.find('.sound-play-btn').trigger('click')
+      await flushPromises()
+      const audio = wrapper.find('audio').element as HTMLAudioElement
+      const pause = vi.mocked(HTMLMediaElement.prototype.pause)
+      const load = vi.mocked(HTMLMediaElement.prototype.load)
+      pause.mockClear()
+      load.mockClear()
+      let srcAtDelete: string | null = 'unset'
+      vi.mocked(deleteSound).mockImplementationOnce(async () => {
+        srcAtDelete = audio.getAttribute('src')
+      })
+
+      await wrapper.find('.btn-delete').trigger('click')
+      await wrapper.find('.btn-confirm-delete').trigger('click')
+      await flushPromises()
+
+      expect(deleteSound).toHaveBeenCalledWith('music', 's1')
+      expect(srcAtDelete).toBeNull()
+      expect(pause.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(deleteSound).mock.invocationCallOrder.at(-1)!)
+      // Reloading without a src aborts the hibiki://sound request so its file handle is released.
+      expect(load).toHaveBeenCalled()
+    })
+
+    it('keeps the preview playing when another sound is deleted', async () => {
+      const { listMusic, deleteSound } = await import('@/api/sounds')
+      vi.mocked(listMusic).mockResolvedValue([
+        {
+          id: 's1',
+          name: 'Long Track',
+          filename: 'long.mp3',
+          category: 'music',
+          createdAt: '2024-01-01T00:00:00Z',
+        },
+        {
+          id: 's2',
+          name: 'Other Track',
+          filename: 'other.mp3',
+          category: 'music',
+          createdAt: '2024-01-02T00:00:00Z',
+        },
+      ])
+      vi.mocked(deleteSound).mockResolvedValueOnce(undefined)
+      const wrapper = mount(SoundListManage, {
+        props: { type: 'music' },
+      })
+      await flushPromises()
+      const rowOf = (name: string) => wrapper.findAll('.sound-item').find(r => r.text().includes(name))!
+      await rowOf('Long Track').find('.sound-play-btn').trigger('click')
+      await flushPromises()
+      const audio = wrapper.find('audio').element as HTMLAudioElement
+
+      await rowOf('Other Track').find('.btn-delete').trigger('click')
+      await rowOf('Other Track').find('.btn-confirm-delete').trigger('click')
+      await flushPromises()
+
+      expect(deleteSound).toHaveBeenCalledWith('music', 's2')
+      expect(audio.getAttribute('src')).toBe('hibiki://sound/music/s1')
+    })
+
     it('stops the preview when the panel is unmounted', async () => {
       const wrapper = mount(SoundListManage, {
         props: { type: 'music' },

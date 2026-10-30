@@ -220,6 +220,8 @@ function stop() {
   if (el) {
     el.pause()
     el.removeAttribute('src')
+    // Reloading without a src aborts the hibiki://sound request, releasing its file handle.
+    el.load()
   }
   playingId.value = null
 }
@@ -256,6 +258,11 @@ async function confirmDelete(id: string) {
   if (pendingDeleteId.value !== id)
     return
   pendingDeleteId.value = null
+  // The preview holds the file open (Windows refuses the unlink) and would outlive its row.
+  if (playingId.value === id) {
+    logInfo(`[media] preview stopped on delete (type=${props.type}, sound=${id})`)
+    stop()
+  }
   try {
     await deleteSound(props.type, id)
     await loadSounds()
@@ -263,6 +270,7 @@ async function confirmDelete(id: string) {
     showToast('success', 'Removed from library.')
   }
   catch (err) {
+    console.warn(`[media] delete failed (type=${props.type}, sound=${id})`, err)
     showToast('error', err instanceof Error
       ? err.message
       : 'Couldn\'t delete. The file may be in use — try again in a moment.')
