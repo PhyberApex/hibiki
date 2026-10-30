@@ -1,5 +1,57 @@
 # Changelog
 
+## [1.8.0](https://github.com/PhyberApex/hibiki/compare/v1.7.0...v1.8.0) (2026-10-30)
+
+
+### Features
+
+* **diagnostics:** copy a redacted diagnostics summary from Settings ([#718](https://github.com/PhyberApex/hibiki/issues/718)) ([ffff995](https://github.com/PhyberApex/hibiki/commit/ffff995cccb23fc18bca363fa0c74360dcce5572))
+* **effects:** pre-warm the Effect PCM cache when a Scene opens or becomes the Playing Scene ([#703](https://github.com/PhyberApex/hibiki/issues/703)) ([890891a](https://github.com/PhyberApex/hibiki/commit/890891ab5d9e5a235946c5a3a46f9e55ef0c22ed))
+* **music:** read each Music track's duration and show an elapsed / total timer ([#702](https://github.com/PhyberApex/hibiki/issues/702)) ([8fd9617](https://github.com/PhyberApex/hibiki/commit/8fd9617fc4e35b9c0de385355d6aa737aefeb22c))
+* **scenes:** reorder Scenes by drag or keyboard so Previous/Next Scene follow the GM's order ([#704](https://github.com/PhyberApex/hibiki/issues/704)) ([922023b](https://github.com/PhyberApex/hibiki/commit/922023bda4c9efa48faf58bb1ec4afd6e05891b2))
+
+
+### Bug Fixes
+
+* **a11y:** ignore key auto-repeat in HotkeyRecorder, close Registry and Resolve dialogs on Escape ([#688](https://github.com/PhyberApex/hibiki/issues/688)) ([d47fde6](https://github.com/PhyberApex/hibiki/commit/d47fde652aff42d43b19926bd2d530cdd9db6a8d))
+* **audio:** destroy a voice connection that never becomes ready instead of reporting it joined ([#674](https://github.com/PhyberApex/hibiki/issues/674)) ([f657786](https://github.com/PhyberApex/hibiki/commit/f657786d1e48922e0ed832ba5d12d7cc4a057b9a))
+* **audio:** destroy the AudioEngine when a manager leaves or loses its voice connection ([#672](https://github.com/PhyberApex/hibiki/issues/672)) ([73f1497](https://github.com/PhyberApex/hibiki/commit/73f149765bf2857db4bb65d5d37dd2fcbca279be))
+* **audio:** drop plays that land on a torn-down Target and stop attenuating renderer-fallback streams twice ([#726](https://github.com/PhyberApex/hibiki/issues/726)) ([edb3e97](https://github.com/PhyberApex/hibiki/commit/edb3e9735f5f41eb2ca97753906db1e1293b0172))
+* **audio:** guard non-finite ramp inputs, byte-budget the Effect PCM cache, read WAV data size 0 to EOF ([#694](https://github.com/PhyberApex/hibiki/issues/694)) ([1375a2c](https://github.com/PhyberApex/hibiki/commit/1375a2ca23eed7a4617b9cb31dcc32000c70cfb1))
+* **audio:** keep the live Music volume across a loop restart ([#671](https://github.com/PhyberApex/hibiki/issues/671)) ([e39c3fb](https://github.com/PhyberApex/hibiki/commit/e39c3fb1a45ccf718fb1cab4c62787bf04e01448))
+* **audio:** release the decoder and file handle when a PCM stream is destroyed ([#670](https://github.com/PhyberApex/hibiki/issues/670)) ([ae2192a](https://github.com/PhyberApex/hibiki/commit/ae2192a657000e10d89c3b5f8ff4516f970fbeeb))
+* **audio:** route a captured &lt;audio&gt; element to the Output Device under the Local Target ([#680](https://github.com/PhyberApex/hibiki/issues/680)) ([e7d78b7](https://github.com/PhyberApex/hibiki/commit/e7d78b7fc044ed2aab9f9acf920b82ad220a3c80))
+* **audio:** stop a looping track whose source errors instead of re-decoding it ([#673](https://github.com/PhyberApex/hibiki/issues/673)) ([830f662](https://github.com/PhyberApex/hibiki/commit/830f662a8e712815cf9c674501be7d0628b7e598))
+* **audio:** stop bulk stops from resurrecting a loop restart mid-decode ([#669](https://github.com/PhyberApex/hibiki/issues/669)) ([444b268](https://github.com/PhyberApex/hibiki/commit/444b26845310c0ffbee3173898960d06b2ba193a))
+* **browser:** keep a background-created tab hidden, allow un-routing while the Target cannot play, keep typed URLs ([#684](https://github.com/PhyberApex/hibiki/issues/684)) ([f192a96](https://github.com/PhyberApex/hibiki/commit/f192a9606ce2ee4ca5d11d38a92fb3537fa825f8))
+* **discord:** destroy a client whose login is still in flight on reconnect, logout and shutdown ([#681](https://github.com/PhyberApex/hibiki/issues/681)) ([8469017](https://github.com/PhyberApex/hibiki/commit/84690174f16a6331a95c8ea925acf5b4602ef471))
+* **electron:** exit 1 on fatal startup, non-blocking uncaught error dialog, details-object navigation, log silent branches ([#690](https://github.com/PhyberApex/hibiki/issues/690)) ([e38d594](https://github.com/PhyberApex/hibiki/commit/e38d594633bb1d491bf693850306b3ef0ae13d0e))
+* **electron:** tear down chunked-IPC audio streams and Browser tabs when the renderer crashes or reloads ([#683](https://github.com/PhyberApex/hibiki/issues/683)) ([185ad22](https://github.com/PhyberApex/hibiki/commit/185ad221957fd838223ae5d67c6e9be0f608bfce))
+* **hotkeys:** keep later Hotkeys responsive when a Scene start hangs on an unplayable element ([#730](https://github.com/PhyberApex/hibiki/issues/730)) ([b79b793](https://github.com/PhyberApex/hibiki/commit/b79b793bfe451cdacdbd2d082293188202b27f78))
+* **main:** deny Browser tab pages every permission and all screen capture ([#721](https://github.com/PhyberApex/hibiki/issues/721)) ([55b8b1d](https://github.com/PhyberApex/hibiki/commit/55b8b1d3f9647adeece9dfacb83596d333d017ad))
+* **main:** keep streams and Browser tabs when the guard blocks a main-window navigation ([#722](https://github.com/PhyberApex/hibiki/issues/722)) ([70cd88f](https://github.com/PhyberApex/hibiki/commit/70cd88f57d63898a4e6e29373b4ceac404a1a95a))
+* **media:** stop the Sound Library preview when its panel is left or a Scene starts ([#686](https://github.com/PhyberApex/hibiki/issues/686)) ([2b1488c](https://github.com/PhyberApex/hibiki/commit/2b1488c5498f02e53678d91b3570e62fe878737f))
+* **persistence:** fsync atomic JSON writes and let a concurrent set win over the plaintext-secret migration ([#691](https://github.com/PhyberApex/hibiki/issues/691)) ([8743ea6](https://github.com/PhyberApex/hibiki/commit/8743ea65be74abc46104849e32c30cd01a002076))
+* **protocol:** clamp Range ends, answer bad ranges with 416, never stream a directory for hibiki://app ([#689](https://github.com/PhyberApex/hibiki/issues/689)) ([a7045e1](https://github.com/PhyberApex/hibiki/commit/a7045e1217535358311be425dd63238b4aeeeb57))
+* **registry:** serve the stale cached index when the index fetch fails ([#724](https://github.com/PhyberApex/hibiki/issues/724)) ([861b1e5](https://github.com/PhyberApex/hibiki/commit/861b1e59750169aa267eeee58faacea7bf7f6da1))
+* **renderer-audio:** stop tab tracks when routed capture setup fails and drop stale waitForPlayable listeners ([#693](https://github.com/PhyberApex/hibiki/issues/693)) ([4dfc4fa](https://github.com/PhyberApex/hibiki/commit/4dfc4faf10f65f7ea3b543950862bdc6f98461ca))
+* **scene-playback:** abort a superseded Scene start-up instead of starting its remaining Ambience and Music ([#675](https://github.com/PhyberApex/hibiki/issues/675)) ([b1bbeea](https://github.com/PhyberApex/hibiki/commit/b1bbeea9444b311eac6becc313eb5d2616ad72bd))
+* **scene-playback:** apply master volume to the Playing Scene's items, not the open Scene's ([#677](https://github.com/PhyberApex/hibiki/issues/677)) ([38961cc](https://github.com/PhyberApex/hibiki/commit/38961cc6dafad1681f49931deded00306c184000))
+* **scene-playback:** bring back a renderer-fallback Ambience still fading out when a Scene Crossfade wants it ([#679](https://github.com/PhyberApex/hibiki/issues/679)) ([4bd464d](https://github.com/PhyberApex/hibiki/commit/4bd464d243cdaaac9563a1aaa9ba321f49666e87))
+* **scene-playback:** drop an Ambience or Effect start overtaken by a Stop during its start-up ([#676](https://github.com/PhyberApex/hibiki/issues/676)) ([a5eacbc](https://github.com/PhyberApex/hibiki/commit/a5eacbc4eae8cd60c761ee5b66020e5a5a78124a))
+* **scenes:** guard New scene against double submit, stop removed playing tracks, surface load and save failures ([#685](https://github.com/PhyberApex/hibiki/issues/685)) ([33502fb](https://github.com/PhyberApex/hibiki/commit/33502fb422b67d839bccb959d86042149f10d9ae))
+* **scenes:** import and export Scenes without blocking the main process ([#725](https://github.com/PhyberApex/hibiki/issues/725)) ([cf6bdf5](https://github.com/PhyberApex/hibiki/commit/cf6bdf5223a0810861e951b720a8499bc1bddccc))
+* **scenes:** keep a different Playing Scene when deleting the open Scene and refuse duplicate relinks ([#731](https://github.com/PhyberApex/hibiki/issues/731)) ([1ec2c09](https://github.com/PhyberApex/hibiki/commit/1ec2c0993391f5762d77cc820b458f506d56e1aa))
+* **scenes:** keep the Ambience repeat interval through export and import ([#723](https://github.com/PhyberApex/hibiki/issues/723)) ([a8d0cf0](https://github.com/PhyberApex/hibiki/commit/a8d0cf068ec85f1d8a0e15010d5d01e226c516ce))
+* **scenes:** release errored fallback Music's stream and log play calls a Target cannot take ([#729](https://github.com/PhyberApex/hibiki/issues/729)) ([66c57dd](https://github.com/PhyberApex/hibiki/commit/66c57dd9109b04830acdfb8803845755b48bfddc))
+* **scenes:** stop a loading fallback Ambience and keep Music bookkeeping on quick Scene Crossfades ([#728](https://github.com/PhyberApex/hibiki/issues/728)) ([b822e05](https://github.com/PhyberApex/hibiki/commit/b822e054b72864712a2ca12877c28621a24bd62e))
+* **scenes:** validate imported Scenes, bound bundled-sound extraction and never overwrite library files ([#682](https://github.com/PhyberApex/hibiki/issues/682)) ([d23b7d3](https://github.com/PhyberApex/hibiki/commit/d23b7d37b2dafb5a4732cba9b8d1f784dbe752fd))
+* **security:** encrypt the OpenAI-compatible Vision key and stop logging config values ([#668](https://github.com/PhyberApex/hibiki/issues/668)) ([97f8578](https://github.com/PhyberApex/hibiki/commit/97f857811041f3a6697c070b5e4b4bc5e899d44e))
+* **security:** keep the main window on the app and open its links in the system browser ([#667](https://github.com/PhyberApex/hibiki/issues/667)) ([bc8acd2](https://github.com/PhyberApex/hibiki/commit/bc8acd2f01a361d2d444863645b551519f996a5f))
+* **settings:** revert controls on failed saves, surface Connect failures, refresh Settings and Media under KeepAlive ([#687](https://github.com/PhyberApex/hibiki/issues/687)) ([5b16f3b](https://github.com/PhyberApex/hibiki/commit/5b16f3b7d04951bc390b1958ba232c213468637a))
+* **sounds:** derive sound ids by stripping only the trailing extension ([#692](https://github.com/PhyberApex/hibiki/issues/692)) ([331027b](https://github.com/PhyberApex/hibiki/commit/331027b62d6ab14521a082022eb21cc372ae42e0))
+* **sounds:** keep Sound ids inside the library directory ([#665](https://github.com/PhyberApex/hibiki/issues/665)) ([af7c1bf](https://github.com/PhyberApex/hibiki/commit/af7c1bf706ebd21632dfdd51d885efe9d081f9d2))
+
 ## [1.7.0](https://github.com/PhyberApex/hibiki/compare/v1.6.0...v1.7.0) (2026-10-28)
 
 
