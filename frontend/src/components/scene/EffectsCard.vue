@@ -43,6 +43,14 @@ function isMissing(item: SceneItem): boolean {
   return isMissingFrom(props.sounds, item.soundId)
 }
 
+function triggerTitle(item: SceneItem): string {
+  if (isMissing(item))
+    return 'Sound missing'
+  if (!player.canPlay)
+    return 'Join a voice channel first'
+  return `Play ${nameOf(item)}`
+}
+
 function onAdd(event: Event) {
   const select = event.target as HTMLSelectElement
   const sound = props.sounds.find(x => x.id === select.value)
@@ -89,8 +97,8 @@ function onAdd(event: Event) {
         <button
           type="button"
           class="effect-trigger"
-          :disabled="isMissing(item)"
-          :title="isMissing(item) ? 'Sound missing' : `Play ${nameOf(item)}`"
+          :disabled="isMissing(item) || !player.canPlay"
+          :title="triggerTitle(item)"
           @click="playback.playEffect(item)"
         >
           <span

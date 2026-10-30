@@ -2,11 +2,12 @@ import type { Scene } from '@/api/scenes'
 import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { startEffectStream, stopEffectStream } from '@/api/audio-stream'
+import { startEffectStream, stopAudioStream, stopEffectStream } from '@/api/audio-stream'
 import { fetchMasterVolume, fetchSceneFadeLength, updateMasterVolume } from '@/api/config'
 import { playAmbience, playEffect, playMusic, setAmbienceVolume, setMusicVolume, stopAmbience, stopEffects, stopMusic, warmEffects } from '@/api/player'
 import { canDecode } from '@/api/sounds'
 import { trackUsage } from '@/api/usage-stats'
+import { captureFromAudioElement } from '@/audio/browser-audio-capture'
 import { usePlayerStore } from '@/stores/player'
 import { useScenePlaybackStore } from './scene-playback'
 
@@ -112,6 +113,44 @@ describe('scene playback store', () => {
     expect(playMusic).toHaveBeenCalledWith('local', 'mus-1', expect.objectContaining({ volume: 50, loop: true }))
     expect(store.playingMusicId).toBe('mus-1')
     expect(store.playingAmbienceIds.has('amb-1')).toBe(true)
+  })
+
+  describe('a play call while the active Target cannot play (#713)', () => {
+    beforeEach(() => {
+      const player = usePlayerStore()
+      player.activeTarget = 'discord'
+      player.guildId = 'g1'
+      player.playerState = []
+    })
+
+    it('logs why an Effect was ignored and does not flash it', async () => {
+      const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+      const store = useScenePlaybackStore()
+
+      await store.playEffect(scene.effects[0]!)
+
+      expect(info).toHaveBeenCalledWith('[scene] playEffect fx-1 ignored: Target g1 cannot play')
+      expect(store.effectFlash.has('fx-1')).toBe(false)
+      expect(playEffect).not.toHaveBeenCalled()
+      info.mockRestore()
+    })
+
+    it('logs why Music and Ambience were ignored', async () => {
+      const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+      const store = useScenePlaybackStore()
+      store.musicSounds = [
+        { id: 'mus-1', name: 'Theme', filename: 'theme.mp3' } as never,
+      ]
+
+      await store.playMusic(scene.music[0]!)
+      await store.playAmbience(scene.ambience[0]!)
+
+      expect(info).toHaveBeenCalledWith('[scene] playMusic mus-1 ignored: Target g1 cannot play')
+      expect(info).toHaveBeenCalledWith('[scene] playAmbience amb-1 ignored: Target g1 cannot play')
+      expect(playMusic).not.toHaveBeenCalled()
+      expect(playAmbience).not.toHaveBeenCalled()
+      info.mockRestore()
+    })
   })
 
   it('stops the Playing Scene: ambience, music, effects and the Playing Scene marker', async () => {
@@ -1174,6 +1213,72 @@ describe('scene playback store: Music Mode', () => {
     await flushPromises()
     expect(playingEls).toHaveLength(2)
     expect(store.playingMusicId).toBeNull()
+  })
+
+  it('an element error on streamed renderer-fallback Music ends its capture session and Discord stream (#713)', async () => {
+    vi.mocked(canDecode).mockResolvedValue(false)
+    const player = usePlayerStore()
+    player.activeTarget = 'discord'
+    player.guildId = 'g1'
+    player.playerState = [
+      { guildId: 'g1', connectedChannelId: 'c1' },
+    ] as never
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+    await store.playScene(scene)
+    const el = playingEls.at(-1)!
+    const sess = await vi.mocked(captureFromAudioElement).mock.results.at(-1)!.value as { stop: ReturnType<typeof vi.fn> }
+    expect(store.playingMusicId).toBe('m1')
+
+    el.onerror?.(new Event('error'))
+    await flushPromises()
+
+    expect(sess.stop).toHaveBeenCalled()
+    expect(stopAudioStream).toHaveBeenCalledWith('g1', 'music-a')
+    expect(store.playingMusicId).toBeNull()
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[scene] music m1 errored mid-play'))
+    warn.mockRestore()
+  })
+
+  it('a streamed renderer-fallback Music start that fails to load ends its Discord stream (#713)', async () => {
+    vi.mocked(canDecode).mockResolvedValue(false)
+    const player = usePlayerStore()
+    player.activeTarget = 'discord'
+    player.guildId = 'g1'
+    player.playerState = [
+      { guildId: 'g1', connectedChannelId: 'c1' },
+    ] as never
+    Object.defineProperty(mediaProto, 'load', {
+      configurable: true,
+      value(this: HTMLMediaElement) {
+        if (this.getAttribute('src'))
+          queueMicrotask(() => this.dispatchEvent(new Event('error')))
+      },
+    })
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const store = setup(musicScene('sequential'))
+
+    await store.playMusic(track('m1'))
+
+    expect(stopAudioStream).toHaveBeenCalledWith('g1', 'music-a')
+    expect(store.playingMusicId).toBeNull()
+    error.mockRestore()
+  })
+
+  it('a stale element error from a replaced track leaves the channel alone (#713)', async () => {
+    vi.mocked(canDecode).mockResolvedValue(false)
+    const scene = musicScene('sequential')
+    const store = setup(scene)
+    await store.playScene(scene)
+    const staleError = playingEls.at(-1)!.onerror!
+
+    await store.playMusicTrack(scene.music[2]!)
+    await flushPromises()
+    staleError.call(playingEls[0]!, new Event('error'))
+    await flushPromises()
+
+    expect(store.playingMusicId).toBe('m3')
   })
 
   describe('progress timer (#695)', () => {
