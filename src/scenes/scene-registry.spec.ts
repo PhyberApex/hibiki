@@ -115,10 +115,14 @@ describe('createSceneRegistry', () => {
   it('fetchIndex fetches the default index URL unless given another', async () => {
     respondWith(remoteIndex)
     await createSceneRegistry(config).fetchIndex(true)
-    expect(fetchMock).toHaveBeenLastCalledWith(REGISTRY_INDEX_URL)
+    expect(fetchMock).toHaveBeenLastCalledWith(REGISTRY_INDEX_URL, expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }))
     respondWith(remoteIndex)
     await createSceneRegistry(config, 'http://127.0.0.1:9/index.json').fetchIndex(true)
-    expect(fetchMock).toHaveBeenLastCalledWith('http://127.0.0.1:9/index.json')
+    expect(fetchMock).toHaveBeenLastCalledWith('http://127.0.0.1:9/index.json', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }))
   })
 
   it('ignores a cache fetched from a different index URL', async () => {
@@ -309,6 +313,82 @@ describe('createSceneRegistry', () => {
     const registry = createSceneRegistry(config)
     expect((await registry.installFromRegistry('seq')).musicMode).toBe('sequential')
     expect(await registry.installFromRegistry('odd')).not.toHaveProperty('musicMode')
+  })
+
+  describe('untrusted index (#652)', () => {
+    it('fetchIndex gives up on a stalled connection after the timeout', async () => {
+      fetchMock.mockImplementation((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))
+      }))
+      await expect(createSceneRegistry(config, REGISTRY_INDEX_URL, { timeoutMs: 20 }).fetchIndex(true))
+        .rejects
+        .toThrow('Registry index request timed out after 20 ms')
+      expect(existsSync(cachePath())).toBe(false)
+    })
+
+    it('fetchIndex gives up when the body stalls after the headers arrive', async () => {
+      fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => new Response(new ReadableStream({
+        start(controller) {
+          init?.signal?.addEventListener('abort', () => controller.error(init.signal!.reason))
+        },
+      })))
+      await expect(createSceneRegistry(config, REGISTRY_INDEX_URL, { timeoutMs: 20 }).fetchIndex(true))
+        .rejects
+        .toThrow('Registry index request timed out after 20 ms')
+    })
+
+    it.each([
+      [
+        'an object without scenes',
+        { version: 1 },
+      ],
+      [
+        'a scenes field that is not a list',
+        { version: 1, scenes: 'none' },
+      ],
+      ['a bare list', []],
+    ])('fetchIndex rejects %s without caching it', async (_label, body) => {
+      respondWith(body)
+      await expect(createSceneRegistry(config).fetchIndex(true)).rejects.toThrow('Registry index is malformed')
+      expect(existsSync(cachePath())).toBe(false)
+    })
+
+    it('getIndex refetches when the cached index is malformed', async () => {
+      writeCache({ version: 1 })
+      respondWith(remoteIndex)
+      await expect(createSceneRegistry(config).getIndex()).resolves.toEqual(remoteIndex)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('installFromRegistry rejects an entry without item lists, saving nothing', async () => {
+      writeCache({
+        ...remoteIndex,
+        scenes: [
+          {
+            name: 'Broken',
+            slug: 'broken',
+            scene: { music: [] },
+          },
+        ],
+      })
+      await expect(createSceneRegistry(config).installFromRegistry('broken')).rejects.toThrow('Registry entry \'broken\' is malformed')
+      const { createSceneStore } = await import('./scene-store')
+      await expect(createSceneStore(config).list()).resolves.toEqual([])
+    })
+
+    it('installFromRegistry rejects an entry whose name is not a string', async () => {
+      writeCache({
+        ...remoteIndex,
+        scenes: [
+          {
+            name: 42,
+            slug: 'nameless',
+            scene: { music: [], ambience: [], effects: [] },
+          },
+        ],
+      })
+      await expect(createSceneRegistry(config).installFromRegistry('nameless')).rejects.toThrow('Registry entry \'nameless\' is malformed')
+    })
   })
 })
 

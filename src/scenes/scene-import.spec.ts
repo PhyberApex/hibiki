@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import AdmZip from 'adm-zip'
@@ -315,5 +315,223 @@ describe('importScene', () => {
     expect(clash.id).not.toBe(existing.id)
     const { createSceneStore } = await import('./scene-store')
     expect((await createSceneStore(config).get(existing.id))?.name).toBe('Original')
+  })
+
+  it('treats a blank displayName as absent', async () => {
+    const scene = await importScene(config, createManifestZip(makeManifest({ displayName: '   ', name: 'blank-display' })))
+    expect(scene.name).toBe('blank-display')
+  })
+
+  it('still imports when a stored Scene has a non-string name', async () => {
+    const scenesPath = join(tempRoot, 'data', 'scenes.json')
+    const stored = JSON.parse(readFileSync(scenesPath, 'utf-8')) as object[]
+    writeFileSync(scenesPath, JSON.stringify([
+      ...stored,
+      {
+        id: 'corrupt',
+        name: 7,
+        music: [],
+        ambience: [],
+        effects: [],
+      },
+    ]))
+    const scene = await importScene(config, createManifestZip(makeManifest({ displayName: 'After Corrupt' })))
+    expect(scene.name).toBe('After Corrupt')
+  })
+
+  describe('manifest validation (#652)', () => {
+    const item = (overrides: Record<string, unknown> = {}) => ({
+      soundName: 'Theme',
+      volume: 50,
+      bundled: false,
+      ...overrides,
+    })
+    const withMusic = (music: unknown[]) => makeManifest({
+      displayName: 'Validated',
+      scene: { music, ambience: [], effects: [] },
+    })
+
+    it.each([
+      [
+        'an unknown formatVersion',
+        makeManifest({ formatVersion: 2 }),
+        'unsupported formatVersion 2',
+      ],
+      [
+        'a non-string displayName',
+        makeManifest({ displayName: 42 }),
+        'displayName must be a string',
+      ],
+      [
+        'a non-string name',
+        makeManifest({
+          displayName: '',
+          name: { en: 'x' },
+        }),
+        'name must be a string',
+      ],
+      [
+        'a missing item list',
+        makeManifest({
+          scene: { music: [], ambience: [] },
+        }),
+        'scene.effects must be a list',
+      ],
+      [
+        'an item that is not an object',
+        withMusic(['Theme']),
+        'music item 1 must be an object',
+      ],
+      [
+        'a missing soundName',
+        withMusic([
+          item({ soundName: undefined }),
+        ]),
+        'music item 1 has no soundName',
+      ],
+      [
+        'a non-numeric volume',
+        withMusic([
+          item({ volume: 'loud' }),
+        ]),
+        'music item 1 volume must be a number from 0 to 100',
+      ],
+      [
+        'an out-of-range volume',
+        withMusic([
+          item({ volume: 150 }),
+        ]),
+        'music item 1 volume must be a number from 0 to 100',
+      ],
+      [
+        'a non-boolean enabled',
+        withMusic([
+          item({ enabled: 'yes' }),
+        ]),
+        'music item 1 enabled must be true or false',
+      ],
+      [
+        'a non-boolean loop',
+        withMusic([
+          item({ loop: 1 }),
+        ]),
+        'music item 1 loop must be true or false',
+      ],
+      [
+        'a source that is not an object with a name',
+        withMusic([
+          item({ source: 123 }),
+        ]),
+        'music item 1 source must have a name',
+      ],
+    ])('rejects %s before extracting anything', async (_label, manifest, message) => {
+      const zipPath = createManifestZip(manifest, { 'sounds/music/validation-orphan.mp3': 'x' })
+      await expect(importScene(config, zipPath)).rejects.toThrow(`Invalid hibiki-scene.json: ${message}`)
+      expect(existsSync(join(config.audio.musicDir, 'validation-orphan.mp3'))).toBe(false)
+    })
+  })
+
+  describe('bundled sound extraction (#652)', () => {
+    const bundledManifest = (displayName: string, bundledPath: string) => makeManifest({
+      displayName,
+      scene: {
+        music: [
+          {
+            soundName: 'Theme',
+            volume: 50,
+            bundled: true,
+            bundledPath,
+          },
+        ],
+        ambience: [],
+        effects: [],
+      },
+    })
+
+    it('rejects an entry larger than the per-file cap without writing anything', async () => {
+      const zipPath = createManifestZip(bundledManifest('Too Big', 'sounds/music/too-big.mp3'), {
+        'sounds/music/too-big.mp3': 'x'.repeat(64),
+      })
+      await expect(importScene(config, zipPath, { maxFileBytes: 32, maxTotalBytes: 1024 }))
+        .rejects
+        .toThrow(/too-big\.mp3 .*exceeds the 32-byte limit/)
+      expect(existsSync(join(config.audio.musicDir, 'too-big.mp3'))).toBe(false)
+    })
+
+    it('rejects an archive whose bundled sounds together exceed the total cap', async () => {
+      const zipPath = createManifestZip(bundledManifest('Too Many', 'sounds/music/many-1.mp3'), {
+        'sounds/music/many-1.mp3': 'x'.repeat(30),
+        'sounds/effects/many-2.wav': 'x'.repeat(30),
+      })
+      await expect(importScene(config, zipPath, { maxFileBytes: 32, maxTotalBytes: 50 }))
+        .rejects
+        .toThrow(/exceed the 50-byte limit/)
+      expect(existsSync(join(config.audio.musicDir, 'many-1.mp3'))).toBe(false)
+      expect(existsSync(join(config.audio.effectsDir, 'many-2.wav'))).toBe(false)
+    })
+
+    it('removes the extracted sounds again when the Scene cannot be saved', async () => {
+      const userData = mkdtempSync(join(tmpdir(), 'hibiki-import-unsaved-'))
+      // scenes.json reads as empty, but its atomic write cannot replace a non-empty directory
+      mkdirSync(join(userData, 'data', 'scenes.json.tmp', 'blocker'), { recursive: true })
+      process.env.HIBIKI_USER_DATA = userData
+      const zipPath = createManifestZip(bundledManifest('Unsaved', 'sounds/music/unsaved-1.mp3'), {
+        'sounds/music/unsaved-1.mp3': 'x',
+      })
+      await expect(importScene(config, zipPath)).rejects.toThrow(/EISDIR|EPERM|ENOTEMPTY/)
+      expect(existsSync(join(config.audio.musicDir, 'unsaved-1.mp3'))).toBe(false)
+      delete process.env.HIBIKI_USER_DATA
+    })
+
+    it('reuses an existing library file of the same name and size', async () => {
+      mkdirSync(config.audio.musicDir, { recursive: true })
+      writeFileSync(join(config.audio.musicDir, 'same-1.mp3'), 'abc')
+      const zipPath = createManifestZip(bundledManifest('Same File', 'sounds/music/same-1.mp3'), {
+        'sounds/music/same-1.mp3': 'xyz',
+      })
+      const scene = await importScene(config, zipPath)
+      expect(scene.music[0]!.soundId).toBe('same-1')
+      expect(readFileSync(join(config.audio.musicDir, 'same-1.mp3'), 'utf-8')).toBe('abc')
+    })
+
+    it('never overwrites a library file of the same name but different size; the bundled one gets a fresh id', async () => {
+      mkdirSync(config.audio.musicDir, { recursive: true })
+      writeFileSync(join(config.audio.musicDir, 'rain-1712345.mp3'), 'the GM\'s own rain')
+      const zipPath = createManifestZip(bundledManifest('Clash File', 'sounds/music/rain-1712345.mp3'), {
+        'sounds/music/rain-1712345.mp3': 'archive rain',
+      })
+      const scene = await importScene(config, zipPath)
+      expect(readFileSync(join(config.audio.musicDir, 'rain-1712345.mp3'), 'utf-8')).toBe('the GM\'s own rain')
+      const soundId = scene.music[0]!.soundId
+      expect(soundId).toMatch(/^rain-1712345-\d+$/)
+      expect(readFileSync(join(config.audio.musicDir, `${soundId}.mp3`), 'utf-8')).toBe('archive rain')
+    })
+
+    it('gives a bundled file a fresh id when its name differs from a library file only in case', async () => {
+      mkdirSync(config.audio.musicDir, { recursive: true })
+      writeFileSync(join(config.audio.musicDir, 'Storm-1.mp3'), 'the GM\'s own storm')
+      const zipPath = createManifestZip(bundledManifest('Clash Case', 'sounds/music/storm-1.mp3'), {
+        'sounds/music/storm-1.mp3': 'archive storm',
+      })
+      const scene = await importScene(config, zipPath)
+      const soundId = scene.music[0]!.soundId
+      expect(soundId).toMatch(/^storm-1-\d+$/)
+      expect(readFileSync(join(config.audio.musicDir, 'Storm-1.mp3'), 'utf-8')).toBe('the GM\'s own storm')
+      expect(readFileSync(join(config.audio.musicDir, `${soundId}.mp3`), 'utf-8')).toBe('archive storm')
+    })
+
+    it('gives a bundled file a fresh id when a library file has the same id under another extension', async () => {
+      mkdirSync(config.audio.musicDir, { recursive: true })
+      writeFileSync(join(config.audio.musicDir, 'foo-1.mp3'), 'mp3')
+      const zipPath = createManifestZip(bundledManifest('Clash Ext', 'sounds/music/foo-1.ogg'), {
+        'sounds/music/foo-1.ogg': 'ogg',
+      })
+      const scene = await importScene(config, zipPath)
+      const soundId = scene.music[0]!.soundId
+      expect(soundId).not.toBe('foo-1')
+      const ids = readdirSync(config.audio.musicDir).filter(f => f.startsWith('foo-1')).map(f => f.replace(/\.[^.]+$/, ''))
+      expect(new Set(ids).size).toBe(ids.length)
+      expect(readFileSync(join(config.audio.musicDir, `${soundId}.ogg`), 'utf-8')).toBe('ogg')
+    })
   })
 })

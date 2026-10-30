@@ -5,13 +5,16 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { writeJsonFileAtomic } from '../json-file'
 import { createLogger } from '../logger'
-import { createSceneStore, normalizeMusicMode } from './scene-store'
+import { SOUND_CATEGORIES } from '../sound/sound-id'
+import { createSceneStore, isRecord, normalizeMusicMode, uniqueSceneName } from './scene-store'
 
 const log = createLogger('scene-registry')
 
 export const REGISTRY_INDEX_URL = 'https://raw.githubusercontent.com/PhyberApex/hibiki/main/registry/index.json'
 const CACHE_FILENAME = 'registry-cache.json'
 const STALE_MS = 24 * 60 * 60 * 1000 // 24 hours
+/** Without it a stalled connection pins the renderer's `getIndex` for undici's multi-minute defaults (#652). */
+export const DEFAULT_REGISTRY_FETCH_TIMEOUT_MS = 10_000
 
 interface CachedIndex {
   fetchedAt: string
@@ -32,6 +35,20 @@ function getCachePath(config: Config): string {
     ? join(base, 'data')
     : dirname(dbPath)
   return join(dir, CACHE_FILENAME)
+}
+
+/** Only the part every caller relies on; each entry is checked when it is installed. */
+function isRegistryIndex(data: unknown): data is RegistryIndex {
+  return isRecord(data) && Array.isArray(data.scenes)
+}
+
+function isInstallableEntry(entry: RegistryEntry): boolean {
+  const scene: unknown = entry.scene
+  return typeof entry.name === 'string'
+    && entry.name.trim() !== ''
+    && isRecord(scene)
+    && SOUND_CATEGORIES.every(category =>
+      Array.isArray(scene[category]) && scene[category].every(isRecord))
 }
 
 async function readCache(cachePath: string): Promise<CachedIndex | null> {
@@ -75,7 +92,11 @@ function registryEntryToScene(entry: RegistryEntry): Omit<Scene, 'id' | 'created
   }
 }
 
-export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_URL) {
+export interface SceneRegistryOptions {
+  timeoutMs?: number
+}
+
+export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_URL, { timeoutMs = DEFAULT_REGISTRY_FETCH_TIMEOUT_MS }: SceneRegistryOptions = {}) {
   const cachePath = getCachePath(config)
 
   /** A cached index, unless it was fetched from another index URL. */
@@ -84,10 +105,32 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
     if (!cached)
       return null
     const cachedUrl = cached.url ?? REGISTRY_INDEX_URL
-    if (cachedUrl === indexUrl)
+    if (cachedUrl !== indexUrl) {
+      log.info(`Ignoring registry cache fetched from ${cachedUrl}; the index is now ${indexUrl}`)
+      return null
+    }
+    if (isRegistryIndex(cached.data))
       return cached
-    log.info(`Ignoring registry cache fetched from ${cachedUrl}; the index is now ${indexUrl}`)
+    log.warn(`Ignoring malformed registry cache at ${cachePath}`)
     return null
+  }
+
+  /** The index's parsed JSON body; the timeout covers the body download as well as the connection. */
+  async function fetchIndexBody(): Promise<unknown> {
+    try {
+      const response = await fetch(indexUrl, {
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+      if (!response.ok)
+        throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText} (${indexUrl})`)
+      return await response.json()
+    }
+    catch (e) {
+      if ((e as Error).name !== 'TimeoutError')
+        throw e
+      log.warn(`Registry index request to ${indexUrl} timed out after ${timeoutMs} ms`)
+      throw new Error(`Registry index request timed out after ${timeoutMs} ms (${indexUrl})`)
+    }
   }
 
   return {
@@ -102,11 +145,11 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
       }
 
       log.info(`Fetching registry index from ${indexUrl}…`)
-      const response = await fetch(indexUrl)
-      if (!response.ok)
-        throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText} (${indexUrl})`)
-
-      const data = await response.json() as RegistryIndex
+      const data = await fetchIndexBody()
+      if (!isRegistryIndex(data)) {
+        log.warn(`Registry index from ${indexUrl} is malformed: no scenes list; not caching it`)
+        throw new Error(`Registry index is malformed (${indexUrl})`)
+      }
       await writeCache(cachePath, {
         fetchedAt: new Date().toISOString(),
         url: indexUrl,
@@ -125,18 +168,17 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
 
     async installFromRegistry(slug: string): Promise<Scene> {
       const index = await this.getIndex()
-      const entry = index.scenes.find(s => s.slug === slug)
+      const entry = index.scenes.find(s => s?.slug === slug)
       if (!entry)
         throw new Error(`Scene '${slug}' not found in registry`)
+      if (!isInstallableEntry(entry)) {
+        log.warn(`Registry entry '${slug}' is malformed: needs a name and music, ambience and effects lists`)
+        throw new Error(`Registry entry '${slug}' is malformed`)
+      }
 
       const scenes = createSceneStore(config)
-      const existing = await scenes.list()
-      const existingNames = new Set(existing.map(s => s.name.toLowerCase()))
-
       const sceneData = registryEntryToScene(entry)
-      while (existingNames.has(sceneData.name.toLowerCase())) {
-        sceneData.name = `${sceneData.name} (imported)`
-      }
+      sceneData.name = uniqueSceneName(sceneData.name, await scenes.list())
 
       const saved = await scenes.save(sceneData)
       log.info(`Installed "${saved.name}" from registry (${saved.id})`)

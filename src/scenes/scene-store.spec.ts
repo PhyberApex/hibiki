@@ -299,4 +299,139 @@ describe('createSceneStore', () => {
     })
     expect(saved.music[0]!.loop).toBe(true)
   })
+
+  describe('save input gate (#652)', () => {
+    it.each([
+      ['a missing name', { }],
+      [
+        'a non-string name',
+        { name: 42 },
+      ],
+      [
+        'a blank name',
+        { name: '   ' },
+      ],
+    ])('rejects %s', async (_label, input) => {
+      const store = createSceneStore(config)
+      await expect(store.save(input as never)).rejects.toThrow('Scene name must be a non-empty string')
+      expect(await store.list()).toEqual([])
+    })
+
+    it('rejects input that is not an object', async () => {
+      await expect(createSceneStore(config).save(null as never)).rejects.toThrow('Scene must be an object')
+    })
+
+    it.each(['music', 'ambience', 'effects'])('rejects a %s list that is not an array', async (category) => {
+      const store = createSceneStore(config)
+      await expect(store.save({ name: 'A', [category]: 'rain' } as never)).rejects.toThrow(`Scene ${category} must be a list`)
+      expect(await store.list()).toEqual([])
+    })
+
+    it.each([
+      ['not an object', 'rain'],
+      [
+        'without a sound id',
+        { volume: 50 },
+      ],
+      [
+        'with a non-string sound id',
+        { soundId: 7 },
+      ],
+      [
+        'with a sound id that is not one path segment',
+        { soundId: '../escape' },
+      ],
+    ])('rejects an item %s', async (_label, item) => {
+      const store = createSceneStore(config)
+      await expect(store.save({
+        name: 'A',
+        ambience: [item],
+      } as never)).rejects.toThrow('Scene ambience item 1 has no valid sound id')
+      expect(await store.list()).toEqual([])
+    })
+
+    it('clamps volumes into 0-100 and drops values of the wrong type', async () => {
+      const store = createSceneStore(config)
+      const saved = await store.save({
+        name: 'A',
+        music: [
+          { soundId: 'loud', volume: 250 },
+          { soundId: 'quiet', volume: -5 },
+          {
+            soundId: 'word',
+            volume: 'loud',
+            loop: 'yes',
+            soundName: 3,
+          },
+          { soundId: 'nan', volume: Number.NaN },
+        ],
+        ambience: [
+          {
+            soundId: 'rain',
+            enabled: 'yes',
+            repeatMin: -1,
+            repeatMax: 'x',
+            source: 123,
+          },
+        ],
+        effects: [
+          { soundId: 'boom', hotkey: 5 },
+        ],
+      } as never)
+      expect(saved.music).toEqual([
+        { soundId: 'loud', volume: 100 },
+        { soundId: 'quiet', volume: 0 },
+        { soundId: 'word' },
+        { soundId: 'nan' },
+      ])
+      expect(saved.ambience).toEqual([
+        { soundId: 'rain' },
+      ])
+      expect(saved.effects).toEqual([
+        { soundId: 'boom' },
+      ])
+    })
+
+    it('keeps well-formed item fields, including the renderer\'s repeat interval, and drops unknown ones', async () => {
+      const store = createSceneStore(config)
+      const saved = await store.save({
+        name: 'A',
+        ambience: [
+          {
+            soundId: 'rain',
+            soundName: 'Rain',
+            volume: 40,
+            enabled: false,
+            loop: true,
+            repeatMin: 5,
+            repeatMax: 15,
+            source: { name: 'Rain', url: 'https://example.com', note: 7 },
+            extra: 'junk',
+          },
+        ],
+      } as never)
+      expect(saved.ambience).toEqual([
+        {
+          soundId: 'rain',
+          soundName: 'Rain',
+          volume: 40,
+          enabled: false,
+          loop: true,
+          repeatMin: 5,
+          repeatMax: 15,
+          source: { name: 'Rain', url: 'https://example.com' },
+        },
+      ])
+    })
+
+    it.each([
+      ['a number', 123],
+      ['an empty string', ''],
+    ])('generates an id when the given one is %s', async (_label, id) => {
+      const saved = await createSceneStore(config).save({ id, name: 'A' } as never)
+      expect(typeof saved.id).toBe('string')
+      expect(saved.id).not.toBe('')
+      expect(saved.id).not.toBe(id)
+    })
+  })
 })
