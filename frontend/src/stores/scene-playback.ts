@@ -1224,11 +1224,12 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
         // Still fading out of an earlier switch, whose onDone would stop it:
         // the ramp never turns an 'out' fade around, so drop it and glide back
         // in from wherever it got to.
-        if (crossfadeRamp.directionOf(ambienceFadeKey(item.soundId)) === 'out') {
-          logInfo(`[scene] crossfade: retargeting ${item.soundId} from out to in`)
-          crossfadeRamp.cancel(ambienceFadeKey(item.soundId))
+        const fadeKey = ambienceFadeKey(item.soundId)
+        if (crossfadeRamp.directionOf(fadeKey) === 'out') {
+          logInfo(`[scene] crossfade: retargeting ${item.soundId} from out to in (Scene ${target.id})`)
+          crossfadeRamp.cancel(fadeKey)
         }
-        crossfadeRamp.fade(ambienceFadeKey(item.soundId), {
+        crossfadeRamp.fade(fadeKey, {
           direction: 'in',
           from: el.volume,
           to,

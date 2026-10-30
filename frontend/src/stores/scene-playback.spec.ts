@@ -605,7 +605,7 @@ describe('scene playback store: master volume reaches the Playing Scene', () => 
 })
 
 describe('scene playback store: Scene Crossfade back to a Scene whose Ambience is fading out', () => {
-  const FADE_MS = 100
+  const FADE_MS = 300
   const storm: Scene = {
     ...scene,
     music: [],
@@ -674,13 +674,14 @@ describe('scene playback store: Scene Crossfade back to a Scene whose Ambience i
     pausedEls = []
 
     await store.crossfadeToScene('s2')
-    await new Promise(resolve => setTimeout(resolve, FADE_MS / 2))
     await store.crossfadeToScene('s1')
-    await new Promise(resolve => setTimeout(resolve, FADE_MS * 3))
+    // Past the end of the out-fade the first switch started.
+    await new Promise(resolve => setTimeout(resolve, FADE_MS * 2))
     await flushPromises()
 
     expect(store.playingAmbienceIds.has('amb-1')).toBe(true)
     expect(pausedEls).not.toContain(el)
+    // Item volume 80 at master volume 50.
     expect(el.volume).toBeCloseTo(0.4)
   })
 })
