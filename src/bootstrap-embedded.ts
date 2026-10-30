@@ -79,8 +79,8 @@ export interface EmbeddedApi {
     join: (body: { guildId: string, channelId: string }) => Promise<void>
     leave: (body: { guildId: string }) => Promise<void>
     stop: (guildId: string) => Promise<void>
-    startStream: (guildId: string, stream: NodeJS.ReadableStream, metadata?: { id: string, name: string, filename: string, category: string }, streamId?: string) => void
-    startEffectStream: (guildId: string, stream: NodeJS.ReadableStream, streamId?: string, volume?: number) => void
+    startStream: (guildId: string, stream: NodeJS.ReadableStream, metadata?: { id: string, name: string, filename: string, category: string }, streamId?: string) => boolean
+    startEffectStream: (guildId: string, stream: NodeJS.ReadableStream, streamId?: string, volume?: number) => boolean
     setEffectStreamVolume: (guildId: string, streamId: string, volume: number) => void
     stopStream: (guildId: string, streamId?: string) => void
     reportLocalSinkHealth: (event: import('./player/player').LocalSinkHealth) => void

@@ -156,16 +156,17 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
     manager.stopAllEffects()
   }
 
+  /** Starts a raw chunked-IPC music stream. Returns whether the stream reached a mixer (`false` on the Local Target). */
   function startStream(
     guildId: string,
     stream: Readable,
     metadata?: TrackMetadata,
     streamId?: string,
-  ): void {
+  ): boolean {
     if (isLocalTarget(guildId)) {
       // Renderer-native sources bypass the mix under the Local Target (ADR-0004).
       log.warn('startStream addressed to the Local Target ignored: renderer-native sources play locally')
-      return
+      return false
     }
     const manager = managers.get(guildId)
     if (!manager || !manager.connected) {
@@ -176,17 +177,19 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
       ? ` for "${metadata.name}"`
       : ''}`)
     manager.playMusicFromStream(stream, metadata, streamId)
+    return true
   }
 
   /**
    * Starts a raw chunked-IPC effect stream. With a `streamId` the stream
    * stays addressable for `setEffectStreamVolume` (a Routed Tab); without
    * one it is fire-and-forget. `volume` is the absolute initial level.
+   * Returns whether the stream reached a mixer (`false` on the Local Target).
    */
-  function startEffectStream(guildId: string, stream: Readable, streamId?: string, volume?: number): void {
+  function startEffectStream(guildId: string, stream: Readable, streamId?: string, volume?: number): boolean {
     if (isLocalTarget(guildId)) {
       log.warn('startEffectStream addressed to the Local Target ignored: renderer-native sources play locally')
-      return
+      return false
     }
     const manager = managers.get(guildId)
     if (!manager || !manager.connected) {
@@ -197,6 +200,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
       ? ` at volume ${volume}`
       : ''}`)
     manager.playEffectFromStream(stream, streamId, volume)
+    return true
   }
 
   /** Sets a keyed chunked-IPC effect stream's volume live. A logged no-op on the Local Target (the renderer plays those itself) or for a guild without a manager. */

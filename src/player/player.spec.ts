@@ -180,12 +180,12 @@ describe('createPlayer', () => {
       expect(sounds.getFile).toHaveBeenCalledTimes(2)
       expect(sounds.getFilePath).toHaveBeenCalledWith('effects', 'c')
       expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(3)
-      expect(() => player.startStream(LOCAL_TARGET_ID, new Readable({
+      expect(player.startStream(LOCAL_TARGET_ID, new Readable({
         read() {},
-      }))).not.toThrow()
-      expect(() => player.startEffectStream(LOCAL_TARGET_ID, new Readable({
+      }))).toBe(false)
+      expect(player.startEffectStream(LOCAL_TARGET_ID, new Readable({
         read() {},
-      }), 'browser-1', 50)).not.toThrow()
+      }), 'browser-1', 50)).toBe(false)
       expect(() => player.setEffectStreamVolume(LOCAL_TARGET_ID, 'browser-1', 50)).not.toThrow()
       expect(getEngineMock().playEffectFromStream).not.toHaveBeenCalled()
       expect(getEngineMock().setEffectStreamVolume).not.toHaveBeenCalled()
@@ -303,7 +303,7 @@ describe('createPlayer', () => {
       const player = await connectedPlayer()
       const stream = new EventEmitter() as unknown as import('node:stream').Readable
 
-      player.startStream('guild-1', stream, undefined, 'a')
+      expect(player.startStream('guild-1', stream, undefined, 'a')).toBe(true)
 
       expect(getEngineMock().playMusicFromStream).toHaveBeenCalledWith(stream, 'a', undefined, expect.any(Function))
     })
@@ -321,7 +321,7 @@ describe('createPlayer', () => {
       const player = await connectedPlayer()
       const stream = new EventEmitter() as unknown as import('node:stream').Readable
 
-      player.startEffectStream('guild-1', stream, 'browser-3', 45)
+      expect(player.startEffectStream('guild-1', stream, 'browser-3', 45)).toBe(true)
       player.setEffectStreamVolume('guild-1', 'browser-3', 20)
 
       expect(getEngineMock().playEffectFromStream).toHaveBeenCalledWith(stream, 'browser-3', 45)

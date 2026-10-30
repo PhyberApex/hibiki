@@ -56,6 +56,8 @@ const appLog = createLogger('app')
 let appHandle = null
 let mainWindow = null
 let hotkeys = null
+/** `registerAudioStreamHandlers`' handle; `endAll` tears down the renderer's chunked-IPC streams when it goes away. */
+let audioStreamHandlers = null
 
 /**
  * On Linux without a keyring, `safeStorage` reports encryption as available
@@ -121,11 +123,19 @@ function createWindow(loadUrl) {
   })
   win.webContents.on('render-process-gone', (_, details) => {
     windowLog.error(`Renderer process gone: ${details.reason} (exit code ${details.exitCode})`)
+    releaseRendererResources(win, `renderer gone (${details.reason})`)
+  })
+  // A reload or crash recovery starts a fresh renderer that knows nothing of the old one's streams and Browser tabs.
+  // `isSameDocument` excludes the router's pushState navigations; the initial load has nothing to release.
+  win.webContents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument)
+      releaseRendererResources(win, 'renderer navigated')
   })
   win.webContents.on('unresponsive', () => windowLog.warn('Renderer became unresponsive'))
   win.webContents.on('responsive', () => windowLog.info('Renderer responsive again'))
   win.on('closed', () => {
     windowLog.info('Main window closed')
+    releaseRendererResources(win, 'main window closed')
     mainWindow = null
   })
   windowLog.info('Main window created')
@@ -135,10 +145,36 @@ function createWindow(loadUrl) {
 
 function registerIpcHandlers(api) {
   registerApiHandler(ipcMain, api, () => hotkeys)
-  registerAudioStreamHandlers(ipcMain, api.player)
+  audioStreamHandlers = registerAudioStreamHandlers(ipcMain, api.player)
 }
 
 const browserViews = new Map()
+
+/** Closes one Browser tab: detaches it from `win` (when that window still exists) and closes its page. */
+function destroyBrowserView(id, view, win) {
+  browserViews.delete(id)
+  if (win && !win.isDestroyed())
+    win.contentView.removeChildView(view)
+  if (!view.webContents.isDestroyed())
+    view.webContents.close({ waitForBeforeUnload: false })
+}
+
+/** Closes every Browser tab; the renderer that opened them is gone, and with it the only way to close them. */
+function destroyAllBrowserViews(win, reason) {
+  if (browserViews.size === 0)
+    return
+  browserLog.info(`Closing ${browserViews.size} tab(s): ${reason}`)
+  for (const [id, view] of browserViews) {
+    browserLog.info(`Tab ${id} closed: ${reason}`)
+    destroyBrowserView(id, view, win)
+  }
+}
+
+/** Ends whatever the main window's renderer left behind in main: its chunked-IPC audio streams and its Browser tabs. */
+function releaseRendererResources(win, reason) {
+  audioStreamHandlers?.endAll(reason)
+  destroyAllBrowserViews(win, reason)
+}
 
 function registerBrowserViewHandlers() {
   ipcMain.handle('browserView:create', async (_, { url }) => {
@@ -202,10 +238,7 @@ function registerBrowserViewHandlers() {
     if (!view)
       return
     browserLog.info(`Tab ${id} closed`)
-    browserViews.delete(id)
-    if (mainWindow)
-      mainWindow.contentView.removeChildView(view)
-    view.webContents.close({ waitForBeforeUnload: false })
+    destroyBrowserView(id, view, mainWindow)
   })
 
   ipcMain.handle('browserView:setBounds', async (_, { id, bounds }) => {
