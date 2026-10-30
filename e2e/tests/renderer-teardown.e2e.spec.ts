@@ -32,6 +32,14 @@ function attachedViews(): Promise<number> {
   return app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.contentView.children.length ?? -1)
 }
 
+/** The ids (their `webContents` ids) of the Browser tab views attached to the main window. */
+function attachedTabIds(): Promise<number[]> {
+  return app.evaluate(({ BrowserWindow, WebContentsView }) =>
+    (BrowserWindow.getAllWindows()[0]?.contentView.children ?? [])
+      .filter(view => view instanceof WebContentsView)
+      .map(view => (view as InstanceType<typeof WebContentsView>).webContents.id))
+}
+
 async function openTab(): Promise<void> {
   await page.goto('hibiki://app/browser')
   const urlInput = page.getByPlaceholder('Paste or type a URL…')
@@ -79,12 +87,15 @@ test.afterAll(async () => {
 
 test('a reload of the main window closes the Browser tabs the old renderer opened', async () => {
   await openTab()
+  const [oldTabId] = await attachedTabIds()
+  expect(oldTabId).toBeDefined()
 
   await page.reload()
   await page.locator('#app nav').first().waitFor()
 
-  await expect.poll(attachedViews).toBe(0)
-  await expect.poll(logText).toMatch(/Tab \d+ closed: renderer navigated/)
+  // The reloaded renderer is still on the Browser view, which opens its default tab again: only the old tab must go.
+  await expect.poll(attachedTabIds).not.toContain(oldTabId)
+  await expect.poll(logText).toContain(`Tab ${oldTabId} closed: renderer navigated`)
 })
 
 test('a crashed main renderer leaves no Browser tab behind', async () => {
