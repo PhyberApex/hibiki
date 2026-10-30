@@ -604,6 +604,88 @@ describe('scene playback store: master volume reaches the Playing Scene', () => 
   })
 })
 
+describe('scene playback store: Scene Crossfade back to a Scene whose Ambience is fading out', () => {
+  const FADE_MS = 300
+  const storm: Scene = {
+    ...scene,
+    music: [],
+    createdAt: '',
+    updatedAt: '',
+  }
+  const tavern: Scene = {
+    ...storm,
+    id: 's2',
+    name: 'Tavern',
+    ambience: [],
+  }
+
+  const mediaProto = HTMLMediaElement.prototype
+  const originalMedia = { load: mediaProto.load, play: mediaProto.play, pause: mediaProto.pause }
+  let playingEls: HTMLMediaElement[]
+  let pausedEls: HTMLMediaElement[]
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    usePlayerStore().activeTarget = 'local'
+    vi.mocked(canDecode).mockResolvedValue(false)
+    vi.mocked(fetchSceneFadeLength).mockResolvedValue(FADE_MS / 1000)
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockImplementation(async id => id === 's2'
+      ? tavern
+      : storm)
+    playingEls = []
+    pausedEls = []
+    Object.defineProperty(mediaProto, 'load', {
+      configurable: true,
+      value(this: HTMLMediaElement) {
+        queueMicrotask(() => this.dispatchEvent(new Event('canplaythrough')))
+      },
+    })
+    Object.defineProperty(mediaProto, 'play', {
+      configurable: true,
+      value(this: HTMLMediaElement) {
+        playingEls.push(this)
+        return Promise.resolve()
+      },
+    })
+    Object.defineProperty(mediaProto, 'pause', {
+      configurable: true,
+      value(this: HTMLMediaElement) {
+        pausedEls.push(this)
+      },
+    })
+  })
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(originalMedia))
+      Object.defineProperty(mediaProto, key, { configurable: true, value })
+    vi.mocked(canDecode).mockResolvedValue(true)
+    vi.mocked(fetchSceneFadeLength).mockResolvedValue(0)
+  })
+
+  it('a renderer-fallback Ambience fading out is brought back and keeps playing', async () => {
+    const store = useScenePlaybackStore()
+    store.masterVolume = 50
+    await store.playScene(storm)
+    await flushPromises()
+    expect(playingEls).toHaveLength(1)
+    const el = playingEls[0]!
+    pausedEls = []
+
+    await store.crossfadeToScene('s2')
+    await store.crossfadeToScene('s1')
+    // Past the end of the out-fade the first switch started.
+    await new Promise(resolve => setTimeout(resolve, FADE_MS * 2))
+    await flushPromises()
+
+    expect(store.playingAmbienceIds.has('amb-1')).toBe(true)
+    expect(pausedEls).not.toContain(el)
+    // Item volume 80 at master volume 50.
+    expect(el.volume).toBeCloseTo(0.4)
+  })
+})
+
 describe('scene playback store: Music Mode', () => {
   const track = (id: string) => ({
     soundId: id,

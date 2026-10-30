@@ -30,6 +30,7 @@ export class CrossfadeRamp {
    * Starts a fade for `key`, or retargets one already in progress. A fade
    * already heading 'out' is never redirected back to 'in' — once a sound
    * is on its way out, a later Scene switch can't resurrect it mid-fade.
+   * A caller that does mean to bring it back cancels the fade first.
    */
   fade(key: string, options: FadeOptions): void {
     if (this.fades.get(key)?.direction === 'out' && options.direction === 'in')
