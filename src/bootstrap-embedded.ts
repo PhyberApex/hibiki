@@ -91,6 +91,7 @@ export interface EmbeddedApi {
     stopAmbience: (guildId: string, soundId: string, options?: { fadeOutMs?: number }) => void
     setAmbienceVolume: (guildId: string, soundId: string, volume: number, options?: { rampMs?: number }) => void
     playEffect: (guildId: string, soundId: string, options: { volume: number }) => Promise<{ instanceId: string, soundId: string, startedAt: string, durationMs: number } | undefined>
+    warmEffects: (sceneId: string, soundIds: string[]) => Promise<import('./player/player').WarmEffectsResult>
     stopEffects: (guildId: string) => void
     stopEffect: (guildId: string, instanceId: string) => void
     reconnect: () => Promise<void>
@@ -365,6 +366,9 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       stopAmbience: (guildId, soundId, options) => player.stopAmbience(guildId, soundId, options),
       setAmbienceVolume: (guildId, soundId, volume, options) => player.setAmbienceVolume(guildId, soundId, volume, options),
       playEffect: (guildId, soundId, options) => player.playEffect(guildId, soundId, options),
+      warmEffects: (sceneId, soundIds) => player.warmEffects(sceneId, Array.isArray(soundIds)
+        ? soundIds.filter(id => typeof id === 'string')
+        : []),
       stopEffects: guildId => player.stopEffects(guildId),
       stopEffect: (guildId, instanceId) => player.stopEffect(guildId, instanceId),
       reconnect: () => discord.reconnect(),

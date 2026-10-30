@@ -3,7 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchMasterVolume, fetchSceneFadeLength, updateMasterVolume } from '@/api/config'
-import { playAmbience, playEffect, playMusic, setAmbienceVolume, setMusicVolume, stopAmbience, stopEffects, stopMusic } from '@/api/player'
+import { playAmbience, playEffect, playMusic, setAmbienceVolume, setMusicVolume, stopAmbience, stopEffects, stopMusic, warmEffects } from '@/api/player'
 import { canDecode } from '@/api/sounds'
 import { trackUsage } from '@/api/usage-stats'
 import { usePlayerStore } from '@/stores/player'
@@ -40,6 +40,7 @@ vi.mock('@/api/player', async (importOriginal) => {
     playEffect: vi.fn().mockResolvedValue(undefined),
     stopEffects: vi.fn().mockResolvedValue(undefined),
     stopEffect: vi.fn().mockResolvedValue(undefined),
+    warmEffects: vi.fn().mockResolvedValue({ warmed: 0, skipped: 0, failed: 0 }),
   }
 })
 vi.mock('@/api/config', () => ({
@@ -1210,5 +1211,102 @@ describe('scene playback store: Usage Stats', () => {
   it('switching to the Target already active emits nothing', async () => {
     await useScenePlaybackStore().switchTarget('local')
     expect(trackUsage).not.toHaveBeenCalled()
+  })
+})
+
+describe('scene playback store: Effect cache warming (#696)', () => {
+  const warmScene: Scene = {
+    id: 'wm',
+    name: 'Storm',
+    ambience: [],
+    music: [],
+    effects: [
+      { soundId: 'fx-1', soundName: 'Thunder', volume: 100 },
+      { soundId: 'fx-2', soundName: 'Door', volume: 100 },
+    ],
+    createdAt: '',
+    updatedAt: '',
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    usePlayerStore().activeTarget = 'local'
+  })
+
+  it('warms a Scene\'s Effects in list order when it is opened, with or without a Target', async () => {
+    usePlayerStore().activeTarget = 'discord'
+    const store = useScenePlaybackStore()
+
+    store.openScene = warmScene
+    await flushPromises()
+
+    expect(warmEffects).toHaveBeenCalledWith('wm', ['fx-1', 'fx-2'])
+  })
+
+  it('does not warm again when the open Scene is edited without touching its Effects', async () => {
+    const store = useScenePlaybackStore()
+    store.openScene = warmScene
+    await flushPromises()
+
+    store.openScene = { ...warmScene, name: 'Thunderstorm' }
+    await flushPromises()
+    store.openScene = null
+    await flushPromises()
+
+    expect(warmEffects).toHaveBeenCalledTimes(1)
+  })
+
+  it('warms again when an Effect is added to the open Scene', async () => {
+    const store = useScenePlaybackStore()
+    store.openScene = warmScene
+    await flushPromises()
+
+    store.openScene = {
+      ...warmScene,
+      effects: [
+        ...warmScene.effects,
+        { soundId: 'fx-3', volume: 100 },
+      ],
+    }
+    await flushPromises()
+
+    expect(warmEffects).toHaveBeenLastCalledWith('wm', ['fx-1', 'fx-2', 'fx-3'])
+  })
+
+  it('does not warm a Scene without Effects', async () => {
+    const store = useScenePlaybackStore()
+    store.openScene = { ...warmScene, effects: [] }
+    await flushPromises()
+    await store.playScene({ ...warmScene, effects: [] })
+
+    expect(warmEffects).not.toHaveBeenCalled()
+  })
+
+  it('warms the Scene that becomes the Playing Scene through Play', async () => {
+    await useScenePlaybackStore().playScene(warmScene)
+
+    expect(warmEffects).toHaveBeenCalledWith('wm', ['fx-1', 'fx-2'])
+  })
+
+  it('warms the Scene that becomes the Playing Scene through a Scene Crossfade', async () => {
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockResolvedValue(warmScene)
+
+    await useScenePlaybackStore().crossfadeToScene('wm')
+
+    expect(warmEffects).toHaveBeenCalledWith('wm', ['fx-1', 'fx-2'])
+  })
+
+  it('a failed warm-up never gets in the way of playing the Scene', async () => {
+    vi.mocked(warmEffects).mockRejectedValueOnce(new Error('IPC down'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await useScenePlaybackStore().playScene(warmScene)
+    await flushPromises()
+
+    expect(usePlayerStore().playingSceneId).toBe('wm')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[scene]'), expect.any(Error))
+    warn.mockRestore()
   })
 })

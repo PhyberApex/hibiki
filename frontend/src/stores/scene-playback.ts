@@ -23,6 +23,7 @@ import {
   stopAmbience as stopBackendAmbience,
   stopEffects as stopBackendEffects,
   stopMusic as stopBackendMusic,
+  warmEffects,
 } from '@/api/player'
 import { getScene } from '@/api/scenes'
 import { canDecode, soundStreamUrl } from '@/api/sounds'
@@ -154,6 +155,29 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
 
   const targetId = computed(() => player.targetId)
   const canPlay = computed(() => player.canPlay)
+
+  // Decodes a Scene's Effects into the backend's PCM cache in the background
+  // (#696), so the first thunderclap lands as fast as the tenth. The backend
+  // filters to backend-decodable Effects and logs the per-Scene outcome; the
+  // cache is shared across Targets, so this needs no Target and never blocks
+  // or fails playback.
+  function warmSceneEffects(scene: Scene) {
+    const soundIds = scene.effects.map(e => e.soundId)
+    if (!soundIds.length)
+      return
+    Promise.resolve()
+      .then(() => warmEffects(scene.id, soundIds))
+      .catch(e => console.warn(`[scene] warming Effects for Scene ${scene.id} failed:`, e))
+  }
+
+  // Keyed on the Effect list, not the Scene object: the view hands over a new
+  // copy on every edit, and only a new Effect is worth another warm-up.
+  watch(() => openScene.value?.effects.length
+    ? `${openScene.value.id}\n${openScene.value.effects.map(e => e.soundId).join('\n')}`
+    : null, (key) => {
+    if (key && openScene.value)
+      warmSceneEffects(openScene.value)
+  })
 
   // Which path started each currently-audible ambience id — 'backend' (ADR-0003)
   // is decoded straight into the mixer; 'renderer' is the fallback for a file
@@ -1161,6 +1185,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     }
     player.setPlayingScene(target.id, targetId.value)
     logInfo(`[scene] play Scene ${target.id} on Target ${targetId.value}`)
+    warmSceneEffects(target)
     sceneTransitionFlash.trigger(SCENE_START_FLASH)
     try {
       for (const item of target.ambience.filter(a => a.enabled)) {
@@ -1469,6 +1494,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     sceneIntent++
     player.setPlayingScene(target.id, targetId.value)
     trackScenePlay(target)
+    warmSceneEffects(target)
     sceneTransitionFlash.trigger(SCENE_START_FLASH)
     crossfadeAmbience(target, durationMs)
     releaseMusicMode('crossfaded away')

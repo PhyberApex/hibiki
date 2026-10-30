@@ -142,6 +142,18 @@ export function playEffect(guildId: string, soundId: string, options: PlayEffect
   return apiCall<EffectInstanceInfo>('player', 'playEffect', [guildId, soundId, options])
 }
 
+export interface WarmEffectsResult {
+  warmed: number
+  skipped: number
+  failed: number
+}
+
+/** Decodes a Scene's backend-decodable Effects into the backend's PCM cache ahead of their first trigger (#696); Target-independent. */
+export function warmEffects(sceneId: string, soundIds: string[]): Promise<WarmEffectsResult> {
+  requireElectron()
+  return apiCall<WarmEffectsResult>('player', 'warmEffects', [sceneId, soundIds])
+}
+
 /** Ends every backend-decoded Effect instance for this guild (distinct from the chunked-IPC `audio-stream` API's `stopEffectStream`). */
 export function stopEffects(guildId: string): Promise<void> {
   requireElectron()

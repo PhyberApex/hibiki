@@ -621,6 +621,73 @@ describe('createPlayer', () => {
     })
   })
 
+  describe('warmEffects', () => {
+    function warmingLibrary(undecodable: string[] = [], missing: string[] = []) {
+      return createFakeSoundLibrary({
+        canDecode: jest.fn(async (_category: string, id: string) => !undecodable.includes(id)),
+        getFilePath: jest.fn(async (_category: string, id: string) => {
+          if (missing.includes(id))
+            throw new Error(`Sound not found: ${id}`)
+          return `/effects/${id}.mp3`
+        }),
+      })
+    }
+
+    it('decodes a Scene\'s backend-decodable Effects in list order, skipping the rest, without any Target', async () => {
+      const sounds = warmingLibrary(['horn'])
+      const player = createPlayer(createFakeDiscordClient(), sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockImplementation(() => Promise.resolve(fakePcmStream()))
+
+      const result = await player.warmEffects('storm', ['thunder', 'horn', 'door'])
+
+      expect(result).toEqual({ warmed: 2, skipped: 1, failed: 0 })
+      expect(sounds.canDecode).toHaveBeenCalledWith('effects', 'horn')
+      expect(createPcmStream.mock.calls.map(call => call[0])).toEqual(['/effects/thunder.mp3', '/effects/door.mp3'])
+    })
+
+    it('counts Effects that cannot be found or decoded as failed and keeps warming the rest', async () => {
+      const sounds = warmingLibrary([], ['gone'])
+      const player = createPlayer(createFakeDiscordClient(), sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockImplementation((path: string) => path.includes('corrupt')
+        ? Promise.reject(new Error('bad header'))
+        : Promise.resolve(fakePcmStream()))
+
+      const result = await player.warmEffects('storm', ['gone', 'corrupt', 'door'])
+
+      expect(result).toEqual({ warmed: 1, skipped: 0, failed: 2 })
+    })
+
+    it('warms each Effect once even when the Scene lists it twice', async () => {
+      const sounds = warmingLibrary()
+      const player = createPlayer(createFakeDiscordClient(), sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockImplementation(() => Promise.resolve(fakePcmStream()))
+
+      const result = await player.warmEffects('storm', ['door', 'door'])
+
+      expect(result).toEqual({ warmed: 1, skipped: 0, failed: 0 })
+      expect(createPcmStream).toHaveBeenCalledTimes(1)
+    })
+
+    it('serves the first trigger of a warmed Effect from the cache, on any Target', async () => {
+      const sounds = warmingLibrary()
+      const connection = createFakeConnection()
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      const player = createPlayer(createFakeDiscordClient(), sounds)
+      const { createPcmStream } = jest.requireMock('../audio/decoders') as { createPcmStream: jest.Mock }
+      createPcmStream.mockImplementation(() => Promise.resolve(fakePcmStream()))
+      await player.warmEffects('storm', ['thunder'])
+      await player.connect(fakeChannel)
+
+      await player.playEffect('guild-1', 'thunder', { volume: 90 })
+
+      expect(createPcmStream).toHaveBeenCalledTimes(1)
+      expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('playEffect / stopEffects', () => {
     async function connectedPlayer(sounds: SoundLibrary) {
       const connection = createFakeConnection()
