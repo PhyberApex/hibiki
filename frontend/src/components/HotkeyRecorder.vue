@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { logInfo } from '@/audio/audio-element-diagnostics'
 import { acceleratorFromEvent, isBareTypingKey } from '@/hotkeys/accelerator'
 
 const props = defineProps<{
@@ -35,6 +36,13 @@ function disarm() {
 function onKeydown(event: KeyboardEvent) {
   if (!armed.value)
     return
+  if (event.repeat) {
+    // Enter arms the button on keydown; its auto-repeat while still held must
+    // not be recorded as the binding.
+    event.preventDefault()
+    event.stopPropagation()
+    return
+  }
   if (event.code === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey) {
     // Let Tab and Shift+Tab keep moving focus; leaving the button cancels.
     return
@@ -49,6 +57,7 @@ function onKeydown(event: KeyboardEvent) {
   if (!accelerator)
     return
   disarm()
+  logInfo(`[hotkeys] recorded ${accelerator} for ${props.label}`)
   emit('update:modelValue', accelerator)
 }
 

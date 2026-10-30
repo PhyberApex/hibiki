@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RegistryEntry } from '@/api/registry'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { getRegistryIndex, installFromRegistry } from '@/api/registry'
 import { trackUsage } from '@/api/usage-stats'
 
@@ -15,6 +15,7 @@ const loading = ref(false)
 const loadError = ref<string | null>(null)
 const installingSlug = ref<string | null>(null)
 const installMessage = ref<{ type: 'success' | 'error', text: string } | null>(null)
+const searchRef = ref<HTMLInputElement | null>(null)
 
 const filtered = computed(() => {
   const q = search.value.toLowerCase().trim()
@@ -70,12 +71,22 @@ async function install(entry: RegistryEntry) {
   }
 }
 
-onMounted(() => load())
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape')
+    emit('close')
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  searchRef.value?.focus()
+  load()
+})
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
   <div class="registry-overlay" @click.self="emit('close')">
-    <div class="registry-modal" role="dialog" aria-label="Browse Community Scenes">
+    <div class="registry-modal" role="dialog" aria-modal="true" aria-label="Browse Community Scenes">
       <header class="registry-header">
         <h2 class="registry-title">
           Community Scenes
@@ -87,6 +98,7 @@ onMounted(() => load())
 
       <div class="registry-toolbar">
         <input
+          ref="searchRef"
           v-model="search"
           type="text"
           class="input registry-search"

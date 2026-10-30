@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { SceneItem } from '@/api/scenes'
 import type { SoundFile } from '@/api/sounds'
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { openExternal } from '@/api/electron'
 import { uploadSound } from '@/api/sounds'
 
@@ -19,6 +19,7 @@ const emit = defineEmits<{
 const uploading = ref(false)
 const uploadError = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const closeRef = ref<HTMLButtonElement | null>(null)
 
 async function handleFileSelected(event: Event) {
   const input = event.target as HTMLInputElement
@@ -53,16 +54,27 @@ function handleLinkSelected(event: Event) {
     emit('resolved', sound.id, sound.name)
   }
 }
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape')
+    emit('close')
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  closeRef.value?.focus()
+})
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
   <div class="resolve-overlay" @click.self="emit('close')">
-    <div class="resolve-modal" role="dialog" :aria-label="`Resolve missing sound: ${item.soundName ?? item.soundId}`">
+    <div class="resolve-modal" role="dialog" aria-modal="true" :aria-label="`Resolve missing sound: ${item.soundName ?? item.soundId}`">
       <header class="resolve-header">
         <h2 class="resolve-title">
           Resolve: "{{ item.soundName ?? item.soundId }}"
         </h2>
-        <button type="button" class="btn-close" aria-label="Close" @click="emit('close')">
+        <button ref="closeRef" type="button" class="btn-close" aria-label="Close" @click="emit('close')">
           &times;
         </button>
       </header>

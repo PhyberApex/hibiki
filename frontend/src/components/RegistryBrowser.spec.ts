@@ -321,5 +321,36 @@ describe('registryBrowser', () => {
       await wrapper.find('.registry-overlay').trigger('click')
       expect(wrapper.emitted('close')).toHaveLength(1)
     })
+
+    it('emits close on Escape and stops listening once unmounted', async () => {
+      const onClose = vi.fn()
+      vi.mocked(getRegistryIndex).mockResolvedValue(index([tavern]))
+      const wrapper = mount(RegistryBrowser, {
+        props: { onClose },
+      })
+      await flushPromises()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      expect(onClose).toHaveBeenCalledTimes(1)
+      wrapper.unmount()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores keys other than Escape', async () => {
+      const wrapper = await mountLoaded()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+      expect(wrapper.emitted('close')).toBeUndefined()
+    })
+  })
+
+  describe('focus', () => {
+    it('is modal and moves focus into the search field on open', async () => {
+      vi.mocked(getRegistryIndex).mockResolvedValue(index([tavern]))
+      const wrapper = mount(RegistryBrowser, { attachTo: document.body })
+      await flushPromises()
+      expect(wrapper.find('[role="dialog"]').attributes('aria-modal')).toBe('true')
+      expect(document.activeElement).toBe(wrapper.find('.registry-search').element)
+      wrapper.unmount()
+    })
   })
 })
