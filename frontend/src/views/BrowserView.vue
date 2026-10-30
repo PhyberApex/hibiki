@@ -630,9 +630,7 @@ watch(activeTabId, async (newId, oldId) => {
 
 .browser-tab-pill {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.5rem;
+  align-items: stretch;
   font-size: 0.8rem;
   color: var(--color-text-muted);
   background: var(--color-bg);
@@ -651,13 +649,19 @@ watch(activeTabId, async (newId, oldId) => {
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  flex: 1;
   min-width: 0;
-  padding: 0;
+  padding: 0.3rem 0.5rem;
   font: inherit;
   color: inherit;
   background: none;
   border: none;
   cursor: pointer;
+}
+
+/* The close button sits in the pill's right padding, so the whole pill stays clickable. */
+.browser-tab-select:not(:last-child) {
+  padding-right: 0.2rem;
 }
 
 .browser-tab-pill-active {
@@ -698,7 +702,7 @@ watch(activeTabId, async (newId, oldId) => {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0 0.15rem;
+  padding: 0 0.5rem 0 0.15rem;
   flex-shrink: 0;
 }
 
