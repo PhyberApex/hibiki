@@ -1007,10 +1007,14 @@ describe('scene playback store: Music Mode', () => {
 
   describe('progress timer (#695)', () => {
     beforeEach(() => {
+      // Frozen at the real now, never rewound: a crossfade an earlier test left
+      // ticking on a real interval reads this Date, and a clock behind its start
+      // would ramp an element's volume out of range (IndexSizeError).
+      const now = Date.now()
       vi.useFakeTimers({
         toFake: ['Date', 'setInterval', 'clearInterval'],
       })
-      vi.setSystemTime(0)
+      vi.setSystemTime(now)
     })
 
     afterEach(() => {
