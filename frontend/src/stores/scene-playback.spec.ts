@@ -2,7 +2,7 @@ import type { Scene } from '@/api/scenes'
 import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { startEffectStream } from '@/api/audio-stream'
+import { startEffectStream, stopEffectStream } from '@/api/audio-stream'
 import { fetchMasterVolume, fetchSceneFadeLength, updateMasterVolume } from '@/api/config'
 import { playAmbience, playEffect, playMusic, setAmbienceVolume, setMusicVolume, stopAmbience, stopEffects, stopMusic, warmEffects } from '@/api/player'
 import { canDecode } from '@/api/sounds'
@@ -27,6 +27,13 @@ vi.mock('@/api/audio-stream', () => ({
   startEffectStream: vi.fn().mockResolvedValue(undefined),
   stopAudioStream: vi.fn().mockResolvedValue(undefined),
   stopEffectStream: vi.fn().mockResolvedValue(undefined),
+}))
+// jsdom has no Web Audio: a stand-in session lets a streamed renderer fallback get as far as `el.play()`.
+vi.mock('@/audio/browser-audio-capture', async importOriginal => ({
+  ...await importOriginal<typeof import('@/audio/browser-audio-capture')>(),
+  captureFromAudioElement: vi.fn().mockResolvedValue({
+    stop: vi.fn(),
+  }),
 }))
 vi.mock('@/api/player', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/player')>()
@@ -462,6 +469,41 @@ describe('scene playback store', () => {
 
       expect(playingEls).toEqual([])
       expect(pausedEls).toContain(el)
+      expect(store.playingAmbienceIds.has('amb-1')).toBe(false)
+    })
+
+    it('a Scene Crossfade while a renderer-fallback Ambience of the outgoing Scene is loading stops it (#712)', async () => {
+      vi.mocked(canDecode).mockResolvedValue(false)
+      joinDiscordTarget()
+      const { getScene } = await import('@/api/scenes')
+      vi.mocked(getScene).mockResolvedValue({
+        ...scene,
+        id: 's2',
+        name: 'Tavern',
+        ambience: [],
+        music: [],
+        createdAt: '',
+        updatedAt: '',
+      })
+      const store = useScenePlaybackStore()
+
+      const starting = store.playScene({
+        ...scene,
+        createdAt: '',
+        updatedAt: '',
+        music: [],
+      })
+      await vi.waitFor(() => expect(loadingEls).toHaveLength(1))
+      const el = loadingEls[0]!
+      vi.mocked(stopEffectStream).mockClear()
+      await store.crossfadeToScene('s2')
+      el.dispatchEvent(new Event('canplaythrough'))
+      await starting
+      await flushPromises()
+
+      expect(playingEls).toEqual([])
+      expect(pausedEls).toContain(el)
+      expect(stopEffectStream).toHaveBeenCalledWith('guild-1', 'ambience-amb-1')
       expect(store.playingAmbienceIds.has('amb-1')).toBe(false)
     })
 
@@ -930,6 +972,53 @@ describe('scene playback store: Music Mode', () => {
 
     await backendTrack(null)
     expect(startedTracks()).toEqual(['m1', 'x1', 'x2'])
+  })
+
+  it.each([
+    [
+      'in order',
+      [0, 1],
+    ],
+    [
+      'newest first',
+      [1, 0],
+    ],
+  ])('a second Scene Crossfade before the first one\'s backend play lands leaves the newest track primary and advancing, plays landing %s (#712)', async (_order, landing) => {
+    const sceneA = musicScene('sequential', ['m1'], 'sa')
+    const sceneB = musicScene('sequential', ['m2', 'm3'], 'sb')
+    const sceneC = musicScene('sequential', ['x1', 'x2'], 'sc')
+    const { getScene } = await import('@/api/scenes')
+    vi.mocked(getScene).mockImplementation(async id => id === 'sb'
+      ? sceneB
+      : sceneC)
+    const store = setup(sceneA)
+    store.musicSounds = store.musicSounds.map(s => ({ ...s, durationMs: 60_000 }))
+    await store.playScene(sceneA)
+    await backendTrack('m1')
+    const held: (() => void)[] = []
+    const holdPlay = () => vi.mocked(playMusic).mockReturnValueOnce(new Promise<void>((resolve) => {
+      held.push(resolve)
+    }))
+    holdPlay()
+    holdPlay()
+
+    await store.crossfadeToScene('sb')
+    await vi.waitFor(() => expect(startedTracks()).toEqual(['m1', 'm2']))
+    await store.crossfadeToScene('sc')
+    await vi.waitFor(() => expect(startedTracks()).toEqual(['m1', 'm2', 'x1']))
+    for (const i of landing) {
+      held[i]!()
+      await flushPromises()
+    }
+
+    expect(store.playingMusicId).toBe('x1')
+    expect(store.musicSceneId).toBe('sc')
+    expect(store.musicProgress?.soundId).toBe('x1')
+    expect(startedTracks()).toEqual(['m1', 'm2', 'x1'])
+
+    await playsOut('x1')
+    expect(startedTracks()).toEqual(['m1', 'm2', 'x1', 'x2'])
+    store.stopScene()
   })
 
   it('a jump crossfades to the clicked track and the sequence continues from it', async () => {
