@@ -1,5 +1,5 @@
 /**
- * Captures audio from browser sources (HTML5 audio element or tab/window via getDisplayMedia)
+ * Captures audio from browser sources (HTML5 audio element or a tab via getUserMedia tab capture)
  * and converts to 48kHz stereo s16le PCM for Discord.
  *
  * Uses AudioWorkletNode (replaces deprecated ScriptProcessorNode).
@@ -258,7 +258,7 @@ export function captureTabStream(mediaSourceId: string): Promise<MediaStream> {
 }
 
 /**
- * Capture from a MediaStream (e.g. from getUserMedia tab capture or getDisplayMedia).
+ * Capture from a MediaStream (e.g. from getUserMedia tab capture).
  */
 export async function captureFromMediaStream(
   stream: MediaStream,
@@ -290,19 +290,4 @@ export async function captureFromMediaStream(
       ctx.close()
     },
   }
-}
-
-/**
- * Request tab/window capture via getDisplayMedia. Returns a promise that resolves
- * with a CaptureSession when the user selects a source, or rejects if cancelled.
- */
-export async function captureDisplayMedia(onChunk: AudioChunkCallback): Promise<CaptureSession> {
-  const stream = await navigator.mediaDevices.getDisplayMedia({
-    video: true,
-    audio: true,
-  })
-  const audioTracks = stream.getAudioTracks()
-  if (audioTracks.length === 0)
-    throw new Error('No audio in selected source. Ensure "Share audio" is checked when picking a tab.')
-  return captureFromMediaStream(stream, onChunk)
 }
