@@ -468,6 +468,13 @@ app.whenReady().then(async () => {
   let handle
   let api
   let secretCodec
+  // Shared by Usage Stats and the Diagnostics summary so the two describe the machine the same way.
+  const runtimeEnvironment = {
+    electronVersion: process.versions.electron,
+    platform: process.platform,
+    arch: process.arch,
+    locale: app.getLocale(),
+  }
   try {
     secretCodec = await createSecretCodec()
     const embedded = await getEmbeddedApp(secretCodec, {
@@ -475,12 +482,7 @@ app.whenReady().then(async () => {
       appVersion: app.getVersion(),
       usageStats: {
         gate: { packaged: app.isPackaged, killSwitch: process.env.HIBIKI_USAGE_STATS === 'off' },
-        environment: {
-          electronVersion: process.versions.electron,
-          platform: process.platform,
-          arch: process.arch,
-          locale: app.getLocale(),
-        },
+        environment: runtimeEnvironment,
       },
     })
     handle = embedded
@@ -594,30 +596,28 @@ app.whenReady().then(async () => {
   // Settings → Diagnostics "Copy diagnostics" (#698): the content is never logged, only that it was copied.
   ipcMain.handle('diagnostics:copy', async () => {
     diagnosticsLog.info('Copy diagnostics requested')
-    const summary = await buildDiagnosticsSummary({
-      environment: {
-        appVersion: app.getVersion(),
-        electronVersion: process.versions.electron,
-        nodeVersion: process.versions.node,
-        platform: process.platform,
-        arch: process.arch,
-        locale: app.getLocale(),
-      },
-      api,
-      hotkeyStatus: hotkeys?.getStatus() ?? null,
-      secretStorageAvailable: secretCodec.available,
-      readLogTail: () => readLogTail(logging.logFile, LOG_TAIL_LINES),
-    })
     try {
+      const summary = await buildDiagnosticsSummary({
+        environment: {
+          ...runtimeEnvironment,
+          appVersion: app.getVersion(),
+          nodeVersion: process.versions.node,
+        },
+        api,
+        hotkeyStatus: hotkeys?.getStatus() ?? null,
+        secretStorageAvailable: secretCodec.available,
+        loadLogTail: () => readLogTail(logging.logFile, LOG_TAIL_LINES),
+        homeDir: app.getPath('home'),
+      })
       clipboard.writeText(summary)
+      const lines = summary.split('\n').length - 1
+      diagnosticsLog.info(`Diagnostics summary copied to the clipboard (${lines} lines)`)
+      return { lines }
     }
     catch (err) {
-      diagnosticsLog.error('Could not write the diagnostics summary to the clipboard:', err)
+      diagnosticsLog.error('Could not copy the diagnostics summary:', err)
       throw err
     }
-    const lines = summary.split('\n').length - 1
-    diagnosticsLog.info(`Diagnostics summary copied to the clipboard (${lines} lines)`)
-    return { lines }
   })
 
   ipcMain.handle('shell:openExternal', (_, url) => {

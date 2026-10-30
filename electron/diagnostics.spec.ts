@@ -91,7 +91,8 @@ describe('buildDiagnosticsSummary', () => {
       api: fakeApi(),
       hotkeyStatus,
       secretStorageAvailable: true,
-      readLogTail: async () => ['2026-10-30T10:00:00.000Z [info ] [app] hello'],
+      loadLogTail: async () => ['2026-10-30T10:00:00.000Z [info ] [app] hello'],
+      homeDir: '/home/gm',
       ...overrides,
     })
   }
@@ -169,13 +170,22 @@ describe('buildDiagnosticsSummary', () => {
       api: fakeApi({
         getUsageStats: jest.fn().mockResolvedValue({ enabled: true, prompted: true }),
         getStorageWarnings: jest.fn().mockResolvedValue([
-          { file: 'scenes.json', backupPath: '/home/gm/data/scenes.json.corrupt-1' },
+          { file: '/srv/hibiki/data/scenes.json', backupPath: '/srv/hibiki/data/scenes.json.corrupt-1' },
         ]),
       }),
     })
 
     expect(text).toContain('Usage Stats: on')
     expect(text).toContain('- scenes.json (backup: scenes.json.corrupt-1)')
+    expect(text).not.toContain('/srv/hibiki')
+  })
+
+  it('replaces the home folder with ~ everywhere, the log tail included', async () => {
+    const text = await build({
+      loadLogTail: async () => ['[hibiki] Storage root /home/gm/.config/hibiki/data'],
+    })
+
+    expect(text).toContain('[hibiki] Storage root ~/.config/hibiki/data')
     expect(text).not.toContain('/home/gm')
   })
 
@@ -191,7 +201,7 @@ describe('buildDiagnosticsSummary', () => {
 
   it('notes an unreadable log instead of failing', async () => {
     const text = await build({
-      readLogTail: async () => null,
+      loadLogTail: async () => null,
     })
 
     expect(text).toContain('(log file could not be read)')

@@ -80,13 +80,21 @@ function describeHotkeysEnabled(status) {
   return status.enabled ? 'enabled' : 'disabled'
 }
 
+/** Replaces every occurrence of the home folder with `~`: a path under it carries the OS user name. */
+function redactHomeDir(text, homeDir) {
+  if (!homeDir || homeDir.length < 2)
+    return text
+  return text.split(homeDir).join('~')
+}
+
 /**
  * The plain-text block Settings → Diagnostics copies for a bug report (#698).
  * Secrets are excluded by construction: it reads only the same status readers
- * Settings uses, which report "set / not set", never a value. Paths are cut
- * to their file name since the full path carries the OS user name.
+ * Settings uses, which report "set / not set", never a value. Storage warnings
+ * name only the file, and the home folder is replaced with `~` everywhere
+ * (log tail included), since a full path carries the OS user name.
  */
-async function buildDiagnosticsSummary({ environment, api, hotkeyStatus, secretStorageAvailable, readLogTail: readTail }) {
+async function buildDiagnosticsSummary({ environment, api, hotkeyStatus, secretStorageAvailable, loadLogTail, homeDir }) {
   const config = api.config
   const [target, device, discord, vision, usageStats, storageWarnings, logTail] = await Promise.all([
     settle(() => config.getActiveOutputTarget(), undefined),
@@ -95,7 +103,7 @@ async function buildDiagnosticsSummary({ environment, api, hotkeyStatus, secretS
     settle(() => config.getVision(), null),
     settle(() => config.getUsageStats(), null),
     settle(() => config.getStorageWarnings(), null),
-    settle(() => readTail(), null),
+    settle(() => loadLogTail(), null),
   ])
 
   const lines = [
@@ -138,7 +146,7 @@ async function buildDiagnosticsSummary({ environment, api, hotkeyStatus, secretS
   else if (storageWarnings.length === 0)
     lines.push('Storage warnings: none')
   else
-    lines.push('Storage warnings:', ...storageWarnings.map(w => `- ${w.file} (backup: ${path.basename(w.backupPath)})`))
+    lines.push('Storage warnings:', ...storageWarnings.map(w => `- ${path.basename(w.file)} (backup: ${path.basename(w.backupPath)})`))
 
   lines.push('', `## Log (last ${LOG_TAIL_LINES} lines of hibiki.log)`)
   if (logTail)
@@ -146,7 +154,7 @@ async function buildDiagnosticsSummary({ environment, api, hotkeyStatus, secretS
   else
     lines.push('(log file could not be read)')
 
-  return `${lines.join('\n')}\n`
+  return redactHomeDir(`${lines.join('\n')}\n`, homeDir)
 }
 
 module.exports = { buildDiagnosticsSummary, readLogTail, LOG_TAIL_LINES }
