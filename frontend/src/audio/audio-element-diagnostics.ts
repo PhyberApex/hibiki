@@ -50,17 +50,25 @@ export function waitForPlayable(el: HTMLAudioElement, label: string): Promise<vo
     const timer = setTimeout(() => {
       console.warn(`[audio] ${label} still not playable after ${LOAD_WARNING_MS} ms: ${describe(el)}`)
     }, LOAD_WARNING_MS)
-    const done = () => clearTimeout(timer)
-    el.addEventListener('canplaythrough', () => {
-      done()
+    // The element is reused across plays, so whichever listener did not fire
+    // must go too, or it reports on a later, unrelated load.
+    function cleanup() {
+      clearTimeout(timer)
+      el.removeEventListener('canplaythrough', onPlayable)
+      el.removeEventListener('error', onError)
+    }
+    function onPlayable() {
+      cleanup()
       logInfo(`[audio] ${label} playable after ${Date.now() - startedAt} ms (duration ${Number.isFinite(el.duration)
         ? el.duration.toFixed(1)
         : '?'} s)`)
       resolve()
-    }, { once: true })
-    el.addEventListener('error', () => {
-      done()
+    }
+    function onError() {
+      cleanup()
       reject(el.error ?? new Error('Audio load failed'))
-    }, { once: true })
+    }
+    el.addEventListener('canplaythrough', onPlayable)
+    el.addEventListener('error', onError)
   })
 }

@@ -87,12 +87,19 @@ export const useRoutedTabsStore = defineStore('routedTabs', () => {
   async function openDiscordSession(tabId: number, guildId: string, mediaSourceId: string): Promise<RoutingSession> {
     const streamId = `browser-${tabId}`
     await startEffectStream(guildId, streamId, effectiveLevel(tabId))
+    let stream: MediaStream | undefined
     let capture: Awaited<ReturnType<typeof captureFromMediaStream>>
     try {
-      const stream = await captureTabStream(mediaSourceId)
+      stream = await captureTabStream(mediaSourceId)
       capture = await captureFromMediaStream(stream, pcm => sendEffectChunk(guildId, pcm, streamId))
     }
     catch (err) {
+      // A failed worklet setup hands back no session, so the tab would stay
+      // "being captured" until GC unless its tracks are stopped here.
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop())
+        console.warn(`[browser] tab ${tabId} capture setup on ${guildId} failed, tracks stopped`)
+      }
       stopEffectStream(guildId, streamId).catch(() => {})
       throw err
     }
