@@ -254,6 +254,7 @@ function fakeServices() {
       get: jest.fn().mockResolvedValue(null),
       save: jest.fn().mockResolvedValue({ id: 's1' }),
       remove: jest.fn().mockResolvedValue(undefined),
+      move: jest.fn().mockResolvedValue(undefined),
       removeSoundFromAll: jest.fn().mockResolvedValue(undefined),
     },
     registry: {
@@ -660,6 +661,7 @@ describe('getEmbeddedApp', () => {
       await api.scenes.get('s1')
       await api.scenes.save(scene)
       await api.scenes.remove('s1')
+      await api.scenes.move('s1', 2)
       await api.scenes.exportScene('s1', '/tmp/tavern.hibiki.zip')
       await api.scenes.importScene('/tmp/tavern.hibiki.zip')
       await api.registry.getIndex()
@@ -669,6 +671,7 @@ describe('getEmbeddedApp', () => {
       expect(services.scenes.get).toHaveBeenCalledWith('s1')
       expect(services.scenes.save).toHaveBeenCalledWith(scene)
       expect(services.scenes.remove).toHaveBeenCalledWith('s1')
+      expect(services.scenes.move).toHaveBeenCalledWith('s1', 2)
       expect(exportScene).toHaveBeenCalledWith(config, 's1', '/tmp/tavern.hibiki.zip')
       expect(importScene).toHaveBeenCalledWith(config, '/tmp/tavern.hibiki.zip')
       expect(services.registry.fetchIndex).toHaveBeenNthCalledWith(1, false)

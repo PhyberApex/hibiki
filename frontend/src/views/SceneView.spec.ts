@@ -12,6 +12,7 @@ vi.mock('@/api/scenes', () => ({
   getScene: vi.fn(),
   saveScene: vi.fn().mockResolvedValue(undefined),
   deleteScene: vi.fn().mockResolvedValue(undefined),
+  moveScene: vi.fn().mockResolvedValue(undefined),
   exportScene: vi.fn().mockResolvedValue(undefined),
   importScene: vi.fn().mockResolvedValue(undefined),
 }))
@@ -2458,6 +2459,120 @@ describe('sceneView — failure handling and stale playback (#655)', () => {
     expect(player.playingSceneId).toBe('s1')
     expect(router.currentRoute.value.path).toBe('/scenes/s1')
     expect(toasts.toasts.some(t => t.type === 'error')).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+describe('sceneView — Scene order (#697)', () => {
+  const named = (id: string, name: string) => ({
+    ...JSON.parse(JSON.stringify(scene)),
+    id,
+    name,
+  })
+
+  beforeEach(async () => {
+    const { listScenes, moveScene } = await import('@/api/scenes')
+    vi.mocked(listScenes).mockResolvedValue([
+      named('a', 'Alpha'),
+      named('b', 'Bravo'),
+      named('c', 'Charlie'),
+    ])
+    vi.mocked(moveScene).mockReset()
+    vi.mocked(moveScene).mockResolvedValue(undefined)
+  })
+
+  async function mountList() {
+    await router.push('/scenes')
+    await router.isReady()
+    const pinia = createPinia()
+    const wrapper = mount(SceneView, {
+      attachTo: document.body,
+      global: {
+        plugins: [pinia, router],
+        stubs: { RegistryBrowser: true, ResolveSoundDialog: true },
+      },
+    })
+    await flushPromises()
+    return { wrapper, pinia }
+  }
+
+  const names = (wrapper: Awaited<ReturnType<typeof mountList>>['wrapper']) =>
+    wrapper.findAll('.scene-list-name').map(n => n.text())
+  const grip = (wrapper: Awaited<ReturnType<typeof mountList>>['wrapper'], name: string) =>
+    wrapper.find(`[aria-label="Reorder ${name}"]`)
+
+  it('moves a Scene down and up with the arrow keys on its grip, saving each move and keeping focus', async () => {
+    const { moveScene } = await import('@/api/scenes')
+    const { wrapper } = await mountList()
+
+    await grip(wrapper, 'Alpha').trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    expect(names(wrapper)).toEqual(['Bravo', 'Alpha', 'Charlie'])
+    expect(moveScene).toHaveBeenLastCalledWith('a', 1)
+    expect(document.activeElement).toBe(grip(wrapper, 'Alpha').element)
+
+    await grip(wrapper, 'Charlie').trigger('keydown', { key: 'ArrowUp' })
+    await flushPromises()
+    expect(names(wrapper)).toEqual(['Bravo', 'Charlie', 'Alpha'])
+    expect(moveScene).toHaveBeenLastCalledWith('c', 1)
+    wrapper.unmount()
+  })
+
+  it('does nothing past either end of the list', async () => {
+    const { moveScene } = await import('@/api/scenes')
+    const { wrapper } = await mountList()
+    await grip(wrapper, 'Alpha').trigger('keydown', { key: 'ArrowUp' })
+    await grip(wrapper, 'Charlie').trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    expect(names(wrapper)).toEqual(['Alpha', 'Bravo', 'Charlie'])
+    expect(moveScene).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('moves a Scene dropped onto another row to that row\'s position', async () => {
+    const { moveScene } = await import('@/api/scenes')
+    const { wrapper } = await mountList()
+    const rows = wrapper.findAll('.scene-list-row')
+
+    await grip(wrapper, 'Charlie').trigger('dragstart')
+    await rows[0].trigger('dragover')
+    expect(rows[0].classes()).toContain('scene-list-row-drop-before')
+    expect(rows[2].classes()).toContain('scene-list-row-dragging')
+    await rows[0].trigger('drop')
+    await flushPromises()
+    expect(names(wrapper)).toEqual(['Charlie', 'Alpha', 'Bravo'])
+    expect(moveScene).toHaveBeenCalledWith('c', 0)
+    wrapper.unmount()
+  })
+
+  it('ignores a drop with no Scene being dragged and a drop onto the dragged row itself', async () => {
+    const { moveScene } = await import('@/api/scenes')
+    const { wrapper } = await mountList()
+    const rows = wrapper.findAll('.scene-list-row')
+
+    await rows[1].trigger('drop')
+    await grip(wrapper, 'Alpha').trigger('dragstart')
+    await rows[0].trigger('drop')
+    await flushPromises()
+    expect(names(wrapper)).toEqual(['Alpha', 'Bravo', 'Charlie'])
+    expect(moveScene).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('reloads the saved order, logs and shows an error toast when a move fails', async () => {
+    const { listScenes, moveScene } = await import('@/api/scenes')
+    vi.mocked(moveScene).mockRejectedValue(new Error('disk full'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { wrapper, pinia } = await mountList()
+    const listCalls = vi.mocked(listScenes).mock.calls.length
+
+    await grip(wrapper, 'Alpha').trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    expect(vi.mocked(listScenes).mock.calls.length).toBe(listCalls + 1)
+    expect(names(wrapper)).toEqual(['Alpha', 'Bravo', 'Charlie'])
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[scenes]'), expect.any(Error))
+    expect(useToastStore(pinia).toasts.some(t => t.type === 'error')).toBe(true)
+    warn.mockRestore()
     wrapper.unmount()
   })
 })
