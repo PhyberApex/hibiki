@@ -91,7 +91,7 @@ async function readJsonFile<T>(filePath: string, options: JsonFileOptions<T>): P
   return data as T
 }
 
-/** Windows cannot open or fsync a directory; the rename is already durable there. */
+/** Windows (and some filesystems) refuse to fsync a directory; the rename is already durable there. */
 const UNSUPPORTED_DIR_SYNC_CODES = new Set(['EISDIR', 'EPERM', 'EINVAL'])
 
 /** Best-effort: makes the rename itself durable. Never throws, the data is already in place. */
