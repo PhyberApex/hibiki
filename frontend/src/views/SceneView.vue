@@ -539,11 +539,14 @@ async function submitCreateScene() {
 
 // Scene order (#697): the list order is the `scenes.json` order that
 // Previous/Next Scene walk. Moves apply locally at once and are saved one at a
-// time, in order; a failed save reloads the stored order.
+// time, in order; a failed save reloads the stored order and drops the moves
+// still queued behind it, whose positions were picked against the discarded
+// order.
 const draggedSceneId = ref<string | null>(null)
 const dropTargetSceneId = ref<string | null>(null)
 const sceneOrderAnnouncement = ref('')
 let pendingSceneMoves: Promise<void> = Promise.resolve()
+let sceneMoveGeneration = 0
 
 const ARROW_STEPS: Record<string, number> = { ArrowUp: -1, ArrowDown: 1 }
 
@@ -561,7 +564,12 @@ function moveSceneTo(id: string, toIndex: number): Promise<void> {
   scenes.value = next
   sceneOrderAnnouncement.value = `${moved.name} moved to position ${toIndex + 1} of ${next.length}`
   logInfo(`[scenes] Moving scene ${id} from position ${from + 1} to ${toIndex + 1}`)
+  const generation = sceneMoveGeneration
   pendingSceneMoves = pendingSceneMoves.then(async () => {
+    if (generation !== sceneMoveGeneration) {
+      logInfo(`[scenes] Dropped queued move of scene ${id}: an earlier move failed and the saved order was reloaded`)
+      return
+    }
     try {
       await moveScene(id, toIndex)
     }
@@ -569,6 +577,7 @@ function moveSceneTo(id: string, toIndex: number): Promise<void> {
       console.warn(`[scenes] move failed for scene ${id}:`, err)
       toast.show({ type: 'error', text: `Couldn't move "${moved.name}". Try again.` })
       await loadScenes()
+      sceneMoveGeneration++
     }
   })
   return pendingSceneMoves

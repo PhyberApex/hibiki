@@ -2599,4 +2599,32 @@ describe('sceneView — Scene order (#697)', () => {
     warn.mockRestore()
     wrapper.unmount()
   })
+
+  it('drops moves queued behind a failed one so the list and the saved order agree', async () => {
+    const { moveScene } = await import('@/api/scenes')
+    const settle: ((err?: Error) => void)[] = []
+    vi.mocked(moveScene).mockImplementation(() => new Promise<void>((resolve, reject) =>
+      settle.push(err => err
+        ? reject(err)
+        : resolve())))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { wrapper } = await mountList()
+
+    await grip(wrapper, 'Alpha').trigger('keydown', { key: 'ArrowDown' })
+    await grip(wrapper, 'Alpha').trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    settle[0](new Error('disk full'))
+    await flushPromises()
+    expect(moveScene).toHaveBeenCalledTimes(1)
+    expect(names(wrapper)).toEqual(['Alpha', 'Bravo', 'Charlie'])
+
+    await grip(wrapper, 'Charlie').trigger('keydown', { key: 'ArrowUp' })
+    await flushPromises()
+    expect(moveScene).toHaveBeenCalledTimes(2)
+    expect(moveScene).toHaveBeenLastCalledWith('c', 1)
+    settle[1]()
+    await flushPromises()
+    warn.mockRestore()
+    wrapper.unmount()
+  })
 })
