@@ -533,55 +533,56 @@ app.whenReady().then(async () => {
         callback({})
       })
   }, { useSystemPicker: true })
+  captureLog.info('Display media handler registered; the OS system picker is preferred where available')
 
-  /** Logs a file dialog's request and the GM's choice; returns the chosen path or `null` when cancelled. */
-  const logDialogChoice = (kind, title, chosen) => {
-    if (chosen)
-      dialogLog.info(`${kind} "${title}": chose ${chosen}`)
-    else
-      dialogLog.info(`${kind} "${title}": cancelled`)
-    return chosen ?? null
+  /**
+   * Registers a file dialog handler that logs the request and the GM's choice.
+   * Only the chosen file or folder name is logged: the full path carries the OS user name.
+   * `show(title, options)` opens the dialog and resolves to the chosen path, or `null` when cancelled.
+   */
+  const handleFileDialog = (kind, defaultTitle, show) => {
+    ipcMain.handle(`dialog:${kind}`, async (_, options = {}) => {
+      const title = options.title ?? defaultTitle
+      dialogLog.info(`${kind} "${title}" opened`)
+      const chosen = await show(BrowserWindow.getFocusedWindow() ?? null, title, options)
+      if (chosen)
+        dialogLog.info(`${kind} "${title}": chose ${path.basename(chosen)}`)
+      else
+        dialogLog.info(`${kind} "${title}": cancelled`)
+      return chosen || null
+    })
   }
 
-  ipcMain.handle('dialog:selectFolder', async (_, options = {}) => {
-    const title = options.title ?? 'Select folder'
-    dialogLog.info(`selectFolder "${title}" opened`)
-    const win = BrowserWindow.getFocusedWindow()
-    const result = await dialog.showOpenDialog(win ?? null, {
+  handleFileDialog('selectFolder', 'Select folder', async (win, title) => {
+    const result = await dialog.showOpenDialog(win, {
       properties: ['openDirectory'],
       title,
     })
-    return logDialogChoice('selectFolder', title, result.canceled
+    return result.canceled
       ? null
-      : result.filePaths[0])
+      : result.filePaths[0]
   })
 
-  ipcMain.handle('dialog:saveFile', async (_, options = {}) => {
-    const title = options.title ?? 'Save file'
-    dialogLog.info(`saveFile "${title}" opened`)
-    const win = BrowserWindow.getFocusedWindow()
-    const result = await dialog.showSaveDialog(win ?? null, {
+  handleFileDialog('saveFile', 'Save file', async (win, title, options) => {
+    const result = await dialog.showSaveDialog(win, {
       title,
       defaultPath: options.defaultPath,
       filters: options.filters,
     })
-    return logDialogChoice('saveFile', title, result.canceled
+    return result.canceled
       ? null
-      : result.filePath || null)
+      : result.filePath
   })
 
-  ipcMain.handle('dialog:openFile', async (_, options = {}) => {
-    const title = options.title ?? 'Open file'
-    dialogLog.info(`openFile "${title}" opened`)
-    const win = BrowserWindow.getFocusedWindow()
-    const result = await dialog.showOpenDialog(win ?? null, {
+  handleFileDialog('openFile', 'Open file', async (win, title, options) => {
+    const result = await dialog.showOpenDialog(win, {
       properties: ['openFile'],
       title,
       filters: options.filters,
     })
-    return logDialogChoice('openFile', title, result.canceled
+    return result.canceled
       ? null
-      : result.filePaths[0])
+      : result.filePaths[0]
   })
 
   ipcMain.handle('logs:getPath', () => logging.logFile)
@@ -613,7 +614,7 @@ async function teardownBeforeQuit() {
     return
   let timeout
   await Promise.race([
-    handle.close().catch(err => console.error('Error during shutdown teardown:', err)),
+    handle.close().catch(err => appLog.error('Error during shutdown teardown:', err)),
     new Promise((resolve) => { timeout = setTimeout(resolve, SHUTDOWN_TEARDOWN_TIMEOUT_MS) }),
   ])
   clearTimeout(timeout)
