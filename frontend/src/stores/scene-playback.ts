@@ -1099,8 +1099,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     if (intent !== musicIntent || !scene)
       return
     const mode = normalizeMusicMode(scene.musicMode)
-    if (mode === 'single')
+    if (mode === 'single') {
+      logDebug(`[scene] Music Mode of Scene ${scene.id} is single now, no advance after ${outgoing}`)
       return
+    }
     const next = selectNextTrack({
       mode,
       list: scene.music.map(m => m.soundId),
@@ -1110,6 +1112,12 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       pass: cursor.pass,
     })
     if (!next) {
+      // An overlap advance leaves the cursor to the track's end, so the current
+      // track stays its Scene's Music (a Play still jumps) until it plays out.
+      if (overlapMs !== undefined) {
+        logInfo(`[scene] Music Mode ${mode}: Scene ${scene.id} has no Music left after ${outgoing}, it plays out`)
+        return
+      }
       logInfo(`[scene] Music Mode ${mode}: Scene ${scene.id} has no Music left after ${outgoing}, Music ends`)
       musicCursor = null
       musicSceneId.value = null
@@ -1635,6 +1643,9 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // length then drives both channels' ramps (0 is a hard cut, handled by
   // CrossfadeRamp itself). Stays within the active Target.
   async function crossfadeToScene(sceneId: string) {
+    // Before the awaits below: an overlap due meanwhile must not start a track
+    // of the outgoing Scene.
+    cancelMusicOverlap(`Scene Crossfade to ${sceneId} requested`)
     let target: Scene | null
     try {
       target = await getScene(sceneId)

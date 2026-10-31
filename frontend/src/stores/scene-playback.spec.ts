@@ -1633,10 +1633,33 @@ describe('scene playback store: Music Mode', () => {
 
         expect(startedTracks()).toEqual(['m1', 'm2', ...takeoverTracks])
         expect(store.playingMusicId).toBe(primaryAfter)
-        if (primaryAfter === null)
+        if (primaryAfter === null) {
           expect(store.musicProgress).toBeNull()
+          expect(stopMusic).toHaveBeenCalledWith('local', {})
+        }
         store.stopScene()
       })
+    })
+
+    it('a Scene Crossfade whose Scene is still loading when the timer is due starts no track of the outgoing Scene', async () => {
+      const { getScene } = await import('@/api/scenes')
+      let releaseScene!: (scene: Scene) => void
+      vi.mocked(getScene).mockReturnValueOnce(new Promise((resolve) => {
+        releaseScene = resolve
+      }))
+      const { store } = await startSequential({ m1: 60_000 })
+      await elapse(55_000)
+
+      const crossfading = store.crossfadeToScene('other')
+      await elapse(2_000)
+      expect(startedTracks()).toEqual(['m1'])
+      releaseScene(musicScene('single', ['x1'], 'other'))
+      await crossfading
+      await flushPromises()
+
+      expect(startedTracks()).toEqual(['m1', 'x1'])
+      expect(store.playingMusicId).toBe('x1')
+      store.stopScene()
     })
 
     it('a fade length changed mid-track does not re-arm: the timer keeps the value read at start', async () => {
@@ -1657,10 +1680,12 @@ describe('scene playback store: Music Mode', () => {
       await elapse(56_000)
       expect(startedTracks()).toEqual(['m1'])
       expect(store.playingMusicId).toBe('m1')
+      expect(store.musicSceneId).toBe('sm')
 
       await backendTrack(null)
       expect(startedTracks()).toEqual(['m1'])
       expect(store.playingMusicId).toBeNull()
+      expect(store.musicSceneId).toBeNull()
     })
 
     it('the renderer fallback arms the timer from the element duration when none is stored', async () => {
