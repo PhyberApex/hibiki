@@ -554,6 +554,15 @@ describe('settingsView', () => {
       expect(wrapper.find('.fade-value').text()).toBe('3s')
     })
 
+    it('says the fade length also sets the Music track overlap, and 0 is a hard cut for both', async () => {
+      const wrapper = mountSettings()
+      await flushPromises()
+      const section = wrapper.find('#scene-fade-length').element.closest('section')!
+      expect(section.textContent).toContain('how far the next Music track overlaps the current one in sequential and shuffle mode')
+      expect(wrapper.find('#scene-fade-length').element.closest('.field')!.querySelector('.field-hint')!.textContent)
+        .toContain('0 seconds is a hard cut instead of a fade, for Scenes and Music tracks alike.')
+    })
+
     it('shows "Hard cut" at 0 seconds', async () => {
       vi.mocked(fetchSceneFadeLength).mockResolvedValue(0)
       const wrapper = mountSettings()

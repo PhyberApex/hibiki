@@ -99,10 +99,11 @@ export interface MusicProgress {
 }
 
 // Where a Scene's Music Mode stands (CONTEXT.md, ADR-0006): the Scene the
-// current track was started from, that track, its list index when picked, and
-// the shuffle bag left for this pass.
+// current track was started from, that track, its list index when picked, the
+// shuffle bag left for this pass, and the mode it was picked under.
 interface MusicCursor {
   sceneId: string
+  mode: MusicMode
   current: string
   index: number
   bag: string[]
@@ -286,6 +287,8 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       ? 'duration unknown, no timer'
       : `duration ${durationMs} ms`}`)
     syncMusicClock()
+    armMusicOverlap(channel, durationMs)
+      .catch(e => console.warn(`[scene] Music Mode overlap for ${channel.soundId} could not be armed:`, e))
   }
 
   // Music Mode (ADR-0006). `musicSceneId` is the Scene the current Music track
@@ -300,6 +303,73 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // Bumped by every Scene start, Stop and Scene Crossfade: a Scene start-up
   // still awaiting its Ambience must not start anything once overtaken.
   let sceneIntent = 0
+
+  // The Music Mode overlap (#738, ADR-0006): in sequential/shuffle the advance
+  // runs from a timer `overlapMs` before the confirmed-started primary track's
+  // known end, so the seam is a crossfade instead of a dip. At most one is
+  // pending; `musicOverlapAdvancing` holds the token of the track whose
+  // overlap advance is still choosing and starting the next track.
+  let musicOverlap: { channel: MusicChannel, token: number, soundId: string, timer: ReturnType<typeof setTimeout> } | null = null
+  let musicOverlapAdvancing: number | null = null
+
+  function cancelMusicOverlap(reason: string) {
+    if (!musicOverlap)
+      return
+    clearTimeout(musicOverlap.timer)
+    logDebug(`[scene] Music Mode overlap for ${musicOverlap.soundId} on ${musicOverlap.channel.streamId} cancelled: ${reason}`)
+    musicOverlap = null
+  }
+
+  // Arms the overlap for a just-confirmed start, with the fade length as read
+  // now: a later Settings change applies from the next track. No timer for a
+  // hard cut, an unknown duration or single mode; the advance then waits for
+  // the track's end as before.
+  async function armMusicOverlap(channel: MusicChannel, durationMs: number | null) {
+    const cursor = musicCursor
+    if (durationMs === null || !cursor || cursor.current !== channel.soundId || cursor.mode === 'single')
+      return
+    const token = channel.token
+    const intent = musicIntent
+    const fadeMs = await sceneFadeMs()
+    if (channel.token !== token || intent !== musicIntent || channel.startedAt === null || channel !== primaryMusicChannel) {
+      logDebug(`[scene] Music Mode overlap for ${cursor.current} not armed: the track was stopped or replaced while reading the fade length`)
+      return
+    }
+    if (fadeMs <= 0) {
+      logDebug(`[scene] Music Mode ${cursor.mode}: fade length 0, ${cursor.current} advances at its end with a hard cut`)
+      return
+    }
+    const overlapMs = Math.round(Math.min(fadeMs, durationMs / 2))
+    const delayMs = Math.max(0, channel.startedAt + durationMs - overlapMs - Date.now())
+    cancelMusicOverlap('a newer track armed its own')
+    const soundId = cursor.current
+    musicOverlap = {
+      channel,
+      token,
+      soundId,
+      timer: setTimeout(onMusicOverlapDue, delayMs, channel, token, overlapMs),
+    }
+    logInfo(`[scene] Music Mode ${cursor.mode} overlap armed for ${soundId} on ${channel.streamId}: advance in ${delayMs} ms, fade ${overlapMs} ms${overlapMs < fadeMs
+      ? ` (fade length ${fadeMs} ms clamped to half the ${durationMs} ms track)`
+      : ''}`)
+  }
+
+  function onMusicOverlapDue(channel: MusicChannel, token: number, overlapMs: number) {
+    musicOverlap = null
+    if (channel !== primaryMusicChannel || channel.token !== token || channel.soundId === null) {
+      logDebug(`[scene] Music Mode overlap on ${channel.streamId} due for a track already stopped or replaced, no advance`)
+      return
+    }
+    const outgoing = channel.soundId
+    logInfo(`[scene] Music Mode overlap due: ${outgoing} has ${overlapMs} ms left, advancing`)
+    musicOverlapAdvancing = token
+    advanceMusic(outgoing, overlapMs)
+      .catch(e => console.error('[scene] Music Mode overlap advance failed:', e))
+      .finally(() => {
+        if (musicOverlapAdvancing === token)
+          musicOverlapAdvancing = null
+      })
+  }
 
   function getAmbienceAudio(soundId: string): HTMLAudioElement {
     let el = ambienceAudioEls.get(soundId)
@@ -701,6 +771,8 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   }
 
   function clearMusicChannel(channel: MusicChannel) {
+    if (musicOverlap?.channel === channel)
+      cancelMusicOverlap(`${channel.streamId} cleared`)
     channel.soundId = null
     channel.source = null
     channel.startedAt = null
@@ -712,6 +784,8 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
 
   // Claims `channel` for a start of `item`: its clock waits for the start to be confirmed.
   function claimMusicChannel(channel: MusicChannel, item: SceneItem, source: 'renderer' | 'backend'): number {
+    if (musicOverlap?.channel === channel)
+      cancelMusicOverlap(`${channel.streamId} re-claimed for ${item.soundId}`)
     const token = ++musicStartSeq
     channel.soundId = item.soundId
     channel.source = source
@@ -877,6 +951,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // Target switch, never a played-out track, so nothing advances afterwards.
   function releaseMusicMode(reason: string) {
     musicIntent++
+    cancelMusicOverlap(`Music ${reason}`)
     if (musicCursor)
       logDebug(`[scene] Music ${reason}: track ${musicCursor.current} of Scene ${musicCursor.sceneId} ends without an advance`)
     musicCursor = null
@@ -947,6 +1022,7 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       }
       musicCursor = {
         sceneId: scene.id,
+        mode,
         current: next.soundId,
         index: next.index,
         bag: next.bag,
@@ -984,18 +1060,32 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
 
   // The current Music track played out (not stopped, not replaced): in
   // sequential/shuffle, start the next track from the source Scene's live list,
-  // fading in over the Scene fade length.
+  // fading in over the Scene fade length. Exactly one advance per track: an end
+  // beating its overlap timer advances now instead, and an end while the
+  // overlap advance is still starting the next track only frees the channel.
   function onMusicPlayedOut(channel: MusicChannel, token: number) {
     if (channel !== primaryMusicChannel || channel.token !== token || channel.soundId === null) {
       logDebug(`[scene] Music end on ${channel.streamId} suppressed: that track was already stopped or replaced`)
       return
     }
     const outgoing = channel.soundId
+    if (musicOverlapAdvancing === token) {
+      logDebug(`[scene] Music ${outgoing} played out while its overlap advance was starting the next track, no second advance`)
+      clearMusicChannel(channel)
+      return
+    }
+    if (musicOverlap?.token === token) {
+      console.warn(`[scene] Music ${outgoing} played out before its overlap advance was due (its duration of ${channel.durationMs} ms was too long), advancing now`)
+      clearTimeout(musicOverlap.timer)
+      musicOverlap = null
+    }
     clearMusicChannel(channel)
     advanceMusic(outgoing).catch(e => console.error('[scene] Music Mode advance failed:', e))
   }
 
-  async function advanceMusic(outgoing: string) {
+  // `overlapMs` is set for an overlap advance: the crossfade length fixed when
+  // the outgoing track started, instead of the fade length read now.
+  async function advanceMusic(outgoing: string, overlapMs?: number) {
     const cursor = musicCursor
     if (!cursor || cursor.current !== outgoing) {
       logDebug(`[scene] Music ${outgoing} played out with no Music Mode cursor for it, no advance`)
@@ -1025,10 +1115,12 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       musicSceneId.value = null
       return
     }
-    const fadeMs = await sceneFadeMs()
+    const fadeMs = overlapMs ?? await sceneFadeMs()
     if (intent !== musicIntent)
       return
-    logInfo(`[scene] Music Mode ${mode} advance in Scene ${scene.id}: ${outgoing} -> ${next.soundId}, fade-in ${fadeMs} ms`)
+    logInfo(`[scene] Music Mode ${mode} advance in Scene ${scene.id}: ${outgoing} -> ${next.soundId}, ${overlapMs === undefined
+      ? `fade-in ${fadeMs} ms`
+      : `overlap crossfade ${fadeMs} ms`}`)
     await startMusicFrom(scene, mode, next, item => crossfadeMusic(item, fadeMs), intent)
   }
 

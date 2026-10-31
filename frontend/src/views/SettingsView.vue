@@ -1142,7 +1142,7 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
         </h2>
       </div>
       <p class="section-desc">
-        How long Scenes take to crossfade when you switch between them.
+        How long Scenes take to crossfade when you switch between them, and how far the next Music track overlaps the current one in sequential and shuffle mode.
       </p>
       <div class="field">
         <label for="scene-fade-length" class="field-label">Fade length</label>
@@ -1161,7 +1161,7 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
           <span class="fade-value">{{ sceneFadeLength === 0 ? 'Hard cut' : `${sceneFadeLength}s` }}</span>
         </div>
         <p class="field-hint">
-          0 seconds switches Scenes with a hard cut instead of a fade.
+          0 seconds is a hard cut instead of a fade, for Scenes and Music tracks alike.
         </p>
       </div>
       <p
