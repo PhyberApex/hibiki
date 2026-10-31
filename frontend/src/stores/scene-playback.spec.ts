@@ -1,3 +1,4 @@
+import type { MockInstance } from 'vitest'
 import type { Scene } from '@/api/scenes'
 import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -1367,6 +1368,366 @@ describe('scene playback store: Music Mode', () => {
       const store = setup(scene)
       await store.playScene(scene)
       expect(store.musicProgress).toEqual({ soundId: 'm1', elapsedMs: 0, totalMs: 42_500 })
+    })
+  })
+
+  describe('overlap at the advance (#738)', () => {
+    let info: MockInstance<typeof console.info>
+    let warn: MockInstance<typeof console.warn>
+    let debug: MockInstance<typeof console.debug>
+
+    beforeEach(() => {
+      const now = Date.now()
+      vi.useFakeTimers({
+        toFake: [
+          'Date',
+          'setTimeout',
+          'clearTimeout',
+          'setInterval',
+          'clearInterval',
+        ],
+      })
+      vi.setSystemTime(now)
+      vi.mocked(fetchSceneFadeLength).mockResolvedValue(4)
+      info = vi.spyOn(console, 'info').mockImplementation(() => {})
+      warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      debug = vi.spyOn(console, 'debug').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      vi.mocked(canDecode).mockResolvedValue(true)
+      delete (mediaProto as { duration?: number }).duration
+      vi.restoreAllMocks()
+    })
+
+    function withDurations(store: ReturnType<typeof setup>, durations: Record<string, number>) {
+      store.musicSounds = store.musicSounds.map(s => ({ ...s, durationMs: durations[s.id] }))
+    }
+
+    async function elapse(ms: number) {
+      vi.advanceTimersByTime(ms)
+      await flushPromises()
+    }
+
+    const armedLines = () => info.mock.calls.map(c => String(c[0])).filter(line => line.includes('overlap armed'))
+
+    async function startSequential(durations: Record<string, number> = { m1: 60_000, m2: 60_000, m3: 60_000 }) {
+      const scene = musicScene('sequential')
+      const store = setup(scene)
+      withDurations(store, durations)
+      await store.playScene(scene)
+      await backendTrack('m1')
+      return { scene, store }
+    }
+
+    it('sequential: a 60 s track with a 4 s fade starts the next at 56 s with a 4 s crossfade, the card and timer flipping at once', async () => {
+      const { store } = await startSequential()
+
+      await elapse(55_999)
+      expect(startedTracks()).toEqual(['m1'])
+      expect(store.playingMusicId).toBe('m1')
+
+      await elapse(1)
+      expect(startedTracks()).toEqual(['m1', 'm2'])
+      // The backend fades its previous track out over the same fadeInMs (ADR-0003).
+      expect(playMusic).toHaveBeenLastCalledWith('local', 'm2', expect.objectContaining({ fadeInMs: 4000, loop: false }))
+      expect(store.playingMusicId).toBe('m2')
+      expect(store.musicProgress).toEqual({ soundId: 'm2', elapsedMs: 0, totalMs: 60_000 })
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('[scene] Music Mode overlap due: m1 has 4000 ms left'))
+      store.stopScene()
+    })
+
+    it('the outgoing track fades out over the same overlap when the incoming one takes the renderer fallback', async () => {
+      vi.mocked(canDecode).mockImplementation(async (_c, id) => id !== 'm2')
+      const { store } = await startSequential()
+
+      await elapse(56_000)
+
+      expect(store.playingMusicId).toBe('m2')
+      expect(playingEls.at(-1)!.src).toContain('m2')
+      expect(stopMusic).toHaveBeenCalledWith('local', { fadeOutMs: 4000 })
+      store.stopScene()
+    })
+
+    it('shuffle: the next track starts at 56 s with a 4 s crossfade', async () => {
+      const scene = musicScene('shuffle')
+      const store = setup(scene)
+      withDurations(store, { m1: 60_000, m2: 60_000, m3: 60_000 })
+      await store.playScene(scene)
+      const first = startedTracks()[0]!
+      await backendTrack(first)
+
+      await elapse(55_999)
+      expect(startedTracks()).toEqual([first])
+      await elapse(1)
+
+      const second = startedTracks()[1]
+      expect(startedTracks()).toHaveLength(2)
+      expect(second).not.toBe(first)
+      expect(playMusic).toHaveBeenLastCalledWith('local', second, expect.objectContaining({ fadeInMs: 4000 }))
+      expect(store.playingMusicId).toBe(second)
+      store.stopScene()
+    })
+
+    it('clamps the overlap to half a short track and says so in the armed line', async () => {
+      vi.mocked(fetchSceneFadeLength).mockResolvedValue(5)
+      const { store } = await startSequential({ m1: 6_000 })
+
+      expect(armedLines()).toEqual([
+        expect.stringMatching(/m1 .*advance in 3000 ms, fade 3000 ms \(fade length 5000 ms clamped/),
+      ])
+      await elapse(2_999)
+      expect(startedTracks()).toEqual(['m1'])
+      await elapse(1)
+      expect(playMusic).toHaveBeenLastCalledWith('local', 'm2', expect.objectContaining({ fadeInMs: 3000 }))
+      store.stopScene()
+    })
+
+    it('a fade length of 0 arms no timer and advances at the end as before', async () => {
+      vi.mocked(fetchSceneFadeLength).mockResolvedValue(0)
+      await startSequential()
+
+      await elapse(120_000)
+      expect(startedTracks()).toEqual(['m1'])
+      expect(armedLines()).toEqual([])
+
+      await backendTrack(null)
+      expect(playMusic).toHaveBeenLastCalledWith('local', 'm2', expect.objectContaining({ fadeInMs: 0 }))
+    })
+
+    it('an unknown duration arms no timer and advances at the end', async () => {
+      await startSequential({})
+
+      await elapse(120_000)
+      expect(startedTracks()).toEqual(['m1'])
+      expect(armedLines()).toEqual([])
+
+      await backendTrack(null)
+      expect(playMusic).toHaveBeenLastCalledWith('local', 'm2', expect.objectContaining({ fadeInMs: 4000 }))
+    })
+
+    it('single mode arms no timer', async () => {
+      const scene = musicScene('single')
+      const store = setup(scene)
+      withDurations(store, { m1: 60_000 })
+      await store.playScene(scene)
+      await backendTrack('m1')
+
+      await elapse(120_000)
+      expect(startedTracks()).toEqual(['m1'])
+      expect(armedLines()).toEqual([])
+    })
+
+    it('an end before the timer advances once, right away, cancels the timer and warns', async () => {
+      await startSequential({ m1: 60_000 })
+
+      await elapse(30_000)
+      await backendTrack(null)
+      expect(playMusic).toHaveBeenLastCalledWith('local', 'm2', expect.objectContaining({ fadeInMs: 4000 }))
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[scene] Music m1 played out before its overlap advance was due'))
+
+      await elapse(60_000)
+      expect(startedTracks()).toEqual(['m1', 'm2'])
+    })
+
+    it('the outgoing renderer track\'s end after the timer fired never advances a second time', async () => {
+      vi.mocked(canDecode).mockResolvedValue(false)
+      const scene = musicScene('sequential')
+      const store = setup(scene)
+      withDurations(store, { m1: 60_000 })
+      await store.playScene(scene)
+      const m1El = playingEls.at(-1)!
+      const m1Ended = m1El.onended!
+
+      await elapse(56_000)
+      expect(playingEls.map(el => el.src.split('/').at(-1))).toEqual(['m1', 'm2'])
+      m1Ended.call(m1El, new Event('ended'))
+      await flushPromises()
+
+      expect(playingEls).toHaveLength(2)
+      expect(store.playingMusicId).toBe('m2')
+      store.stopScene()
+    })
+
+    it('an end while the overlap advance is still starting the next track never advances a second time', async () => {
+      const { store } = await startSequential({ m1: 60_000 })
+      let releaseProbe!: (decodable: boolean) => void
+      vi.mocked(canDecode).mockReturnValueOnce(new Promise((resolve) => {
+        releaseProbe = resolve
+      }))
+
+      await elapse(56_000)
+      expect(canDecode).toHaveBeenLastCalledWith('music', 'm2')
+      await backendTrack(null)
+      releaseProbe(true)
+      await flushPromises()
+
+      expect(startedTracks()).toEqual(['m1', 'm2'])
+      expect(store.playingMusicId).toBe('m2')
+      store.stopScene()
+    })
+
+    describe.each([
+      [
+        'Stop',
+        async (store: ReturnType<typeof setup>) => store.stopMusicPlayback(),
+        [],
+        null,
+      ],
+      [
+        'a jump',
+        async (store: ReturnType<typeof setup>, scene: Scene) => store.playMusicTrack(scene.music[2]!),
+        ['m3'],
+        'm3',
+      ],
+      [
+        'a Scene Crossfade',
+        async (store: ReturnType<typeof setup>) => store.crossfadeToScene('other'),
+        ['x1'],
+        'x1',
+      ],
+      [
+        'a Target switch',
+        async (store: ReturnType<typeof setup>) => store.switchTarget('discord'),
+        [],
+        null,
+      ],
+      [
+        'Scene Stop and the Stop Hotkey',
+        async (store: ReturnType<typeof setup>) => store.stopScene(),
+        [],
+        null,
+      ],
+    ] as const)('%s', (_name, takeOver, takeoverTracks, primaryAfter) => {
+      beforeEach(async () => {
+        const { getScene } = await import('@/api/scenes')
+        vi.mocked(getScene).mockResolvedValue(musicScene('single', ['x1'], 'other'))
+      })
+
+      it('before the timer fires cancels it, with no stray advance', async () => {
+        const { scene, store } = await startSequential({ m1: 60_000 })
+        await elapse(30_000)
+
+        await takeOver(store, scene)
+        await flushPromises()
+        await elapse(120_000)
+
+        expect(startedTracks()).toEqual(['m1', ...takeoverTracks])
+        expect(store.playingMusicId).toBe(primaryAfter)
+        expect(info.mock.calls.filter(c => String(c[0]).includes('overlap due'))).toEqual([])
+        expect(debug).toHaveBeenCalledWith(expect.stringMatching(/^\[scene\] Music Mode overlap for m1 on music-a cancelled: /))
+        store.stopScene()
+      })
+
+      it('during the overlap tears both tracks down the way it already does, with no stray advance', async () => {
+        const { scene, store } = await startSequential({ m1: 60_000 })
+        await elapse(57_000)
+        expect(store.playingMusicId).toBe('m2')
+
+        await takeOver(store, scene)
+        await flushPromises()
+        // The backend's current track is the takeover's, or none after a stop.
+        await backendTrack(primaryAfter)
+        await elapse(120_000)
+
+        expect(startedTracks()).toEqual(['m1', 'm2', ...takeoverTracks])
+        expect(store.playingMusicId).toBe(primaryAfter)
+        if (primaryAfter === null) {
+          expect(store.musicProgress).toBeNull()
+          expect(stopMusic).toHaveBeenCalledWith('local', {})
+        }
+        store.stopScene()
+      })
+    })
+
+    it('a Scene Crossfade whose Scene is still loading when the timer is due starts no track of the outgoing Scene', async () => {
+      const { getScene } = await import('@/api/scenes')
+      let releaseScene!: (scene: Scene) => void
+      vi.mocked(getScene).mockReturnValueOnce(new Promise((resolve) => {
+        releaseScene = resolve
+      }))
+      const { store } = await startSequential({ m1: 60_000 })
+      await elapse(55_000)
+
+      const crossfading = store.crossfadeToScene('other')
+      await elapse(2_000)
+      expect(startedTracks()).toEqual(['m1'])
+      releaseScene(musicScene('single', ['x1'], 'other'))
+      await crossfading
+      await flushPromises()
+
+      expect(startedTracks()).toEqual(['m1', 'x1'])
+      expect(store.playingMusicId).toBe('x1')
+      store.stopScene()
+    })
+
+    it('a fade length changed mid-track does not re-arm: the timer keeps the value read at start', async () => {
+      const { store } = await startSequential({ m1: 60_000 })
+      vi.mocked(fetchSceneFadeLength).mockResolvedValue(8)
+
+      await elapse(52_000)
+      expect(startedTracks()).toEqual(['m1'])
+      await elapse(4_000)
+      expect(playMusic).toHaveBeenLastCalledWith('local', 'm2', expect.objectContaining({ fadeInMs: 4000 }))
+      store.stopScene()
+    })
+
+    it('a Music list emptied before the timer fires starts nothing and lets the current track play out', async () => {
+      const { scene, store } = await startSequential({ m1: 60_000 })
+      scene.music.splice(0)
+
+      await elapse(56_000)
+      expect(startedTracks()).toEqual(['m1'])
+      expect(store.playingMusicId).toBe('m1')
+      expect(store.musicSceneId).toBe('sm')
+
+      await backendTrack(null)
+      expect(startedTracks()).toEqual(['m1'])
+      expect(store.playingMusicId).toBeNull()
+      expect(store.musicSceneId).toBeNull()
+    })
+
+    it('a track playing out while its overlap advance loads an emptied Scene still ends Music', async () => {
+      const { getScene } = await import('@/api/scenes')
+      const { scene, store } = await startSequential({ m1: 60_000 })
+      // The source Scene is no longer the open one, so the advance loads it.
+      store.openScene = musicScene('single', ['x1'], 'other')
+      let releaseScene!: (scene: Scene) => void
+      vi.mocked(getScene).mockReturnValueOnce(new Promise((resolve) => {
+        releaseScene = resolve
+      }))
+      vi.mocked(getScene).mockResolvedValue({ ...scene, music: [] })
+
+      await elapse(56_000)
+      await backendTrack(null)
+      releaseScene({ ...scene, music: [] })
+      await flushPromises()
+
+      expect(startedTracks()).toEqual(['m1'])
+      expect(store.playingMusicId).toBeNull()
+      expect(store.musicSceneId).toBeNull()
+    })
+
+    it('the renderer fallback arms the timer from the element duration when none is stored', async () => {
+      vi.mocked(canDecode).mockResolvedValue(false)
+      Object.defineProperty(mediaProto, 'duration', {
+        configurable: true,
+        get: () => 42.5,
+      })
+      const scene = musicScene('sequential')
+      const store = setup(scene)
+      await store.playScene(scene)
+      expect(armedLines()).toEqual([
+        expect.stringMatching(/m1 .*advance in 38500 ms, fade 4000 ms$/),
+      ])
+
+      await elapse(38_499)
+      expect(playingEls).toHaveLength(1)
+      await elapse(1)
+      expect(playingEls.at(-1)!.src).toContain('m2')
+      expect(store.playingMusicId).toBe('m2')
+      store.stopScene()
     })
   })
 })
