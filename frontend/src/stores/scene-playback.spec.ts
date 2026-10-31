@@ -1688,6 +1688,27 @@ describe('scene playback store: Music Mode', () => {
       expect(store.musicSceneId).toBeNull()
     })
 
+    it('a track playing out while its overlap advance loads an emptied Scene still ends Music', async () => {
+      const { getScene } = await import('@/api/scenes')
+      const { scene, store } = await startSequential({ m1: 60_000 })
+      // The source Scene is no longer the open one, so the advance loads it.
+      store.openScene = musicScene('single', ['x1'], 'other')
+      let releaseScene!: (scene: Scene) => void
+      vi.mocked(getScene).mockReturnValueOnce(new Promise((resolve) => {
+        releaseScene = resolve
+      }))
+      vi.mocked(getScene).mockResolvedValue({ ...scene, music: [] })
+
+      await elapse(56_000)
+      await backendTrack(null)
+      releaseScene({ ...scene, music: [] })
+      await flushPromises()
+
+      expect(startedTracks()).toEqual(['m1'])
+      expect(store.playingMusicId).toBeNull()
+      expect(store.musicSceneId).toBeNull()
+    })
+
     it('the renderer fallback arms the timer from the element duration when none is stored', async () => {
       vi.mocked(canDecode).mockResolvedValue(false)
       Object.defineProperty(mediaProto, 'duration', {

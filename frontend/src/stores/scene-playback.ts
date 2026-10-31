@@ -308,9 +308,10 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
   // runs from a timer `overlapMs` before the confirmed-started primary track's
   // known end, so the seam is a crossfade instead of a dip. At most one is
   // pending; `musicOverlapAdvancing` holds the token of the track whose
-  // overlap advance is still choosing and starting the next track.
+  // overlap advance is still choosing and starting the next track, and whether
+  // that track played out meanwhile.
   let musicOverlap: { channel: MusicChannel, token: number, soundId: string, timer: ReturnType<typeof setTimeout> } | null = null
-  let musicOverlapAdvancing: number | null = null
+  let musicOverlapAdvancing: { token: number, playedOut: boolean } | null = null
 
   function cancelMusicOverlap(reason: string) {
     if (!musicOverlap)
@@ -362,12 +363,21 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
     }
     const outgoing = channel.soundId
     logInfo(`[scene] Music Mode overlap due: ${outgoing} has ${overlapMs} ms left, advancing`)
-    musicOverlapAdvancing = token
+    const cursor = musicCursor
+    const advancing = { token, playedOut: false }
+    musicOverlapAdvancing = advancing
     advanceMusic(outgoing, overlapMs)
       .catch(e => console.error('[scene] Music Mode overlap advance failed:', e))
       .finally(() => {
-        if (musicOverlapAdvancing === token)
+        if (musicOverlapAdvancing === advancing)
           musicOverlapAdvancing = null
+        // The track played out while its overlap advance ran, and that advance
+        // started nothing (an emptied list, a failed load): its end advances
+        // now, as one without an overlap would, so Music ends as it does today.
+        if (advancing.playedOut && musicCursor === cursor) {
+          logInfo(`[scene] Music ${outgoing} played out while its overlap advance started nothing, advancing at its end`)
+          advanceMusic(outgoing).catch(e => console.error('[scene] Music Mode advance failed:', e))
+        }
       })
   }
 
@@ -1069,7 +1079,8 @@ export const useScenePlaybackStore = defineStore('scenePlayback', () => {
       return
     }
     const outgoing = channel.soundId
-    if (musicOverlapAdvancing === token) {
+    if (musicOverlapAdvancing?.token === token) {
+      musicOverlapAdvancing.playedOut = true
       logDebug(`[scene] Music ${outgoing} played out while its overlap advance was starting the next track, no second advance`)
       clearMusicChannel(channel)
       return
