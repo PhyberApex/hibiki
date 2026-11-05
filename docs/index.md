@@ -212,7 +212,7 @@ title: Home
     <aside class="aside">
       <div>
         <h3>The fast version</h3>
-        <p>Run from source with Node.js 24 and pnpm. No ffmpeg needed.</p>
+        <p>Run from source with Node.js 26 and pnpm. No ffmpeg needed.</p>
 <pre><code>git clone https://github.com/PhyberApex/hibiki.git
 cd hibiki
 corepack enable &amp;&amp; pnpm install

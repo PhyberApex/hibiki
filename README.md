@@ -41,7 +41,7 @@ Regenerate these with `pnpm screenshots` (see [e2e/README.md](e2e/README.md)).
 
 ## Requirements
 
-- **Node.js** 24 (see [.nvmrc](.nvmrc)). Use `nvm use` to activate.
+- **Node.js** 26 (see [.nvmrc](.nvmrc)). Use `nvm use` to activate.
   The voice stack encodes Opus via `opusscript` (WASM), the same path in dev and packaged builds.
 - **pnpm** — `corepack enable && pnpm install`
 - **No ffmpeg** — audio processing uses the browser's Web Audio API.
