@@ -219,7 +219,7 @@ importers:
         version: 1.0.3
       music-metadata:
         specifier: ^12.3.2
-        version: 12.3.3(supports-color@8.1.1)
+        version: 12.3.4(supports-color@8.1.1)
       node-audio-mixer:
         specifier: ^2.1.0
         version: 2.2.0
@@ -1811,8 +1811,8 @@ packages:
     peerDependencies:
       eslint: ^9.0.0 || ^10.0.0
 
-  '@tokenizer/inflate@0.5.2':
-    resolution: {integrity: sha512-3AZIuReWQ7i916s/UWAzy4V4k2wrkAZLW2sTi448W3w7Hz5uoc+Y7h+cnwzr0cwrwf3PsC5xKsH8MOl0NRltlg==}
+  '@tokenizer/inflate@0.6.0':
+    resolution: {integrity: sha512-+0RDxhBkyT9xMnGdJAwmats9yxRLR8ypJrQgrnLqOu4Gv/aHlnxYgdGVy2QTwvBl6IF/w2Hr+ZNirH+iMUbVZA==}
     engines: {node: '>=18'}
 
   '@tokenizer/token@0.3.0':
@@ -3421,8 +3421,8 @@ packages:
   file-entry-cache@11.1.5:
     resolution: {integrity: sha512-+PFTHITI08JIGhnNpGNI8T8inUpgZfk3GNEqfT9R2zZV2iFXg3CvqzSl/uEhs7TSGujYRELEANyDvS8Fj7+S7Q==}
 
-  file-type@22.2.0:
-    resolution: {integrity: sha512-XmEVJsRpQMVYC+sWFW+FKAVo2P7/lPctDdWH4UQ1r6oxhdrTobnowdM3z+ZJ93a4J8D3yDpxX0bEvRuFev0vUQ==}
+  file-type@22.3.0:
+    resolution: {integrity: sha512-PrPedgnnWl5bWz3JHgar0QSzRvzeyFh7dZ9JpYOgcPZu4KALS9zw4MMa6qXRYyjeBsAlpaWB2boLuG991+0HIQ==}
     engines: {node: '>=22'}
 
   filename-reserved-regex@3.0.0:
@@ -4473,8 +4473,8 @@ packages:
   murmur-32@0.2.0:
     resolution: {integrity: sha512-ZkcWZudylwF+ir3Ld1n7gL6bI2mQAzXvSobPwVtu8aYi2sbXeipeSkdcanRLzIofLcM5F53lGaKm2dk7orBi7Q==}
 
-  music-metadata@12.3.3:
-    resolution: {integrity: sha512-KnETUdzymX+Df8A+CgQRoNi1MrHCkfq9McC2WrxHt4wECHmt8FARCNIg8WbFiYpBSNTGBcqOGLbUN4waKyNYhQ==}
+  music-metadata@12.3.4:
+    resolution: {integrity: sha512-M0t4TlnpaNMd1XBb1rW3BmSIosxTXmXtdOVYsx1wb56l1Jbij08JV9bKEAIn68f19+xO7s7sm/7IzdnfR8BJwQ==}
     engines: {node: '>=22'}
 
   nan@2.27.0:
@@ -7578,7 +7578,7 @@ snapshots:
       estraverse: 5.3.0
       picomatch: 4.0.7
 
-  '@tokenizer/inflate@0.5.2(supports-color@8.1.1)':
+  '@tokenizer/inflate@0.6.0(supports-color@8.1.1)':
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       strtok3: 10.6.3
@@ -9411,9 +9411,9 @@ snapshots:
     dependencies:
       flat-cache: 6.1.23
 
-  file-type@22.2.0(supports-color@8.1.1):
+  file-type@22.3.0(supports-color@8.1.1):
     dependencies:
-      '@tokenizer/inflate': 0.5.2(supports-color@8.1.1)
+      '@tokenizer/inflate': 0.6.0(supports-color@8.1.1)
       strtok3: 10.6.3
       token-types: 6.1.2
       uint8array-extras: 1.6.0
@@ -10916,13 +10916,13 @@ snapshots:
       imul: 1.0.1
     optional: true
 
-  music-metadata@12.3.3(supports-color@8.1.1):
+  music-metadata@12.3.4(supports-color@8.1.1):
     dependencies:
       '@borewit/text-codec': 0.2.3
       '@tokenizer/token': 0.3.0
       content-type: 3.1.1
       debug: 4.4.3(supports-color@8.1.1)
-      file-type: 22.2.0(supports-color@8.1.1)
+      file-type: 22.3.0(supports-color@8.1.1)
       media-typer: 2.0.0
       strtok3: 10.6.3
       token-types: 6.1.2
