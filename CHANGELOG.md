@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.9.0](https://github.com/PhyberApex/hibiki/compare/v1.8.0...v1.9.0) (2026-11-07)
+
+
+### Features
+
+* **scenes:** overlap the Music Mode advance with the outgoing track ([#739](https://github.com/PhyberApex/hibiki/issues/739)) ([4cefd56](https://github.com/PhyberApex/hibiki/commit/4cefd56c52278989b640f120b9924efc4bc33fce))
+
+
+### Bug Fixes
+
+* **browser:** stop nesting controls inside buttons in the tab bar and bookmark lists ([#734](https://github.com/PhyberApex/hibiki/issues/734)) ([40146c6](https://github.com/PhyberApex/hibiki/commit/40146c6770dadc298f7d4677db6d5627de27fbdd))
+* **deps:** update dependency @snazzah/davey to ^0.2.0 ([#747](https://github.com/PhyberApex/hibiki/issues/747)) ([fe93da4](https://github.com/PhyberApex/hibiki/commit/fe93da41122fa2321c46870d96abe65d4a4faa3d))
+* **views:** revert failed Vision Provider select, stop preview before delete, warn on bare typing-key Hotkeys, end endless Connecting banner ([#732](https://github.com/PhyberApex/hibiki/issues/732)) ([0d7d82b](https://github.com/PhyberApex/hibiki/commit/0d7d82b7b64de487886d15491285c048c14c73b9)), closes [#716](https://github.com/PhyberApex/hibiki/issues/716)
+
 ## [1.8.0](https://github.com/PhyberApex/hibiki/compare/v1.7.0...v1.8.0) (2026-10-30)
 
 
