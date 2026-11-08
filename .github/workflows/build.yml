@@ -40,7 +40,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 12.17.0
+          version: 12.18.0
 
       # Packaging stays on Node 24 while dev and the other workflows run the
       # .nvmrc Node 26: newer majors removed fs.rmdir's `recursive` option,
