@@ -166,13 +166,41 @@ function cancelRename() {
   editingBookmarkUrl.value = null
 }
 
+/** Whether `url` is an http(s) page, the only kind a Browser tab opens besides a blank one. */
+function isWebUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url)
+}
+
 function normalizeUrl(input: string): string {
   let url = input.trim()
   if (!url)
     return ''
-  if (!/^https?:\/\//i.test(url))
+  if (!isWebUrl(url))
     url = `https://${url}`
   return url
+}
+
+/**
+ * Opens a stored bookmark in a new tab. `app-config.json` is editable, so a
+ * bookmark is checked like the URL bar's input before it reaches main, which
+ * refuses anything but http(s) as well (#775).
+ */
+async function openBookmark(bm: Bookmark) {
+  if (!isWebUrl(bm.url)) {
+    console.warn(`[browser] Refused to open a bookmark that is not a web page (${urlScheme(bm.url)})`)
+    return
+  }
+  await openTab(bm.url)
+}
+
+/** The scheme of `url` alone, for logs: a path or query can carry tokens. */
+function urlScheme(url: string): string {
+  try {
+    return new URL(url).protocol
+  }
+  catch {
+    return 'an unparseable URL'
+  }
 }
 
 async function openTab(url?: string) {
@@ -503,7 +531,7 @@ watch(activeTabId, async (newId, oldId) => {
           v-else
           type="button"
           class="bookmark-item-main"
-          @click="openTab(bm.url)"
+          @click="openBookmark(bm)"
         >
           <img v-if="bm.favicon" :src="bm.favicon" class="bookmark-favicon" alt="">
           <span class="bookmark-name">{{ bm.name }}</span>
@@ -571,7 +599,7 @@ watch(activeTabId, async (newId, oldId) => {
                 type="button"
                 class="empty-bookmark-item"
                 :title="bm.url"
-                @click="openTab(bm.url)"
+                @click="openBookmark(bm)"
               >
                 <img v-if="bm.favicon" :src="bm.favicon" class="empty-bookmark-favicon" alt="">
                 <span class="empty-bookmark-name">{{ bm.name }}</span>
