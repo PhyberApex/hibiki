@@ -14,12 +14,13 @@ export const MAX_INPUT_SAMPLE_RATE = 192000
 export const MAX_INPUT_CHANNELS = 8
 
 /**
- * Most output frames one push() may produce (about 21.8 s, 4 MiB). Far above
- * any decoder's chunk (a maximal 65535-sample FLAC block at 4 kHz is ~786k)
- * and only a backstop: the output buffer is sized before the loop runs, so the
- * check happens before any allocation.
+ * Input frames resampled into one output Buffer. A decoder chunk can be far
+ * larger (one FLAC `decode()` of 16 KiB of digital silence returns millions of
+ * samples), so push() walks it in slices of this size, each pre-sized and
+ * yielded before the next is allocated. At the lowest accepted rate a slice
+ * yields at most 12x65536+1 frames (~3 MiB).
  */
-export const MAX_PUSH_OUTPUT_FRAMES = 1 << 20
+export const MAX_SLICE_INPUT_FRAMES = 65536
 
 const BYTES_PER_OUTPUT_FRAME = MIXER_CHANNELS * 2
 
@@ -55,19 +56,34 @@ export class PcmResampler {
     this.step = inputSampleRate / MIXER_SAMPLE_RATE
   }
 
-  /** Resamples one decoded chunk; returns interleaved stereo Int16LE PCM for it. */
-  push(channelData: Float32Array[]): Buffer {
+  /**
+   * Resamples one decoded chunk into interleaved stereo Int16LE PCM, yielded
+   * as one Buffer per `MAX_SLICE_INPUT_FRAMES` of input. Lazy: the caller's
+   * `await push(...)` between yields applies backpressure inside a large chunk
+   * too. Iterate it to completion; abandoning it mid-chunk leaves the
+   * resampler's carry-over state at the last yielded slice.
+   */
+  * push(channelData: Float32Array[]): Generator<Buffer, void, undefined> {
     const channels = channelData.slice(0, Math.min(this.inputChannels, MIXER_CHANNELS))
     const length = channels[0]?.length ?? 0
-    if (length === 0)
-      return Buffer.alloc(0)
+    for (let start = 0; start < length; start += MAX_SLICE_INPUT_FRAMES) {
+      const end = Math.min(length, start + MAX_SLICE_INPUT_FRAMES)
+      const slice = end - start === length
+        ? channels
+        : channels.map(c => c.subarray(start, end))
+      const pcm = this.resampleSlice(slice)
+      if (pcm.length > 0)
+        yield pcm
+    }
+  }
+
+  private resampleSlice(channels: Float32Array[]): Buffer {
+    const length = channels[0].length
 
     // Upper bound on the loop's iterations (+1 absorbs floating-point drift in `pos += step`).
     const maxFrames = this.phase < length
       ? Math.ceil((length - this.phase) / this.step) + 1
       : 0
-    if (maxFrames > MAX_PUSH_OUTPUT_FRAMES)
-      throw new Error(`PCM resample of ${length} input frames would exceed the ${MAX_PUSH_OUTPUT_FRAMES}-frame output ceiling`)
 
     if (!this.lastSamples)
       this.lastSamples = channels.map(c => c[0])

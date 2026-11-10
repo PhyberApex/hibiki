@@ -2,6 +2,7 @@ import {
   isSupportedPcmLayout,
   MAX_INPUT_CHANNELS,
   MAX_INPUT_SAMPLE_RATE,
+  MAX_SLICE_INPUT_FRAMES,
   MIN_INPUT_SAMPLE_RATE,
   MIXER_SAMPLE_RATE,
   PcmResampler,
@@ -92,19 +93,48 @@ describe('pcmResampler', () => {
     expect(() => new PcmResampler(rate, channels)).toThrow(/Unsupported PCM input/)
   })
 
-  it('caps the output of a single push at the lowest accepted rate to 12x the input frames', () => {
+  it('caps the output at the lowest accepted rate to 12x the input frames', () => {
     const resampler = new PcmResampler(MIN_INPUT_SAMPLE_RATE, 1)
-    const out = resampler.push([
-      ramp(200),
+    const out = Buffer.concat([
+      ...resampler.push([
+        ramp(200),
+      ]),
     ])
     expect(out.length).toBe(200 * (MIXER_SAMPLE_RATE / MIN_INPUT_SAMPLE_RATE) * 4)
   })
 
-  it('throws instead of allocating when one push would exceed the per-call output ceiling', () => {
+  it('yields a decoder chunk far larger than one slice lazily, one bounded Buffer at a time', () => {
+    // One FLAC decode() of digital silence can return millions of samples; that must play, not throw.
+    const length = MAX_SLICE_INPUT_FRAMES * 4 + 123
     const resampler = new PcmResampler(MIN_INPUT_SAMPLE_RATE, 1)
-    expect(() => resampler.push([
-      new Float32Array(1 << 20),
-    ])).toThrow(/output ceiling/)
+    const slices = resampler.push([
+      new Float32Array(length),
+    ])
+    const first = slices.next()
+    expect(first.done).toBe(false)
+    const maxSliceBytes = (MAX_SLICE_INPUT_FRAMES * (MIXER_SAMPLE_RATE / MIN_INPUT_SAMPLE_RATE) + 1) * 4
+    expect((first.value as Buffer).length).toBeLessThanOrEqual(maxSliceBytes)
+    const rest = [...slices]
+    expect(rest).toHaveLength(4)
+    expect(rest.every(b => b.length <= maxSliceBytes)).toBe(true)
+    const totalFrames = ((first.value as Buffer).length + rest.reduce((n, b) => n + b.length, 0)) / 4
+    expect(totalFrames).toBe(length * (MIXER_SAMPLE_RATE / MIN_INPUT_SAMPLE_RATE))
+  })
+
+  it('produces the same audio whether a chunk arrives whole or across slices', () => {
+    const length = MAX_SLICE_INPUT_FRAMES * 2 + 7
+    const data = [
+      ramp(length, -0.5, 1 / length),
+      ramp(length, 0.5, -1 / length),
+    ]
+    const whole = Buffer.concat([
+      ...new PcmResampler(44100, 2).push(data),
+    ])
+    const reference = referenceResample([data], 44100, 2)
+    expect(whole.length).toBe(reference.length)
+    // Slicing re-bases the fractional read position, so allow one LSB of rounding.
+    for (let o = 0; o < whole.length; o += 2)
+      expect(Math.abs(whole.readInt16LE(o) - reference.readInt16LE(o))).toBeLessThanOrEqual(1)
   })
 
   it.each([
@@ -119,14 +149,18 @@ describe('pcmResampler', () => {
       (_, c) => ramp(len, (k * 0.1 + c * 0.05) - 0.4, 0.0007),
     ))
     const resampler = new PcmResampler(rate, channels)
-    const actual = Buffer.concat(chunks.map(c => resampler.push(c)))
+    const actual = Buffer.concat(chunks.flatMap(c => [
+      ...resampler.push(c),
+    ]))
     expect(actual.equals(referenceResample(chunks, rate, channels))).toBe(true)
   })
 
-  it('returns an empty buffer for an empty chunk', () => {
-    expect(new PcmResampler(44100, 2).push([
-      new Float32Array(0),
-      new Float32Array(0),
-    ]).length).toBe(0)
+  it('yields nothing for an empty chunk', () => {
+    expect([
+      ...new PcmResampler(44100, 2).push([
+        new Float32Array(0),
+        new Float32Array(0),
+      ]),
+    ]).toHaveLength(0)
   })
 })

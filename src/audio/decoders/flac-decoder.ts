@@ -38,7 +38,7 @@ export async function probeFlac(filePath: string): Promise<boolean> {
     return true
   }
   catch (err) {
-    log.debug(`${basename(filePath)} failed the FLAC probe:`, err)
+    log.info(`${basename(filePath)} failed the FLAC probe:`, err)
     return false
   }
   finally {

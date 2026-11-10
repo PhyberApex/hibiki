@@ -36,7 +36,7 @@ const FMT_READ_LIMIT = 64
 const FMT_MIN_SIZE = 16
 /** Frames read per decode step. */
 const CHUNK_FRAMES = 16384
-/** Ceiling on one sample-data read, independent of the file's declared frame size (#765). */
+/** Ceiling on one sample-data read, independent of the file's declared frame size (#765). A backstop: `isSupportedFormat`'s 8-channel cap already keeps a chunk at 512 KiB. */
 const MAX_READ_BYTES = 1 << 20
 
 /**
@@ -65,10 +65,10 @@ export async function probeWav(filePath: string): Promise<boolean> {
     return bytesRead === 12
       && header.toString('ascii', 0, 4) === 'RIFF'
       && header.toString('ascii', 8, 12) === 'WAVE'
-      && isSupportedProbedFormat(filePath, await parseWavFormat(handle))
+      && acceptsProbedFormat(filePath, await parseWavFormat(handle))
   }
   catch (err) {
-    log.debug(`${basename(filePath)} failed the WAV probe:`, err)
+    log.info(`${basename(filePath)} failed the WAV probe:`, err)
     return false
   }
   finally {
@@ -76,7 +76,7 @@ export async function probeWav(filePath: string): Promise<boolean> {
   }
 }
 
-function isSupportedProbedFormat(filePath: string, format: WavFormat): boolean {
+function acceptsProbedFormat(filePath: string, format: WavFormat): boolean {
   const supported = isSupportedFormat(format)
   if (!supported)
     log.info(`${basename(filePath)} is a WAV format the backend does not decode (${describeFormat(format)})`)
@@ -200,8 +200,10 @@ export function createWavPcmStream(filePath: string): Readable {
         if (bytesRead <= 0)
           break
         const usable = buffer.subarray(0, bytesRead - (bytesRead % bytesPerFrame))
-        if (usable.length > 0)
-          await push(resampler.push(samplesToFloat32(usable, format)))
+        if (usable.length > 0) {
+          for (const pcm of resampler.push(samplesToFloat32(usable, format)))
+            await push(pcm)
+        }
         position += bytesRead
         remaining -= bytesRead
       }

@@ -92,6 +92,33 @@ describe('backend sound decoders', () => {
     await expect(canDecode(path)).resolves.toBe(false)
   })
 
+  function patchedOgg(name: string, id: string, patch: (bytes: Buffer, at: number) => void): string {
+    const bytes = readFileSync(fixture(name))
+    const at = bytes.indexOf(Buffer.from(id, 'latin1'))
+    patch(bytes, at)
+    const dir = mkdtempSync(join(tmpdir(), 'hibiki-decoders-'))
+    const path = join(dir, name)
+    writeFileSync(path, bytes)
+    return path
+  }
+
+  it.each([
+    [
+      'a 1 Hz sample rate',
+      (b: Buffer, at: number) => b.writeUInt32LE(1, at + 12),
+    ],
+    [
+      'zero channels',
+      (b: Buffer, at: number) => b.writeUInt8(0, at + 11),
+    ],
+  ])('reports an Ogg Vorbis declaring %s as not decodable (#765)', async (_label, patch) => {
+    await expect(canDecode(patchedOgg('fixture-stereo-44100.ogg', '\x01vorbis', patch))).resolves.toBe(false)
+  })
+
+  it('reports an Ogg Opus declaring 255 channels as not decodable (#765)', async () => {
+    await expect(canDecode(patchedOgg('fixture-stereo-48000.opus', 'OpusHead', (b, at) => b.writeUInt8(255, at + 9)))).resolves.toBe(false)
+  })
+
   it('reports a .flac-named file with only the magic bytes as not decodable', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'hibiki-decoders-'))
     const path = join(dir, 'magic-only.flac')
