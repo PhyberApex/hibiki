@@ -7,8 +7,23 @@
   "platformAutomerge": false,
   "packageRules": [
     {
+      "description": "Automerge only dev tooling: minor and patch npm devDependencies once checks pass (#771)",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["devDependencies"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
+    },
+    {
+      "description": "Electron is a devDependency but it is the runtime every GM ships with, so a human reviews every bump (#771)",
+      "matchManagers": ["npm"],
+      "matchDepNames": ["electron"],
+      "automerge": false
+    },
+    {
+      "description": "Production dependencies ship in the packaged app: wait longer than the default npm release age before even opening the PR (#771)",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["dependencies"],
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "Packaging stays on Node 24: maker-zip's cross-zip breaks on Windows under Node 26 (#705)",
