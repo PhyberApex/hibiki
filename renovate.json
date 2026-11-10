@@ -14,10 +14,11 @@
       "automerge": true
     },
     {
-      "description": "Electron is a devDependency but it is the runtime every GM ships with, so a human reviews every bump (#771)",
+      "description": "Electron is a devDependency but it is the runtime every GM ships with, so it gets the production treatment: human review and the longer release age (#771)",
       "matchManagers": ["npm"],
       "matchDepNames": ["electron"],
-      "automerge": false
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "Production dependencies ship in the packaged app: wait longer than the default npm release age before even opening the PR (#771)",
