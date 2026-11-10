@@ -1,9 +1,25 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { open } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import AdmZip from 'adm-zip'
 import { createSoundLibrary } from '../sound/sound-library'
 import { importScene } from './scene-import'
+
+jest.mock('node:fs/promises', () => {
+  const actual = jest.requireActual('node:fs/promises')
+  return {
+    ...actual,
+    open: jest.fn(actual.open),
+  }
+})
+
+const openMock = open as jest.MockedFunction<typeof open>
+const { open: realOpen } = jest.requireActual<typeof import('node:fs/promises')>('node:fs/promises')
+
+afterEach(() => {
+  openMock.mockImplementation(realOpen)
+})
 
 describe('importScene', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-import-'))
@@ -665,14 +681,19 @@ describe('importScene', () => {
 
     it('removes the extracted sounds again when the Scene cannot be saved', async () => {
       const userData = mkdtempSync(join(tmpdir(), 'hibiki-import-unsaved-'))
-      // scenes.json reads as empty, but its atomic write cannot replace a non-empty directory
-      mkdirSync(join(userData, 'data', 'scenes.json.tmp', 'blocker'), { recursive: true })
+      // scenes.json reads as empty, but its atomic write cannot create its temp file
+      openMock.mockImplementation(async (...args: Parameters<typeof open>) => {
+        if (/scenes\.json\.[0-9a-f]+\.tmp$/.test(String(args[0])))
+          throw Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' })
+        return realOpen(...args)
+      })
       process.env.HIBIKI_USER_DATA = userData
       const zipPath = createManifestZip(bundledManifest('Unsaved', 'sounds/music/unsaved-1.mp3'), {
         'sounds/music/unsaved-1.mp3': 'x',
       })
       await expect(importScene(config, zipPath)).rejects.toThrow(/EISDIR|EPERM|ENOTEMPTY/)
       expect(existsSync(join(config.audio.musicDir, 'unsaved-1.mp3'))).toBe(false)
+      expect(openMock).toHaveBeenCalledWith(expect.stringMatching(/scenes\.json\.[0-9a-f]+\.tmp$/), 'wx', 0o600)
       delete process.env.HIBIKI_USER_DATA
     })
 

@@ -1,5 +1,5 @@
 import type { FileHandle } from 'node:fs/promises'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { open, readdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,6 +14,11 @@ jest.mock('node:fs/promises', () => {
 })
 
 const openMock = open as jest.MockedFunction<typeof open>
+/** POSIX permission bits; Windows has none to check. */
+const posixIt = process.platform === 'win32'
+  ? it.skip
+  : it
+const modeOf = (path: string) => statSync(path).mode & 0o777
 const { open: realOpen } = jest.requireActual<typeof import('node:fs/promises')>('node:fs/promises')
 
 describe('createJsonFileStore', () => {
@@ -55,7 +60,7 @@ describe('createJsonFileStore', () => {
     expect(JSON.parse(raw)).toEqual(['a'])
 
     const entries = await readdir(tempRoot)
-    expect(entries).not.toContain('data.json.tmp')
+    expect(entries.filter(name => name.endsWith('.tmp'))).toEqual([])
   })
 
   it('a corrupt (unparseable) file is backed up, a warning is recorded, and read returns the default', async () => {
@@ -112,6 +117,63 @@ describe('createJsonFileStore', () => {
     expect(readFileSync(warnings[0]!.backupPath, 'utf-8')).toBe('{not valid json')
     const raw = await readFile(filePath, 'utf-8')
     expect(JSON.parse(raw)).toEqual(['new'])
+  })
+
+  posixIt('creates the corrupt-file backup owner-only (0600), not with the source file\'s mode', async () => {
+    const filePath = join(tempRoot, 'app-config.json')
+    writeFileSync(filePath, '{not valid json', { mode: 0o644 })
+    const store = createJsonFileStore<string[]>(filePath, { defaultValue: [], isValid: isStringArray })
+
+    await store.read()
+
+    expect(modeOf(getStorageWarnings()[0]!.backupPath)).toBe(0o600)
+  })
+
+  it('passes the corrupt contents through redactBackup before writing the backup', async () => {
+    const filePath = join(tempRoot, 'app-config.json')
+    writeFileSync(filePath, '{"secret": "trunca')
+    const store = createJsonFileStore<Record<string, string>>(filePath, {
+      defaultValue: {},
+      isValid: isRecord,
+      redactBackup: raw => raw.replace('trunca', '[redacted]'),
+    })
+
+    await store.read()
+
+    expect(readFileSync(getStorageWarnings()[0]!.backupPath, 'utf-8')).toBe('{"secret": "[redacted]')
+  })
+
+  posixIt('repairs an existing world-readable store and its old backups to 0600 on first access', async () => {
+    const filePath = join(tempRoot, 'app-config.json')
+    const oldBackup = `${filePath}.corrupt-2025-01-01T00-00-00-000Z.bak`
+    writeFileSync(filePath, '{"a":"1"}', { mode: 0o644 })
+    writeFileSync(oldBackup, '{', { mode: 0o644 })
+    const store = createJsonFileStore<Record<string, string>>(filePath, { defaultValue: {}, isValid: isRecord })
+
+    expect(await store.read()).toEqual({ a: '1' })
+
+    expect(modeOf(filePath)).toBe(0o600)
+    expect(modeOf(oldBackup)).toBe(0o600)
+  })
+
+  it('removes temp files a crashed write left behind, without touching other files', async () => {
+    const filePath = join(tempRoot, 'app-config.json')
+    writeFileSync(filePath, '{"a":"1"}')
+    writeFileSync(`${filePath}.tmp`, '{"a":"stale"}')
+    writeFileSync(`${filePath}.0123456789ab.tmp`, '{"a":"stale"}')
+    writeFileSync(join(tempRoot, 'scenes.json.tmp'), '[]')
+    const store = createJsonFileStore<Record<string, string>>(filePath, { defaultValue: {}, isValid: isRecord })
+
+    await store.read()
+
+    expect((await readdir(tempRoot)).sort()).toEqual(['app-config.json', 'scenes.json.tmp'])
+  })
+
+  it('a missing directory on first access is not an error', async () => {
+    const filePath = join(tempRoot, 'nested', 'data.json')
+    const store = createJsonFileStore<string[]>(filePath, { defaultValue: [], isValid: isStringArray })
+
+    await expect(store.read()).resolves.toEqual([])
   })
 
   it('update can skip the write when nothing changed', async () => {
@@ -180,7 +242,7 @@ describe('writeJsonFileAtomic', () => {
 
     await writeJsonFileAtomic(filePath, ['a'])
 
-    const tmpHandle = opened.find(h => h.path === `${filePath}.tmp`)
+    const tmpHandle = opened.find(h => h.path.startsWith(`${filePath}.`) && h.path.endsWith('.tmp'))
     expect(tmpHandle?.sync).toHaveBeenCalledTimes(1)
     const dirHandle = opened.find(h => h.path === tempRoot)
     expect(dirHandle?.sync).toHaveBeenCalledTimes(1)
@@ -195,5 +257,56 @@ describe('writeJsonFileAtomic', () => {
 
     expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toEqual({ a: '1' })
     expect(await readdir(tempRoot)).toEqual(['app-config.json'])
+  })
+
+  it('opens a fresh, randomly named temp file exclusively, owner-only', async () => {
+    const filePath = join(tempRoot, 'app-config.json')
+
+    await writeJsonFileAtomic(filePath, { a: '1' })
+    await writeJsonFileAtomic(filePath, { a: '2' })
+
+    const tmpOpens = openMock.mock.calls.filter(([path]) => String(path).startsWith(tempRoot) && String(path).endsWith('.tmp'))
+    expect(tmpOpens).toHaveLength(2)
+    for (const [path, flags, mode] of tmpOpens) {
+      expect(String(path)).toMatch(/app-config\.json\.[0-9a-f]{12}\.tmp$/)
+      expect(flags).toBe('wx')
+      expect(mode).toBe(0o600)
+    }
+    expect(tmpOpens[0]![0]).not.toBe(tmpOpens[1]![0])
+  })
+
+  posixIt('writes the file owner-only (0600) and creates a missing directory 0700', async () => {
+    const dir = join(tempRoot, 'data')
+    const filePath = join(dir, 'app-config.json')
+
+    await writeJsonFileAtomic(filePath, { 'discord.token': 'secret' })
+
+    expect(modeOf(filePath)).toBe(0o600)
+    expect(modeOf(dir)).toBe(0o700)
+  })
+
+  it('never writes through a symlink planted at the old fixed temp path', async () => {
+    const filePath = join(tempRoot, 'app-config.json')
+    const target = join(tempRoot, 'attacker-owned')
+    writeFileSync(target, 'untouched')
+    symlinkSync(target, `${filePath}.tmp`)
+
+    await writeJsonFileAtomic(filePath, { a: '1' })
+
+    expect(readFileSync(target, 'utf-8')).toBe('untouched')
+    expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toEqual({ a: '1' })
+  })
+
+  it('removes its temp file when the write fails', async () => {
+    const filePath = join(tempRoot, 'app-config.json')
+    openMock.mockImplementation(async (...args: Parameters<typeof open>) => {
+      const handle: FileHandle = await realOpen(...args)
+      jest.spyOn(handle, 'writeFile').mockRejectedValue(Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' }))
+      return handle
+    })
+
+    await expect(writeJsonFileAtomic(filePath, { a: '1' })).rejects.toThrow('ENOSPC')
+
+    expect(await readdir(tempRoot)).toEqual([])
   })
 })

@@ -66,6 +66,24 @@ function describeSetForLog(key: string, value: string): string {
 
 const ENCRYPTED_PREFIX = 'enc:v1:'
 
+const REDACTED = '[redacted]'
+
+/**
+ * Corrupt-file backups are never cleaned up, so one holding a token would
+ * outlive a later `clearDiscordToken()` (#769). Works on the raw text, since
+ * an unparseable file is the usual reason for a backup: each secret key's
+ * string value is blanked, up to its closing quote or the end of a truncated
+ * file.
+ */
+const SECRET_VALUE_PATTERN = new RegExp(
+  `("(?:${[...SECRET_KEYS].map(key => key.replace(/\./g, '\\.')).join('|')})"\\s*:\\s*)"(?:[^"\\\\]|\\\\.)*(?:"|\\\\?$)`,
+  'g',
+)
+
+export function redactSecrets(raw: string): string {
+  return raw.replace(SECRET_VALUE_PATTERN, `$1"${REDACTED}"`)
+}
+
 function getConfigFilePath(config: Config): string {
   const dbPath = config.database.path
   const dir = resolve(process.cwd(), dirname(dbPath))
@@ -76,7 +94,11 @@ const log = createLogger('app-config')
 
 export function createAppConfig(config: Config, codec: SecretCodec = NOOP_CODEC) {
   const filePath = getConfigFilePath(config)
-  const store = createJsonFileStore<Record<string, string>>(filePath, { defaultValue: {}, isValid: isPlainObject })
+  const store = createJsonFileStore<Record<string, string>>(filePath, {
+    defaultValue: {},
+    isValid: isPlainObject,
+    redactBackup: redactSecrets,
+  })
   const encryptForStorage = async (plaintext: string) => ENCRYPTED_PREFIX + await codec.encrypt(plaintext)
   /** Writes `replacement` only if `key` still holds `expected`, so a `set` that landed meanwhile wins. */
   const replaceIfUnchanged = (key: string, expected: string, replacement: string) =>
