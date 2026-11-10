@@ -1,5 +1,5 @@
 import type { FileHandle } from 'node:fs/promises'
-import { mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { open, readdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -154,6 +154,73 @@ describe('createJsonFileStore', () => {
 
     expect(modeOf(filePath)).toBe(0o600)
     expect(modeOf(oldBackup)).toBe(0o600)
+  })
+
+  posixIt('restricts an existing world-readable store directory to 0700 on first access', async () => {
+    const dir = join(tempRoot, 'data')
+    mkdirSync(dir, { mode: 0o755 })
+    chmodSync(dir, 0o755)
+    const store = createJsonFileStore<string[]>(join(dir, 'scenes.json'), { defaultValue: [], isValid: isStringArray })
+
+    await store.read()
+
+    expect(modeOf(dir)).toBe(0o700)
+  })
+
+  posixIt('does not chmod through a store path that is a symlink', async () => {
+    const target = join(tempRoot, 'elsewhere.json')
+    writeFileSync(target, '{}', { mode: 0o644 })
+    chmodSync(target, 0o644)
+    const filePath = join(tempRoot, 'app-config.json')
+    symlinkSync(target, filePath)
+    const store = createJsonFileStore<Record<string, string>>(filePath, { defaultValue: {}, isValid: isRecord })
+
+    await store.read()
+
+    expect(modeOf(target)).toBe(0o644)
+  })
+
+  it('redacts old backups in place on first access, leaving the live file and other stores\' backups alone', async () => {
+    const filePath = join(tempRoot, 'app-config.json')
+    const oldBackup = `${filePath}.corrupt-2025-01-01T00-00-00-000Z.bak`
+    const otherBackup = join(tempRoot, 'scenes.json.corrupt-2025-01-01T00-00-00-000Z.bak')
+    writeFileSync(filePath, '{"secret":"live"}')
+    writeFileSync(oldBackup, '{"secret": "old')
+    writeFileSync(otherBackup, '{"secret": "old')
+    const store = createJsonFileStore<Record<string, string>>(filePath, {
+      defaultValue: {},
+      isValid: isRecord,
+      redactBackup: raw => raw.replace(/"(?:old|live)/, '"[redacted]'),
+    })
+
+    expect(await store.read()).toEqual({ secret: 'live' })
+
+    expect(readFileSync(oldBackup, 'utf-8')).toBe('{"secret": "[redacted]')
+    expect(readFileSync(otherBackup, 'utf-8')).toBe('{"secret": "old')
+    expect((await readdir(tempRoot)).filter(name => name.endsWith('.tmp'))).toEqual([])
+  })
+
+  it('keeps both backups when two corruptions land in the same millisecond', async () => {
+    jest.useFakeTimers({
+      now: new Date('2026-01-01T00:00:00.000Z'),
+      doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'],
+    })
+    try {
+      const filePath = join(tempRoot, 'scenes.json')
+      const store = createJsonFileStore<string[]>(filePath, { defaultValue: [], isValid: isStringArray })
+      writeFileSync(filePath, '{first')
+      await store.read()
+      writeFileSync(filePath, '{second')
+      await store.read()
+
+      const [first, second] = getStorageWarnings()
+      expect(first!.backupPath).not.toBe(second!.backupPath)
+      expect(readFileSync(first!.backupPath, 'utf-8')).toBe('{first')
+      expect(readFileSync(second!.backupPath, 'utf-8')).toBe('{second')
+    }
+    finally {
+      jest.useRealTimers()
+    }
   })
 
   it('removes temp files a crashed write left behind, without touching other files', async () => {

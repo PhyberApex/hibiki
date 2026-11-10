@@ -1,6 +1,6 @@
 import type { Config } from './config'
 import { dirname, join, resolve } from 'node:path'
-import { createJsonFileStore, isPlainObject } from './json-file'
+import { createJsonFileStore, escapeRegExp, isPlainObject } from './json-file'
 import { createLogger } from './logger'
 
 const CONFIG_FILENAME = 'app-config.json'
@@ -76,7 +76,7 @@ const REDACTED = '[redacted]'
  * file.
  */
 const SECRET_VALUE_PATTERN = new RegExp(
-  `("(?:${[...SECRET_KEYS].map(key => key.replace(/\./g, '\\.')).join('|')})"\\s*:\\s*)"(?:[^"\\\\]|\\\\.)*(?:"|\\\\?$)`,
+  `("(?:${[...SECRET_KEYS].map(escapeRegExp).join('|')})"\\s*:\\s*)"(?:[^"\\\\]|\\\\.)*(?:"|\\\\?$)`,
   'g',
 )
 

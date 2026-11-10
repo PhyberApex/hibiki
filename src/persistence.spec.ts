@@ -112,6 +112,19 @@ describe('createAppConfig with a corrupt store', () => {
     expect(await appConfig.get('discord.token')).toBe('new-token')
   })
 
+  it('redacts the secrets in a backup an earlier version left in the clear', async () => {
+    const configPath = join(corruptRoot, 'data', 'app-config.json')
+    const oldBackup = `${configPath}.corrupt-2025-01-01T00-00-00-000Z.bak`
+    mkdirSync(dirname(configPath), { recursive: true })
+    writeFileSync(configPath, '{"kept": "yes"}')
+    writeFileSync(oldBackup, '{"discord.token": "old-plaintext", "kept": "yes"')
+
+    const appConfig = createAppConfig(corruptConfig)
+    expect(await appConfig.get('kept')).toBe('yes')
+
+    expect(readFileSync(oldBackup, 'utf-8')).toBe('{"discord.token": "[redacted]", "kept": "yes"')
+  })
+
   it('a wrong top-level type (array) is backed up and a warning is recorded', async () => {
     const configPath = join(corruptRoot, 'data', 'app-config.json')
     mkdirSync(dirname(configPath), { recursive: true })
