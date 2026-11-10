@@ -1,6 +1,6 @@
 import type { FileHandle } from 'node:fs/promises'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
-import { open, readdir, readFile } from 'node:fs/promises'
+import { chmod, open, readdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { clearStorageWarnings, createJsonFileStore, getStorageWarnings, writeJsonFileAtomic } from './json-file'
@@ -10,10 +10,12 @@ jest.mock('node:fs/promises', () => {
   return {
     ...actual,
     open: jest.fn(actual.open),
+    chmod: jest.fn(actual.chmod),
   }
 })
 
 const openMock = open as jest.MockedFunction<typeof open>
+const chmodMock = chmod as jest.MockedFunction<typeof chmod>
 /** POSIX permission bits; Windows has none to check. */
 const posixIt = process.platform === 'win32'
   ? it.skip
@@ -165,6 +167,25 @@ describe('createJsonFileStore', () => {
     await store.read()
 
     expect(modeOf(dir)).toBe(0o700)
+  })
+
+  posixIt('still repairs the store and its temp files when the directory cannot be restricted', async () => {
+    const dir = join(tempRoot, 'data')
+    mkdirSync(dir, { mode: 0o755 })
+    chmodSync(dir, 0o755)
+    const filePath = join(dir, 'app-config.json')
+    writeFileSync(filePath, '{"a":"1"}', { mode: 0o644 })
+    chmodSync(filePath, 0o644)
+    writeFileSync(`${filePath}.tmp`, '{"a":"stale"}')
+    chmodMock.mockImplementationOnce(async () => {
+      throw Object.assign(new Error('EPERM'), { code: 'EPERM' })
+    })
+    const store = createJsonFileStore<Record<string, string>>(filePath, { defaultValue: {}, isValid: isRecord })
+
+    expect(await store.read()).toEqual({ a: '1' })
+
+    expect(modeOf(filePath)).toBe(0o600)
+    expect(await readdir(dir)).toEqual(['app-config.json'])
   })
 
   posixIt('does not chmod through a store path that is a symlink', async () => {

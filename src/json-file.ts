@@ -136,12 +136,18 @@ async function repairStoreFiles<T>(filePath: string, options: JsonFileOptions<T>
   let entries: string[]
   try {
     entries = await readdir(dir)
-    await restrictMode(dir, DIR_MODE)
   }
   catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT')
       log.warn(`Could not repair ${dir} for ${base}`, err)
     return
+  }
+  // A directory that cannot be tightened (another owner, a FAT/FUSE mount) must not stop the file repair below.
+  try {
+    await restrictMode(dir, DIR_MODE)
+  }
+  catch (err) {
+    log.warn(`Could not restrict ${dir}`, err)
   }
 
   const staleTemp = new RegExp(`^${escapeRegExp(base)}\\.(?:[0-9a-f]+\\.)?tmp$`)
