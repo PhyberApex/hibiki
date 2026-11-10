@@ -262,6 +262,13 @@ describe('createOpenAICompatibleVisionProvider', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
+  it('does not follow redirects, so the image cannot be bounced to an unchecked host', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue({ ok: false, status: 307, type: 'basic' })
+    const { instance } = provider({ apiKey: 'sk-test' }, fetchImpl)
+    await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow(/redirected the request/)
+    expect(fetchImpl.mock.calls[0][1].redirect).toBe('manual')
+  })
+
   it('refuses a public-looking host that resolves to link-local space without sending a request', async () => {
     const fetchImpl = jest.fn()
     const lookupImpl = jest.fn().mockResolvedValue([

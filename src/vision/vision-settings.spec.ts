@@ -245,6 +245,20 @@ describe('createVisionSettings', () => {
       expect((await settings.getProviderConfig()).apiKey).toBeNull()
     })
 
+    it('falls back to a key saved in Settings for a custom endpoint when the env key is set', async () => {
+      const config = makeConfig({ openaiKey: 'sk-env' })
+      const settings = createVisionSettings(config, createAppConfig(config))
+      await settings.setProvider('openai-compatible')
+      await settings.setOpenAiBaseUrl('https://openrouter.ai/api/v1')
+      const state = await settings.setApiKey('openai-compatible', 'sk-or')
+      expect(state.openaiCompatible.keyConfigured).toBe(true)
+      expect(state.openaiCompatible.keyWithheld).toBe(false)
+      expect((await settings.getProviderConfig()).apiKey).toBe('sk-or')
+
+      await settings.setOpenAiBaseUrl('')
+      expect((await settings.getProviderConfig()).apiKey).toBe('sk-env')
+    })
+
     it('clearing the key clears its binding', async () => {
       const config = makeConfig()
       const settings = createVisionSettings(config, createAppConfig(config))

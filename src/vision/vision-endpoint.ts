@@ -22,8 +22,14 @@ BLOCKED.addSubnet('100.64.0.0', 10, 'ipv4') // carrier-grade NAT
 BLOCKED.addSubnet('169.254.0.0', 16, 'ipv4')
 BLOCKED.addSubnet('172.16.0.0', 12, 'ipv4')
 BLOCKED.addSubnet('192.168.0.0', 16, 'ipv4')
+BLOCKED.addSubnet('198.18.0.0', 15, 'ipv4') // benchmarking
 BLOCKED.addSubnet('224.0.0.0', 3, 'ipv4') // multicast and reserved
-BLOCKED.addAddress('::', 'ipv6')
+// IPv6 forms that embed an IPv4 address (IPv4-mapped `::ffff:0:0/96` is matched against the IPv4 rules by BlockList itself).
+BLOCKED.addSubnet('::', 96, 'ipv6') // unspecified and IPv4-compatible
+BLOCKED.addSubnet('64:ff9b::', 96, 'ipv6') // NAT64
+BLOCKED.addSubnet('64:ff9b:1::', 48, 'ipv6') // local-use NAT64
+BLOCKED.addSubnet('2002::', 16, 'ipv6') // 6to4
+BLOCKED.addSubnet('fec0::', 10, 'ipv6') // deprecated site-local
 BLOCKED.addSubnet('fc00::', 7, 'ipv6') // unique local
 BLOCKED.addSubnet('fe80::', 10, 'ipv6') // link-local
 BLOCKED.addSubnet('ff00::', 8, 'ipv6') // multicast
@@ -31,12 +37,6 @@ BLOCKED.addSubnet('ff00::', 8, 'ipv6') // multicast
 const LOOPBACK = new BlockList()
 LOOPBACK.addSubnet('127.0.0.0', 8, 'ipv4')
 LOOPBACK.addAddress('::1', 'ipv6')
-
-/** `[::ffff:169.254.169.254]` must be judged as the IPv4 address it wraps. */
-function unwrapMappedIpv4(address: string): string {
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address)
-  return mapped ? mapped[1] : address
-}
 
 function ipFamily(address: string): 'ipv4' | 'ipv6' | null {
   const family = isIP(address)
@@ -48,44 +48,30 @@ function ipFamily(address: string): 'ipv4' | 'ipv6' | null {
 }
 
 function isLoopbackAddress(address: string): boolean {
-  const ip = unwrapMappedIpv4(address)
-  const family = ipFamily(ip)
-  return family !== null && LOOPBACK.check(ip, family)
+  const family = ipFamily(address)
+  return family !== null && LOOPBACK.check(address, family)
 }
 
 function isBlockedAddress(address: string): boolean {
-  const ip = unwrapMappedIpv4(address)
-  const family = ipFamily(ip)
-  return family !== null && !LOOPBACK.check(ip, family) && BLOCKED.check(ip, family)
+  const family = ipFamily(address)
+  return family !== null && !LOOPBACK.check(address, family) && BLOCKED.check(address, family)
 }
 
-/** `URL.hostname` keeps IPv6 literals bracketed. */
+/** `URL.hostname` keeps IPv6 literals bracketed and a fully-qualified trailing dot (`localhost.`). */
 function bareHostname(url: URL): string {
-  return url.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  return url.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase()
 }
 
+/** Only the literal name `localhost`: subdomains of it are resolved by ordinary DNS on most systems. */
 function isLoopbackHostname(hostname: string): boolean {
-  return hostname === 'localhost' || hostname.endsWith('.localhost') || isLoopbackAddress(hostname)
+  return hostname === 'localhost' || isLoopbackAddress(hostname)
 }
 
 function isMdnsHostname(hostname: string): boolean {
   return hostname.endsWith('.local')
 }
 
-/** What a log line or error may say about a Base URL: its origin, never path, query or userinfo. */
-export function describeEndpoint(baseUrl: string): string {
-  try {
-    const url = new URL(baseUrl)
-    return url.origin !== 'null'
-      ? url.origin
-      : url.protocol
-  }
-  catch {
-    return 'an unparseable URL'
-  }
-}
-
-/** The origin a stored key is bound to, or null when the Base URL does not parse. */
+/** The origin a stored key is bound to, or null when the Base URL does not parse or has no origin. */
 export function endpointOrigin(baseUrl: string): string | null {
   try {
     const origin = new URL(baseUrl).origin
@@ -95,6 +81,19 @@ export function endpointOrigin(baseUrl: string): string | null {
   }
   catch {
     return null
+  }
+}
+
+/** What a log line or error may say about a Base URL: its origin (or scheme), never path, query or userinfo. */
+export function describeEndpoint(baseUrl: string): string {
+  const origin = endpointOrigin(baseUrl)
+  if (origin)
+    return origin
+  try {
+    return new URL(baseUrl).protocol
+  }
+  catch {
+    return 'an unparseable URL'
   }
 }
 

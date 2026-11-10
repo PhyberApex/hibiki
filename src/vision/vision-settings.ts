@@ -63,29 +63,38 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
       : null
   }
 
-  /**
-   * The OpenAI-compatible key to send to `baseUrl`, bound to an origin so that changing the Base URL to
-   * another host never hands that host the key (#767). The stored key belongs to the origin it was entered
-   * for (a key saved before binding existed belongs to the current Base URL until the Base URL changes,
-   * see `setOpenAiBaseUrl`). The env key belongs to OpenAI's own origin: for a custom endpoint, enter its key in Settings.
-   */
-  async function getOpenAiKey(baseUrl: string): Promise<{ apiKey: string | null, withheld: boolean }> {
-    const origin = endpointOrigin(baseUrl)
-    if (config.vision.openaiApiKey) {
-      return origin === endpointOrigin(OPENAI_COMPATIBLE_DEFAULT_BASE_URL)
-        ? { apiKey: config.vision.openaiApiKey, withheld: false }
-        : { apiKey: null, withheld: true }
-    }
-    const [stored, boundOrigin] = await Promise.all([
+  /** The stored OpenAI-compatible key and the origin it was saved for (null for a key saved before binding existed). */
+  async function getStoredOpenAiKey(): Promise<{ key: string | null, boundOrigin: string | null }> {
+    const [key, boundOrigin] = await Promise.all([
       appConfig.get(OPENAI_API_KEY_CONFIG_KEY),
       appConfig.get(OPENAI_API_KEY_ORIGIN_CONFIG_KEY),
     ])
-    if (!stored?.trim())
-      return { apiKey: null, withheld: false }
-    const keyOrigin = boundOrigin?.trim() || origin
-    return origin !== null && keyOrigin === origin
-      ? { apiKey: stored, withheld: false }
-      : { apiKey: null, withheld: true }
+    return {
+      key: key?.trim()
+        ? key
+        : null,
+      boundOrigin: boundOrigin?.trim() || null,
+    }
+  }
+
+  /**
+   * The OpenAI-compatible key to send to `baseUrl`, bound to an origin so that changing the Base URL to
+   * another host never hands that host the key (#767). The env key belongs to OpenAI's own origin and wins
+   * there; elsewhere the stored key is used if it was saved for this origin (a key saved before binding
+   * existed belongs to the current Base URL until the Base URL changes, see `setOpenAiBaseUrl`).
+   */
+  async function getOpenAiKey(baseUrl: string): Promise<{ apiKey: string | null, withheld: boolean }> {
+    const origin = endpointOrigin(baseUrl)
+    const envKey = config.vision.openaiApiKey
+    if (envKey && origin === endpointOrigin(OPENAI_COMPATIBLE_DEFAULT_BASE_URL))
+      return { apiKey: envKey, withheld: false }
+    const { key, boundOrigin } = await getStoredOpenAiKey()
+    if (key && origin !== null && (boundOrigin ?? origin) === origin)
+      return { apiKey: key, withheld: false }
+    return {
+      apiKey: null,
+      withheld: Boolean(envKey || key),
+    }
   }
 
   async function getStoredOrDefault(key: string, defaultValue: string): Promise<string> {
@@ -116,7 +125,9 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
         getOpenAiBaseUrl(),
         getOpenAiModel(),
       ])
-      const { apiKey } = await getOpenAiKey(baseUrl)
+      const { apiKey, withheld } = await getOpenAiKey(baseUrl)
+      if (withheld)
+        log.warn(`openai-compatible API key withheld from ${describeEndpoint(baseUrl)}: it was saved for another endpoint (or is the env key, which only goes to OpenAI)`)
       return { provider, apiKey, baseUrl, model }
     }
     return { provider: 'claude', apiKey: await getClaudeApiKey() }
@@ -199,11 +210,8 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
       }
       const previous = await getOpenAiBaseUrl()
       // A key saved before keys were bound to an endpoint belongs to the Base URL it was used with until now.
-      const [storedKey, boundOrigin] = await Promise.all([
-        appConfig.get(OPENAI_API_KEY_CONFIG_KEY),
-        appConfig.get(OPENAI_API_KEY_ORIGIN_CONFIG_KEY),
-      ])
-      if (storedKey?.trim() && !boundOrigin?.trim()) {
+      const { key: storedKey, boundOrigin } = await getStoredOpenAiKey()
+      if (storedKey && !boundOrigin) {
         const previousOrigin = endpointOrigin(previous)
         if (previousOrigin)
           await appConfig.set(OPENAI_API_KEY_ORIGIN_CONFIG_KEY, previousOrigin)

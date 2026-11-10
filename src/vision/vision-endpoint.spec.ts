@@ -7,7 +7,8 @@ describe('validateOpenAiBaseUrl', () => {
     'http://localhost:11434/v1',
     'http://127.0.0.1:1234/v1',
     'http://[::1]:8080/v1',
-    'http://ollama.localhost/v1',
+    'http://localhost./v1',
+    'http://gpu-box.local.:11434/v1',
     'http://gpu-box.local:11434/v1',
     'https://localhost:8443/v1',
   ])('accepts %s', (baseUrl) => {
@@ -25,6 +26,12 @@ describe('validateOpenAiBaseUrl', () => {
     ['https://evil.test/v1?', /query string/],
     ['https://api.openai.com/v1#', /fragment/],
     ['http://box.lan/v1', /must use https/],
+    ['http://ollama.localhost/v1', /must use https/],
+    ['https://[64:ff9b::a9fe:a9fe]/v1', /private, link-local or reserved/],
+    ['https://[::169.254.169.254]/v1', /private, link-local or reserved/],
+    ['https://[2002:a9fe:a9fe::]/v1', /private, link-local or reserved/],
+    ['https://[fec0::1]/v1', /private, link-local or reserved/],
+    ['https://198.18.0.1/v1', /private, link-local or reserved/],
     ['http://api.openai.com/v1', /must use https/],
     ['http://169.254.169.254/latest/meta-data', /private, link-local or reserved/],
     ['https://169.254.169.254/v1', /private, link-local or reserved/],
@@ -55,6 +62,7 @@ describe('assertEndpointResolvesSafely', () => {
     '127.0.0.1',
     '::1',
     'fe80::1',
+    '64:ff9b::a9fe:a9fe',
     '::ffff:192.168.0.1',
   ])('refuses a hostname resolving to %s', async (address) => {
     const lookup = jest.fn().mockResolvedValue([

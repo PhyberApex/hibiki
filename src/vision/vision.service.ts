@@ -163,6 +163,8 @@ export function createOpenAICompatibleVisionProvider(options: OpenAICompatiblePr
           method: 'POST',
           headers,
           body: JSON.stringify(requestBody),
+          // A redirect would carry the image to a host the Base URL guard never checked (#767).
+          redirect: 'manual',
         })
       }
       catch {
@@ -170,6 +172,8 @@ export function createOpenAICompatibleVisionProvider(options: OpenAICompatiblePr
       }
 
       // Status code only: an echoed body would hand an SSRF target's response back through the UI and hibiki.log (#767).
+      if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400))
+        throw new Error(`The vision endpoint at ${describeEndpoint(options.baseUrl)} redirected the request, which Hibiki does not follow. Use the final address as the Base URL.`)
       if (!response.ok)
         throw new Error(`The vision endpoint returned an error (HTTP ${response.status}).`)
 
