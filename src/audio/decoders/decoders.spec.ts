@@ -75,6 +75,31 @@ describe('backend sound decoders', () => {
     await expect(canDecode(fakePath)).resolves.toBe(false)
   })
 
+  it.each([
+    ['a 1 Hz', 1],
+    ['a 100 Hz', 100],
+    ['a 655350 Hz', 655350],
+  ])('reports a FLAC whose STREAMINFO declares %s sample rate as not decodable (#765)', async (_label, rate) => {
+    const bytes = readFileSync(fixture('fixture-stereo-44100.flac'))
+    // STREAMINFO's 20-bit sample rate starts at byte 18 (after "fLaC", the block header and 10 bytes of sizes).
+    bytes[18] = (rate >> 12) & 0xFF
+    bytes[19] = (rate >> 4) & 0xFF
+    bytes[20] = ((rate & 0x0F) << 4) | (bytes[20] & 0x0F)
+    const dir = mkdtempSync(join(tmpdir(), 'hibiki-decoders-'))
+    const path = join(dir, 'low-rate.flac')
+    writeFileSync(path, bytes)
+
+    await expect(canDecode(path)).resolves.toBe(false)
+  })
+
+  it('reports a .flac-named file with only the magic bytes as not decodable', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hibiki-decoders-'))
+    const path = join(dir, 'magic-only.flac')
+    writeFileSync(path, 'fLaC')
+
+    await expect(canDecode(path)).resolves.toBe(false)
+  })
+
   it('closes the file read stream when an mp3 stream is destroyed mid-decode', async () => {
     // Enough concatenated frames that the file is still being read when the decoder parks in push.
     const dir = mkdtempSync(join(tmpdir(), 'hibiki-decoders-'))
