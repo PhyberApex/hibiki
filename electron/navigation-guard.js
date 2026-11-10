@@ -104,7 +104,7 @@ function guardMainWindowNavigation(webContents, { appUrl, openExternal }) {
 function guardBrowserTab(webContents, { tabId }) {
   webContents.setWindowOpenHandler(({ url }) => {
     if (isWebUrl(url)) {
-      browserLog.debug(`Tab ${tabId} opening ${describeUrl(url)} in place of a new window`)
+      browserLog.info(`Tab ${tabId} opening ${describeUrl(url)} in place of a new window`)
       Promise.resolve(webContents.loadURL(url)).catch(err => browserLog.debug(`Tab ${tabId} could not load ${describeUrl(url)}`, err))
     }
     else {

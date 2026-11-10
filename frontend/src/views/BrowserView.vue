@@ -166,11 +166,16 @@ function cancelRename() {
   editingBookmarkUrl.value = null
 }
 
+/** Whether `url` is an http(s) page, the only kind a Browser tab opens besides a blank one. */
+function isWebUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url)
+}
+
 function normalizeUrl(input: string): string {
   let url = input.trim()
   if (!url)
     return ''
-  if (!/^https?:\/\//i.test(url))
+  if (!isWebUrl(url))
     url = `https://${url}`
   return url
 }
@@ -181,7 +186,7 @@ function normalizeUrl(input: string): string {
  * refuses anything but http(s) as well (#775).
  */
 async function openBookmark(bm: Bookmark) {
-  if (!/^https?:\/\//i.test(bm.url)) {
+  if (!isWebUrl(bm.url)) {
     console.warn(`[browser] Refused to open a bookmark that is not a web page (${urlScheme(bm.url)})`)
     return
   }
