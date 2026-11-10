@@ -603,6 +603,29 @@ describe('importScene', () => {
       expect(existsSync(join(config.audio.musicDir, 'bomb.wav'))).toBe(false)
     })
 
+    it('rejects an archive with more entries of any kind than the cap, before parsing them (#768)', async () => {
+      const files: Record<string, string> = {}
+      for (let i = 0; i < 4; i++)
+        files[`junk/${i}.txt`] = ''
+      const zipPath = createManifestZip(makeManifest({ displayName: 'Junk Entries' }), files)
+      await expect(importScene(config, zipPath, { maxArchiveEntries: 4 }))
+        .rejects
+        .toThrow('Invalid scene archive: 5 entries exceed the limit of 4')
+    })
+
+    it('rejects many entries just under the ratio floor that together exceed the ratio cap (#768)', async () => {
+      const zip = new AdmZip()
+      zip.addFile('hibiki-scene.json', Buffer.from(JSON.stringify(makeManifest({ displayName: 'Split Bomb' })), 'utf-8'))
+      for (let i = 0; i < 3; i++)
+        zip.addFile(`sounds/music/split-bomb-${i}.wav`, Buffer.alloc(1024 * 1024 - 1))
+      const zipPath = join(tempRoot, 'split-bomb.zip')
+      zip.writeZip(zipPath)
+      await expect(importScene(config, zipPath))
+        .rejects
+        .toThrow(/bundled sounds are compressed more than 200:1/)
+      expect(existsSync(join(config.audio.musicDir, 'split-bomb-0.wav'))).toBe(false)
+    })
+
     it('renames many clashes on one id quickly and to distinct ids (#768)', async () => {
       const files: Record<string, string> = {}
       const music = []

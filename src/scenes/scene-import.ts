@@ -36,9 +36,11 @@ export interface SceneImportLimits {
   maxFileBytes: number
   /** Declared uncompressed size of all bundled sounds together. */
   maxTotalBytes: number
+  /** Entries of any kind, read from the end of the archive before adm-zip parses them. */
+  maxArchiveEntries: number
   /** Bundled sound entries under `sounds/`. */
   maxBundledSounds: number
-  /** Declared size over compressed size, for entries above `RATIO_FLOOR_BYTES`. Audio barely deflates. */
+  /** Declared size over compressed size, per entry and for all bundled sounds together, above `RATIO_FLOOR_BYTES`. Audio barely deflates. */
   maxCompressionRatio: number
   /** Items in each of `scene.music`, `scene.ambience` and `scene.effects`. */
   maxItemsPerCategory: number
@@ -49,6 +51,8 @@ export const SCENE_IMPORT_LIMITS: SceneImportLimits = {
   // an hour of 256 kbps audio is about 115 MB
   maxFileBytes: 128 * 1024 * 1024,
   maxTotalBytes: 512 * 1024 * 1024,
+  // room for the bundled sounds plus directory entries and a zip tool's __MACOSX copies
+  maxArchiveEntries: 2048,
   maxBundledSounds: 512,
   maxCompressionRatio: 200,
   maxItemsPerCategory: 512,
@@ -212,7 +216,13 @@ function createFreshSoundIds(taken: (id: string) => boolean): (soundId: string) 
   }
 }
 
-function assertWithinLimits(entry: AdmZip.IZipEntry, total: number, limits: SceneImportLimits, archiveName: string): void {
+/** Bytes the bundled sounds planned so far declare, and how many they take in the archive. */
+interface BundledTotals {
+  declared: number
+  compressed: number
+}
+
+function assertWithinLimits(entry: AdmZip.IZipEntry, totals: BundledTotals, limits: SceneImportLimits, archiveName: string): void {
   const size = entry.header.size
   if (size > limits.maxFileBytes) {
     log.warn(`Rejected archive ${archiveName}: ${entry.entryName} declares ${size} bytes, over the ${limits.maxFileBytes}-byte limit`)
@@ -223,9 +233,15 @@ function assertWithinLimits(entry: AdmZip.IZipEntry, total: number, limits: Scen
     log.warn(`Rejected archive ${archiveName}: ${entry.entryName} declares ${size} bytes from ${compressed} compressed, over the ${limits.maxCompressionRatio}:1 ratio limit`)
     throw new Error(`Invalid scene archive: ${entry.entryName} is compressed more than ${limits.maxCompressionRatio}:1, which no sound file is`)
   }
+  const total = totals.declared
   if (total > limits.maxTotalBytes) {
     log.warn(`Rejected archive ${archiveName}: bundled sounds declare ${total} bytes, over the ${limits.maxTotalBytes}-byte limit`)
     throw new Error(`Invalid scene archive: bundled sounds (${total} bytes) exceed the ${limits.maxTotalBytes}-byte limit`)
+  }
+  // many entries each just under the floor must not add up to a bomb
+  if (total > RATIO_FLOOR_BYTES && total > totals.compressed * limits.maxCompressionRatio) {
+    log.warn(`Rejected archive ${archiveName}: bundled sounds declare ${total} bytes from ${totals.compressed} compressed, over the ${limits.maxCompressionRatio}:1 ratio limit`)
+    throw new Error(`Invalid scene archive: bundled sounds are compressed more than ${limits.maxCompressionRatio}:1, which no sound files are`)
   }
 }
 
@@ -241,8 +257,8 @@ async function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImpor
     throw new Error(`Invalid scene archive: ${entries.length} bundled sounds exceed the limit of ${limits.maxBundledSounds}`)
   }
   const planned: BundledSound[] = []
-  let total = 0
-  let seen = 0
+  const totals: BundledTotals = { declared: 0, compressed: 0 }
+  let iterations = 0
   for (const category of SOUND_CATEGORIES) {
     const prefix = `${SOUNDS_PREFIX}${category}/`
     const destDir = resolveStorageDir(config, category)
@@ -251,15 +267,16 @@ async function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImpor
     const taken = (id: string) => library.has(id.toLowerCase()) || plannedIds.has(id.toLowerCase())
     const freshSoundId = createFreshSoundIds(taken)
     for (const entry of entries) {
-      if (++seen % PLAN_YIELD_EVERY === 0)
+      if (++iterations % PLAN_YIELD_EVERY === 0)
         await new Promise(resolve => setImmediate(resolve))
       if (!entry.entryName.startsWith(prefix))
         continue
       const filename = basename(entry.entryName)
       if (filename.startsWith('.'))
         continue
-      total += entry.header.size
-      assertWithinLimits(entry, total, limits, archiveName)
+      totals.declared += entry.header.size
+      totals.compressed += entry.header.compressedSize
+      assertWithinLimits(entry, totals, limits, archiveName)
       const soundId = idFromFilename(filename)
       const sameFile = library.get(soundId.toLowerCase())?.find(f => f.filename === filename && f.size === entry.header.size)
       if (sameFile && !plannedIds.has(soundId.toLowerCase())) {
@@ -367,6 +384,24 @@ function assertSafeSoundIds(items: SceneItem[], category: SoundCategory, archive
   }
 }
 
+const EOCD_SIGNATURE = 0x06054B50
+const EOCD_BYTES = 22
+const MAX_ZIP_COMMENT_BYTES = 0xFFFF
+
+/**
+ * The entry count the archive's end-of-central-directory record declares, or
+ * null when there is none (adm-zip then rejects the file). A zip64 archive
+ * stores 0xFFFF here, which is over any sane cap as well.
+ */
+function declaredEntryCount(archive: Buffer): number | null {
+  const lowest = Math.max(0, archive.length - EOCD_BYTES - MAX_ZIP_COMMENT_BYTES)
+  for (let offset = archive.length - EOCD_BYTES; offset >= lowest; offset--) {
+    if (archive.readUInt32LE(offset) === EOCD_SIGNATURE)
+      return archive.readUInt16LE(offset + 10)
+  }
+  return null
+}
+
 export async function importScene(config: Config, sourceZipPath: string, overrides: Partial<SceneImportLimits> = {}): Promise<Scene> {
   const limits = {
     ...SCENE_IMPORT_LIMITS,
@@ -381,7 +416,14 @@ export async function importScene(config: Config, sourceZipPath: string, overrid
     throw new Error(`Invalid scene archive: the file (${archiveBytes} bytes) exceeds the ${limits.maxArchiveBytes}-byte limit`)
   }
   // adm-zip would read the archive with readFileSync; hand it the buffer instead (#710)
-  const zip = new AdmZip(await readFile(sourceZipPath))
+  const archive = await readFile(sourceZipPath)
+  // adm-zip parses every central-directory entry synchronously on construction (#768)
+  const entryCount = declaredEntryCount(archive)
+  if (entryCount !== null && entryCount > limits.maxArchiveEntries) {
+    log.warn(`Rejected archive ${archiveName}: declares ${entryCount} entries, over the limit of ${limits.maxArchiveEntries}`)
+    throw new Error(`Invalid scene archive: ${entryCount} entries exceed the limit of ${limits.maxArchiveEntries}`)
+  }
+  const zip = new AdmZip(archive)
 
   const manifestEntry = zip.getEntry(MANIFEST_JSON)
   if (!manifestEntry) {
