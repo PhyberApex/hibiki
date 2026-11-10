@@ -37,8 +37,10 @@ describe('searchableSoundSelect', () => {
   })
 
   it('does not open when disabled', async () => {
+    // isVisible() reads computed styles, which jsdom only resolves for connected elements
     const wrapper = mount(SearchableSoundSelect, {
       props: { options, modelValue: '', disabled: true },
+      attachTo: document.body,
     })
     await wrapper.find('.searchable-select-input').trigger('focus')
     await flushPromises()
