@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSoundLibrary } from './sound-library'
@@ -471,6 +471,87 @@ describe('sound ids stay inside the library directory', () => {
     await lib.list('music')
     const lines = warn.mock.calls.map(call => call.join(' ')).filter(line => /shares its id "thunder"/.test(line))
     expect(lines).toHaveLength(1)
+  })
+})
+
+describe('symlinks never reach outside the library (#766)', () => {
+  let tempRoot: string
+  let musicDir: string
+  let config: {
+    discord: { token: string }
+    audio: { storageRoot: string, musicDir: string, effectsDir: string, ambienceDir: string, webDistDir: string }
+    database: { path: string }
+  }
+  const secret = () => join(tempRoot, 'data', 'app-config.json')
+
+  beforeEach(() => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-sound-symlink-'))
+    musicDir = join(tempRoot, 'storage', 'music')
+    config = {
+      discord: { token: '' },
+      audio: {
+        storageRoot: tempRoot,
+        musicDir,
+        effectsDir: join(tempRoot, 'storage', 'effects'),
+        ambienceDir: join(tempRoot, 'storage', 'ambience'),
+        webDistDir: 'web-dist',
+      },
+      database: {
+        path: join(tempRoot, 'data', 'hibiki.json'),
+      },
+    }
+    mkdirSync(musicDir, { recursive: true })
+    mkdirSync(join(tempRoot, 'data'), { recursive: true })
+    writeFileSync(secret(), '{"secret":true}')
+    symlinkSync(secret(), join(musicDir, 'rain.mp3'))
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+    rmSync(tempRoot, { recursive: true, force: true })
+  })
+
+  it('getFilePath refuses a sound that is a symlink to a file outside the library', async () => {
+    await expect(createSoundLibrary(config).getFilePath('music', 'rain')).rejects.toThrow()
+  })
+
+  it('list does not show a symlinked sound', async () => {
+    writeFileSync(join(musicDir, 'tavern.mp3'), 'x')
+    const list = await createSoundLibrary(config).list('music')
+    expect(list.map(s => s.filename)).toEqual(['tavern.mp3'])
+  })
+
+  it('list warns once that it skipped a symlinked sound, not on every list', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const lib = createSoundLibrary(config)
+    await lib.list('music')
+    await lib.list('music')
+    const lines = warn.mock.calls.map(call => call.join(' ')).filter(line => /"rain\.mp3".*symlink/.test(line))
+    expect(lines).toHaveLength(1)
+  })
+
+  it.each(['canDecode', 'getFile', 'remove'] as const)('%s refuses a symlinked sound', async (method) => {
+    await expect(createSoundLibrary(config)[method]('music', 'rain')).rejects.toThrow()
+    expect(readFileSync(secret(), 'utf-8')).toBe('{"secret":true}')
+  })
+
+  it('refuses a dangling symlink', async () => {
+    symlinkSync(join(tempRoot, 'missing.mp3'), join(musicDir, 'gone.mp3'))
+    await expect(createSoundLibrary(config).getFilePath('music', 'gone')).rejects.toThrow()
+  })
+
+  it('still serves sounds when the category folder itself is reached through a symlink', async () => {
+    const realDir = join(tempRoot, 'elsewhere', 'music')
+    mkdirSync(realDir, { recursive: true })
+    writeFileSync(join(realDir, 'tavern.mp3'), 'x')
+    const linkedDir = join(tempRoot, 'linked-music')
+    symlinkSync(realDir, linkedDir)
+    const lib = createSoundLibrary({
+      ...config,
+      audio: { ...config.audio, musicDir: linkedDir },
+    })
+    await expect(lib.getFilePath('music', 'tavern')).resolves.toBe(join(linkedDir, 'tavern.mp3'))
+    expect((await lib.list('music')).map(s => s.filename)).toEqual(['tavern.mp3'])
   })
 })
 
