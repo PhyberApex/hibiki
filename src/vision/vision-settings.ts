@@ -36,6 +36,11 @@ const CLAUDE_API_KEY_CONFIG_KEY = 'vision.apiKey'
 const OPENAI_API_KEY_CONFIG_KEY = 'vision.openai.apiKey'
 /** Origin of the Base URL the stored OpenAI-compatible key was entered for; the key is only ever sent there. */
 const OPENAI_API_KEY_ORIGIN_CONFIG_KEY = 'vision.openai.apiKeyOrigin'
+/**
+ * Bound origin for a key whose endpoint could not be parsed: matches no real origin, so the key is withheld
+ * everywhere until the GM pastes it again, instead of staying unbound and following the next Base URL (#767).
+ */
+const UNPARSEABLE_ORIGIN = 'invalid:'
 const OPENAI_BASE_URL_CONFIG_KEY = 'vision.openai.baseUrl'
 const OPENAI_MODEL_CONFIG_KEY = 'vision.openai.model'
 const ENABLED_CONFIG_KEY = 'vision.enabled'
@@ -187,10 +192,12 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
       if (provider === 'openai-compatible') {
         // Bind the key to the endpoint it was entered for; it is never sent anywhere else.
         const origin = apiKey.trim()
-          ? endpointOrigin(await getOpenAiBaseUrl()) ?? ''
+          ? endpointOrigin(await getOpenAiBaseUrl()) ?? UNPARSEABLE_ORIGIN
           : ''
         await appConfig.set(OPENAI_API_KEY_ORIGIN_CONFIG_KEY, origin)
-        if (origin)
+        if (origin === UNPARSEABLE_ORIGIN)
+          log.warn('openai-compatible API key saved while the stored Base URL is invalid; it is withheld until the key is entered again for a valid Base URL')
+        else if (origin)
           log.info(`openai-compatible API key bound to ${origin}`)
       }
       return get()
@@ -213,8 +220,11 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
       const { key: storedKey, boundOrigin } = await getStoredOpenAiKey()
       if (storedKey && !boundOrigin) {
         const previousOrigin = endpointOrigin(previous)
+        await appConfig.set(OPENAI_API_KEY_ORIGIN_CONFIG_KEY, previousOrigin ?? UNPARSEABLE_ORIGIN)
         if (previousOrigin)
-          await appConfig.set(OPENAI_API_KEY_ORIGIN_CONFIG_KEY, previousOrigin)
+          log.info(`openai-compatible API key saved before endpoint binding pinned to ${previousOrigin}`)
+        else
+          log.warn('openai-compatible API key saved before endpoint binding had an invalid Base URL; it is withheld until entered again')
       }
       await setStored(OPENAI_BASE_URL_CONFIG_KEY, next)
       const state = await get()

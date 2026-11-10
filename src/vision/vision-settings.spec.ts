@@ -234,6 +234,31 @@ describe('createVisionSettings', () => {
       expect((await settings.getProviderConfig()).apiKey).toBe('sk-legacy')
     })
 
+    it('withholds a pre-binding key everywhere when the Base URL it was used with is invalid', async () => {
+      const config = makeConfig()
+      const appConfig = createAppConfig(config)
+      await appConfig.set('vision.openai.baseUrl', 'not a url')
+      await appConfig.set('vision.openai.apiKey', 'sk-legacy')
+      const settings = createVisionSettings(config, appConfig)
+      await settings.setProvider('openai-compatible')
+
+      const state = await settings.setOpenAiBaseUrl('https://hibiki-fast.example/v1')
+      expect(state.openaiCompatible.keyWithheld).toBe(true)
+      expect((await settings.getProviderConfig()).apiKey).toBeNull()
+    })
+
+    it('does not let a key saved under an invalid Base URL follow the next Base URL', async () => {
+      const config = makeConfig()
+      const appConfig = createAppConfig(config)
+      await appConfig.set('vision.openai.baseUrl', 'not a url')
+      const settings = createVisionSettings(config, appConfig)
+      await settings.setProvider('openai-compatible')
+      await settings.setApiKey('openai-compatible', 'sk-typed')
+
+      await settings.setOpenAiBaseUrl('https://hibiki-fast.example/v1')
+      expect((await settings.getProviderConfig()).apiKey).toBeNull()
+    })
+
     it('sends the env key only to OpenAI itself', async () => {
       const config = makeConfig({ openaiKey: 'sk-env' })
       const settings = createVisionSettings(config, createAppConfig(config))
