@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { parseRange, resolveAppPath } from './protocol'
+import { APP_CONTENT_SECURITY_POLICY, parseRange, resolveAppPath } from './protocol'
 
 describe('parseRange', () => {
   it('serves the whole file without a parseable range', () => {
@@ -107,5 +107,43 @@ describe('resolveAppPath', () => {
   it('refuses a malformed escape or a NUL byte', () => {
     expect(resolveAppPath(webDistDir, '/assets/%E0%A4%A')).toEqual(refused('malformed escape'))
     expect(resolveAppPath(webDistDir, '/index.html%00.js')).toEqual(refused('NUL byte'))
+  })
+})
+
+describe('the app Content-Security-Policy', () => {
+  const directives = new Map(
+    APP_CONTENT_SECURITY_POLICY.split(';').map((d) => {
+      const [name, ...sources] = d.trim().split(/\s+/)
+      return [name, sources] as const
+    }),
+  )
+
+  it('denies everything not named explicitly', () => {
+    expect(directives.get('default-src')).toEqual(['\'none\''])
+  })
+
+  it('runs only the app bundle\'s own scripts, never inline ones or another origin\'s', () => {
+    expect(directives.get('script-src')).toEqual(['\'self\'', 'blob:'])
+  })
+
+  it('loads styles and fonts from the app bundle alone, with no remote font origin', () => {
+    expect(directives.get('style-src')).toEqual(['\'self\'', '\'unsafe-inline\''])
+    expect(directives.get('font-src')).toEqual(['\'self\'', 'data:'])
+  })
+
+  it('streams media from hibiki://sound only', () => {
+    expect(directives.get('media-src')).toEqual(['hibiki://sound'])
+  })
+
+  it('keeps the renderer off the network and out of frames, plugins and form posts', () => {
+    expect(directives.get('connect-src')).toEqual(['\'self\''])
+    for (const name of [
+      'frame-src',
+      'object-src',
+      'base-uri',
+      'form-action',
+      'frame-ancestors',
+    ])
+      expect(directives.get(name)).toEqual(['\'none\''])
   })
 })

@@ -4,12 +4,13 @@ const { Readable } = require('node:stream')
 const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
 const { buildDiagnosticsSummary, LOG_TAIL_LINES, readLogTail } = require('./diagnostics')
 const { createHotkeys } = require('./hotkeys')
+const { createTrustedIpc } = require('./ipc-sender')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createUncaughtExceptionHandler, exitWithError } = require('./lifecycle')
 const { createLogger, setupFileLogging } = require('./logger')
 const { describeScheme, describeUrl, forwardMainFrameNavigation, guardMainWindowNavigation, isWebUrl, releaseOnMainFrameNavigation } = require('./navigation-guard')
 const { installPermissionPolicy } = require('./permissions')
-const { parseRange, resolveAppPath } = require('./protocol')
+const { APP_CONTENT_SECURITY_POLICY, parseRange, resolveAppPath } = require('./protocol')
 const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
@@ -53,6 +54,9 @@ const rendererLog = createLogger('renderer')
 const appLog = createLogger('app')
 const dialogLog = createLogger('dialog')
 const diagnosticsLog = createLogger('diagnostics')
+
+/** Every IPC handler registers through this: it refuses any sender that is not the app's own top-level frame (#774). */
+const trustedIpc = createTrustedIpc(ipcMain)
 
 let appHandle = null
 let mainWindow = null
@@ -162,8 +166,8 @@ function createWindow(loadUrl) {
 }
 
 function registerIpcHandlers(api) {
-  registerApiHandler(ipcMain, api, () => hotkeys)
-  audioStreamHandlers = registerAudioStreamHandlers(ipcMain, api.player)
+  registerApiHandler(trustedIpc, api, () => hotkeys)
+  audioStreamHandlers = registerAudioStreamHandlers(trustedIpc, api.player)
 }
 
 const browserViews = new Map()
@@ -195,7 +199,7 @@ function releaseRendererResources(win, reason) {
 }
 
 function registerBrowserViewHandlers() {
-  ipcMain.handle('browserView:create', async (_, { url }) => {
+  trustedIpc.handle('browserView:create', async (_, { url }) => {
     if (!mainWindow)
       throw new Error('No main window')
     const view = new WebContentsView()
@@ -251,7 +255,7 @@ function registerBrowserViewHandlers() {
     return id
   })
 
-  ipcMain.handle('browserView:destroy', async (_, { id }) => {
+  trustedIpc.handle('browserView:destroy', async (_, { id }) => {
     const view = browserViews.get(id)
     if (!view)
       return
@@ -270,11 +274,11 @@ function registerBrowserViewHandlers() {
     return view
   }
 
-  ipcMain.handle('browserView:setBounds', async (_, { id, bounds }) => {
+  trustedIpc.handle('browserView:setBounds', async (_, { id, bounds }) => {
     knownView(id, 'setBounds', 'debug')?.setBounds(bounds)
   })
 
-  ipcMain.handle('browserView:loadURL', async (_, { id, url }) => {
+  trustedIpc.handle('browserView:loadURL', async (_, { id, url }) => {
     const view = knownView(id, 'loadURL')
     if (view) {
       browserLog.info(`Tab ${id} loading ${describeUrl(url)}`)
@@ -282,30 +286,30 @@ function registerBrowserViewHandlers() {
     }
   })
 
-  ipcMain.handle('browserView:goBack', async (_, { id }) => {
+  trustedIpc.handle('browserView:goBack', async (_, { id }) => {
     const view = knownView(id, 'goBack')
     if (view?.webContents.navigationHistory.canGoBack())
       view.webContents.navigationHistory.goBack()
   })
 
-  ipcMain.handle('browserView:goForward', async (_, { id }) => {
+  trustedIpc.handle('browserView:goForward', async (_, { id }) => {
     const view = knownView(id, 'goForward')
     if (view?.webContents.navigationHistory.canGoForward())
       view.webContents.navigationHistory.goForward()
   })
 
-  ipcMain.handle('browserView:reload', async (_, { id }) => {
+  trustedIpc.handle('browserView:reload', async (_, { id }) => {
     knownView(id, 'reload')?.webContents.reload()
   })
 
-  ipcMain.handle('browserView:getMediaSourceId', async (_, { id }) => {
+  trustedIpc.handle('browserView:getMediaSourceId', async (_, { id }) => {
     const view = browserViews.get(id)
     if (!view || !mainWindow)
       throw new Error('View or window not found')
     return view.webContents.getMediaSourceId(mainWindow.webContents)
   })
 
-  ipcMain.handle('browserView:setAudioMuted', async (_, { id, muted }) => {
+  trustedIpc.handle('browserView:setAudioMuted', async (_, { id, muted }) => {
     const view = browserViews.get(id)
     if (!view)
       throw new Error(`Tab ${id} not found`)
@@ -313,7 +317,7 @@ function registerBrowserViewHandlers() {
     browserLog.debug(`Tab ${id} ${muted ? 'muted' : 'unmuted'}`)
   })
 
-  ipcMain.handle('browserView:show', async (_, { id }) => {
+  trustedIpc.handle('browserView:show', async (_, { id }) => {
     const view = browserViews.get(id)
     if (view && mainWindow) {
       mainWindow.contentView.removeChildView(view)
@@ -321,7 +325,7 @@ function registerBrowserViewHandlers() {
     }
   })
 
-  ipcMain.handle('browserView:hide', async (_, { id }) => {
+  trustedIpc.handle('browserView:hide', async (_, { id }) => {
     const view = browserViews.get(id)
     if (view && mainWindow)
       mainWindow.contentView.removeChildView(view)
@@ -434,10 +438,11 @@ function registerHibikiProtocol(api, webDistDir) {
         '.ico': 'image/x-icon',
         '.svg': 'image/svg+xml',
         '.png': 'image/png',
+        '.woff': 'font/woff',
         '.woff2': 'font/woff2',
       }[ext] || 'application/octet-stream'
       return fileResponse(filePath, {
-        headers: { 'Content-Type': mime },
+        headers: { 'Content-Type': mime, 'Content-Security-Policy': APP_CONTENT_SECURITY_POLICY },
       })
     }
 
@@ -510,7 +515,7 @@ app.whenReady().then(async () => {
     getApi: () => api,
     getWindow: () => mainWindow,
   })
-  ipcMain.handle('hotkeys:getStatus', () => hotkeys.getStatus())
+  trustedIpc.handle('hotkeys:getStatus', () => hotkeys.getStatus())
   await hotkeys.sync()
   registerBrowserViewHandlers()
   registerHibikiProtocol(api, webDistDir)
@@ -523,7 +528,7 @@ app.whenReady().then(async () => {
    * `show(title, options)` opens the dialog and resolves to the chosen path, or `null` when cancelled.
    */
   const handleFileDialog = (kind, defaultTitle, show) => {
-    ipcMain.handle(`dialog:${kind}`, async (_, options = {}) => {
+    trustedIpc.handle(`dialog:${kind}`, async (_, options = {}) => {
       const title = options.title ?? defaultTitle
       dialogLog.info(`${kind} "${title}" opened`)
       const chosen = await show(BrowserWindow.getFocusedWindow() ?? null, title, options)
@@ -567,10 +572,10 @@ app.whenReady().then(async () => {
       : result.filePaths[0]
   })
 
-  ipcMain.handle('logs:getPath', () => logging.logFile)
-  ipcMain.handle('logs:openFolder', () => shell.openPath(logging.logsDir))
+  trustedIpc.handle('logs:getPath', () => logging.logFile)
+  trustedIpc.handle('logs:openFolder', () => shell.openPath(logging.logsDir))
   // Settings → Diagnostics "Copy diagnostics" (#698): the content is never logged, only that it was copied.
-  ipcMain.handle('diagnostics:copy', async () => {
+  trustedIpc.handle('diagnostics:copy', async () => {
     diagnosticsLog.info('Copy diagnostics requested')
     try {
       const summary = await buildDiagnosticsSummary({
@@ -597,7 +602,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  ipcMain.handle('shell:openExternal', (_, url) => {
+  trustedIpc.handle('shell:openExternal', (_, url) => {
     if (isWebUrl(url))
       return shell.openExternal(url)
     appLog.warn(`openExternal refused a non-web URL (${describeScheme(url)})`)

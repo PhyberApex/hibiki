@@ -17,7 +17,6 @@ module.exports = {
     'forge/**/*.js',
     // Electron wiring only: covered by the e2e suite, not loadable outside Electron.
     '!electron/main.js',
-    '!electron/preload.js',
     '!**/*.spec.(t|j)s',
     '!**/__mocks__/**',
   ],

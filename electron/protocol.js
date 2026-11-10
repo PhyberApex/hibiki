@@ -2,6 +2,34 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 /**
+ * The Content-Security-Policy every `hibiki://app` response carries (#774).
+ * The app origin holds the preload bridge, so this is the layer that keeps a
+ * future HTML-injection sink from loading or running anything of its own:
+ * - `script-src` also allows `blob:` because the Routed Tab capture worklet
+ *   is loaded from a Blob URL (`frontend/src/audio/browser-audio-capture.ts`),
+ * - `font-src` also allows `data:` because Vite inlines the smallest
+ *   self-hosted font subsets,
+ * - `img-src` allows `https:` for Browser tab favicons and Discord guild icons,
+ * - `media-src` is the Sound Library stream origin, `hibiki://sound`.
+ * `connect-src` stays on the app origin: Discord, GitHub and the Vision
+ * Provider are all reached from the backend, never by renderer fetches.
+ */
+const APP_CONTENT_SECURITY_POLICY = [
+  'default-src \'none\'',
+  'script-src \'self\' blob:',
+  'style-src \'self\' \'unsafe-inline\'',
+  'font-src \'self\' data:',
+  'img-src \'self\' data: https:',
+  'media-src hibiki://sound',
+  'connect-src \'self\'',
+  'frame-src \'none\'',
+  'object-src \'none\'',
+  'base-uri \'none\'',
+  'form-action \'none\'',
+  'frame-ancestors \'none\'',
+].join('; ')
+
+/**
  * What a `Range` request header asks of a file of `totalSize` bytes:
  * - `{ kind: 'full' }` when there is no header or it is not a `bytes=<start>-[<end>]` range,
  * - `{ kind: 'partial', start, end }` with `end` clamped to the last byte, so
@@ -58,4 +86,4 @@ function resolveAppPath(webDistDir, pathname) {
   }
 }
 
-module.exports = { parseRange, resolveAppPath }
+module.exports = { APP_CONTENT_SECURITY_POLICY, parseRange, resolveAppPath }
