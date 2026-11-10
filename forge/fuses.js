@@ -20,8 +20,9 @@ const fusesConfig = {
   [FuseV1Options.EnableCookieEncryption]: true,
   // Refuse an app/ directory swapped in beside or instead of app.asar.
   [FuseV1Options.OnlyLoadAppFromAsar]: true,
-  // Check app.asar against the hash packager records. Only tamper-proof once the
-  // build is signed (ADR-0008), since the hash lives in the unsigned binary/Info.plist.
+  // Check app.asar against the hash packager records (macOS: Info.plist, Windows: an exe
+  // resource; no effect on Linux). Builds are unsigned today, so this only becomes
+  // tamper-proof with signing (agent-docs/adr/0008-code-signing-per-platform.md).
   [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
 
   // Electron's defaults, set explicitly because strictlyRequireAllFuses needs them.

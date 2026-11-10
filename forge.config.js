@@ -77,7 +77,7 @@ module.exports = {
     },
   ],
 
-  // Electron Fuses (#770): no runAsNode, NODE_OPTIONS or --inspect in the packaged app.
+  // Electron Fuses (#770), reasons in forge/fuses.js.
   plugins: [
     new FusesPlugin(fusesConfig),
   ],

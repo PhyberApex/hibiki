@@ -17,7 +17,7 @@ describe('fusesConfig', () => {
     expect(fusesConfig[FuseV1Options.EnableCookieEncryption]).toBe(true)
   })
 
-  it('sets every fuse the installed Electron knows, so a new one fails packaging', () => {
+  it('sets every fuse @electron/fuses knows and asks packaging to reject an unset one', () => {
     expect(fusesConfig.version).toBe(FuseVersion.V1)
     expect(fusesConfig.strictlyRequireAllFuses).toBe(true)
     const fuseIndexes = Object.values(FuseV1Options).filter(v => typeof v === 'number')
