@@ -33,9 +33,12 @@ function createLocalSink(getWindow) {
   }
 }
 
-/** The generic `api` channel: dispatches `{ domain, method, args }` to the `EmbeddedApi` and logs every failed call. */
-function registerApiHandler(ipcMain, api, getHotkeys) {
-  ipcMain.handle('api', async (_, { domain, method, args }) => {
+/**
+ * The generic `api` channel: dispatches `{ domain, method, args }` to the `EmbeddedApi` and logs every failed call.
+ * `ipc` is main's `trustedIpc`, so untrusted senders never reach the dispatch.
+ */
+function registerApiHandler(ipc, api, getHotkeys) {
+  ipc.handle('api', async (_, { domain, method, args }) => {
     // Own properties only: `__proto__`, `constructor` and inherited methods are not part of the API.
     const obj = Object.hasOwn(api, domain)
       ? api[domain]
@@ -70,7 +73,7 @@ function registerApiHandler(ipcMain, api, getHotkeys) {
  * crashes or reloads would leave them as silent, still-"playing" mixer inputs:
  * main calls the returned `endAll(reason)` whenever the renderer goes away.
  */
-function registerAudioStreamHandlers(ipcMain, player) {
+function registerAudioStreamHandlers(ipc, player) {
   /** Map<guildId, Map<streamId|undefined, PassThrough>> - multiple music streams per guild, mixed by backend */
   const audioStreams = new Map()
   /** Map<guildId, Map<streamId, PassThrough>> - multiple streams per guild, mixed by backend */
@@ -140,18 +143,18 @@ function registerAudioStreamHandlers(ipcMain, player) {
       stream.push(Buffer.from(chunk))
   }
 
-  ipcMain.handle('audio:startStream', async (_, { guildId, metadata, streamId }) => {
+  ipc.handle('audio:startStream', async (_, { guildId, metadata, streamId }) => {
     const streams = streamsFor(audioStreams, guildId)
     warnedUnknown.delete(unknownKey('audio:chunk', guildId, streamId))
     ipcLog.info(`audio:startStream ${streamId} for guild ${guildId}`)
     openStream('audio:startStream', streams, streamId, guildId, stream => player.startStream(guildId, stream, metadata, streamId))
   })
 
-  ipcMain.on('audio:chunk', (_, { guildId, streamId, chunk }) => {
+  ipc.on('audio:chunk', (_, { guildId, streamId, chunk }) => {
     write('audio:chunk', audioStreams.get(guildId)?.get(streamId), guildId, streamId, chunk)
   })
 
-  ipcMain.handle('audio:stopStream', async (_, { guildId, streamId }) => {
+  ipc.handle('audio:stopStream', async (_, { guildId, streamId }) => {
     const streams = audioStreams.get(guildId)
     if (streams)
       end(streams, streamId)
@@ -159,7 +162,7 @@ function registerAudioStreamHandlers(ipcMain, player) {
     player.stopStream(guildId, streamId)
   })
 
-  ipcMain.handle('audio:startEffectStream', async (_, { guildId, streamId, volume }) => {
+  ipc.handle('audio:startEffectStream', async (_, { guildId, streamId, volume }) => {
     const id = streamId || `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const streams = streamsFor(effectStreams, guildId)
     warnedUnknown.delete(unknownKey('audio:effectChunk', guildId, id))
@@ -170,12 +173,12 @@ function registerAudioStreamHandlers(ipcMain, player) {
     return id
   })
 
-  ipcMain.handle('audio:setEffectStreamVolume', async (_, { guildId, streamId, volume }) => {
+  ipc.handle('audio:setEffectStreamVolume', async (_, { guildId, streamId, volume }) => {
     ipcLog.debug(`audio:setEffectStreamVolume ${streamId} = ${volume} for guild ${guildId}`)
     player.setEffectStreamVolume(guildId, streamId, volume)
   })
 
-  ipcMain.on('audio:effectChunk', (_, { guildId, streamId, chunk }) => {
+  ipc.on('audio:effectChunk', (_, { guildId, streamId, chunk }) => {
     const streams = effectStreams.get(guildId)
     const stream = streamId
       ? streams?.get(streamId)
@@ -183,7 +186,7 @@ function registerAudioStreamHandlers(ipcMain, player) {
     write('audio:effectChunk', stream, guildId, streamId, chunk)
   })
 
-  ipcMain.handle('audio:stopEffectStream', async (_, { guildId, streamId }) => {
+  ipc.handle('audio:stopEffectStream', async (_, { guildId, streamId }) => {
     const streams = effectStreams.get(guildId)
     if (!streams)
       return

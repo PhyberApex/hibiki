@@ -190,7 +190,6 @@ Hibiki has no account. It only contacts:
 - **Discord** — once you set a bot token, to log the bot in and stream audio to voice channels.
 - **GitHub** — once per launch, one request to the Releases API (`api.github.com`) to see whether a newer version exists. Nothing is downloaded or installed. Turn it off in **Settings → Updates**.
 - **GitHub** — when you open the community scene registry, to fetch its index (`raw.githubusercontent.com`, cached for 24 hours).
-- **Google Fonts** — to load the app's typeface.
 - **Your Vision Provider** (Anthropic, or the Base URL you set) — only when Vision to Vibe is turned on and you analyze an image.
 - **Websites you open** in the Browser tab.
 - **The project's self-hosted Umami** (`analytics.phyberapex.de`) — only if you switch on **Usage Stats** in Settings. Off by default; anonymous counts of which features are used, no identifier stored. The full event list is on the [privacy page](https://phyberapex.github.io/hibiki/privacy).
