@@ -75,6 +75,7 @@ const UNCONFIGURED_VISION = {
     encrypted: true,
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-6-astra',
+    keyWithheld: false,
   },
 }
 
@@ -90,6 +91,7 @@ vi.mock('@/api/config', () => ({
       encrypted: true,
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-6-astra',
+      keyWithheld: false,
     },
   }),
   openFileDialog: vi.fn().mockResolvedValue(null),
@@ -620,10 +622,31 @@ describe('sceneView — Vision to Vibe entry point', () => {
         encrypted: true,
         baseUrl: 'http://localhost:11434/v1',
         model: 'local-vision',
+        keyWithheld: false,
       },
     })
     const wrapper = await mountScene()
     expect(wrapper.find('[data-testid="vision-to-vibe-open"]').exists()).toBe(true)
+  })
+
+  it('tells the dialog the API key travels with the image when one is sent to the endpoint', async () => {
+    vi.mocked(fetchVisionConfig).mockResolvedValue({
+      provider: 'openai-compatible',
+      enabled: true,
+      configured: true,
+      claude: { keyConfigured: false, configured: false, encrypted: true },
+      openaiCompatible: {
+        keyConfigured: true,
+        configured: true,
+        encrypted: true,
+        baseUrl: 'https://openrouter.ai/api/v1',
+        model: 'local-vision',
+        keyWithheld: false,
+      },
+    })
+    const wrapper = await mountScene()
+    await wrapper.find('[data-testid="vision-to-vibe-open"]').trigger('click')
+    expect(wrapper.find('[role="dialog"][aria-label="Vision to Vibe"]').text()).toContain('The image and your API key are sent to https://openrouter.ai/api/v1')
   })
 
   it('stays hidden when the vision config cannot be loaded', async () => {

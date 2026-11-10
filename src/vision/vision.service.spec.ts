@@ -145,7 +145,11 @@ describe('createVisionService', () => {
 describe('createOpenAICompatibleVisionProvider', () => {
   const imageBuffer = Buffer.from('fake-png-bytes')
 
-  function provider(overrides: Partial<{ apiKey: string | null, baseUrl: string, model: string }> = {}, fetchImpl = jest.fn()) {
+  const publicLookup = jest.fn().mockResolvedValue([
+    { address: '104.18.6.192', family: 4 },
+  ])
+
+  function provider(overrides: Partial<{ apiKey: string | null, baseUrl: string, model: string }> = {}, fetchImpl = jest.fn(), lookupImpl = publicLookup) {
     return {
       fetchImpl,
       instance: createOpenAICompatibleVisionProvider({
@@ -153,6 +157,7 @@ describe('createOpenAICompatibleVisionProvider', () => {
         baseUrl: overrides.baseUrl ?? OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
         model: overrides.model ?? OPENAI_COMPATIBLE_DEFAULT_MODEL,
         fetchImpl,
+        lookupImpl,
       }),
     }
   }
@@ -224,22 +229,55 @@ describe('createOpenAICompatibleVisionProvider', () => {
     await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow(/HTTP 401/)
   })
 
-  it('redacts the API key if the endpoint echoes it back in an error body', async () => {
+  it('reports only the status code, never the error body, so a response cannot be read back through the UI or log', async () => {
     const fetchImpl = jest.fn().mockResolvedValue({
       ok: false,
       status: 401,
-      text: async () => 'Incorrect API key provided: sk-echoed-secret',
+      text: async () => 'Incorrect API key provided: sk-echoed-secret, ami-id: i-0abc',
     })
     const { instance } = provider({ apiKey: 'sk-echoed-secret' }, fetchImpl)
     const error = await instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' }).catch(err => err as Error)
-    expect(error.message).toContain('HTTP 401')
-    expect(error.message).not.toContain('sk-echoed-secret')
+    expect(error.message).toBe('The vision endpoint returned an error (HTTP 401).')
   })
 
-  it('reports an unreachable endpoint with a readable message', async () => {
+  it('reports an unreachable endpoint by origin only, never path or credentials', async () => {
     const fetchImpl = jest.fn().mockRejectedValue(new Error('fetch failed'))
-    const { instance } = provider({ apiKey: 'sk-test', baseUrl: 'http://localhost:1/v1' }, fetchImpl)
-    await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow(/couldn't reach/i)
+    const { instance } = provider({ apiKey: 'sk-test', baseUrl: 'http://localhost:1/secret-path/v1' }, fetchImpl)
+    const error = await instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' }).catch(err => err as Error)
+    expect(error.message).toMatch(/couldn't reach/i)
+    expect(error.message).toContain('http://localhost:1')
+    expect(error.message).not.toContain('secret-path')
+  })
+
+  it.each([
+    'http://169.254.169.254/latest/meta-data',
+    'https://evil.test/collect?x=',
+    'https://api.openai.com/v1#',
+    'http://box.lan/v1',
+    'ftp://example.com/v1',
+  ])('refuses %s without sending a request', async (baseUrl) => {
+    const fetchImpl = jest.fn()
+    const { instance } = provider({ apiKey: 'sk-test', baseUrl }, fetchImpl)
+    await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow()
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('does not follow redirects, so the image cannot be bounced to an unchecked host', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue({ ok: false, status: 307, type: 'basic' })
+    const { instance } = provider({ apiKey: 'sk-test' }, fetchImpl)
+    await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow(/redirected the request/)
+    expect(fetchImpl.mock.calls[0][1].redirect).toBe('manual')
+  })
+
+  it('refuses a public-looking host that resolves to link-local space without sending a request', async () => {
+    const fetchImpl = jest.fn()
+    const lookupImpl = jest.fn().mockResolvedValue([
+      { address: '169.254.169.254', family: 4 },
+    ])
+    const { instance } = provider({ apiKey: 'sk-test', baseUrl: 'https://rebind.example/v1' }, fetchImpl, lookupImpl)
+    await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow(/private, loopback or link-local/)
+    expect(lookupImpl).toHaveBeenCalledWith('rebind.example')
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 
   it('reports a non-JSON model response with a readable message', async () => {
