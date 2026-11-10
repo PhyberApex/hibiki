@@ -202,7 +202,10 @@ export const usePlayerStore = defineStore('player', () => {
     }
     if (!longest)
       return null
-    const elapsedMs = Math.max(0, Math.min(longest.durationMs, tick - longest.startedAt))
+    // A duration of 0 means "not known yet": keep counting rather than clamping to it.
+    const elapsedMs = Math.max(0, longest.durationMs > 0
+      ? Math.min(longest.durationMs, tick - longest.startedAt)
+      : tick - longest.startedAt)
     return { count, elapsedMs, totalMs: longest.durationMs }
   }
 

@@ -1544,6 +1544,64 @@ describe('guildAudioManager', () => {
       expect(getEngineMock().playMusicFromStream).not.toHaveBeenCalled()
     })
 
+    describe('cancelling the decode of a slot that is gone (#773)', () => {
+      /** A factory that captures the signal it is handed and settles only when the test says so (or rejects once aborted, like the PCM cache). */
+      function signalledFactory() {
+        let signal!: AbortSignal
+        let resolveFn!: () => void
+        const factory = jest.fn().mockImplementation((s: AbortSignal) => new Promise((resolve, reject) => {
+          signal = s
+          resolveFn = () => resolve(effectResult(createFakeStream()))
+          s.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        }))
+        return {
+          factory,
+          signal: () => signal,
+          resolve: () => resolveFn(),
+        }
+      }
+
+      it('aborts the decode of an instance evicted by the cap, and resolves its call without starting it', async () => {
+        const oldest = signalledFactory()
+        const firstTrigger = manager.playEffect(oldest.factory, 'fx1', { volume: 90 })
+        for (let i = 0; i < 7; i++)
+          await manager.playEffect(jest.fn().mockReturnValue(effectResult(createFakeStream())), 'fx1', { volume: 90 })
+        expect(oldest.signal().aborted).toBe(false)
+
+        await manager.playEffect(jest.fn().mockReturnValue(effectResult(createFakeStream())), 'fx1', { volume: 90 })
+
+        expect(oldest.signal().aborted).toBe(true)
+        await expect(firstTrigger).resolves.toMatchObject({ soundId: 'fx1', durationMs: 0 })
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(8)
+      })
+
+      it('aborts an in-flight decode on stopAllEffects and on stopEffect of its id', async () => {
+        const bulk = signalledFactory()
+        const bulkCall = manager.playEffect(bulk.factory, 'fx1', { volume: 90 })
+        manager.stopAllEffects()
+        expect(bulk.signal().aborted).toBe(true)
+        await expect(bulkCall).resolves.toMatchObject({ soundId: 'fx1' })
+
+        const single = signalledFactory()
+        const singleCall = manager.playEffect(single.factory, 'fx2', { volume: 90 })
+        const reservedId = (manager as unknown as { effectStreamIds: Set<string> }).effectStreamIds.values().next().value as string
+        manager.stopEffect(reservedId)
+        expect(single.signal().aborted).toBe(true)
+        await expect(singleCall).resolves.toMatchObject({ instanceId: reservedId, soundId: 'fx2' })
+        expect(getEngineMock().playMusicFromStream).not.toHaveBeenCalled()
+      })
+
+      it('never aborts the decode of an instance that is still live', async () => {
+        const live = signalledFactory()
+        const call = manager.playEffect(live.factory, 'fx1', { volume: 90 })
+        live.resolve()
+        await call
+
+        expect(live.signal().aborted).toBe(false)
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+      })
+    })
+
     it('an instance that already ended naturally does not count toward the cap', async () => {
       const endedStream = createFakeStream()
       await manager.playEffect(jest.fn().mockReturnValue(effectResult(endedStream)), 'fx1', { volume: 90 })

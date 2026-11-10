@@ -172,6 +172,8 @@ export class GuildAudioManager extends EventEmitter {
    * it.
    */
   private readonly effectInstances = new Map<string, Omit<EffectInstanceInfo, 'instanceId'>>()
+  /** One per Effect slot whose decode is still in flight, aborted when that slot is evicted or stopped before it starts, so the PCM cache can drop a decode nobody will play (#773). */
+  private readonly effectDecodeAborts = new Map<string, AbortController>()
   /** Matches the renderer's own Effect cap (`EFFECT_INSTANCE_CAP` in SceneView.vue, #408). */
   private static readonly EFFECT_INSTANCE_CAP = 8
   /**
@@ -818,9 +820,13 @@ export class GuildAudioManager extends EventEmitter {
    * while its decode is in flight it still resolves with a well-formed
    * id/duration though it never started: `activeEffects` is the source of
    * truth for liveness, and `stopEffect` on such an id is a safe no-op.
+   * `streamFactory` gets an `AbortSignal` aborted at that point, so the
+   * Effect PCM cache can cancel a decode nobody will play (#773); a
+   * factory rejecting after that abort resolves the same way, with a
+   * duration of 0.
    */
   async playEffect(
-    streamFactory: () => { stream: Readable, durationMs: number } | Promise<{ stream: Readable, durationMs: number }>,
+    streamFactory: (signal: AbortSignal) => { stream: Readable, durationMs: number } | Promise<{ stream: Readable, durationMs: number }>,
     soundId: string,
     options: PlayEffectOptions,
   ): Promise<EffectInstanceInfo> {
@@ -833,15 +839,28 @@ export class GuildAudioManager extends EventEmitter {
     const streamId = `backend-effect:${++this.effectStreamSeq}`
     this.enforceEffectInstanceCap()
     this.effectStreamIds.add(streamId)
+    const decodeAbort = new AbortController()
+    this.effectDecodeAborts.set(streamId, decodeAbort)
 
     let stream: Readable
     let durationMs: number
     try {
-      ({ stream, durationMs } = await streamFactory())
+      ({ stream, durationMs } = await streamFactory(decodeAbort.signal))
     }
     catch (err) {
+      if (decodeAbort.signal.aborted) {
+        // The slot went away mid-decode and the decode was cancelled for
+        // it: same outcome as the "evicted while decoding" path below.
+        log.debug(`Effect "${soundId}" ${streamId} was stopped before it started; its decode ended with ${err instanceof Error
+          ? err.name
+          : String(err)}`)
+        return neverStarted(streamId, soundId, 0)
+      }
       this.effectStreamIds.delete(streamId)
       throw err
+    }
+    finally {
+      this.effectDecodeAborts.delete(streamId)
     }
 
     if (!this.effectStreamIds.has(streamId)) {
@@ -853,12 +872,7 @@ export class GuildAudioManager extends EventEmitter {
       // here ever touches the engine for a slot that was reserved but
       // never decoded.
       stream.destroy?.()
-      return {
-        instanceId: streamId,
-        soundId,
-        startedAt: new Date().toISOString(),
-        durationMs,
-      }
+      return neverStarted(streamId, soundId, durationMs)
     }
 
     const startedAt = new Date().toISOString()
@@ -887,6 +901,7 @@ export class GuildAudioManager extends EventEmitter {
     }
     log.info(`Stopping effect instance ${instanceId} (guild ${this.guildId})`)
     this.effectStreamIds.delete(instanceId)
+    this.abortEffectDecode(instanceId)
     this.effectInstances.delete(instanceId)
     this.engine.stopMusic(instanceId)
     this.emit('effectsChanged')
@@ -895,8 +910,10 @@ export class GuildAudioManager extends EventEmitter {
   /** Ends every backend-decoded Effect instance for this guild (Scene stop, leave, disconnect). */
   stopAllEffects(): void {
     const hadActive = this.effectInstances.size > 0
-    for (const streamId of this.effectStreamIds)
+    for (const streamId of this.effectStreamIds) {
       this.engine.stopMusic(streamId)
+      this.abortEffectDecode(streamId)
+    }
     this.effectStreamIds.clear()
     this.effectInstances.clear()
     if (hadActive)
@@ -910,6 +927,16 @@ export class GuildAudioManager extends EventEmitter {
     ].map(([instanceId, entry]) => ({ instanceId, ...entry }))
   }
 
+  /** Cancels `streamId`'s decode if it is still in flight; a no-op for an instance already playing. */
+  private abortEffectDecode(streamId: string): void {
+    const decodeAbort = this.effectDecodeAborts.get(streamId)
+    if (decodeAbort === undefined)
+      return
+    log.debug(`Cancelling the in-flight decode of Effect ${streamId} (guild ${this.guildId})`)
+    this.effectDecodeAborts.delete(streamId)
+    decodeAbort.abort()
+  }
+
   /** FIFO-evicts the oldest backend-decoded Effect instance(s) until there's room for one more, under `EFFECT_INSTANCE_CAP`. */
   private enforceEffectInstanceCap(): void {
     let evictedActive = false
@@ -919,6 +946,7 @@ export class GuildAudioManager extends EventEmitter {
         break
       log.info(`Effect cap of ${GuildAudioManager.EFFECT_INSTANCE_CAP} reached; stopping oldest ${oldestStreamId}`)
       this.effectStreamIds.delete(oldestStreamId)
+      this.abortEffectDecode(oldestStreamId)
       if (this.effectInstances.delete(oldestStreamId))
         evictedActive = true
       this.engine.stopMusic(oldestStreamId)
@@ -951,5 +979,15 @@ export class GuildAudioManager extends EventEmitter {
 
   get connected() {
     return Boolean(this.localSink) || Boolean(this.connection)
+  }
+}
+
+/** The well-formed result `playEffect` resolves with for a slot evicted or stopped before its Effect ever started. */
+function neverStarted(instanceId: string, soundId: string, durationMs: number): EffectInstanceInfo {
+  return {
+    instanceId,
+    soundId,
+    startedAt: new Date().toISOString(),
+    durationMs,
   }
 }

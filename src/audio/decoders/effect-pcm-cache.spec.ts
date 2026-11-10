@@ -19,6 +19,15 @@ function pcmChunkOfMs(ms: number): Buffer {
   return Buffer.alloc(ms * PCM_BYTES_PER_MS)
 }
 
+function decoderOf(...chunks: Buffer[]): () => Readable {
+  return () => NodeReadable.from(chunks)
+}
+
+/** Lets queued promise callbacks and stream ticks run. */
+function flush(): Promise<void> {
+  return new Promise(resolve => setImmediate(resolve))
+}
+
 describe('effectPcmCache', () => {
   it('decodes on a cache miss and returns the decoded bytes', async () => {
     const cache = createEffectPcmCache()
@@ -207,18 +216,20 @@ describe('effectPcmCache', () => {
       expect(decodeC).toHaveBeenCalledTimes(1)
     })
 
-    it('plays an Effect over the per-file cut-off with its full duration but never retains it, warning with the sound name', async () => {
+    it('plays an Effect over the per-file cut-off from a fresh decoder but never retains it, warning once with the sound name', async () => {
       const cache = createEffectPcmCache({ maxEntryBytes: pcmChunkOfMs(500).length })
       const decode = decoderOfMs(600)
 
       const first = await cache.get('/effects/long-battle.mp3', decode)
 
-      expect(first.durationMs).toBe(600)
+      // The cut-off decode is dropped and a fresh one streams; its duration is unknown until it plays out (#773).
+      expect(decode).toHaveBeenCalledTimes(2)
+      expect(first.durationMs).toBe(0)
       expect(await collect(first.stream)).toHaveLength(pcmChunkOfMs(600).length)
       expect(warn).toHaveBeenCalledWith('[effect-pcm-cache]', expect.stringContaining('long-battle.mp3'))
 
       const second = await cache.get('/effects/long-battle.mp3', decode)
-      expect(decode).toHaveBeenCalledTimes(2)
+      expect(decode).toHaveBeenCalledTimes(3)
       expect(second.durationMs).toBe(600)
       expect(await collect(second.stream)).toHaveLength(pcmChunkOfMs(600).length)
       expect(warn).toHaveBeenCalledTimes(1)
@@ -250,6 +261,176 @@ describe('effectPcmCache', () => {
       expect(decodeSmall).toHaveBeenCalledTimes(1)
     })
   })
+  describe('bounded decode and concurrency (#773)', () => {
+    let warn: jest.SpyInstance
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    })
+    afterEach(() => warn.mockRestore())
+
+    /** A decoder that would produce `chunkMs`-sized PCM chunks forever, counting how many were pulled and whether it was destroyed. */
+    function endlessDecoder(chunkMs = 100) {
+      const state = { pulled: 0, destroyed: false }
+      const stream = new NodeReadable({
+        read() {
+          state.pulled++
+          this.push(pcmChunkOfMs(chunkMs))
+        },
+        destroy(err, cb) {
+          state.destroyed = true
+          cb(err)
+        },
+      })
+      return { stream, state }
+    }
+
+    /** A decode the test resolves by hand, recording whether it ever started. */
+    function deferredDecoder(...chunks: string[]) {
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const decode = jest.fn().mockImplementation(async () => {
+        await gate
+        return streamOf(...chunks)
+      })
+      return { decode, release }
+    }
+
+    it('stops reading a decode as soon as it passes the per-file cut-off, instead of buffering the whole file', async () => {
+      const cache = createEffectPcmCache({ maxEntryBytes: pcmChunkOfMs(500).length })
+      const { stream, state } = endlessDecoder(100)
+
+      await expect(cache.warm('/effects/endless.wav', () => stream)).resolves.toBe(false)
+
+      expect(state.destroyed).toBe(true)
+      // 6 chunks pass the 500 ms cut-off; a few more may sit in the stream's read-ahead buffer.
+      expect(state.pulled).toBeLessThan(20)
+      expect(warn).toHaveBeenCalledWith('[effect-pcm-cache]', expect.stringContaining('endless.wav'))
+    })
+
+    it('plays an Effect cut off mid-decode from a fresh decoder, reporting an unknown (0) duration', async () => {
+      const cache = createEffectPcmCache({ maxEntryBytes: pcmChunkOfMs(500).length })
+      const first = endlessDecoder(100)
+      const { PassThrough } = jest.requireActual('node:stream')
+      const live = new PassThrough()
+      const decode = jest.fn()
+        .mockReturnValueOnce(first.stream)
+        .mockReturnValueOnce(live)
+
+      const result = await cache.get('long', decode)
+
+      expect(decode).toHaveBeenCalledTimes(2)
+      expect(first.state.destroyed).toBe(true)
+      expect(result.durationMs).toBe(0)
+      live.end(pcmChunkOfMs(700))
+      expect(await collect(result.stream)).toHaveLength(pcmChunkOfMs(700).length)
+    })
+
+    it('learns an oversize Effect\'s duration once one uncached play runs to the end, and reports it from then on', async () => {
+      const cache = createEffectPcmCache({ maxEntryBytes: pcmChunkOfMs(500).length })
+      await cache.warm('long', () => endlessDecoder(100).stream)
+
+      const first = await cache.get('long', decoderOf(pcmChunkOfMs(400), pcmChunkOfMs(400)))
+      expect(first.durationMs).toBe(0)
+      await collect(first.stream)
+
+      const { PassThrough } = jest.requireActual('node:stream')
+      const live = new PassThrough()
+      const second = await cache.get('long', () => live)
+      expect(second.stream).toBe(live)
+      expect(second.durationMs).toBe(800)
+    })
+
+    it('runs at most `maxConcurrentDecodes` cache-miss decodes at once, queueing the rest', async () => {
+      const cache = createEffectPcmCache({ maxConcurrentDecodes: 2 })
+      const a = deferredDecoder('a')
+      const b = deferredDecoder('b')
+      const c = deferredDecoder('c')
+
+      const getA = cache.get('a', a.decode)
+      const getB = cache.get('b', b.decode)
+      const getC = cache.get('c', c.decode)
+      await flush()
+
+      expect(a.decode).toHaveBeenCalledTimes(1)
+      expect(b.decode).toHaveBeenCalledTimes(1)
+      expect(c.decode).not.toHaveBeenCalled()
+
+      a.release()
+      await getA
+      await flush()
+      expect(c.decode).toHaveBeenCalledTimes(1)
+
+      b.release()
+      c.release()
+      expect((await collect((await getB).stream)).toString()).toBe('b')
+      expect((await collect((await getC).stream)).toString()).toBe('c')
+    })
+
+    it('cancels a decode whose only caller aborts, destroying the decoder stream and caching nothing', async () => {
+      const cache = createEffectPcmCache()
+      const { PassThrough } = jest.requireActual('node:stream')
+      const live = new PassThrough()
+      const controller = new AbortController()
+
+      const pending = cache.get('door', () => live, { signal: controller.signal })
+      await flush()
+      controller.abort()
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+      expect(live.destroyed).toBe(true)
+      const decode = jest.fn().mockReturnValue(streamOf('ok'))
+      await cache.get('door', decode)
+      expect(decode).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps a shared decode running while another caller still waits on it', async () => {
+      const cache = createEffectPcmCache()
+      const { decode, release } = deferredDecoder('abc')
+      const controller = new AbortController()
+
+      const aborted = cache.get('door', decode, { signal: controller.signal })
+      const kept = cache.get('door', decode)
+      controller.abort()
+      release()
+
+      await expect(aborted).rejects.toMatchObject({ name: 'AbortError' })
+      expect((await collect((await kept).stream)).toString()).toBe('abc')
+      expect(decode).toHaveBeenCalledTimes(1)
+    })
+
+    it('never starts a queued decode whose caller aborted while it waited, and hands its slot on', async () => {
+      const cache = createEffectPcmCache({ maxConcurrentDecodes: 1 })
+      const a = deferredDecoder('a')
+      const b = deferredDecoder('b')
+      const c = deferredDecoder('c')
+      const controller = new AbortController()
+
+      const getA = cache.get('a', a.decode)
+      const getB = cache.get('b', b.decode, { signal: controller.signal })
+      const getC = cache.get('c', c.decode)
+      controller.abort()
+      await expect(getB).rejects.toMatchObject({ name: 'AbortError' })
+
+      a.release()
+      c.release()
+      await getA
+      expect((await collect((await getC).stream)).toString()).toBe('c')
+      expect(b.decode).not.toHaveBeenCalled()
+    })
+
+    it('rejects straight away for a signal that is already aborted, without decoding', async () => {
+      const cache = createEffectPcmCache()
+      const decode = jest.fn().mockReturnValue(streamOf('a'))
+
+      await expect(cache.get('door', decode, {
+        signal: AbortSignal.abort(),
+      })).rejects.toMatchObject({ name: 'AbortError' })
+      expect(decode).not.toHaveBeenCalled()
+    })
+  })
+
   describe('warm', () => {
     it('decodes an uncached Effect into the cache so the first trigger needs no decode', async () => {
       const cache = createEffectPcmCache()
