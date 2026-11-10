@@ -513,6 +513,17 @@ describe('importScene', () => {
         ]),
         'music item 1 repeatMax must not be less than repeatMin',
       ],
+      [
+        'more items in a category than the cap',
+        makeManifest({
+          scene: {
+            music: Array.from({ length: 513 }, () => item()),
+            ambience: [],
+            effects: [],
+          },
+        }),
+        'scene.music has 513 items, over the limit of 512',
+      ],
     ])('rejects %s before extracting anything', async (_label, manifest, message) => {
       const zipPath = createManifestZip(manifest, { 'sounds/music/validation-orphan.mp3': 'x' })
       await expect(importScene(config, zipPath)).rejects.toThrow(`Invalid hibiki-scene.json: ${message}`)
@@ -557,6 +568,99 @@ describe('importScene', () => {
         .toThrow(/exceed the 50-byte limit/)
       expect(existsSync(join(config.audio.musicDir, 'many-1.mp3'))).toBe(false)
       expect(existsSync(join(config.audio.effectsDir, 'many-2.wav'))).toBe(false)
+    })
+
+    it('rejects an archive file larger than the archive cap before reading it (#768)', async () => {
+      const zipPath = createManifestZip(bundledManifest('Huge Archive', 'sounds/music/huge-archive.mp3'), {
+        'sounds/music/huge-archive.mp3': 'x',
+      })
+      await expect(importScene(config, zipPath, { maxArchiveBytes: 64 }))
+        .rejects
+        .toThrow(/exceeds the 64-byte limit/)
+      expect(existsSync(join(config.audio.musicDir, 'huge-archive.mp3'))).toBe(false)
+    })
+
+    it('rejects an archive with more bundled sounds than the cap, before writing any (#768)', async () => {
+      const files: Record<string, string> = {}
+      for (let i = 0; i < 4; i++)
+        files[`sounds/effects/${i}/count-cap.wav`] = ''
+      const zipPath = createManifestZip(makeManifest({ displayName: 'Too Many Entries' }), files)
+      await expect(importScene(config, zipPath, { maxBundledSounds: 3 }))
+        .rejects
+        .toThrow('Invalid scene archive: 4 bundled sounds exceed the limit of 3')
+      expect(existsSync(join(config.audio.effectsDir, 'count-cap.wav'))).toBe(false)
+    })
+
+    it('rejects an entry compressed beyond the ratio cap without writing anything (#768)', async () => {
+      const zip = new AdmZip()
+      zip.addFile('hibiki-scene.json', Buffer.from(JSON.stringify(bundledManifest('Bomb', 'sounds/music/bomb.wav')), 'utf-8'))
+      zip.addFile('sounds/music/bomb.wav', Buffer.alloc(4 * 1024 * 1024))
+      const zipPath = join(tempRoot, 'bomb.zip')
+      zip.writeZip(zipPath)
+      await expect(importScene(config, zipPath))
+        .rejects
+        .toThrow(/bomb\.wav is compressed more than 200:1/)
+      expect(existsSync(join(config.audio.musicDir, 'bomb.wav'))).toBe(false)
+    })
+
+    it('rejects an archive with more entries of any kind than the cap, before parsing them (#768)', async () => {
+      const files: Record<string, string> = {}
+      for (let i = 0; i < 4; i++)
+        files[`junk/${i}.txt`] = ''
+      const zipPath = createManifestZip(makeManifest({ displayName: 'Junk Entries' }), files)
+      await expect(importScene(config, zipPath, { maxArchiveEntries: 4 }))
+        .rejects
+        .toThrow('Invalid scene archive: 5 entries exceed the limit of 4')
+    })
+
+    it('counts the entries adm-zip parses, not a lowered total in the end record (#768)', async () => {
+      const files: Record<string, string> = {}
+      for (let i = 0; i < 4; i++)
+        files[`junk/${i}.txt`] = ''
+      const zipPath = createManifestZip(makeManifest({ displayName: 'Lying Total' }), files)
+      const archive = readFileSync(zipPath)
+      const eocd = archive.lastIndexOf(Buffer.from([0x50, 0x4B, 0x05, 0x06]))
+      // adm-zip sizes its entry list from "entries on this disk" (offset 8), not "total entries" (offset 10)
+      archive.writeUInt16LE(1, eocd + 10)
+      writeFileSync(zipPath, archive)
+      await expect(importScene(config, zipPath, { maxArchiveEntries: 4 }))
+        .rejects
+        .toThrow('Invalid scene archive: 5 entries exceed the limit of 4')
+    })
+
+    it('rejects many entries just under the ratio floor that together exceed the ratio cap (#768)', async () => {
+      const zip = new AdmZip()
+      zip.addFile('hibiki-scene.json', Buffer.from(JSON.stringify(makeManifest({ displayName: 'Split Bomb' })), 'utf-8'))
+      for (let i = 0; i < 3; i++)
+        zip.addFile(`sounds/music/split-bomb-${i}.wav`, Buffer.alloc(1024 * 1024 - 1))
+      const zipPath = join(tempRoot, 'split-bomb.zip')
+      zip.writeZip(zipPath)
+      await expect(importScene(config, zipPath))
+        .rejects
+        .toThrow(/bundled sounds are compressed more than 200:1/)
+      expect(existsSync(join(config.audio.musicDir, 'split-bomb-0.wav'))).toBe(false)
+    })
+
+    it('renames many clashes on one id quickly and to distinct ids (#768)', async () => {
+      const files: Record<string, string> = {}
+      const music = []
+      for (let i = 0; i < 300; i++) {
+        files[`sounds/music/${i}/clash.mp3`] = `clash ${i}`
+        music.push({
+          soundName: `Clash ${i}`,
+          volume: 50,
+          bundled: true,
+          bundledPath: `sounds/music/${i}/clash.mp3`,
+        })
+      }
+      const zipPath = createManifestZip(makeManifest({
+        displayName: 'Many Clashes',
+        scene: { music, ambience: [], effects: [] },
+      }), files)
+      const scene = await importScene(config, zipPath)
+      const ids = scene.music.map(item => item.soundId)
+      expect(new Set(ids.map(id => id.toLowerCase())).size).toBe(300)
+      expect(ids.filter(id => id !== 'clash').every(id => /^clash-\d+$/.test(id))).toBe(true)
     })
 
     it('removes the extracted sounds again when the Scene cannot be saved', async () => {
