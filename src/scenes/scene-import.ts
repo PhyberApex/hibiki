@@ -384,24 +384,6 @@ function assertSafeSoundIds(items: SceneItem[], category: SoundCategory, archive
   }
 }
 
-const EOCD_SIGNATURE = 0x06054B50
-const EOCD_BYTES = 22
-const MAX_ZIP_COMMENT_BYTES = 0xFFFF
-
-/**
- * The entry count the archive's end-of-central-directory record declares, or
- * null when there is none (adm-zip then rejects the file). A zip64 archive
- * stores 0xFFFF here, which is over any sane cap as well.
- */
-function declaredEntryCount(archive: Buffer): number | null {
-  const lowest = Math.max(0, archive.length - EOCD_BYTES - MAX_ZIP_COMMENT_BYTES)
-  for (let offset = archive.length - EOCD_BYTES; offset >= lowest; offset--) {
-    if (archive.readUInt32LE(offset) === EOCD_SIGNATURE)
-      return archive.readUInt16LE(offset + 10)
-  }
-  return null
-}
-
 export async function importScene(config: Config, sourceZipPath: string, overrides: Partial<SceneImportLimits> = {}): Promise<Scene> {
   const limits = {
     ...SCENE_IMPORT_LIMITS,
@@ -416,14 +398,15 @@ export async function importScene(config: Config, sourceZipPath: string, overrid
     throw new Error(`Invalid scene archive: the file (${archiveBytes} bytes) exceeds the ${limits.maxArchiveBytes}-byte limit`)
   }
   // adm-zip would read the archive with readFileSync; hand it the buffer instead (#710)
-  const archive = await readFile(sourceZipPath)
-  // adm-zip parses every central-directory entry synchronously on construction (#768)
-  const entryCount = declaredEntryCount(archive)
-  if (entryCount !== null && entryCount > limits.maxArchiveEntries) {
+  // construction reads only the end-of-central-directory record (zip64 included);
+  // the entries themselves are parsed synchronously on first access, so the count
+  // adm-zip will parse is checked before anything touches them (#768)
+  const zip = new AdmZip(await readFile(sourceZipPath))
+  const entryCount = zip.getEntryCount()
+  if (entryCount > limits.maxArchiveEntries) {
     log.warn(`Rejected archive ${archiveName}: declares ${entryCount} entries, over the limit of ${limits.maxArchiveEntries}`)
     throw new Error(`Invalid scene archive: ${entryCount} entries exceed the limit of ${limits.maxArchiveEntries}`)
   }
-  const zip = new AdmZip(archive)
 
   const manifestEntry = zip.getEntry(MANIFEST_JSON)
   if (!manifestEntry) {

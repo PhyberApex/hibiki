@@ -613,6 +613,21 @@ describe('importScene', () => {
         .toThrow('Invalid scene archive: 5 entries exceed the limit of 4')
     })
 
+    it('counts the entries adm-zip parses, not a lowered total in the end record (#768)', async () => {
+      const files: Record<string, string> = {}
+      for (let i = 0; i < 4; i++)
+        files[`junk/${i}.txt`] = ''
+      const zipPath = createManifestZip(makeManifest({ displayName: 'Lying Total' }), files)
+      const archive = readFileSync(zipPath)
+      const eocd = archive.lastIndexOf(Buffer.from([0x50, 0x4B, 0x05, 0x06]))
+      // adm-zip sizes its entry list from "entries on this disk" (offset 8), not "total entries" (offset 10)
+      archive.writeUInt16LE(1, eocd + 10)
+      writeFileSync(zipPath, archive)
+      await expect(importScene(config, zipPath, { maxArchiveEntries: 4 }))
+        .rejects
+        .toThrow('Invalid scene archive: 5 entries exceed the limit of 4')
+    })
+
     it('rejects many entries just under the ratio floor that together exceed the ratio cap (#768)', async () => {
       const zip = new AdmZip()
       zip.addFile('hibiki-scene.json', Buffer.from(JSON.stringify(makeManifest({ displayName: 'Split Bomb' })), 'utf-8'))
