@@ -1,6 +1,6 @@
 import type { Readable } from 'node:stream'
 import { basename } from 'node:path'
-import { Readable as NodeReadable } from 'node:stream'
+import { Readable as NodeReadable, pipeline, Transform } from 'node:stream'
 import { createLogger } from '../../logger'
 import { MIXER_CHANNELS, MIXER_SAMPLE_RATE } from './pcm-resample'
 
@@ -15,6 +15,8 @@ const DEFAULT_MAX_ENTRIES = 32
 const DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 /** One Effect decoding to more than a minute of PCM (~11.5 MB) is never cached (#664). */
 const DEFAULT_MAX_ENTRY_BYTES = 60_000 * PCM_BYTES_PER_MS
+/** Cache-miss decodes buffering at once (#773); each holds at most `maxEntryBytes` (plus one chunk) while it runs. */
+const DEFAULT_MAX_CONCURRENT_DECODES = 2
 /** Durations remembered for oversize Effects; each is a path and a number, so this only stops unbounded growth. */
 const MAX_OVERSIZE_KEYS = 256
 
@@ -23,13 +25,31 @@ export interface EffectPcmCacheOptions {
   maxEntries?: number
   /** Most decoded PCM bytes kept across all entries. */
   maxBytes?: number
-  /** Decoded size above which an Effect streams uncached instead. */
+  /** Decoded size above which an Effect streams uncached instead; a decode is cut off as soon as it passes this. */
   maxEntryBytes?: number
+  /** Most cache-miss decodes running at once; further ones wait their turn. */
+  maxConcurrentDecodes?: number
 }
 
 export interface EffectPcmResult {
   stream: Readable
+  /** Decoded duration in ms; 0 when not known yet (an oversize Effect that has never played to the end). */
   durationMs: number
+}
+
+export interface EffectPcmGetOptions {
+  /** Aborting gives up on this request (rejecting with an `AbortError`); the shared decode itself is cancelled once no caller waits on it any more. */
+  signal?: AbortSignal
+}
+
+type Decode = () => Readable | Promise<Readable>
+
+/** A cache-miss decode in flight, shared by every caller asking for the same key. Resolves `undefined` when the Effect turned out to be over `maxEntryBytes`. */
+interface PendingDecode {
+  promise: Promise<Buffer | undefined>
+  /** Callers still waiting on `promise`; the decode is cancelled when this drops to zero. */
+  waiters: number
+  controller: AbortController
 }
 
 /**
@@ -45,39 +65,49 @@ export interface EffectPcmResult {
  *
  * A GM can still drop a five-minute track into Effects: caching that would
  * hold ~57 MB for the session, and every trigger would wait out the whole
- * decode (#664). So an Effect whose decoded PCM exceeds `maxEntryBytes` is
- * played from that first decode but never retained; only its duration is
- * remembered, and every later trigger streams straight from a fresh decoder
- * with no up-front wait.
+ * decode (#664). So a decode is cut off the moment it passes
+ * `maxEntryBytes` (#773: a file decoding to a gigabyte must never be read
+ * into memory first), and that Effect streams from a fresh decoder on every
+ * trigger, never retained. Its duration is unknown until one of those
+ * uncached plays runs to the end, which is then remembered.
+ *
+ * At most `maxConcurrentDecodes` cache-miss decodes buffer at once, and a
+ * caller that no longer needs its decode (an Effect Instance evicted or
+ * stopped before it started) aborts it through `signal`.
  */
 export class EffectPcmCache {
   private readonly cache = new Map<string, Buffer>()
   private cachedBytes = 0
   /** Decodes in flight, keyed the same way as `cache` — dedupes a cache-miss burst (e.g. a GM double-clicking an Effect that's never been played) into a single decode instead of racing separate WASM decoder instances for the same file. */
-  private readonly pending = new Map<string, Promise<Buffer>>()
-  /** Durations of Effects found to be over `maxEntryBytes`, keyed like `cache`. */
-  private readonly oversize = new Map<string, number>()
+  private readonly pending = new Map<string, PendingDecode>()
+  /** Effects found to be over `maxEntryBytes`, keyed like `cache`, with their duration once an uncached play has measured it (`null` until then). */
+  private readonly oversize = new Map<string, number | null>()
   private readonly maxEntries: number
   private readonly maxBytes: number
   private readonly maxEntryBytes: number
+  private readonly maxConcurrentDecodes: number
+  private activeDecodes = 0
+  /** Decodes waiting for a slot, in arrival order; `grant` hands one the slot being released. */
+  private readonly decodeQueue: Array<{ grant: () => void }> = []
 
   constructor(options: EffectPcmCacheOptions = {}) {
     this.maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES
     this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES
     this.maxEntryBytes = options.maxEntryBytes ?? DEFAULT_MAX_ENTRY_BYTES
+    this.maxConcurrentDecodes = Math.max(1, options.maxConcurrentDecodes ?? DEFAULT_MAX_CONCURRENT_DECODES)
   }
 
   /**
    * Returns a fresh, independent Readable of `key`'s PCM data, plus its
    * duration — from the cache if already decoded (also refreshing its
    * recency), otherwise by running `decode()` to completion first (joining
-   * an already in-flight decode for the same key, if there is one). The
-   * whole file is always decoded before this resolves (cache hit and miss
-   * alike), so `durationMs` — the decoded buffer's byte length divided by
-   * the fixed PCM byte rate — is known up front, before playback starts; no
-   * decoder changes are needed for this (see issue #509). A `decode()` that
-   * rejects or whose stream errors is never cached, so the next request
-   * tries again rather than being stuck replaying a partial/failed decode.
+   * an already in-flight decode for the same key, if there is one). For a
+   * cacheable Effect the whole file is decoded before this resolves, so
+   * `durationMs` — the decoded buffer's byte length divided by the fixed PCM
+   * byte rate — is known up front, before playback starts (see issue
+   * #509). A `decode()` that rejects or whose stream errors is never
+   * cached, so the next request tries again rather than being stuck
+   * replaying a partial/failed decode.
    *
    * Always hands out a *copy* of the cached bytes, never the cached
    * `Buffer` itself: the mixer (`node-audio-mixer`'s volume scaling)
@@ -88,19 +118,13 @@ export class EffectPcmCache {
    * instances of the same Effect (an explicitly supported case) would race
    * on mutating that one shared buffer mid-playback.
    *
-   * The one exception to "decoded up front" is an Effect already known to
-   * be over `maxEntryBytes`: its fresh decoder stream is returned as is,
-   * with the duration remembered from its first decode.
+   * An Effect over `maxEntryBytes` (known already, or found out by this
+   * decode being cut off) instead gets a fresh decoder stream as is, with
+   * its remembered duration or 0 while that is still unknown.
    */
-  async get(key: string, decode: () => Readable | Promise<Readable>): Promise<EffectPcmResult> {
-    const oversizeMs = this.oversize.get(key)
-    if (oversizeMs !== undefined) {
-      log.debug(`Effect ${basename(key)} is over the cache cut-off; streaming it uncached`)
-      return {
-        stream: await decode(),
-        durationMs: oversizeMs,
-      }
-    }
+  async get(key: string, decode: Decode, options: EffectPcmGetOptions = {}): Promise<EffectPcmResult> {
+    if (this.oversize.has(key))
+      return this.streamUncached(key, decode)
 
     const cached = this.cache.get(key)
     if (cached !== undefined) {
@@ -111,7 +135,9 @@ export class EffectPcmCache {
       }
     }
 
-    const buffer = await this.decodeOnce(key, decode)
+    const buffer = await this.decodeOnce(key, decode, options.signal)
+    if (buffer === undefined)
+      return this.streamUncached(key, decode)
     return {
       stream: NodeReadable.from(Buffer.from(buffer)),
       durationMs: durationOf(buffer),
@@ -127,7 +153,7 @@ export class EffectPcmCache {
    * over `maxEntryBytes`, so nothing is retained. Rejects when the decode
    * fails, leaving nothing cached.
    */
-  async warm(key: string, decode: () => Readable | Promise<Readable>): Promise<boolean> {
+  async warm(key: string, decode: Decode): Promise<boolean> {
     if (this.oversize.has(key))
       return false
     const cached = this.cache.get(key)
@@ -135,32 +161,151 @@ export class EffectPcmCache {
       this.bump(key, cached)
       return true
     }
-    await this.decodeOnce(key, decode)
-    return !this.oversize.has(key)
+    return (await this.decodeOnce(key, decode)) !== undefined
   }
 
-  private decodeOnce(key: string, decode: () => Readable | Promise<Readable>): Promise<Buffer> {
-    const inFlight = this.pending.get(key)
-    if (inFlight)
-      return inFlight
+  private async streamUncached(key: string, decode: Decode): Promise<EffectPcmResult> {
+    const knownMs = this.oversize.get(key) ?? null
+    log.debug(`Effect ${basename(key)} is over the cache cut-off; streaming it uncached (duration ${knownMs === null
+      ? 'unknown'
+      : `${knownMs} ms`})`)
+    const stream = await decode()
+    if (knownMs !== null)
+      return { stream, durationMs: knownMs }
+    return {
+      stream: this.measureUncached(key, stream),
+      durationMs: 0,
+    }
+  }
 
-    const decoding = (async () => readAll(await decode()))()
+  /** Passes `stream` through untouched, counting its bytes; when it runs to the end, remembers the oversize Effect's duration for later triggers. */
+  private measureUncached(key: string, stream: Readable): Readable {
+    let bytes = 0
+    const counter = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        bytes += chunk.length
+        callback(null, chunk)
+      },
+    })
+    pipeline(stream, counter, (err) => {
+      if (err || !this.oversize.has(key))
+        return
+      const durationMs = Math.round(bytes / PCM_BYTES_PER_MS)
+      this.oversize.set(key, durationMs)
+      log.info(`Effect ${basename(key)} measured at ${durationMs} ms (${toMb(bytes)} MB) after an uncached play`)
+    })
+    return counter
+  }
+
+  private decodeOnce(key: string, decode: Decode, signal?: AbortSignal): Promise<Buffer | undefined> {
+    if (signal?.aborted)
+      return Promise.reject(abortError())
+    let entry = this.pending.get(key)
+    if (entry === undefined)
+      entry = this.startDecode(key, decode)
+    return this.waitFor(key, entry, signal)
+  }
+
+  private startDecode(key: string, decode: Decode): PendingDecode {
+    const controller = new AbortController()
+    const promise = (async () => {
+      // Only yield when queued, so a free slot starts `decode()` in the same tick.
+      if (!this.tryAcquireDecodeSlot())
+        await this.waitForDecodeSlot(key, controller.signal)
+      try {
+        const stream = await decode()
+        return await readBounded(stream, this.maxEntryBytes, controller.signal)
+      }
+      finally {
+        this.releaseDecodeSlot()
+      }
+    })()
       .then((buffer) => {
-        if (buffer.length > this.maxEntryBytes)
-          this.markOversize(key, buffer)
+        if (buffer === undefined)
+          this.markOversize(key)
         else
           this.bump(key, buffer)
         return buffer
       })
-      .finally(() => this.pending.delete(key))
-    this.pending.set(key, decoding)
-    return decoding
+      .finally(() => {
+        if (this.pending.get(key)?.controller === controller)
+          this.pending.delete(key)
+      })
+    // A cancelled decode has no waiter left to observe its rejection.
+    promise.catch(() => {})
+    const entry: PendingDecode = { promise, waiters: 0, controller }
+    this.pending.set(key, entry)
+    return entry
   }
 
-  private markOversize(key: string, buffer: Buffer): void {
-    const durationMs = durationOf(buffer)
-    log.warn(`Effect ${basename(key)} decodes to ${toMb(buffer.length)} MB (${durationMs} ms), over the ${toMb(this.maxEntryBytes)} MB cache cut-off; streaming it uncached from now on`)
-    this.oversize.set(key, durationMs)
+  /** Waits on a shared decode for one caller; that caller aborting leaves the decode to the others, or cancels it when it was the last one waiting. */
+  private waitFor(key: string, entry: PendingDecode, signal?: AbortSignal): Promise<Buffer | undefined> {
+    entry.waiters++
+    if (signal === undefined)
+      return entry.promise
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        entry.waiters--
+        if (entry.waiters === 0) {
+          log.debug(`Cancelling the decode of Effect ${basename(key)}: no caller waits on it any more`)
+          entry.controller.abort()
+          if (this.pending.get(key) === entry)
+            this.pending.delete(key)
+        }
+        reject(abortError())
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      entry.promise.then(
+        (buffer) => {
+          signal.removeEventListener('abort', onAbort)
+          resolve(buffer)
+        },
+        (err: unknown) => {
+          signal.removeEventListener('abort', onAbort)
+          reject(err)
+        },
+      )
+    })
+  }
+
+  private tryAcquireDecodeSlot(): boolean {
+    if (this.activeDecodes >= this.maxConcurrentDecodes)
+      return false
+    this.activeDecodes++
+    return true
+  }
+
+  private waitForDecodeSlot(key: string, signal: AbortSignal): Promise<void> {
+    log.debug(`Effect ${basename(key)} waits for a decode slot (${this.activeDecodes} running, ${this.decodeQueue.length} queued)`)
+    return new Promise<void>((resolve, reject) => {
+      const waiter = { grant: resolve }
+      const onAbort = () => {
+        const index = this.decodeQueue.indexOf(waiter)
+        if (index !== -1)
+          this.decodeQueue.splice(index, 1)
+        reject(abortError())
+      }
+      waiter.grant = () => {
+        signal.removeEventListener('abort', onAbort)
+        resolve()
+      }
+      this.decodeQueue.push(waiter)
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+  }
+
+  /** Hands the slot straight to the next queued decode, if any. */
+  private releaseDecodeSlot(): void {
+    const next = this.decodeQueue.shift()
+    if (next)
+      next.grant()
+    else
+      this.activeDecodes--
+  }
+
+  private markOversize(key: string): void {
+    log.warn(`Effect ${basename(key)} decodes to more than the ${toMb(this.maxEntryBytes)} MB cache cut-off; decode cut off there, streaming it uncached from now on`)
+    this.oversize.set(key, null)
     if (this.oversize.size > MAX_OVERSIZE_KEYS) {
       const oldestKey = this.oversize.keys().next().value
       if (oldestKey !== undefined)
@@ -191,10 +336,39 @@ export class EffectPcmCache {
   }
 }
 
-async function readAll(stream: Readable): Promise<Buffer> {
-  const chunks: Buffer[] = []
-  for await (const chunk of stream) chunks.push(chunk as Buffer)
-  return Buffer.concat(chunks)
+/**
+ * Reads `stream` into one buffer, or resolves `undefined` (destroying the
+ * stream, so its decoder stops) as soon as more than `limit` bytes have come
+ * through — at most `limit` plus one chunk is ever held. Aborting `signal`
+ * destroys the stream and rejects with an `AbortError`.
+ */
+async function readBounded(stream: Readable, limit: number, signal: AbortSignal): Promise<Buffer | undefined> {
+  if (signal.aborted) {
+    stream.destroy()
+    throw abortError()
+  }
+  const onAbort = () => stream.destroy(abortError())
+  signal.addEventListener('abort', onAbort, { once: true })
+  try {
+    const chunks: Buffer[] = []
+    let total = 0
+    for await (const chunk of stream) {
+      total += (chunk as Buffer).length
+      if (total > limit) {
+        stream.destroy()
+        return undefined
+      }
+      chunks.push(chunk as Buffer)
+    }
+    return Buffer.concat(chunks, total)
+  }
+  finally {
+    signal.removeEventListener('abort', onAbort)
+  }
+}
+
+function abortError(): Error {
+  return new DOMException('The Effect decode was aborted', 'AbortError')
 }
 
 function durationOf(buffer: Buffer): number {

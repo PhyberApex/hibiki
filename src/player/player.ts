@@ -307,7 +307,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
     const manager = requireManager(guildId, 'playEffect')
     const path = await sounds.getFilePath('effects', soundId)
     log.info(`playEffect ${soundId} in guild ${guildId}: volume ${options.volume}`)
-    return manager.playEffect(() => effectPcmCache.get(path, () => createPcmStream(path)), soundId, options)
+    return manager.playEffect(signal => effectPcmCache.get(path, () => createPcmStream(path), { signal }), soundId, options)
   }
 
   /**
