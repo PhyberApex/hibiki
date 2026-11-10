@@ -181,7 +181,7 @@ describe('createSceneStore', () => {
     await store.save({ name: 'Atomic' })
     const scenesPath = join(dirname(config.database.path), 'scenes.json')
     const entries = await readdir(dirname(scenesPath))
-    expect(entries).not.toContain('scenes.json.tmp')
+    expect(entries.filter(name => name.endsWith('.tmp'))).toEqual([])
   })
 
   describe('hotkeys', () => {

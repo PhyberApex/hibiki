@@ -4,7 +4,7 @@ import { readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { clearStorageWarnings, getStorageWarnings } from './json-file'
-import { createAppConfig } from './persistence'
+import { createAppConfig, redactSecrets } from './persistence'
 
 describe('createAppConfig', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-config-'))
@@ -52,7 +52,7 @@ describe('createAppConfig', () => {
     await appConfig.set('atomic', 'true')
     const dataDir = join(tempRoot, 'data')
     const entries = await readdir(dataDir)
-    expect(entries).not.toContain('app-config.json.tmp')
+    expect(entries.filter(name => name.endsWith('.tmp'))).toEqual([])
   })
 
   it('delete removes the key from the file, leaving the others', async () => {
@@ -105,11 +105,24 @@ describe('createAppConfig with a corrupt store', () => {
     const warnings = getStorageWarnings()
     expect(warnings).toHaveLength(1)
     expect(warnings[0]!.file).toBe(configPath)
-    expect(readFileSync(warnings[0]!.backupPath, 'utf-8')).toBe('{"discord.token": "trunca')
+    expect(readFileSync(warnings[0]!.backupPath, 'utf-8')).toBe('{"discord.token": "[redacted]"')
 
     await appConfig.set('discord.token', 'new-token')
-    expect(readFileSync(warnings[0]!.backupPath, 'utf-8')).toBe('{"discord.token": "trunca')
+    expect(readFileSync(warnings[0]!.backupPath, 'utf-8')).toBe('{"discord.token": "[redacted]"')
     expect(await appConfig.get('discord.token')).toBe('new-token')
+  })
+
+  it('redacts the secrets in a backup an earlier version left in the clear', async () => {
+    const configPath = join(corruptRoot, 'data', 'app-config.json')
+    const oldBackup = `${configPath}.corrupt-2025-01-01T00-00-00-000Z.bak`
+    mkdirSync(dirname(configPath), { recursive: true })
+    writeFileSync(configPath, '{"kept": "yes"}')
+    writeFileSync(oldBackup, '{"discord.token": "old-plaintext", "kept": "yes"')
+
+    const appConfig = createAppConfig(corruptConfig)
+    expect(await appConfig.get('kept')).toBe('yes')
+
+    expect(readFileSync(oldBackup, 'utf-8')).toBe('{"discord.token": "[redacted]", "kept": "yes"')
   })
 
   it('a wrong top-level type (array) is backed up and a warning is recorded', async () => {
@@ -121,6 +134,39 @@ describe('createAppConfig with a corrupt store', () => {
     const val = await appConfig.get('anything')
     expect(val).toBeNull()
     expect(getStorageWarnings()).toHaveLength(1)
+  })
+})
+
+describe('redactSecrets', () => {
+  it('blanks every secret value and keeps the rest of the file for diagnosis', () => {
+    const raw = JSON.stringify({
+      'discord.token': 'MTIz.abc',
+      'vision.apiKey': 'sk-ant-1',
+      'vision.openai.apiKey': 'enc:v1:ZW5j',
+      'vision.provider': 'claude',
+    }, null, 2)
+
+    const redacted = redactSecrets(raw)
+
+    expect(JSON.parse(redacted)).toEqual({
+      'discord.token': '[redacted]',
+      'vision.apiKey': '[redacted]',
+      'vision.openai.apiKey': '[redacted]',
+      'vision.provider': 'claude',
+    })
+  })
+
+  it('handles escaped quotes inside a value', () => {
+    expect(redactSecrets('{"discord.token":"a\\"b\\\\","x":"1"}')).toBe('{"discord.token":"[redacted]","x":"1"}')
+  })
+
+  it('blanks a value truncated by an interrupted write', () => {
+    expect(redactSecrets('{"a": "1", "vision.apiKey": "sk-ant-tru')).toBe('{"a": "1", "vision.apiKey": "[redacted]"')
+    expect(redactSecrets('{"discord.token": "abc\\')).toBe('{"discord.token": "[redacted]"')
+  })
+
+  it('leaves non-secret keys that merely look similar untouched', () => {
+    expect(redactSecrets('{"discord_token": "keep", "xdiscord.token": "keep"}')).toBe('{"discord_token": "keep", "xdiscord.token": "keep"}')
   })
 })
 
