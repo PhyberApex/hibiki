@@ -53,12 +53,12 @@ const rendererFiles = sources(path.join(__dirname, '..', 'frontend', 'src'), /\.
 /** The channels main serves or sends, read from its source. */
 const main = {
   invoke: new Set([
-    ...matches(mainFiles, /(?:ipcMain|trustedIpc)\.handle\('([^']+)'/g),
+    ...matches(mainFiles, /\b(?:ipc|trustedIpc)\.handle\('([^']+)'/g),
     ...[
       ...matches(mainFiles, /handleFileDialog\('(\w+)'/g),
     ].map(kind => `dialog:${kind}`),
   ]),
-  send: matches(mainFiles, /(?:ipcMain|trustedIpc)\.on\('([^']+)'/g),
+  send: matches(mainFiles, /\b(?:ipc|trustedIpc)\.on\('([^']+)'/g),
   receive: matches(mainFiles, /send\('(\w+:\w+)'/g),
 }
 
