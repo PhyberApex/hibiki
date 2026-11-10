@@ -1,4 +1,5 @@
 const path = require('node:path')
+const { assertNoStrayAppFiles, ignoreAppFile } = require('./forge/app-files')
 
 module.exports = {
   packagerConfig: {
@@ -23,23 +24,9 @@ module.exports = {
       NSAudioCaptureUsageDescription: 'Hibiki needs audio capture access to stream audio to Discord voice channels.',
     },
 
-    // Include all necessary files
-    ignore: [
-      /^\/src/, // Source TypeScript (compiled to dist/)
-      /^\/frontend\/src/, // Frontend source (built to web-dist/)
-      /^\/e2e/, // E2E tests
-      /^\/docs/, // Documentation
-      /^\/release/, // Old electron-builder output
-      /^\/out/, // Forge output (don't recurse)
-      /^\/\.git/, // Git directory
-      /^\/\.pnpm-store/, // pnpm content-addressable store
-      /\.map$/, // Source maps (production)
-      /tsconfig/, // TS configs
-      /vite\.config/, // Vite config
-      /jest\.config/, // Jest config
-      /\.spec\./, // Test files
-      /\.test\./, // Test files
-    ],
+    // Allowlist of what ships in app.asar (#764): a local .env must never be packaged.
+    ignore: ignoreAppFile,
+    afterCopy: [assertNoStrayAppFiles],
   },
 
   makers: [
