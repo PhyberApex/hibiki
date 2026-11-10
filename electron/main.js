@@ -8,7 +8,7 @@ const { createTrustedIpc } = require('./ipc-sender')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createUncaughtExceptionHandler, exitWithError } = require('./lifecycle')
 const { createLogger, setupFileLogging } = require('./logger')
-const { describeScheme, describeUrl, forwardMainFrameNavigation, guardMainWindowNavigation, isWebUrl, releaseOnMainFrameNavigation } = require('./navigation-guard')
+const { describeScheme, describeUrl, forwardMainFrameNavigation, guardBrowserTab, guardMainWindowNavigation, isTabUrl, isWebUrl, refuseDownloads, releaseOnMainFrameNavigation } = require('./navigation-guard')
 const { installPermissionPolicy } = require('./permissions')
 const { APP_CONTENT_SECURITY_POLICY, parseRange, resolveAppPath } = require('./protocol')
 const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
@@ -202,13 +202,19 @@ function registerBrowserViewHandlers() {
   trustedIpc.handle('browserView:create', async (_, { url }) => {
     if (!mainWindow)
       throw new Error('No main window')
+    // Validated here rather than trusted from the renderer: a tab may only ever show web pages (#775).
+    if (!isTabUrl(url)) {
+      browserLog.warn(`Refused to open a tab at ${describeUrl(url)}`)
+      throw new Error('Browser tabs only open http(s) pages')
+    }
     const view = new WebContentsView()
     mainWindow.contentView.addChildView(view)
     view.setBounds({ x: 0, y: 0, width: 0, height: 0 })
     const id = view.webContents.id
 
+    // A navigation `guardBrowserTab` cancels still starts, so it is kept out of the URL bar.
     view.webContents.on('did-start-navigation', forwardMainFrameNavigation((navUrl) => {
-      if (mainWindow)
+      if (mainWindow && isTabUrl(navUrl))
         mainWindow.webContents.send('browserView:didNavigate', id, navUrl)
     }))
     view.webContents.on('page-title-updated', (_, title) => {
@@ -235,10 +241,7 @@ function registerBrowserViewHandlers() {
       if (mainWindow)
         mainWindow.webContents.send('browserView:mediaPlaying', id, false)
     })
-    view.webContents.setWindowOpenHandler(({ url: linkUrl }) => {
-      view.webContents.loadURL(linkUrl)
-      return { action: 'deny' }
-    })
+    guardBrowserTab(view.webContents, { tabId: id })
 
     view.webContents.on('did-fail-load', (_, errorCode, errorDescription, failedUrl, isMainFrame) => {
       if (isMainFrame)
@@ -249,7 +252,7 @@ function registerBrowserViewHandlers() {
     })
     browserViews.set(id, view)
 
-    browserLog.info(`Tab ${id} opened at ${url}`)
+    browserLog.info(`Tab ${id} opened at ${describeUrl(url)}`)
     view.webContents.loadURL(url).catch(() => {})
 
     return id
@@ -280,6 +283,10 @@ function registerBrowserViewHandlers() {
 
   trustedIpc.handle('browserView:loadURL', async (_, { id, url }) => {
     const view = knownView(id, 'loadURL')
+    if (view && !isTabUrl(url)) {
+      browserLog.warn(`Tab ${id} refused to load ${describeUrl(url)}`)
+      throw new Error('Browser tabs only load http(s) pages')
+    }
     if (view) {
       browserLog.info(`Tab ${id} loading ${describeUrl(url)}`)
       view.webContents.loadURL(url).catch(() => {})
@@ -521,6 +528,7 @@ app.whenReady().then(async () => {
   registerHibikiProtocol(api, webDistDir)
 
   installPermissionPolicy(session.defaultSession)
+  refuseDownloads(session.defaultSession)
 
   /**
    * Registers a file dialog handler that logs the request and the GM's choice.

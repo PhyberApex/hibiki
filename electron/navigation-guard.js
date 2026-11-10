@@ -1,6 +1,7 @@
 const { createLogger } = require('./logger')
 
 const log = createLogger('window')
+const browserLog = createLogger('browser')
 
 /**
  * What a log line may say about a URL: its origin, or its scheme when it has
@@ -32,6 +33,16 @@ function describeScheme(url) {
 /** Whether `url` is a web page the system browser should open; the only kind Hibiki ever hands to `shell.openExternal`. */
 function isWebUrl(url) {
   return typeof url === 'string' && /^https?:\/\//i.test(url)
+}
+
+/**
+ * Whether a Browser tab may show `url` (#775): a web page, or the blank page
+ * an empty new tab opens on. Tabs share the renderer's session, so a tab on
+ * `hibiki://app` would hold the app origin's permissions, and one on `file:`
+ * would display the GM's local files inside Hibiki's window.
+ */
+function isTabUrl(url) {
+  return isWebUrl(url) || url === 'about:blank'
 }
 
 /** Scheme and host of `url`; `URL#origin` is `'null'` for custom schemes like `hibiki:`. */
@@ -84,6 +95,62 @@ function guardMainWindowNavigation(webContents, { appUrl, openExternal }) {
 }
 
 /**
+ * Keeps Browser tab `tabId` on web pages (#775). A page's `window.open` and
+ * `target="_blank"` links load in the same tab when they are http(s) and are
+ * dropped otherwise; a main-frame navigation or redirect off `isTabUrl` is
+ * cancelled. Subframes are left to the page: `hibiki://app` refuses to be
+ * framed (`frame-ancestors 'none'`) and Chromium keeps web pages off `file:`.
+ */
+function guardBrowserTab(webContents, { tabId }) {
+  webContents.setWindowOpenHandler(({ url }) => {
+    if (isWebUrl(url)) {
+      browserLog.debug(`Tab ${tabId} opening ${describeUrl(url)} in place of a new window`)
+      Promise.resolve(webContents.loadURL(url)).catch(err => browserLog.debug(`Tab ${tabId} could not load ${describeUrl(url)}`, err))
+    }
+    else {
+      browserLog.warn(`Tab ${tabId} blocked a new window to ${describeUrl(url)}`)
+    }
+    return { action: 'deny' }
+  })
+
+  webContents.on('will-navigate', (event) => {
+    if (isTabUrl(event.url))
+      return
+    event.preventDefault()
+    browserLog.warn(`Tab ${tabId} blocked navigation to ${describeUrl(event.url)}`)
+  })
+
+  webContents.on('will-redirect', (event) => {
+    if (!event.isMainFrame || isTabUrl(event.url))
+      return
+    event.preventDefault()
+    browserLog.warn(`Tab ${tabId} blocked a redirect to ${describeUrl(event.url)}`)
+  })
+}
+
+/**
+ * Cancels every download in `session` (#775). Hibiki never downloads
+ * anything itself, and without a `will-download` listener Chromium would
+ * offer any Browser tab page its save dialog.
+ */
+function refuseDownloads(session) {
+  session.on('will-download', (event, item, webContents) => {
+    event.preventDefault()
+    const source = webContents
+      ? ` (web contents ${webContents.id})`
+      : ''
+    browserLog.warn(`Refused a download from ${describeDownloadSource(item.getURL())}${source}`)
+  })
+}
+
+/** `describeUrl`, looking through a `blob:` URL to the origin that made it. */
+function describeDownloadSource(url) {
+  return typeof url === 'string' && url.startsWith('blob:')
+    ? describeUrl(url.slice('blob:'.length))
+    : describeUrl(url)
+}
+
+/**
  * `did-start-navigation` listener that hands main-frame URLs to `send`.
  * Reads the `details` object: the positional `(event, url, isInPlace,
  * isMainFrame)` arguments are deprecated, and once removed `isMainFrame`
@@ -122,8 +189,11 @@ module.exports = {
   describeScheme,
   describeUrl,
   forwardMainFrameNavigation,
+  guardBrowserTab,
   guardMainWindowNavigation,
+  isTabUrl,
   isWebUrl,
+  refuseDownloads,
   releaseOnMainFrameNavigation,
   schemeAndHost,
 }
