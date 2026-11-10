@@ -19,18 +19,20 @@ const SHIPPED_ROOTS = new Set([
 ])
 
 /** Secret-bearing files, dropped wherever they sit (`.env`, `.env.e2e`, `.secrets`, ...). */
-const SECRET_FILE = /^\.(?:env(?:\..*)?|secrets)$/
+const SECRET_FILE = /^\.(?:env|secrets)(?:\..*)?$/
 
 /**
  * Dropped inside the shipped roots. Supplying an `ignore` function replaces Packager's
- * DEFAULT_IGNORES, so its `node_modules/.bin`, object-file and `node_gyp_bins` entries
- * are repeated here.
+ * DEFAULT_IGNORES, so all of them (lockfiles, `.git`, `node_modules/.bin`, object files,
+ * `node_gyp_bins`) are repeated here.
  */
 const IGNORED_WITHIN = [
   /\.map$/,
   /\.spec\./,
   /\.test\./,
   /tsconfig/,
+  /\/(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/,
+  /\/\.git(?:$|\/)/,
   /^\/node_modules\/\.bin(?:$|\/)/,
   /\.o(?:bj)?$/,
   /\/node_gyp_bins(?:$|\/)/,
@@ -82,7 +84,7 @@ async function assertNoStrayAppFiles({ buildPath }) {
     ...secrets,
   ]
   if (offending.length > 0)
-    throw new Error(`Refusing to package: files outside the app allowlist reached ${buildPath}: ${offending.join(', ')} (see forge/app-files.js)`)
+    throw new Error(`Refusing to package: non-allowlisted or secret files reached ${buildPath}: ${offending.join(', ')} (see forge/app-files.js)`)
 }
 
 module.exports = {

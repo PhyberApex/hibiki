@@ -75,6 +75,9 @@ describe('ignoreAppFile', () => {
     '/node_modules/some-native/build/Release/obj/foo.o',
     '/node_modules/some-native/build/node_gyp_bins',
     '/node_modules/.env',
+    '/node_modules/some-dep/.git/config',
+    '/node_modules/some-dep/pnpm-lock.yaml',
+    '/electron/.secrets.local',
     '/dist/.env',
   ])('drops %s inside a shipped directory', (file) => {
     expect(ignoreAppFile(file)).toBe(true)
