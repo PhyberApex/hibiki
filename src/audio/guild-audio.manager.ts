@@ -851,13 +851,10 @@ export class GuildAudioManager extends EventEmitter {
       if (decodeAbort.signal.aborted) {
         // The slot went away mid-decode and the decode was cancelled for
         // it: same outcome as the "evicted while decoding" path below.
-        log.debug(`Effect "${soundId}" ${streamId} was stopped before it started; its decode was cancelled`)
-        return {
-          instanceId: streamId,
-          soundId,
-          startedAt: new Date().toISOString(),
-          durationMs: 0,
-        }
+        log.debug(`Effect "${soundId}" ${streamId} was stopped before it started; its decode ended with ${err instanceof Error
+          ? err.name
+          : String(err)}`)
+        return neverStarted(streamId, soundId, 0)
       }
       this.effectStreamIds.delete(streamId)
       throw err
@@ -875,12 +872,7 @@ export class GuildAudioManager extends EventEmitter {
       // here ever touches the engine for a slot that was reserved but
       // never decoded.
       stream.destroy?.()
-      return {
-        instanceId: streamId,
-        soundId,
-        startedAt: new Date().toISOString(),
-        durationMs,
-      }
+      return neverStarted(streamId, soundId, durationMs)
     }
 
     const startedAt = new Date().toISOString()
@@ -987,5 +979,15 @@ export class GuildAudioManager extends EventEmitter {
 
   get connected() {
     return Boolean(this.localSink) || Boolean(this.connection)
+  }
+}
+
+/** The well-formed result `playEffect` resolves with for a slot evicted or stopped before its Effect ever started. */
+function neverStarted(instanceId: string, soundId: string, durationMs: number): EffectInstanceInfo {
+  return {
+    instanceId,
+    soundId,
+    startedAt: new Date().toISOString(),
+    durationMs,
   }
 }

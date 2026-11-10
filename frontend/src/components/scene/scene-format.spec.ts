@@ -22,6 +22,10 @@ describe('scene-format', () => {
     expect(timerLabel({ elapsedMs: 5_999, totalMs: 125_000 })).toBe('0:05 / 2:05')
   })
 
+  it('shows only the elapsed time while the duration is unknown', () => {
+    expect(timerLabel({ elapsedMs: 65_000, totalMs: 0 })).toBe('1:05')
+  })
+
   it('fills 0% while the duration is unknown and never past 100%', () => {
     expect(progressPercent({ elapsedMs: 1_000, totalMs: 0 })).toBe(0)
     expect(progressPercent({ elapsedMs: 1_000, totalMs: 4_000 })).toBe(25)

@@ -640,6 +640,17 @@ describe('player store', () => {
       expect(id).toMatch(/^effect-/)
     })
 
+    it('keeps counting elapsed time for an instance whose duration is still unknown (0)', () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(0)
+      const store = usePlayerStore()
+      store.registerRendererEffectInstance('fx1', vi.fn())
+
+      vi.advanceTimersByTime(600)
+
+      expect(store.effectStatus('fx1')).toEqual({ count: 1, elapsedMs: 600, totalMs: 0 })
+    })
+
     it('tracks elapsed time against a renderer instance\'s duration once set', () => {
       vi.useFakeTimers()
       vi.setSystemTime(0)
