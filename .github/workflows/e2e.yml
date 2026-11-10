@@ -25,10 +25,10 @@ jobs:
     permissions:
       actions: read
       contents: read
-    # The Discord secrets live on the two steps that read them, never the job:
-    # install, build and Playwright setup run dependency-supplied code (vite,
-    # rollup and tsc plugins), and in-repo branches such as Renovate's do
-    # receive secrets (#772). Keep any new step that needs them scoped the same.
+    # The Discord secrets live only on the steps that read them, never the
+    # job: install, build and Playwright setup run dependency-supplied code
+    # (vite, rollup and tsc plugins), and in-repo branches such as Renovate's
+    # do receive secrets (#772). Scope any new step that needs them the same.
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -100,7 +100,9 @@ jobs:
           E2E_GUILD_ID: ${{ secrets.E2E_GUILD_ID }}
           E2E_VOICE_CHANNEL_ID: ${{ secrets.E2E_VOICE_CHANNEL_ID }}
           E2E_SIDECAR_TOKEN: ${{ secrets.E2E_SIDECAR_TOKEN }}
-        run: xvfb-run --auto-servernum pnpm run test:e2e
+        # Not `pnpm run test:e2e`: that re-runs `pnpm install` in e2e/, which
+        # would execute dependency code with the secrets loaded.
+        run: xvfb-run --auto-servernum pnpm --dir e2e test
 
   # Plays a Scene through the Local Target: no Discord token, bot login or
   # secrets, so it also runs on fork PRs where the job above cannot.
