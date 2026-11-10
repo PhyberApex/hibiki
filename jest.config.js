@@ -1,4 +1,4 @@
-/** Jest config: specs live next to the code in src/ (backend) and electron/ (main process). */
+/** Jest config: specs live next to the code in src/ (backend), electron/ (main process) and forge/ (packaging). */
 const path = require('path');
 
 const packageRoot = __dirname;
@@ -6,7 +6,7 @@ const packageRoot = __dirname;
 module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: packageRoot,
-  roots: ['<rootDir>/src', '<rootDir>/electron'],
+  roots: ['<rootDir>/src', '<rootDir>/electron', '<rootDir>/forge'],
   testRegex: '.*\\.spec\\.ts$',
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
@@ -14,6 +14,7 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.(t|j)s',
     'electron/**/*.js',
+    'forge/**/*.js',
     // Electron wiring only: covered by the e2e suite, not loadable outside Electron.
     '!electron/main.js',
     '!electron/preload.js',

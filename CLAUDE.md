@@ -16,6 +16,7 @@ Processes: `electron/` is the main process shell (window, IPC plumbing, hotkeys,
 - **IPC only, no HTTP.** Frontend and backend talk through the `preload.js` bridge. Adding a backend capability: service method in `src/`, expose it on `EmbeddedApi` in `src/bootstrap-embedded.ts`, let the generic `api` handler in `electron/main.js` carry it (a dedicated channel only when state must live in main, like hotkeys and audio streams), typed wrapper in `frontend/src/api/`.
 - **Single test file**: backend `node --experimental-vm-modules node_modules/.bin/jest --config jest.config.js <file>`, frontend `cd frontend && npx vitest run <file>`.
 - **E2E** launches the built app: `pnpm build` first. The Discord suite needs `DISCORD_TOKEN` in `.env` plus `e2e/.env.e2e` (see `e2e/README.md`); the Local Target suite needs no token. `electron/main.js` and `preload.js` are covered only by e2e; the other `electron/*.js` modules have Jest specs.
+- **What ships**: `forge/app-files.js` is an allowlist (`dist`, `web-dist`, `electron`, `node_modules`, `package.json`) plus an `afterCopy` guard that fails packaging on anything else or any `.env`/`.secrets` (#764). A new top-level file or folder the packaged app loads at runtime must be added to `SHIPPED_ROOTS`.
 - **Electron majors**: PR CI builds and runs e2e but never packages. Before merging an Electron bump, read its breaking-changes doc against `electron/` and run `pnpm package` locally, booting the result against a throwaway `HIBIKI_USER_DATA_DIR`.
 
 ## Storage and environment
