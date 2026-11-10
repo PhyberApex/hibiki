@@ -25,16 +25,20 @@ jobs:
     permissions:
       actions: read
       contents: read
-    env:
-      DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-      E2E_GUILD_ID: ${{ secrets.E2E_GUILD_ID }}
-      E2E_VOICE_CHANNEL_ID: ${{ secrets.E2E_VOICE_CHANNEL_ID }}
-      E2E_SIDECAR_TOKEN: ${{ secrets.E2E_SIDECAR_TOKEN }}
+    # The Discord secrets live on the two steps that read them, never the job:
+    # install, build and Playwright setup run dependency-supplied code (vite,
+    # rollup and tsc plugins), and in-repo branches such as Renovate's do
+    # receive secrets (#772). Keep any new step that needs them scoped the same.
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Validate required secrets
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          E2E_GUILD_ID: ${{ secrets.E2E_GUILD_ID }}
+          E2E_VOICE_CHANNEL_ID: ${{ secrets.E2E_VOICE_CHANNEL_ID }}
+          E2E_SIDECAR_TOKEN: ${{ secrets.E2E_SIDECAR_TOKEN }}
         run: |
           missing=()
           [ -z "$DISCORD_TOKEN" ] && missing+=("DISCORD_TOKEN")
@@ -91,6 +95,11 @@ jobs:
         run: .github/scripts/wait-for-e2e-slot.sh
 
       - name: Run E2E tests (Playwright + Electron)
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          E2E_GUILD_ID: ${{ secrets.E2E_GUILD_ID }}
+          E2E_VOICE_CHANNEL_ID: ${{ secrets.E2E_VOICE_CHANNEL_ID }}
+          E2E_SIDECAR_TOKEN: ${{ secrets.E2E_SIDECAR_TOKEN }}
         run: xvfb-run --auto-servernum pnpm run test:e2e
 
   # Plays a Scene through the Local Target: no Discord token, bot login or
