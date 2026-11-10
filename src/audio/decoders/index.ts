@@ -4,7 +4,7 @@ import { createLogger } from '../../logger'
 import { createFlacPcmStream, probeFlac } from './flac-decoder'
 import { createMp3PcmStream, probeMp3 } from './mp3-decoder'
 import { createOggOpusPcmStream } from './ogg-opus-decoder'
-import { sniffOggCodec } from './ogg-sniff'
+import { probeOgg, sniffOggCodec } from './ogg-sniff'
 import { createOggVorbisPcmStream } from './ogg-vorbis-decoder'
 import { createWavPcmStream, probeWav } from './wav-decoder'
 
@@ -27,7 +27,7 @@ async function createOggStream(filePath: string): Promise<Readable> {
 }
 
 const oggDecoder: FormatDecoder = {
-  probe: async filePath => (await sniffOggCodec(filePath)) !== null,
+  probe: probeOgg,
   create: createOggStream,
 }
 

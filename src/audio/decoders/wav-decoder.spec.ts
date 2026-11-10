@@ -58,8 +58,9 @@ function buildWav(spec: WavSpec): Buffer {
   fmt.writeUInt16LE(spec.extensible ? EXTENSIBLE : formatTag, 0)
   fmt.writeUInt16LE(channels, 2)
   fmt.writeUInt32LE(sampleRate, 4)
-  fmt.writeUInt32LE(sampleRate * blockAlign, 8)
-  fmt.writeUInt16LE(blockAlign, 12)
+  // Wrapped like a writer overflowing the fields would; a 65535-channel header overflows both.
+  fmt.writeUInt32LE((sampleRate * blockAlign) >>> 0, 8)
+  fmt.writeUInt16LE(blockAlign & 0xFFFF, 12)
   fmt.writeUInt16LE(bitsPerSample, 14)
   if (spec.extensible) {
     fmt.writeUInt16LE(22, 16) // cbSize
@@ -183,6 +184,82 @@ describe('probeWav', () => {
       data: Buffer.alloc(0),
       omitData: true,
     })))).resolves.toBe(false)
+  })
+
+  it.each([
+    [
+      'a 1 Hz sample rate',
+      { sampleRate: 1 },
+    ],
+    [
+      'a 100 Hz sample rate',
+      { sampleRate: 100 },
+    ],
+    [
+      'a 384 kHz sample rate',
+      { sampleRate: 384000 },
+    ],
+    [
+      'zero channels',
+      { channels: 0 },
+    ],
+    [
+      '65535 channels',
+      { channels: 65535, bitsPerSample: 32 },
+    ],
+  ])('rejects %s so the file never reaches the resampler (#765)', async (_label, spec) => {
+    await expect(probeWav(writeTemp(buildWav({
+      ...spec,
+      data: Buffer.alloc(8),
+    })))).resolves.toBe(false)
+  })
+
+  it('rejects a fmt chunk declaring more bytes than the file holds, without allocating them (#765)', async () => {
+    const fmt = Buffer.alloc(16)
+    fmt.writeUInt16LE(PCM, 0)
+    fmt.writeUInt16LE(2, 2)
+    fmt.writeUInt32LE(MIXER_SAMPLE_RATE, 4)
+    fmt.writeUInt16LE(16, 14)
+    const allocSpy = jest.spyOn(Buffer, 'alloc')
+    try {
+      await expect(probeWav(writeTemp(buildWav({
+        omitFmt: true,
+        chunksBeforeData: [
+          chunk('fmt ', fmt, 0xFFFFFFF0),
+        ],
+        data: Buffer.alloc(4),
+      })))).resolves.toBe(false)
+      expect(Math.max(...allocSpy.mock.calls.map(([size]) => size))).toBeLessThanOrEqual(64)
+    }
+    finally {
+      allocSpy.mockRestore()
+    }
+  })
+
+  it('rejects a fmt chunk shorter than 16 bytes instead of reading zeros (#765)', async () => {
+    await expect(probeWav(writeTemp(buildWav({
+      omitFmt: true,
+      chunksBeforeData: [
+        chunk('fmt ', Buffer.from([1, 0, 2, 0, 0x80, 0xBB])),
+      ],
+      data: Buffer.alloc(4),
+    })))).resolves.toBe(false)
+  })
+
+  it('accepts a fmt chunk larger than 64 bytes, reading only its head', async () => {
+    const fmt = Buffer.alloc(80)
+    fmt.writeUInt16LE(PCM, 0)
+    fmt.writeUInt16LE(2, 2)
+    fmt.writeUInt32LE(MIXER_SAMPLE_RATE, 4)
+    fmt.writeUInt16LE(16, 14)
+    const path = writeTemp(buildWav({
+      omitFmt: true,
+      chunksBeforeData: [
+        chunk('fmt ', fmt),
+      ],
+      data: repeat(Buffer.from([0x00, 0x40]), N * 2),
+    }))
+    await expect(probeWav(path)).resolves.toBe(true)
   })
 })
 
@@ -337,6 +414,31 @@ describe('createWavPcmStream', () => {
     })))
       .rejects
       .toThrow(`Unsupported WAV format: tag ${formatTag}, ${bitsPerSample}-bit`)
+  })
+
+  it('rejects a 1 Hz WAV before allocating any resampler output (#765)', async () => {
+    await expect(decode(buildWav({
+      sampleRate: 1,
+      data: Buffer.alloc(800),
+    }))).rejects.toThrow('Unsupported WAV format')
+  })
+
+  it('reads at most 1 MiB of sample data per chunk', async () => {
+    const path = writeTemp(buildWav({
+      channels: 8,
+      bitsPerSample: 32,
+      data: Buffer.alloc(8 * 4 * 16384 * 3),
+    }))
+    const allocSpy = jest.spyOn(Buffer, 'alloc')
+    try {
+      const chunks: Buffer[] = []
+      for await (const c of createWavPcmStream(path) as Readable) chunks.push(c as Buffer)
+      expect(Buffer.concat(chunks).length).toBe(16384 * 3 * 4)
+      expect(Math.max(...allocSpy.mock.calls.map(([size]) => size))).toBeLessThanOrEqual(1 << 20)
+    }
+    finally {
+      allocSpy.mockRestore()
+    }
   })
 
   it('closes the file handle when destroyed mid-decode', async () => {

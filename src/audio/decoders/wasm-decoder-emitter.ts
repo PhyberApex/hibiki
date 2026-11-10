@@ -20,6 +20,7 @@ export function createWasmDecoderEmitter(push: (chunk: Buffer) => Promise<void>)
       return
     if (!resampler)
       resampler = new PcmResampler(result.sampleRate, result.channelData.length)
-    await push(resampler.push(result.channelData))
+    for (const pcm of resampler.push(result.channelData))
+      await push(pcm)
   }
 }

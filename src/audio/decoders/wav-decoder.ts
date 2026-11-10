@@ -3,7 +3,7 @@ import type { Readable } from 'node:stream'
 import { open } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { createLogger } from '../../logger'
-import { PcmResampler } from './pcm-resample'
+import { isSupportedPcmLayout, PcmResampler } from './pcm-resample'
 import { createProducerStream } from './pcm-stream'
 
 const log = createLogger('wav-decoder')
@@ -30,11 +30,30 @@ interface WavFormat {
  */
 const DATA_SIZE_UNKNOWN = new Set([0, 0xFFFFFFFF])
 
-/** Integer PCM at 8/16/24/32 bits or 32-bit IEEE float; anything else (ADPCM, A-law, ...) is left to the renderer. */
-function isSupportedFormat({ formatTag, bitsPerSample }: WavFormat): boolean {
+/** Bytes of a fmt chunk that are ever read; WAVE_FORMAT_EXTENSIBLE needs 26 of its 40. A larger declared size is skipped past, never allocated (#765). */
+const FMT_READ_LIMIT = 64
+/** The PCMWAVEFORMAT core every fmt chunk carries; less is a truncated or corrupt header. */
+const FMT_MIN_SIZE = 16
+/** Frames read per decode step. */
+const CHUNK_FRAMES = 16384
+/** Ceiling on one sample-data read, independent of the file's declared frame size (#765). A backstop: `isSupportedFormat`'s 8-channel cap already keeps a chunk at 512 KiB. */
+const MAX_READ_BYTES = 1 << 20
+
+/**
+ * Integer PCM at 8/16/24/32 bits or 32-bit IEEE float, at a sample rate and
+ * channel count `PcmResampler` accepts; anything else (ADPCM, A-law, a 1 Hz
+ * rate, 65535 channels, ...) is left to the renderer.
+ */
+function isSupportedFormat({ formatTag, bitsPerSample, sampleRate, channels }: WavFormat): boolean {
+  if (!isSupportedPcmLayout(sampleRate, channels))
+    return false
   if (formatTag === WAVE_FORMAT_IEEE_FLOAT)
     return bitsPerSample === 32
   return formatTag === WAVE_FORMAT_PCM && [8, 16, 24, 32].includes(bitsPerSample)
+}
+
+function describeFormat({ formatTag, bitsPerSample, sampleRate, channels }: WavFormat): string {
+  return `tag ${formatTag}, ${bitsPerSample}-bit, ${sampleRate} Hz, ${channels} channel(s)`
 }
 
 /** RIFF/WAVE magic bytes plus a fmt chunk in a format `createWavPcmStream` decodes, found before the data chunk. Reads only chunk headers and fmt. */
@@ -46,14 +65,22 @@ export async function probeWav(filePath: string): Promise<boolean> {
     return bytesRead === 12
       && header.toString('ascii', 0, 4) === 'RIFF'
       && header.toString('ascii', 8, 12) === 'WAVE'
-      && isSupportedFormat(await parseWavFormat(handle))
+      && acceptsProbedFormat(filePath, await parseWavFormat(handle))
   }
-  catch {
+  catch (err) {
+    log.info(`${basename(filePath)} failed the WAV probe:`, err)
     return false
   }
   finally {
     await handle.close()
   }
+}
+
+function acceptsProbedFormat(filePath: string, format: WavFormat): boolean {
+  const supported = isSupportedFormat(format)
+  if (!supported)
+    log.info(`${basename(filePath)} is a WAV format the backend does not decode (${describeFormat(format)})`)
+  return supported
 }
 
 async function readChunkHeader(handle: FileHandle, offset: number): Promise<{ id: string, size: number } | null> {
@@ -70,6 +97,7 @@ async function readChunkHeader(handle: FileHandle, offset: number): Promise<{ id
 async function parseWavFormat(handle: FileHandle): Promise<WavFormat> {
   let offset = 12 // past "RIFF" size "WAVE"
   let fmt: { formatTag: number, channels: number, sampleRate: number, bitsPerSample: number } | null = null
+  const { size: fileSize } = await handle.stat()
 
   for (;;) {
     const chunk = await readChunkHeader(handle, offset)
@@ -78,10 +106,15 @@ async function parseWavFormat(handle: FileHandle): Promise<WavFormat> {
     const bodyOffset = offset + 8
 
     if (chunk.id === 'fmt ') {
-      const body = Buffer.alloc(chunk.size)
-      await handle.read(body, 0, chunk.size, bodyOffset)
+      if (chunk.size < FMT_MIN_SIZE || bodyOffset + chunk.size > fileSize)
+        throw new Error(`WAV fmt chunk declares ${chunk.size} bytes; the file holds ${Math.max(0, fileSize - bodyOffset)} after its header`)
+      const readSize = Math.min(chunk.size, FMT_READ_LIMIT)
+      const body = Buffer.alloc(readSize)
+      const { bytesRead } = await handle.read(body, 0, readSize, bodyOffset)
+      if (bytesRead < FMT_MIN_SIZE)
+        throw new Error(`WAV fmt chunk is truncated: ${bytesRead} bytes read`)
       let formatTag = body.readUInt16LE(0)
-      if (formatTag === WAVE_FORMAT_EXTENSIBLE && chunk.size >= 40)
+      if (formatTag === WAVE_FORMAT_EXTENSIBLE && chunk.size >= 40 && bytesRead >= 26)
         formatTag = body.readUInt16LE(24)
       fmt = {
         formatTag,
@@ -151,13 +184,12 @@ export function createWavPcmStream(filePath: string): Readable {
     try {
       const format = await parseWavFormat(handle)
       if (!isSupportedFormat(format))
-        throw new Error(`Unsupported WAV format: tag ${format.formatTag}, ${format.bitsPerSample}-bit`)
+        throw new Error(`Unsupported WAV format: ${describeFormat(format)}`)
       if (format.dataSize === Infinity)
         log.warn(`${basename(filePath)} declares no data chunk size; reading samples to end of file`)
       const resampler = new PcmResampler(format.sampleRate, format.channels)
       const bytesPerFrame = (format.bitsPerSample / 8) * format.channels
-      const chunkFrames = 16384
-      const chunkBytes = chunkFrames * bytesPerFrame
+      const chunkBytes = Math.max(bytesPerFrame, Math.min(CHUNK_FRAMES, Math.floor(MAX_READ_BYTES / bytesPerFrame)) * bytesPerFrame)
 
       let remaining = format.dataSize
       let position = format.dataStart
@@ -168,8 +200,10 @@ export function createWavPcmStream(filePath: string): Readable {
         if (bytesRead <= 0)
           break
         const usable = buffer.subarray(0, bytesRead - (bytesRead % bytesPerFrame))
-        if (usable.length > 0)
-          await push(resampler.push(samplesToFloat32(usable, format)))
+        if (usable.length > 0) {
+          for (const pcm of resampler.push(samplesToFloat32(usable, format)))
+            await push(pcm)
+        }
         position += bytesRead
         remaining -= bytesRead
       }
