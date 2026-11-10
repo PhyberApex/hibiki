@@ -1,6 +1,6 @@
 import type { Config } from '../config'
 import type { SoundCategory, SoundFile } from './sound.types'
-import { mkdir, stat, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, realpath, stat, unlink, writeFile } from 'node:fs/promises'
 import { extname, join, resolve, sep } from 'node:path'
 import fg from 'fast-glob'
 import slugify from 'slugify'
@@ -35,6 +35,36 @@ function resolvePath(config: Config, category: SoundCategory, filename?: string)
   return filePath
 }
 
+/**
+ * `resolvePath` for an existing file, also refusing one whose real location is outside the
+ * category folder (#766). `resolve()` never follows symlinks, so a symlink named like a sound
+ * (restored by `unzip`/`tar` from a shared pack, or synced in) would otherwise serve and stream
+ * whatever it points at. A dangling symlink is refused too. The folder itself may be a symlink.
+ */
+async function resolveExistingPath(config: Config, category: SoundCategory, filename: string): Promise<string> {
+  const filePath = resolvePath(config, category, filename)
+  const base = resolvePath(config, category)
+  let realFile: string
+  let realBase: string
+  try {
+    [realFile, realBase] = await Promise.all([
+      realpath(filePath),
+      realpath(base),
+    ])
+  }
+  catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT')
+      throw err
+    log.warn(`Rejected ${category} file ${JSON.stringify(filename)}: it, its symlink target or the folder does not exist`)
+    throw new Error(`Invalid sound file '${filename}'`)
+  }
+  if (!realFile.startsWith(realBase + sep)) {
+    log.warn(`Rejected ${category} file ${JSON.stringify(filename)}: its real path is outside ${base}`)
+    throw new Error(`Invalid sound file '${filename}'`)
+  }
+  return filePath
+}
+
 function humanize(filename: string): string {
   return idFromFilename(filename)
     .replace(/[-_]+/g, ' ')
@@ -53,7 +83,12 @@ async function findFilename(config: Config, category: SoundCategory, id: string)
   }
   const escaped = escapeGlob(id)
   // `rain.*` also matches `rain.wav-mix.wav`, whose id is `rain.wav-mix`
-  const match = (await fg(`${escaped}.*`, { cwd: base, onlyFiles: true, dot: false }))
+  const match = (await fg(`${escaped}.*`, {
+    cwd: base,
+    onlyFiles: true,
+    dot: false,
+    followSymbolicLinks: false,
+  }))
     .find(filename => idFromFilename(filename) === id)
   if (!match)
     throw new Error(`Sound '${id}' not found in ${category}`)
@@ -155,15 +190,35 @@ export function createSoundLibrary(config: Config) {
     ])
   }
 
-  /** Files already warned about, so a refreshing view does not repeat the warning on every list. */
-  const warnedUnresolvable = new Set<string>()
+  /** `category/filename` keys already warned about, so a refreshing view does not repeat a warning on every list. */
+  const warnedFiles = new Set<string>()
+
+  function warnOnce(category: SoundCategory, file: string, message: string): void {
+    const key = `${category}/${file}`
+    if (warnedFiles.has(key))
+      return
+    warnedFiles.add(key)
+    log.warn(message)
+  }
 
   return {
     async list(category: SoundCategory): Promise<SoundFile[]> {
       const base = resolvePath(config, category)
-      let entries: string[]
+      const entries: string[] = []
       try {
-        entries = await fg('*', { cwd: base, onlyFiles: true })
+        // Not `onlyFiles`: that drops symlinks silently, and a GM missing an extracted pack's sounds needs the log to say why (#766).
+        const found = await fg('*', {
+          cwd: base,
+          onlyFiles: false,
+          followSymbolicLinks: false,
+          objectMode: true,
+        })
+        for (const { name, dirent } of found) {
+          if (dirent.isFile())
+            entries.push(name)
+          else if (dirent.isSymbolicLink())
+            warnOnce(category, name, `Skipped ${category} entry ${JSON.stringify(name)}: it is a symlink, and sounds must be regular files inside the folder`)
+        }
       }
       catch (err) {
         log.warn(`Could not list ${category} in ${base}:`, err)
@@ -174,18 +229,16 @@ export function createSoundLibrary(config: Config) {
       const filesById = new Map<string, string>()
       const paths: { id: string, path: string }[] = []
       for (const file of entries) {
-        const filePath = resolvePath(config, category, file)
         try {
+          const filePath = await resolveExistingPath(config, category, file)
           const stats = await stat(filePath)
           const id = idFromFilename(file)
           const problem = unresolvableIdProblem(file, id, filesById)
           // only a file `findFilename` would return claims its id, so a later duplicate is compared with the winner
           if (!problem)
             filesById.set(id, file)
-          if (problem && !warnedUnresolvable.has(`${category}/${file}`)) {
-            warnedUnresolvable.add(`${category}/${file}`)
-            log.warn(`${category} file ${JSON.stringify(file)} ${problem}, so its id cannot be resolved back to it`)
-          }
+          if (problem)
+            warnOnce(category, file, `${category} file ${JSON.stringify(file)} ${problem}, so its id cannot be resolved back to it`)
           results.push({
             id,
             name: humanize(file),
@@ -210,18 +263,18 @@ export function createSoundLibrary(config: Config) {
 
     async getFilePath(category: SoundCategory, id: string): Promise<string> {
       const filename = await findFilename(config, category, id)
-      return resolvePath(config, category, filename)
+      return resolveExistingPath(config, category, filename)
     },
 
     /** Whether backend (Discord) playback can decode this file directly, vs. the renderer fallback. See ADR-0003. */
     async canDecode(category: SoundCategory, id: string): Promise<boolean> {
       const filename = await findFilename(config, category, id)
-      return canDecodeFile(resolvePath(config, category, filename))
+      return canDecodeFile(await resolveExistingPath(config, category, filename))
     },
 
     async getFile(category: SoundCategory, id: string): Promise<SoundFile & { path: string }> {
       const filename = await findFilename(config, category, id)
-      const path = resolvePath(config, category, filename)
+      const path = await resolveExistingPath(config, category, filename)
       const [stats, tags, durationMs] = await Promise.all([
         stat(path),
         tagsStore.get(category, id),
@@ -259,7 +312,7 @@ export function createSoundLibrary(config: Config) {
 
     async remove(category: SoundCategory, id: string): Promise<void> {
       const file = await findFilename(config, category, id)
-      const path = resolvePath(config, category, file)
+      const path = await resolveExistingPath(config, category, file)
       await unlink(path)
       await tagsStore.remove(category, id)
       await durationsStore.remove(category, id)
@@ -282,7 +335,8 @@ export function createSoundLibrary(config: Config) {
       const ext = extname(file.originalname) || '.mp3'
       const filename = `${safeId}${ext}`
       const target = join(base, filename)
-      await writeFile(target, file.buffer)
+      // `wx` (O_EXCL) never follows or replaces an existing entry, so an upload cannot write through a planted symlink (#766).
+      await writeFile(target, file.buffer, { flag: 'wx' })
       const stats = await stat(target)
       let durationMs: number | null = null
       if (isMeasured(category)) {
