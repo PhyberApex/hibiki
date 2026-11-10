@@ -535,6 +535,52 @@ describe('symlinks never reach outside the library (#766)', () => {
     expect(readFileSync(secret(), 'utf-8')).toBe('{"secret":true}')
   })
 
+  describe('when the glob lets a symlink through (as before #766, or after a regression)', () => {
+    function libraryWithFollowingGlob(): ReturnType<typeof createSoundLibrary> {
+      let lib!: ReturnType<typeof createSoundLibrary>
+      jest.isolateModules(() => {
+        jest.doMock('fast-glob', () => {
+          const actual = jest.requireActual('fast-glob')
+          return (pattern: string, options: object) => actual(pattern, { ...options, followSymbolicLinks: true })
+        })
+        lib = (jest.requireActual('./sound-library') as typeof import('./sound-library')).createSoundLibrary(config)
+      })
+      return lib
+    }
+
+    afterEach(() => {
+      jest.dontMock('fast-glob')
+    })
+
+    it.each([
+      'getFilePath',
+      'canDecode',
+      'getFile',
+      'remove',
+    ] as const)('%s still refuses it by its real path', async (method) => {
+      jest.spyOn(console, 'warn').mockImplementation(() => {})
+      await expect(libraryWithFollowingGlob()[method]('music', 'rain')).rejects.toThrow(/Invalid sound file/)
+      expect(readFileSync(secret(), 'utf-8')).toBe('{"secret":true}')
+    })
+
+    it('list still leaves it out', async () => {
+      jest.spyOn(console, 'warn').mockImplementation(() => {})
+      writeFileSync(join(musicDir, 'tavern.mp3'), 'x')
+      const list = await libraryWithFollowingGlob().list('music')
+      expect(list.map(s => s.filename)).toEqual(['tavern.mp3'])
+    })
+  })
+
+  it('save never writes through a symlink planted under the upload\'s name', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1000)
+    symlinkSync(secret(), join(musicDir, 'my-song-1000.mp3'))
+    await expect(createSoundLibrary(config).save('music', {
+      buffer: Buffer.from('x'),
+      originalname: 'my-song.mp3',
+    })).rejects.toThrow()
+    expect(readFileSync(secret(), 'utf-8')).toBe('{"secret":true}')
+  })
+
   it('refuses a dangling symlink', async () => {
     symlinkSync(join(tempRoot, 'missing.mp3'), join(musicDir, 'gone.mp3'))
     await expect(createSoundLibrary(config).getFilePath('music', 'gone')).rejects.toThrow()

@@ -55,7 +55,7 @@ async function resolveExistingPath(config: Config, category: SoundCategory, file
   catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT')
       throw err
-    log.warn(`Rejected ${category} file ${JSON.stringify(filename)}: it or its symlink target does not exist`)
+    log.warn(`Rejected ${category} file ${JSON.stringify(filename)}: it, its symlink target or the folder does not exist`)
     throw new Error(`Invalid sound file '${filename}'`)
   }
   if (!realFile.startsWith(realBase + sep)) {
@@ -190,8 +190,16 @@ export function createSoundLibrary(config: Config) {
     ])
   }
 
-  /** Files already warned about (unresolvable ids, symlinks), so a refreshing view does not repeat the warning on every list. */
-  const warnedUnresolvable = new Set<string>()
+  /** `category/filename` keys already warned about, so a refreshing view does not repeat a warning on every list. */
+  const warnedFiles = new Set<string>()
+
+  function warnOnce(category: SoundCategory, file: string, message: string): void {
+    const key = `${category}/${file}`
+    if (warnedFiles.has(key))
+      return
+    warnedFiles.add(key)
+    log.warn(message)
+  }
 
   return {
     async list(category: SoundCategory): Promise<SoundFile[]> {
@@ -199,19 +207,17 @@ export function createSoundLibrary(config: Config) {
       const entries: string[] = []
       try {
         // Not `onlyFiles`: that drops symlinks silently, and a GM missing an extracted pack's sounds needs the log to say why (#766).
-        for (const entry of await fg('*', {
+        const found = await fg('*', {
           cwd: base,
           onlyFiles: false,
           followSymbolicLinks: false,
           objectMode: true,
-        })) {
-          if (entry.dirent.isFile()) {
-            entries.push(entry.name)
-          }
-          else if (entry.dirent.isSymbolicLink() && !warnedUnresolvable.has(`${category}/${entry.name}`)) {
-            warnedUnresolvable.add(`${category}/${entry.name}`)
-            log.warn(`Skipped ${category} entry ${JSON.stringify(entry.name)}: it is a symlink, and sounds must be regular files inside the folder`)
-          }
+        })
+        for (const { name, dirent } of found) {
+          if (dirent.isFile())
+            entries.push(name)
+          else if (dirent.isSymbolicLink())
+            warnOnce(category, name, `Skipped ${category} entry ${JSON.stringify(name)}: it is a symlink, and sounds must be regular files inside the folder`)
         }
       }
       catch (err) {
@@ -231,10 +237,8 @@ export function createSoundLibrary(config: Config) {
           // only a file `findFilename` would return claims its id, so a later duplicate is compared with the winner
           if (!problem)
             filesById.set(id, file)
-          if (problem && !warnedUnresolvable.has(`${category}/${file}`)) {
-            warnedUnresolvable.add(`${category}/${file}`)
-            log.warn(`${category} file ${JSON.stringify(file)} ${problem}, so its id cannot be resolved back to it`)
-          }
+          if (problem)
+            warnOnce(category, file, `${category} file ${JSON.stringify(file)} ${problem}, so its id cannot be resolved back to it`)
           results.push({
             id,
             name: humanize(file),
@@ -331,7 +335,8 @@ export function createSoundLibrary(config: Config) {
       const ext = extname(file.originalname) || '.mp3'
       const filename = `${safeId}${ext}`
       const target = join(base, filename)
-      await writeFile(target, file.buffer)
+      // `wx` (O_EXCL) never follows or replaces an existing entry, so an upload cannot write through a planted symlink (#766).
+      await writeFile(target, file.buffer, { flag: 'wx' })
       const stats = await stat(target)
       let durationMs: number | null = null
       if (isMeasured(category)) {
