@@ -34,6 +34,8 @@ export interface VisionProviderStatus {
 export interface VisionOpenAICompatibleStatus extends VisionProviderStatus {
   baseUrl: string
   model: string
+  /** A key exists but was entered for another endpoint (or is the env key and the Base URL isn't OpenAI's), so it isn't sent to this Base URL. */
+  keyWithheld: boolean
 }
 
 export interface VisionConfig {

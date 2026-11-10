@@ -88,6 +88,7 @@ const DEFAULT_VISION_CONFIG: VisionConfig = {
     encrypted: true,
     baseUrl: '',
     model: '',
+    keyWithheld: false,
   },
 }
 
@@ -1189,7 +1190,7 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
       <p class="section-desc">
         Drop a battle map or mood-board image into a scene and get matching Music and Ambience suggestions from your own tagged sound library.
         <strong class="privacy-note">
-          <template v-if="isOpenAiCompatible">Opt-in: each image you analyze is sent to the endpoint configured below.</template>
+          <template v-if="isOpenAiCompatible">Opt-in: each image you analyze is sent, with your API key if you set one, to the endpoint configured below.</template>
           <template v-else>Opt-in: each image you analyze is sent to Anthropic's Claude API using your key.</template>
         </strong>
         Hibiki does not keep the image after the request. Off by default.
@@ -1246,6 +1247,12 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
         <p v-if="selectedProviderStatus && !selectedProviderStatus.encrypted" class="field-hint field-hint-warning" data-testid="vision-key-plaintext-warning">
           Not encrypted on this system — stored as plain text.
         </p>
+        <p v-if="isOpenAiCompatible" class="field-hint" data-testid="vision-key-destination">
+          The key is sent only to the Base URL it was saved for. Changing the Base URL to another host withholds it until you paste it again.
+        </p>
+        <p v-if="isOpenAiCompatible && visionConfig?.openaiCompatible.keyWithheld" class="field-hint field-hint-warning" data-testid="vision-key-withheld">
+          Your API key was saved for a different endpoint, so it is not sent to this Base URL. Paste a key here to use it with this endpoint.
+        </p>
       </div>
       <template v-if="isOpenAiCompatible">
         <div class="field">
@@ -1254,8 +1261,9 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
             <input
               id="vision-base-url"
               v-model="visionBaseUrlInput"
-              type="text"
+              type="url"
               autocomplete="off"
+              aria-describedby="vision-base-url-hint"
               class="input field-input"
             >
             <button
@@ -1277,6 +1285,9 @@ onUnmounted(() => navigator.mediaDevices?.removeEventListener?.('devicechange', 
               Reset
             </button>
           </div>
+          <p id="vision-base-url-hint" class="field-hint">
+            Use https://. Plain http:// works only for a server on this computer (localhost) or a .local host.
+          </p>
         </div>
         <div class="field">
           <label for="vision-model" class="field-label">Model</label>

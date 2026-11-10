@@ -274,6 +274,7 @@ describe('config API', () => {
       encrypted: true,
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-6-astra',
+      keyWithheld: false,
     },
   }
 

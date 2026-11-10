@@ -28,3 +28,11 @@ This ADR records the decisions reached (via `/triage` on #335) on which provider
 - The image now goes to whichever endpoint the GM configured, so the consent copy in Settings must name the selected destination rather than Anthropic.
 - The `config` IPC domain grows additively (provider selection, per-provider key, base URL, model); `vision.analyzeImageVibe` is unchanged.
 - Issue #412 (encrypting secrets at rest) now has more than one Vision key to cover; both are encrypted since #639.
+
+## Amendment: the Base URL is guarded and the key is bound to it (#767)
+
+A pasted Base URL is where the GM's key and image go, from the main process, so it is no longer free text:
+
+- **Validation** (`src/vision/vision-endpoint.ts`, on save and again before every request): `https:` only, with `http:` allowed for loopback and `.local` hosts so local servers keep working; no userinfo, query or fragment; no literal or resolved private, link-local, CGNAT, multicast or unspecified address. A hostname resolving to loopback is refused too (use `localhost` directly). The resolve-time check narrows DNS rebinding rather than closing it.
+- **Key binding**: the stored OpenAI-compatible key is sent only to the origin it was saved for; a Base URL on another origin withholds it (`keyWithheld`) until the GM pastes a key there. A key saved before this rule is pinned to the Base URL it was used with when the Base URL next changes. The env key `HIBIKI_VISION_OPENAI_API_KEY` is sent only to OpenAI's own origin, which narrows "each env key wins" above: a custom endpoint's key is entered in Settings.
+- **Logs and errors** name the endpoint by origin only, and a non-2xx response surfaces as its status code, never its body.

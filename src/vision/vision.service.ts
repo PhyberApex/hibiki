@@ -1,7 +1,9 @@
+import type { LookupAddresses } from './vision-endpoint'
 import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 import Anthropic from '@anthropic-ai/sdk'
 import { createLogger } from '../logger'
+import { assertEndpointResolvesSafely, describeEndpoint } from './vision-endpoint'
 
 export interface VibeAnalysis {
   description: string
@@ -117,6 +119,8 @@ export interface OpenAICompatibleProviderOptions {
   baseUrl: string
   model: string
   fetchImpl?: typeof fetch
+  /** DNS lookup used to refuse hostnames resolving to private or link-local space; injectable for tests. */
+  lookupImpl?: LookupAddresses
 }
 
 /** Speaks the OpenAI Chat Completions wire format, so it reaches OpenAI itself plus any compatible gateway or local server. */
@@ -126,6 +130,9 @@ export function createOpenAICompatibleVisionProvider(options: OpenAICompatiblePr
 
   return {
     async analyzeImage(image) {
+      // Re-checked per request: a Base URL stored before validation existed, or a name re-pointed in DNS, must not slip through.
+      await assertEndpointResolvesSafely(options.baseUrl, options.lookupImpl)
+
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (options.apiKey)
         headers.Authorization = `Bearer ${options.apiKey}`
@@ -159,19 +166,12 @@ export function createOpenAICompatibleVisionProvider(options: OpenAICompatiblePr
         })
       }
       catch {
-        throw new Error(`Couldn't reach the vision endpoint at ${options.baseUrl}. Check the Base URL and that the server is running.`)
+        throw new Error(`Couldn't reach the vision endpoint at ${describeEndpoint(options.baseUrl)}. Check the Base URL and that the server is running.`)
       }
 
-      if (!response.ok) {
-        // The error lands in hibiki.log via the service's failure log, so never let an echoed key through.
-        const body = await response.text().catch(() => '')
-        const detail = options.apiKey
-          ? body.replaceAll(options.apiKey, '[redacted]')
-          : body
-        throw new Error(`The vision endpoint returned an error (HTTP ${response.status}).${detail
-          ? ` ${detail.slice(0, 200)}`
-          : ''}`)
-      }
+      // Status code only: an echoed body would hand an SSRF target's response back through the UI and hibiki.log (#767).
+      if (!response.ok)
+        throw new Error(`The vision endpoint returned an error (HTTP ${response.status}).`)
 
       const unreadable = new Error('The vision endpoint returned a response Hibiki couldn\'t understand.')
 
@@ -235,7 +235,7 @@ export function createVisionService(options: VisionServiceOptions) {
         throw new Error('Unsupported image format. Use a PNG, JPEG, GIF, or WebP image.')
       const data = await readFile(imagePath)
       const target = providerConfig.provider === 'openai-compatible'
-        ? `${providerConfig.baseUrl ?? ''} (${providerConfig.model ?? 'default model'})`
+        ? `${describeEndpoint(providerConfig.baseUrl ?? OPENAI_COMPATIBLE_DEFAULT_BASE_URL)} (${providerConfig.model ?? 'default model'}, ${providerConfig.apiKey ? 'with' : 'without'} API key)`
         : 'claude'
       log.info(`Analyzing ${mediaType} image (${data.length} bytes) with ${target}`)
       try {

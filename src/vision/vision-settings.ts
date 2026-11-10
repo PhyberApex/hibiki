@@ -2,6 +2,7 @@ import type { Config } from '../config'
 import type { createAppConfig } from '../persistence'
 import type { VisionProviderConfig, VisionProviderId } from './vision.service'
 import { createLogger } from '../logger'
+import { describeEndpoint, endpointOrigin, validateOpenAiBaseUrl } from './vision-endpoint'
 import { OPENAI_COMPATIBLE_DEFAULT_BASE_URL, OPENAI_COMPATIBLE_DEFAULT_MODEL } from './vision.service'
 
 export interface VisionProviderState {
@@ -14,6 +15,11 @@ export interface VisionProviderState {
 export interface VisionOpenAICompatibleState extends VisionProviderState {
   baseUrl: string
   model: string
+  /**
+   * A key exists but is withheld from the current Base URL because it was entered for a different endpoint
+   * (or, for the env key, because the Base URL is not OpenAI's). `keyConfigured` is false in that case (#767).
+   */
+  keyWithheld: boolean
 }
 
 export interface VisionSettingsState {
@@ -28,6 +34,8 @@ export interface VisionSettingsState {
 const PROVIDER_CONFIG_KEY = 'vision.provider'
 const CLAUDE_API_KEY_CONFIG_KEY = 'vision.apiKey'
 const OPENAI_API_KEY_CONFIG_KEY = 'vision.openai.apiKey'
+/** Origin of the Base URL the stored OpenAI-compatible key was entered for; the key is only ever sent there. */
+const OPENAI_API_KEY_ORIGIN_CONFIG_KEY = 'vision.openai.apiKeyOrigin'
 const OPENAI_BASE_URL_CONFIG_KEY = 'vision.openai.baseUrl'
 const OPENAI_MODEL_CONFIG_KEY = 'vision.openai.model'
 const ENABLED_CONFIG_KEY = 'vision.enabled'
@@ -55,13 +63,29 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
       : null
   }
 
-  async function getOpenAiApiKey(): Promise<string | null> {
-    if (config.vision.openaiApiKey)
-      return config.vision.openaiApiKey
-    const stored = await appConfig.get(OPENAI_API_KEY_CONFIG_KEY)
-    return stored?.trim()
-      ? stored
-      : null
+  /**
+   * The OpenAI-compatible key to send to `baseUrl`, bound to an origin so that changing the Base URL to
+   * another host never hands that host the key (#767). The stored key belongs to the origin it was entered
+   * for (a key saved before binding existed belongs to the current Base URL until the Base URL changes,
+   * see `setOpenAiBaseUrl`). The env key belongs to OpenAI's own origin: for a custom endpoint, enter its key in Settings.
+   */
+  async function getOpenAiKey(baseUrl: string): Promise<{ apiKey: string | null, withheld: boolean }> {
+    const origin = endpointOrigin(baseUrl)
+    if (config.vision.openaiApiKey) {
+      return origin === endpointOrigin(OPENAI_COMPATIBLE_DEFAULT_BASE_URL)
+        ? { apiKey: config.vision.openaiApiKey, withheld: false }
+        : { apiKey: null, withheld: true }
+    }
+    const [stored, boundOrigin] = await Promise.all([
+      appConfig.get(OPENAI_API_KEY_CONFIG_KEY),
+      appConfig.get(OPENAI_API_KEY_ORIGIN_CONFIG_KEY),
+    ])
+    if (!stored?.trim())
+      return { apiKey: null, withheld: false }
+    const keyOrigin = boundOrigin?.trim() || origin
+    return origin !== null && keyOrigin === origin
+      ? { apiKey: stored, withheld: false }
+      : { apiKey: null, withheld: true }
   }
 
   async function getStoredOrDefault(key: string, defaultValue: string): Promise<string> {
@@ -88,25 +112,25 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
   async function getProviderConfig(): Promise<VisionProviderConfig> {
     const provider = await getProvider()
     if (provider === 'openai-compatible') {
-      const [apiKey, baseUrl, model] = await Promise.all([
-        getOpenAiApiKey(),
+      const [baseUrl, model] = await Promise.all([
         getOpenAiBaseUrl(),
         getOpenAiModel(),
       ])
+      const { apiKey } = await getOpenAiKey(baseUrl)
       return { provider, apiKey, baseUrl, model }
     }
     return { provider: 'claude', apiKey: await getClaudeApiKey() }
   }
 
   async function get(): Promise<VisionSettingsState> {
-    const [provider, enabledValue, claudeKey, openaiKey, baseUrl, model] = await Promise.all([
+    const [provider, enabledValue, claudeKey, baseUrl, model] = await Promise.all([
       getProvider(),
       appConfig.get(ENABLED_CONFIG_KEY),
       getClaudeApiKey(),
-      getOpenAiApiKey(),
       getOpenAiBaseUrl(),
       getOpenAiModel(),
     ])
+    const { apiKey: openaiKey, withheld: openaiKeyWithheld } = await getOpenAiKey(baseUrl)
 
     const claude: VisionProviderState = {
       keyConfigured: Boolean(claudeKey),
@@ -119,6 +143,7 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
       encrypted: appConfig.secretsEncrypted,
       baseUrl,
       model,
+      keyWithheld: openaiKeyWithheld,
     }
 
     return {
@@ -148,11 +173,47 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
         ? 'updated'
         : 'cleared'}`)
       await setStored(key, apiKey)
+      if (provider === 'openai-compatible') {
+        // Bind the key to the endpoint it was entered for; it is never sent anywhere else.
+        const origin = apiKey.trim()
+          ? endpointOrigin(await getOpenAiBaseUrl()) ?? ''
+          : ''
+        await appConfig.set(OPENAI_API_KEY_ORIGIN_CONFIG_KEY, origin)
+        if (origin)
+          log.info(`openai-compatible API key bound to ${origin}`)
+      }
       return get()
     },
     async setOpenAiBaseUrl(baseUrl: string): Promise<VisionSettingsState> {
-      await setStored(OPENAI_BASE_URL_CONFIG_KEY, baseUrl)
-      return get()
+      const next = typeof baseUrl === 'string'
+        ? baseUrl.trim()
+        : ''
+      if (next) {
+        try {
+          validateOpenAiBaseUrl(next)
+        }
+        catch (err) {
+          log.warn(`Rejected OpenAI-compatible Base URL (${describeEndpoint(next)}): ${(err as Error).message}`)
+          throw err
+        }
+      }
+      const previous = await getOpenAiBaseUrl()
+      // A key saved before keys were bound to an endpoint belongs to the Base URL it was used with until now.
+      const [storedKey, boundOrigin] = await Promise.all([
+        appConfig.get(OPENAI_API_KEY_CONFIG_KEY),
+        appConfig.get(OPENAI_API_KEY_ORIGIN_CONFIG_KEY),
+      ])
+      if (storedKey?.trim() && !boundOrigin?.trim()) {
+        const previousOrigin = endpointOrigin(previous)
+        if (previousOrigin)
+          await appConfig.set(OPENAI_API_KEY_ORIGIN_CONFIG_KEY, previousOrigin)
+      }
+      await setStored(OPENAI_BASE_URL_CONFIG_KEY, next)
+      const state = await get()
+      log.info(`OpenAI-compatible Base URL set to ${describeEndpoint(state.openaiCompatible.baseUrl)}${next ? '' : ' (default)'}${state.openaiCompatible.keyWithheld
+        ? '; the saved API key belongs to another endpoint and is withheld'
+        : ''}`)
+      return state
     },
     async setOpenAiModel(model: string): Promise<VisionSettingsState> {
       await setStored(OPENAI_MODEL_CONFIG_KEY, model)

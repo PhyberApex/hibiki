@@ -49,6 +49,7 @@ const showRegistryBrowser = ref(false)
 const visionAvailable = ref(false)
 const visionProvider = ref<VisionProviderId>('claude')
 const visionEndpoint = ref('')
+const visionSendsKey = ref(false)
 const showVisionDialog = ref(false)
 const resolveTarget = ref<{ category: SceneCategory, item: SceneItem } | null>(null)
 // One per load so a later success only clears its own failure.
@@ -285,6 +286,7 @@ async function loadVisionAvailability() {
     visionAvailable.value = config.enabled && config.configured
     visionProvider.value = config.provider
     visionEndpoint.value = config.openaiCompatible.baseUrl
+    visionSendsKey.value = config.openaiCompatible.keyConfigured
   }
   catch {
     visionAvailable.value = false
@@ -967,6 +969,7 @@ watch(sceneId, (newId) => {
       :ambience-in-scene="scene.ambience.map(a => a.soundId)"
       :provider="visionProvider"
       :endpoint="visionEndpoint"
+      :sends-key="visionSendsKey"
       @add="addToScene"
       @close="showVisionDialog = false"
     />

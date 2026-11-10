@@ -37,6 +37,7 @@ const UNCONFIGURED_VISION = {
     encrypted: true,
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-6-astra',
+    keyWithheld: false,
   },
 }
 
@@ -60,6 +61,7 @@ vi.mock('@/api/config', () => ({
       encrypted: true,
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-6-astra',
+      keyWithheld: false,
     },
   }),
   selectStorageFolder: vi.fn(),
@@ -724,6 +726,7 @@ describe('settingsView', () => {
           encrypted: true,
           baseUrl: 'http://localhost:11434/v1',
           model: 'gpt-6-astra',
+          keyWithheld: false,
         },
       })
       const wrapper = mountSettings()
@@ -733,6 +736,38 @@ describe('settingsView', () => {
       await flushPromises()
       expect(updateVisionOpenAiBaseUrl).toHaveBeenCalledWith('http://localhost:11434/v1')
       expect(wrapper.find<HTMLInputElement>('#vision-enabled').element.disabled).toBe(false)
+    })
+
+    it('shows the backend\'s reason when a Base URL is rejected and keeps the typed value', async () => {
+      vi.mocked(fetchVisionConfig).mockResolvedValue({ ...UNCONFIGURED_VISION, provider: 'openai-compatible' })
+      vi.mocked(updateVisionOpenAiBaseUrl).mockRejectedValueOnce(new Error('The Base URL must use https://.'))
+      const wrapper = mountSettings()
+      await flushPromises()
+      await wrapper.find('#vision-base-url').setValue('http://box.lan/v1')
+      await wrapper.find('[data-testid="vision-save-base-url"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.text()).toContain('The Base URL must use https://.')
+      expect(wrapper.find<HTMLInputElement>('#vision-base-url').element.value).toBe('http://box.lan/v1')
+    })
+
+    it('warns that the saved key is withheld from a Base URL on another endpoint', async () => {
+      vi.mocked(fetchVisionConfig).mockResolvedValue({
+        ...UNCONFIGURED_VISION,
+        provider: 'openai-compatible',
+        configured: true,
+        openaiCompatible: {
+          keyConfigured: false,
+          configured: true,
+          encrypted: true,
+          baseUrl: 'https://gateway.example/v1',
+          model: 'gpt-6-astra',
+          keyWithheld: true,
+        },
+      })
+      const wrapper = mountSettings()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="vision-key-withheld"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="vision-key-destination"]').exists()).toBe(true)
     })
 
     it('resets the Model back to the default', async () => {
@@ -745,6 +780,7 @@ describe('settingsView', () => {
           encrypted: true,
           baseUrl: 'https://api.openai.com/v1',
           model: 'llava',
+          keyWithheld: false,
         },
       })
       vi.mocked(updateVisionOpenAiModel).mockResolvedValue({
@@ -756,6 +792,7 @@ describe('settingsView', () => {
           encrypted: true,
           baseUrl: 'https://api.openai.com/v1',
           model: 'gpt-6-astra',
+          keyWithheld: false,
         },
       })
       const wrapper = mountSettings()

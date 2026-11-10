@@ -18,6 +18,8 @@ const props = defineProps<{
   ambienceInScene: string[]
   provider: VisionProviderId
   endpoint: string
+  /** Whether the OpenAI-compatible request carries the GM's API key, so the disclosure can say so. */
+  sendsKey?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -26,7 +28,7 @@ const emit = defineEmits<{
 }>()
 
 const privacyNote = computed(() => props.provider === 'openai-compatible'
-  ? `The image is sent to ${props.endpoint} for analysis and isn't kept afterwards.`
+  ? `The image${props.sendsKey ? ' and your API key are' : ' is'} sent to ${props.endpoint} for analysis. Hibiki doesn't keep the image afterwards.`
   : 'The image is sent to Anthropic\'s Claude API for analysis and isn\'t kept afterwards.')
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp']

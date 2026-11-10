@@ -41,7 +41,7 @@ function sound(id: string, category: 'music' | 'ambience', tags: string[] = []):
 const tavern = sound('tavern', 'music', ['warm', 'tavern'])
 const rain = sound('rain', 'ambience', ['storm', 'wet'])
 
-function mountDialog(overrides: Partial<{ musicSounds: SoundFile[], ambienceSounds: SoundFile[], musicInScene: string[], ambienceInScene: string[], provider: 'claude' | 'openai-compatible', endpoint: string }> = {}) {
+function mountDialog(overrides: Partial<{ musicSounds: SoundFile[], ambienceSounds: SoundFile[], musicInScene: string[], ambienceInScene: string[], provider: 'claude' | 'openai-compatible', endpoint: string, sendsKey: boolean }> = {}) {
   return mount(VisionToVibeDialog, {
     props: {
       musicSounds: [tavern],
@@ -72,6 +72,13 @@ describe('visionToVibeDialog', () => {
     const wrapper = mountDialog({ provider: 'openai-compatible', endpoint: 'http://localhost:11434/v1' })
     expect(wrapper.text()).toContain('http://localhost:11434/v1')
     expect(wrapper.text()).not.toContain('Anthropic')
+  })
+
+  it('says the API key travels with the image when one is sent to the endpoint', () => {
+    const withKey = mountDialog({ provider: 'openai-compatible', endpoint: 'https://gateway.example/v1', sendsKey: true })
+    expect(withKey.text()).toContain('The image and your API key are sent to https://gateway.example/v1')
+    const keyless = mountDialog({ provider: 'openai-compatible', endpoint: 'http://localhost:11434/v1', sendsKey: false })
+    expect(keyless.text()).not.toContain('API key')
   })
 
   it('analyzes the chosen image and shows description, tags, and matches', async () => {

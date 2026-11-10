@@ -75,6 +75,7 @@ const UNCONFIGURED_VISION = {
     encrypted: true,
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-6-astra',
+    keyWithheld: false,
   },
 }
 
@@ -90,6 +91,7 @@ vi.mock('@/api/config', () => ({
       encrypted: true,
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-6-astra',
+      keyWithheld: false,
     },
   }),
   openFileDialog: vi.fn().mockResolvedValue(null),
@@ -620,6 +622,7 @@ describe('sceneView — Vision to Vibe entry point', () => {
         encrypted: true,
         baseUrl: 'http://localhost:11434/v1',
         model: 'local-vision',
+        keyWithheld: false,
       },
     })
     const wrapper = await mountScene()
