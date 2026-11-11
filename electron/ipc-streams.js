@@ -12,9 +12,10 @@ const ipcLog = createLogger('ipc')
  * `audio:chunk` / `audio:effectChunk` are fire-and-forget, so nothing slows the
  * renderer down, and `feedMixerInput` keeps the source paused between refills:
  * whatever arrives faster than the mixer plays it waits in the `PassThrough`.
- * Past `STREAM_BUFFER_BYTES` (about two seconds of audio) chunks are dropped
- * rather than queued, which also keeps a stalled lane from replaying stale audio
- * for minutes once it resumes.
+ * Once `STREAM_BUFFER_BYTES` (about two seconds of audio) wait unread, chunks
+ * are dropped rather than queued, which also keeps a stalled lane from
+ * replaying stale audio for minutes once it resumes. The check runs before each
+ * push, so the buffer peaks at that plus one chunk (at most `MAX_CHUNK_BYTES`).
  */
 const MAX_CHUNK_BYTES = 1024 * 1024
 const STREAM_BUFFER_BYTES = 48000 * 2 * 2 * 2
@@ -272,16 +273,14 @@ function registerAudioStreamHandlers(ipc, player) {
         ipcLog.info(`Ended effect stream ${streamId} for guild ${guildId}: ${reason}`)
       }
     }
-    audioStreams.clear()
-    effectStreams.clear()
   }
 
-  /** How many guilds and streams both lanes hold, for tests and diagnostics. */
+  /** How many guilds and streams both lanes hold; lets the specs see that emptied guilds are forgotten. */
   const registrySize = () => {
     let streams = 0
     for (const registry of [audioStreams, effectStreams]) {
-      for (const lane of registry.values())
-        streams += lane.size
+      for (const guildStreams of registry.values())
+        streams += guildStreams.size
     }
     const guilds = new Set(audioStreams.keys()).union(new Set(effectStreams.keys())).size
     return { guilds, streams }
