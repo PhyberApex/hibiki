@@ -6,15 +6,20 @@ on:
   pull_request:
     branches: [main]
 
+# Read-only (#781): runs pnpm install, build and test on pull requests,
+# including in-repo branches such as Renovate's.
+permissions:
+  contents: read
+
 jobs:
   coverage:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26.13.0
           cache: pnpm
@@ -25,7 +30,7 @@ jobs:
         run: pnpm run test:coverage
 
       - name: Upload backend coverage to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
@@ -33,7 +38,7 @@ jobs:
           disable_search: true
 
       - name: Upload frontend coverage to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./frontend/coverage/lcov.info
