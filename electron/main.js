@@ -470,6 +470,10 @@ app.whenReady().then(async () => {
   const dataDir = path.join(userDataPath, 'data')
   await fs.promises.mkdir(dataDir, { recursive: true })
   const appConfigPath = path.join(dataDir, 'app-config.json')
+  // Logged so a sound library "in the wrong place" is diagnosable from hibiki.log (#776).
+  const envStoragePath = process.env.HIBIKI_STORAGE_PATH
+  if (envStoragePath)
+    appLog.info(`HIBIKI_STORAGE_PATH set in the environment: ${envStoragePath}`)
   try {
     const raw = await fs.promises.readFile(appConfigPath, 'utf-8')
     const appConfig = JSON.parse(raw)
@@ -477,10 +481,15 @@ app.whenReady().then(async () => {
       ? appConfig['storage.path'].trim()
       : ''
     // setStoragePath only stores absolute folders; a relative one predates that check and would resolve against cwd (#776).
-    if (storagePath && path.isAbsolute(storagePath))
+    if (storagePath && path.isAbsolute(storagePath)) {
+      appLog.info(`Storage path from Settings: ${storagePath}${envStoragePath
+        ? ` (overrides HIBIKI_STORAGE_PATH=${envStoragePath} from the environment)`
+        : ''}`)
       process.env.HIBIKI_STORAGE_PATH = storagePath
-    else if (storagePath)
-      appLog.warn(`Ignoring stored storage path ${storagePath}: not an absolute path; using the default`)
+    }
+    else if (storagePath) {
+      appLog.warn(`Ignoring stored storage path ${storagePath}: not an absolute path`)
+    }
   }
   catch {
     // First launch or corrupted config — fall through to defaults

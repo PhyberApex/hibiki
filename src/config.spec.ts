@@ -1,7 +1,8 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { loadEnvFile } from './config'
+import { loadEnvFile, secretsFromEnvironment } from './config'
+import { configuration } from './config/configuration'
 
 describe('loadEnvFile', () => {
   const originalCwd = process.cwd()
@@ -32,5 +33,26 @@ describe('loadEnvFile', () => {
   it('reads no .env at all in a packaged build', () => {
     expect(loadEnvFile({ packaged: true })).toBeNull()
     expect(process.env[probe]).toBeUndefined()
+  })
+})
+
+describe('secretsFromEnvironment', () => {
+  it('names each secret the environment supplies, never its value', () => {
+    const base = configuration()
+    const config = {
+      ...base,
+      discord: { token: 'env-token' },
+      vision: { apiKey: 'sk-env-claude', openaiApiKey: '' },
+    }
+    expect(secretsFromEnvironment(config)).toEqual(['DISCORD_TOKEN', 'HIBIKI_VISION_API_KEY'])
+  })
+
+  it('is empty when every secret comes from Settings', () => {
+    const base = configuration()
+    expect(secretsFromEnvironment({
+      ...base,
+      discord: { token: '' },
+      vision: { apiKey: '', openaiApiKey: '' },
+    })).toEqual([])
   })
 })

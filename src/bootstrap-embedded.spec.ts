@@ -167,7 +167,6 @@ const config = {
     ambienceDir: '/data/ambience',
   },
   discord: { token: undefined },
-  vision: { apiKey: '', openaiApiKey: '' },
 }
 
 function voiceChannel(id: string) {
@@ -394,19 +393,6 @@ describe('getEmbeddedApp', () => {
       expect(getConfig).toHaveBeenLastCalledWith({ packaged: true })
       await getEmbeddedApp(undefined, { packaged: false })
       expect(getConfig).toHaveBeenLastCalledWith({ packaged: false })
-    })
-
-    it('logs which secrets come from the environment by name, never by value', async () => {
-      jest.mocked(getConfig).mockReturnValue({
-        ...config,
-        discord: { token: 'env-token' },
-        vision: { apiKey: 'sk-env-claude', openaiApiKey: '' },
-      } as any)
-      await getEmbeddedApp()
-      expect(spies.info).toHaveBeenCalledWith('[hibiki]', 'Secrets from the environment, overriding Settings: DISCORD_TOKEN, HIBIKI_VISION_API_KEY')
-      const logged = spies.info.mock.calls.flat().join(' ')
-      expect(logged).not.toContain('env-token')
-      expect(logged).not.toContain('sk-env-claude')
     })
 
     it('fetches the default Scene Registry index and logs it', () => {

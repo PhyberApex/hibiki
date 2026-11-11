@@ -1,5 +1,4 @@
 import type { VoiceBasedChannel } from 'discord.js'
-import type { Config } from './config'
 import type { AccessibilitySettings } from './config/accessibility-settings'
 import type { DiscordStatus } from './config/discord-token-settings'
 import type { HotkeySettings } from './config/hotkey-settings'
@@ -258,24 +257,12 @@ export interface EmbeddedAppOptions {
   usageStats?: { gate: UsageStatsGate, environment: Omit<UsageStatsEnvironment, 'appVersion'> }
 }
 
-/** Names (never values) of the secrets the environment supplies; each one wins over its stored counterpart. */
-function logSecretsFromEnvironment(config: Config): void {
-  const fromEnv = [
-    config.discord.token && 'DISCORD_TOKEN',
-    config.vision.apiKey && 'HIBIKI_VISION_API_KEY',
-    config.vision.openaiApiKey && 'HIBIKI_VISION_OPENAI_API_KEY',
-  ].filter(Boolean)
-  if (fromEnv.length)
-    log.info(`Secrets from the environment, overriding Settings: ${fromEnv.join(', ')}`)
-}
-
 export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOptions = {}): Promise<EmbeddedApp> {
   process.env.HIBIKI_EMBEDDED = '1'
   const report = generateDependencyReport()
   log.info('Voice dependency report:\n', report)
   log.info(`DAVE library backend: ${describeDaveBackend()}`)
   const config = getConfig({ packaged: options.packaged ?? true })
-  logSecretsFromEnvironment(config)
   await ensureStorageDirs(config)
   log.info(`Storage root ${config.audio.storageRoot}: music ${config.audio.musicDir}, effects ${config.audio.effectsDir}, ambience ${config.audio.ambienceDir}, data ${config.database.path}`)
   const appConfig = createAppConfig(config, codec)

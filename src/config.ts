@@ -48,6 +48,15 @@ export function loadEnvFile(options: LoadEnvFileOptions): string | null {
 
 export type Config = ReturnType<typeof configuration>
 
+/** Names (never values) of the secrets the environment supplies; each one wins over its stored counterpart. */
+export function secretsFromEnvironment(config: Config): string[] {
+  return [
+    config.discord.token && 'DISCORD_TOKEN',
+    config.vision.apiKey && 'HIBIKI_VISION_API_KEY',
+    config.vision.openaiApiKey && 'HIBIKI_VISION_OPENAI_API_KEY',
+  ].filter((name): name is string => Boolean(name))
+}
+
 let cachedConfig: Config | null = null
 
 /**
@@ -64,6 +73,9 @@ export function getConfig(options: LoadEnvFileOptions = { packaged: true }): Con
       // Validation failed — proceed with raw process.env values
     }
     cachedConfig = configuration()
+    const fromEnv = secretsFromEnvironment(cachedConfig)
+    if (fromEnv.length)
+      log.info(`Secrets from the environment, overriding Settings: ${fromEnv.join(', ')}`)
   }
   return cachedConfig
 }
