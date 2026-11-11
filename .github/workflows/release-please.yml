@@ -56,9 +56,12 @@ jobs:
     needs: [release-please, checks]
     uses: ./.github/workflows/build.yml
     # A called workflow can only narrow the caller's grant: its upload-release
-    # job needs contents: write, its build job drops back to read.
+    # job needs contents: write plus id-token and attestations write for the
+    # build provenance attestation (#782), its build job drops back to read.
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     with:
       upload_release: true
       tag_name: ${{ needs.release-please.outputs.tag_name }}
