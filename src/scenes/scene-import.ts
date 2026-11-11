@@ -300,18 +300,7 @@ async function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImpor
       totals.compressed += entry.header.compressedSize
       assertWithinLimits(entry, totals, limits, archiveName)
       const soundId = idFromFilename(filename)
-      if (!canKeepFilename(soundId)) {
-        const renamed = freshSoundId(soundId)
-        plannedIds.add(renamed.toLowerCase())
-        planned.push({
-          entry,
-          destDir,
-          filename: `${renamed}${ext}`,
-          soundId: renamed,
-          reuse: false,
-        })
-        continue
-      }
+      // A file already in the library is reused before any rename, whatever its name, so re-imports do not duplicate it (#652).
       const sameFile = library.get(soundId.toLowerCase())?.find(f => f.filename === filename && f.size === entry.header.size)
       if (sameFile && !plannedIds.has(soundId.toLowerCase())) {
         plannedIds.add(soundId.toLowerCase())
@@ -321,6 +310,18 @@ async function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImpor
           filename,
           soundId,
           reuse: true,
+        })
+        continue
+      }
+      if (!canKeepFilename(soundId)) {
+        const renamed = freshSoundId(soundId)
+        plannedIds.add(renamed.toLowerCase())
+        planned.push({
+          entry,
+          destDir,
+          filename: `${renamed}${ext}`,
+          soundId: renamed,
+          reuse: false,
         })
         continue
       }

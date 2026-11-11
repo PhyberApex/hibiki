@@ -806,6 +806,24 @@ describe('importScene', () => {
         warn.mockRestore()
       })
 
+      it('reuses a library file of the same name and size even when its name would be renamed (#652)', async () => {
+        mkdirSync(config.audio.musicDir, { recursive: true })
+        writeFileSync(join(config.audio.musicDir, 'Tavern Song.mp3'), 'abc')
+        const zipPath = createManifestZip(bundledManifest('Reused Odd Name', 'sounds/music/Tavern Song.mp3'), {
+          'sounds/music/Tavern Song.mp3': 'xyz',
+        })
+        const scene = await importScene(config, zipPath)
+        expect(scene.music[0]!.soundId).toBe('Tavern Song')
+        expect(readdirSync(config.audio.musicDir).filter(f => f.startsWith('tavern-song'))).toEqual([])
+      })
+
+      it('keeps a bundled file in an audio container only the renderer plays, like an uploaded .webm', async () => {
+        const zipPath = createManifestZip(bundledManifest('Webm Theme', 'sounds/music/theme-17000.webm'), { 'sounds/music/theme-17000.webm': 'x' })
+        const scene = await importScene(config, zipPath)
+        expect(scene.music[0]!.soundId).toBe('theme-17000')
+        expect(readdirSync(config.audio.musicDir)).toContain('theme-17000.webm')
+      })
+
       it('keeps a name already shaped like a library id, so re-importing reuses it', async () => {
         const zipPath = createManifestZip(bundledManifest('Kept Name', 'sounds/music/kept_name.v2-17000.mp3'), { 'sounds/music/kept_name.v2-17000.mp3': 'x' })
         const scene = await importScene(config, zipPath)

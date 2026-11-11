@@ -6,7 +6,8 @@ export const SOUND_CATEGORIES: readonly SoundCategory[] = ['music', 'effects', '
 /**
  * Extensions a sound file from a Scene package may carry (#785): every format
  * with a backend decoder (ADR-0003) plus the ones only the renderer fallback
- * plays. A file with none of them is never written into the library.
+ * plays (Chromium's audio containers, which an `audio/*` upload may carry).
+ * A file with none of them is never written into the library.
  */
 export const SOUND_FILE_EXTENSIONS: readonly string[] = [
   '.mp3',
@@ -17,6 +18,9 @@ export const SOUND_FILE_EXTENSIONS: readonly string[] = [
   '.opus',
   '.m4a',
   '.aac',
+  '.mp4',
+  '.webm',
+  '.weba',
 ]
 
 export function isSoundCategory(value: unknown): value is SoundCategory {
