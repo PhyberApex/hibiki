@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { writeJsonFileAtomic } from '../json-file'
 import { createLogger } from '../logger'
-import { SOUND_CATEGORIES } from '../sound/sound-id'
+import { isSafeSoundId, SOUND_CATEGORIES } from '../sound/sound-id'
 import { createSceneStore, isRecord, normalizeMusicMode, uniqueSceneName } from './scene-store'
 
 const log = createLogger('scene-registry')
@@ -16,6 +16,8 @@ const HOUR_MS = 60 * 60 * 1000
 const STALE_MS = 24 * HOUR_MS
 /** Without it a stalled connection pins the renderer's `getIndex` for undici's multi-minute defaults (#652). */
 export const DEFAULT_REGISTRY_FETCH_TIMEOUT_MS = 10_000
+/** The project's index is tens of KB; the bound keeps a hostile or broken override from filling memory (#784). */
+export const DEFAULT_MAX_REGISTRY_INDEX_BYTES = 5 * 1024 * 1024
 
 interface CachedIndex {
   fetchedAt: string
@@ -24,9 +26,57 @@ interface CachedIndex {
   data: RegistryIndex
 }
 
-/** The index to fetch: `HIBIKI_REGISTRY_INDEX_URL` when set, else the project's own. */
+/** `url` for the log: any `user:password@` it carries is masked. */
+function withoutCredentials(url: string): string {
+  try {
+    const parsed = new URL(url)
+    if (!parsed.username && !parsed.password)
+      return url
+    parsed.username = '***'
+    parsed.password = ''
+    return parsed.href
+  }
+  catch {
+    return url.replace(/\/\/[^/@]*@/, '//***@')
+  }
+}
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+/** Why `url` may not be the index URL, or `null` when it may: https anywhere, plain http only to a loopback test server. */
+function refuseIndexUrl(url: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  }
+  catch {
+    return 'it is not a valid URL'
+  }
+  if (parsed.protocol === 'https:')
+    return null
+  if (parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname))
+    return null
+  return parsed.protocol === 'http:'
+    ? 'plain http is only allowed to a loopback host'
+    : `the ${parsed.protocol} scheme is not allowed`
+}
+
+/**
+ * The index to fetch: `HIBIKI_REGISTRY_INDEX_URL` when set and https (or http
+ * to a loopback host, for a local test server), else the project's own. The
+ * index decides what installs, so it is never read from disk or over an
+ * unauthenticated connection to another machine (#784).
+ */
 export function resolveRegistryIndexUrl(override: string | undefined): string {
-  return override?.trim() || REGISTRY_INDEX_URL
+  const url = override?.trim()
+  if (!url)
+    return REGISTRY_INDEX_URL
+  const refusal = refuseIndexUrl(url)
+  if (refusal) {
+    log.warn(`Ignoring HIBIKI_REGISTRY_INDEX_URL ${JSON.stringify(withoutCredentials(url))}: ${refusal}; using ${REGISTRY_INDEX_URL}`)
+    return REGISTRY_INDEX_URL
+  }
+  return url
 }
 
 function getCachePath(config: Config): string {
@@ -78,6 +128,21 @@ function isInstallableEntry(entry: RegistryEntry): boolean {
       Array.isArray(scene[category]) && scene[category].every(isRecord))
 }
 
+/**
+ * Every item's `soundName` becomes its sound id, which is later globbed inside
+ * a category folder, so it must be one safe path segment: the same gate the
+ * zip import applies (#637, #784). Throws on the first that is not.
+ */
+function assertSafeSoundNames(entry: RegistryEntry): void {
+  for (const category of SOUND_CATEGORIES) {
+    const unsafe = entry.scene[category].find(item => !isSafeSoundId(item.soundName))
+    if (!unsafe)
+      continue
+    log.warn(`Registry entry '${entry.slug}' rejected: unsafe ${category} sound name ${JSON.stringify(unsafe.soundName) ?? 'undefined'}`)
+    throw new Error(`Registry entry '${entry.slug}' has an invalid ${category} sound name`)
+  }
+}
+
 async function readCache(cachePath: string): Promise<CachedIndex | null> {
   try {
     const raw = await readFile(cachePath, 'utf-8')
@@ -119,11 +184,47 @@ function registryEntryToScene(entry: RegistryEntry): Omit<Scene, 'id' | 'created
   }
 }
 
-export interface SceneRegistryOptions {
-  timeoutMs?: number
+/**
+ * The response body as text, refusing it once it passes `maxBytes`: up front
+ * from a declared `Content-Length`, else as soon as the streamed bytes do.
+ */
+async function readBoundedText(response: Response, maxBytes: number, source: string): Promise<string> {
+  const tooLarge = () => {
+    log.warn(`Registry index from ${source} refused: larger than ${maxBytes} bytes`)
+    return new Error(`Registry index is larger than ${maxBytes} bytes (${source})`)
+  }
+  if (Number(response.headers.get('content-length')) > maxBytes) {
+    await response.body?.cancel()
+    throw tooLarge()
+  }
+  if (!response.body)
+    return ''
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done)
+      break
+    total += value.byteLength
+    if (total > maxBytes) {
+      await reader.cancel()
+      throw tooLarge()
+    }
+    chunks.push(value)
+  }
+  return Buffer.concat(chunks).toString('utf-8')
 }
 
-export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_URL, { timeoutMs = DEFAULT_REGISTRY_FETCH_TIMEOUT_MS }: SceneRegistryOptions = {}) {
+export interface SceneRegistryOptions {
+  timeoutMs?: number
+  maxIndexBytes?: number
+}
+
+export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_URL, {
+  timeoutMs = DEFAULT_REGISTRY_FETCH_TIMEOUT_MS,
+  maxIndexBytes = DEFAULT_MAX_REGISTRY_INDEX_BYTES,
+}: SceneRegistryOptions = {}) {
   const cachePath = getCachePath(config)
 
   /** A cached index, unless it was fetched from another index URL. */
@@ -154,7 +255,7 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
       })
       if (!response.ok)
         throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText} (${indexUrl})`)
-      return await response.json()
+      return JSON.parse(await readBoundedText(response, maxIndexBytes, indexUrl))
     }
     catch (e) {
       if ((e as Error).name !== 'TimeoutError')
@@ -207,10 +308,12 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
       }
     },
 
+    /**
+     * The index an install reads: `fetchIndex` without a forced refresh, so a
+     * cache past `STALE_MS` is refetched and only served stale while offline,
+     * never installed from indefinitely (#784).
+     */
     async getIndex(): Promise<RegistryIndex> {
-      const cached = await readOwnCache()
-      if (cached)
-        return cached.data
       return this.fetchIndex()
     },
 
@@ -223,6 +326,7 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
         log.warn(`Registry entry '${slug}' is malformed: needs a name and music, ambience and effects lists`)
         throw new Error(`Registry entry '${slug}' is malformed`)
       }
+      assertSafeSoundNames(entry)
 
       const scenes = createSceneStore(config)
       const sceneData = registryEntryToScene(entry)

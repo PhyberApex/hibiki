@@ -61,10 +61,29 @@ describe('createSceneRegistry', () => {
     expect(JSON.parse(readFileSync(cachePath(), 'utf-8')).data).toEqual(remoteIndex)
   })
 
-  it('getIndex returns a cached index without fetching, however old', async () => {
-    writeCache({ ...remoteIndex, version: 7 }, '2000-01-01T00:00:00.000Z')
+  it('getIndex returns a fresh cached index without fetching', async () => {
+    writeCache({ ...remoteIndex, version: 7 })
     await expect(createSceneRegistry(config).getIndex()).resolves.toMatchObject({ version: 7 })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('getIndex refetches a stale cache, so an install never reads a days-old index while online (#784)', async () => {
+    writeCache({ ...remoteIndex, version: 7 }, '2000-01-01T00:00:00.000Z')
+    respondWith({ ...remoteIndex, version: 8 })
+    await expect(createSceneRegistry(config).getIndex()).resolves.toMatchObject({ version: 8 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('getIndex falls back to a stale cache when the refetch fails', async () => {
+    writeCache({ ...remoteIndex, version: 7 }, '2000-01-01T00:00:00.000Z')
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      await expect(createSceneRegistry(config).getIndex()).resolves.toMatchObject({ version: 7 })
+      expect(warn).toHaveBeenCalledWith('[scene-registry]', expect.stringContaining('serving the cached index'))
+    }
+    finally {
+      warn.mockRestore()
+    }
   })
 
   it('getIndex refetches when the cache file is not valid JSON', async () => {
@@ -374,6 +393,49 @@ describe('createSceneRegistry', () => {
         .toThrow('Registry index request timed out after 20 ms')
     })
 
+    it('fetchIndex refuses a body over the size bound without caching it (#784)', async () => {
+      const big = {
+        ...remoteIndex,
+        padding: 'x'.repeat(200),
+      }
+      respondWith(big)
+      await expect(createSceneRegistry(config, REGISTRY_INDEX_URL, { maxIndexBytes: 100 }).fetchIndex(true))
+        .rejects
+        .toThrow('Registry index is larger than 100 bytes')
+      expect(existsSync(cachePath())).toBe(false)
+    })
+
+    it('fetchIndex refuses a declared Content-Length over the bound before reading the body', async () => {
+      const pull = jest.fn()
+      fetchMock.mockResolvedValue(new Response(new ReadableStream({ pull }), {
+        headers: { 'Content-Length': '5000' },
+      }))
+      await expect(createSceneRegistry(config, REGISTRY_INDEX_URL, { maxIndexBytes: 100 }).fetchIndex(true))
+        .rejects
+        .toThrow('Registry index is larger than 100 bytes')
+    })
+
+    it('fetchIndex reads a body within the bound, split across chunks', async () => {
+      const text = JSON.stringify({ ...remoteIndex, version: 9 })
+      fetchMock.mockResolvedValue(new Response(new ReadableStream({
+        start(controller) {
+          const bytes = new TextEncoder().encode(text)
+          controller.enqueue(bytes.subarray(0, 10))
+          controller.enqueue(bytes.subarray(10))
+          controller.close()
+        },
+      })))
+      await expect(createSceneRegistry(config, REGISTRY_INDEX_URL, { maxIndexBytes: text.length }).fetchIndex(true))
+        .resolves
+        .toMatchObject({ version: 9 })
+    })
+
+    it('fetchIndex rejects a body that is not JSON', async () => {
+      fetchMock.mockResolvedValue(new Response('<html>'))
+      await expect(createSceneRegistry(config).fetchIndex(true)).rejects.toThrow()
+      expect(existsSync(cachePath())).toBe(false)
+    })
+
     it.each([
       [
         'an object without scenes',
@@ -490,6 +552,43 @@ describe('createSceneRegistry', () => {
       await expect(createSceneStore(config).list()).resolves.toEqual([])
     })
 
+    it.each([
+      ['a numeric sound name', 'music', 42],
+      ['a missing sound name', 'ambience', undefined],
+      ['a path-walking sound name', 'effects', '../../secrets'],
+      ['a dot-dot sound name', 'music', '..'],
+    ])('installFromRegistry rejects an entry with %s, saving nothing (#784)', async (_label, category, soundName) => {
+      writeCache({
+        ...remoteIndex,
+        scenes: [
+          {
+            ...listable,
+            name: 'Sneaky',
+            slug: 'sneaky',
+            scene: {
+              music: [],
+              ambience: [],
+              effects: [],
+              [category]: [
+                { soundName: 'Fine' },
+                { soundName },
+              ],
+            },
+          },
+        ],
+      })
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await expect(createSceneRegistry(config).installFromRegistry('sneaky')).rejects.toThrow(`Registry entry 'sneaky' has an invalid ${category} sound name`)
+        expect(warn).toHaveBeenCalledWith('[scene-registry]', expect.stringContaining(`unsafe ${category} sound name`))
+      }
+      finally {
+        warn.mockRestore()
+      }
+      const { createSceneStore } = await import('./scene-store')
+      await expect(createSceneStore(config).list()).resolves.toEqual([])
+    })
+
     it('installFromRegistry rejects an entry whose name is blank', async () => {
       writeCache({
         ...remoteIndex,
@@ -515,5 +614,39 @@ describe('resolveRegistryIndexUrl', () => {
 
   it('uses a set override, trimmed', () => {
     expect(resolveRegistryIndexUrl(' http://127.0.0.1:4000/index.json ')).toBe('http://127.0.0.1:4000/index.json')
+    expect(resolveRegistryIndexUrl('https://example.com/index.json')).toBe('https://example.com/index.json')
+  })
+
+  it('allows plain http only to a loopback host', () => {
+    for (const url of ['http://localhost:4000/index.json', 'http://[::1]:4000/index.json', 'http://127.0.0.1/index.json'])
+      expect(resolveRegistryIndexUrl(url)).toBe(url)
+  })
+
+  describe('refusing an override that is not https (#784)', () => {
+    let warn: jest.SpyInstance
+
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      warn.mockRestore()
+    })
+
+    it.each([
+      'http://example.com/index.json',
+      'file:///etc/passwd',
+      'ftp://example.com/index.json',
+      'not a url',
+    ])('falls back to the default index for %s and warns', (url) => {
+      expect(resolveRegistryIndexUrl(url)).toBe(REGISTRY_INDEX_URL)
+      expect(warn).toHaveBeenCalledWith('[scene-registry]', expect.stringContaining('HIBIKI_REGISTRY_INDEX_URL'))
+    })
+
+    it('masks credentials in the refused URL it logs', () => {
+      expect(resolveRegistryIndexUrl('http://gm:hunter2@example.com/index.json')).toBe(REGISTRY_INDEX_URL)
+      expect(warn).toHaveBeenCalledWith('[scene-registry]', expect.stringContaining('http://***@example.com/index.json'))
+      expect(warn).not.toHaveBeenCalledWith('[scene-registry]', expect.stringContaining('hunter2'))
+    })
   })
 })

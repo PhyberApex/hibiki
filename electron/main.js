@@ -359,9 +359,22 @@ function fileResponse(filePath, init, readOptions) {
   return new Response(Readable.toWeb(fs.createReadStream(filePath, readOptions)), init)
 }
 
+/**
+ * Sizes and streams the same open file descriptor, so a file replaced between
+ * the two (a re-import, a sync client's atomic rename) cannot advertise one
+ * file's `Content-Length` and deliver another's bytes (#784). The descriptor
+ * is closed here until a file stream takes it over (`autoClose`).
+ */
 function serveSoundFile(request, filePath) {
-  const stats = fs.statSync(filePath)
-  const totalSize = stats.size
+  const fd = fs.openSync(filePath, 'r')
+  let totalSize
+  try {
+    totalSize = fs.fstatSync(fd).size
+  }
+  catch (err) {
+    fs.closeSync(fd)
+    throw err
+  }
   const ext = path.extname(filePath).toLowerCase()
   const mime = {
     '.mp3': 'audio/mpeg',
@@ -374,6 +387,7 @@ function serveSoundFile(request, filePath) {
   const rangeHeader = request.headers.get('range')
   const range = parseRange(rangeHeader, totalSize)
   if (range.kind === 'unsatisfiable') {
+    fs.closeSync(fd)
     protocolLog.debug(`${path.basename(filePath)} 416 range "${rangeHeader}" outside ${totalSize} bytes`)
     return new Response(null, {
       status: 416,
@@ -395,11 +409,11 @@ function serveSoundFile(request, filePath) {
         'Accept-Ranges': 'bytes',
         'Access-Control-Allow-Origin': SOUND_ALLOWED_ORIGIN,
       },
-    }, { start, end })
+    }, { fd, start, end })
   }
 
   protocolLog.debug(`${path.basename(filePath)} 200 full ${totalSize} bytes${rangeHeader
-    ? ` (unparsed range "${rangeHeader}")`
+    ? ` (ignored range "${rangeHeader}")`
     : ''}`)
   return fileResponse(filePath, {
     headers: {
@@ -408,7 +422,7 @@ function serveSoundFile(request, filePath) {
       'Accept-Ranges': 'bytes',
       'Access-Control-Allow-Origin': SOUND_ALLOWED_ORIGIN,
     },
-  })
+  }, { fd })
 }
 
 function registerHibikiProtocol(api, webDistDir) {
@@ -437,30 +451,42 @@ function registerHibikiProtocol(api, webDistDir) {
     }
 
     if (host === 'app') {
-      const resolved = resolveAppPath(webDistDir, pathname)
-      if (!resolved.ok) {
-        protocolLog.warn(`Rejected hibiki://app${pathname}: ${resolved.reason}`)
+      // Like the sound branch, nothing may throw out of the handler: it would
+      // reach uncaughtException and the crash dialog (#784).
+      try {
+        return serveAppFile(webDistDir, pathname)
+      }
+      catch (err) {
+        protocolLog.warn(`Could not serve hibiki://app${pathname}:`, err)
         return new Response('Not Found', { status: 404 })
       }
-      const { filePath } = resolved
-      const ext = path.extname(filePath).toLowerCase()
-      const mime = {
-        '.html': 'text/html',
-        '.js': 'application/javascript',
-        '.css': 'text/css',
-        '.json': 'application/json',
-        '.ico': 'image/x-icon',
-        '.svg': 'image/svg+xml',
-        '.png': 'image/png',
-        '.woff': 'font/woff',
-        '.woff2': 'font/woff2',
-      }[ext] || 'application/octet-stream'
-      return fileResponse(filePath, {
-        headers: { 'Content-Type': mime, 'Content-Security-Policy': APP_CONTENT_SECURITY_POLICY },
-      })
     }
 
     return new Response('Not Found', { status: 404 })
+  })
+}
+
+function serveAppFile(webDistDir, pathname) {
+  const resolved = resolveAppPath(webDistDir, pathname)
+  if (!resolved.ok) {
+    protocolLog.warn(`Rejected hibiki://app${pathname}: ${resolved.reason}`)
+    return new Response('Not Found', { status: 404 })
+  }
+  const { filePath } = resolved
+  const ext = path.extname(filePath).toLowerCase()
+  const mime = {
+    '.html': 'text/html',
+    '.js': 'application/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.ico': 'image/x-icon',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+  }[ext] || 'application/octet-stream'
+  return fileResponse(filePath, {
+    headers: { 'Content-Type': mime, 'Content-Security-Policy': APP_CONTENT_SECURITY_POLICY },
   })
 }
 
