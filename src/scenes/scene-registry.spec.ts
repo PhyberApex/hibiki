@@ -352,6 +352,7 @@ describe('createSceneRegistry', () => {
   })
 
   describe('untrusted index (#652)', () => {
+    const listable = { description: '', author: '', tags: [] }
     it('fetchIndex gives up on a stalled connection after the timeout', async () => {
       fetchMock.mockImplementation((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))
@@ -396,11 +397,88 @@ describe('createSceneRegistry', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 
+    describe('entries the Registry browser cannot list (#778)', () => {
+      const good = {
+        ...listable,
+        name: 'Good',
+        slug: 'good',
+        scene: { music: [], ambience: [], effects: [] },
+      }
+      const malformed = [
+        null,
+        'cozy-tavern',
+        [],
+        { ...good, slug: 'numeric-author', author: 42 },
+        { ...good, slug: 'string-tags', tags: 'spooky' },
+        {
+          ...good,
+          slug: 'numeric-tag',
+          tags: ['ok', 7],
+        },
+        { ...good, slug: 'object-name', name: {} },
+        { ...good, slug: 'no-description', description: undefined },
+        { ...good, slug: 42 },
+        { ...good, slug: '' },
+      ]
+      let warn: jest.SpyInstance
+
+      beforeEach(() => {
+        warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+      })
+
+      afterEach(() => {
+        warn.mockRestore()
+      })
+
+      it('fetchIndex drops them, caches only the rest and warns', async () => {
+        respondWith({
+          ...remoteIndex,
+          scenes: [...malformed, good],
+        })
+        await expect(createSceneRegistry(config).fetchIndex(true)).resolves.toEqual({
+          ...remoteIndex,
+          scenes: [good],
+        })
+        expect(JSON.parse(readFileSync(cachePath(), 'utf-8')).data.scenes).toEqual([good])
+        expect(warn).toHaveBeenCalledWith('[scene-registry]', expect.stringContaining(`Dropped ${malformed.length} malformed`))
+      })
+
+      it('getIndex drops them from a cache written before the check', async () => {
+        writeCache({
+          ...remoteIndex,
+          scenes: [good, ...malformed],
+        })
+        await expect(createSceneRegistry(config).getIndex()).resolves.toEqual({
+          ...remoteIndex,
+          scenes: [good],
+        })
+        expect(fetchMock).not.toHaveBeenCalled()
+      })
+
+      it('installFromRegistry cannot find a dropped entry', async () => {
+        writeCache({ ...remoteIndex, scenes: malformed })
+        await expect(createSceneRegistry(config).installFromRegistry('numeric-author')).rejects.toThrow('Scene \'numeric-author\' not found in registry')
+      })
+
+      it('keeps a well-formed index untouched and quiet', async () => {
+        respondWith({
+          ...remoteIndex,
+          scenes: [good],
+        })
+        await expect(createSceneRegistry(config).fetchIndex(true)).resolves.toEqual({
+          ...remoteIndex,
+          scenes: [good],
+        })
+        expect(warn).not.toHaveBeenCalled()
+      })
+    })
+
     it('installFromRegistry rejects an entry without item lists, saving nothing', async () => {
       writeCache({
         ...remoteIndex,
         scenes: [
           {
+            ...listable,
             name: 'Broken',
             slug: 'broken',
             scene: { music: [] },
@@ -412,12 +490,13 @@ describe('createSceneRegistry', () => {
       await expect(createSceneStore(config).list()).resolves.toEqual([])
     })
 
-    it('installFromRegistry rejects an entry whose name is not a string', async () => {
+    it('installFromRegistry rejects an entry whose name is blank', async () => {
       writeCache({
         ...remoteIndex,
         scenes: [
           {
-            name: 42,
+            ...listable,
+            name: '  ',
             slug: 'nameless',
             scene: { music: [], ambience: [], effects: [] },
           },

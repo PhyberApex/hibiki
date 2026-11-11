@@ -38,9 +38,35 @@ function getCachePath(config: Config): string {
   return join(dir, CACHE_FILENAME)
 }
 
-/** Only the part every caller relies on; each entry is checked when it is installed. */
+/** Only the part every caller relies on; entries are filtered by `withListableEntries`. */
 function isRegistryIndex(data: unknown): data is RegistryIndex {
   return isRecord(data) && Array.isArray(data.scenes)
+}
+
+const LISTED_TEXT_FIELDS = ['name', 'description', 'author'] as const
+
+/** What the Registry browser reads off every entry to list and search it; the rest is checked on install. */
+function isListableEntry(entry: unknown): entry is RegistryEntry {
+  return isRecord(entry)
+    && typeof entry.slug === 'string'
+    && entry.slug !== ''
+    && LISTED_TEXT_FIELDS.every(field => typeof entry[field] === 'string')
+    && Array.isArray(entry.tags)
+    && entry.tags.every(tag => typeof tag === 'string')
+}
+
+/**
+ * The index without entries that are not well-typed records. The index is
+ * remote, untrusted data: one bad entry must not break the Registry browser
+ * for everyone until it is fixed upstream (#778).
+ */
+function withListableEntries(index: RegistryIndex, source: string): RegistryIndex {
+  const scenes = index.scenes.filter(isListableEntry)
+  const dropped = index.scenes.length - scenes.length
+  if (dropped === 0)
+    return index
+  log.warn(`Dropped ${dropped} malformed registry entr(y/ies) from ${source}: each needs a slug, name, description, author and a list of tags`)
+  return { ...index, scenes }
 }
 
 function isInstallableEntry(entry: RegistryEntry): boolean {
@@ -110,8 +136,12 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
       log.info(`Ignoring registry cache fetched from ${cachedUrl}; the index is now ${indexUrl}`)
       return null
     }
-    if (isRegistryIndex(cached.data))
-      return cached
+    if (isRegistryIndex(cached.data)) {
+      return {
+        ...cached,
+        data: withListableEntries(cached.data, cachePath),
+      }
+    }
     log.warn(`Ignoring malformed registry cache at ${cachePath}`)
     return null
   }
@@ -137,11 +167,12 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
   /** Fetches the index and caches it; throws on any failure, leaving the cache untouched. */
   async function fetchAndCache(): Promise<RegistryIndex> {
     log.info(`Fetching registry index from ${indexUrl}…`)
-    const data = await fetchIndexBody()
-    if (!isRegistryIndex(data)) {
+    const body = await fetchIndexBody()
+    if (!isRegistryIndex(body)) {
       log.warn(`Registry index from ${indexUrl} is malformed: no scenes list; not caching it`)
       throw new Error(`Registry index is malformed (${indexUrl})`)
     }
+    const data = withListableEntries(body, indexUrl)
     await writeCache(cachePath, {
       fetchedAt: new Date().toISOString(),
       url: indexUrl,
@@ -185,7 +216,7 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
 
     async installFromRegistry(slug: string): Promise<Scene> {
       const index = await this.getIndex()
-      const entry = index.scenes.find(s => s?.slug === slug)
+      const entry = index.scenes.find(s => s.slug === slug)
       if (!entry)
         throw new Error(`Scene '${slug}' not found in registry`)
       if (!isInstallableEntry(entry)) {
