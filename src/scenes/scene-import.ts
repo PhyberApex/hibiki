@@ -393,7 +393,7 @@ async function writeBundledSounds(planned: BundledSound[], written: BundledSound
     else if (canKeepFilename(idFromFilename(original)))
       log.info(`Extracted ${entry.entryName} to ${join(destDir, filename)} as ${soundId}: ${idFromFilename(original)} is already in the library`)
     else
-      log.info(`Extracted ${entry.entryName} to ${join(destDir, filename)} as ${soundId}: its name is not one a library file may have`)
+      log.info(`Extracted ${entry.entryName} to ${join(destDir, filename)} as ${soundId}: its name is not shaped like a library id (ASCII letters, digits, _, - and inner dots, no Windows device name)`)
   }
 }
 

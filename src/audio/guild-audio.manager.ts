@@ -362,7 +362,11 @@ export class GuildAudioManager extends EventEmitter {
       clearInterval(this.encryptionRecheck)
       this.encryptionRecheck = undefined
     }
+    const wasNotReady = this.e2eeNotReady
     this.encryption = 'unknown'
+    // a reconnect or a new join must not leave the GM's warning up until some unrelated state change
+    if (wasNotReady)
+      this.emit('encryptionChanged')
   }
 
   /** Whether the voice connection has a DAVE session that is not ready, so what it sends is likely discarded by Discord clients (#785). */

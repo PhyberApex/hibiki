@@ -40,7 +40,8 @@ function dismissStorageWarnings() {
  * otherwise take it for a mute.
  */
 const e2eeNotReadyEntry = computed(() =>
-  player.playerState.find(g => g.kind === 'discord' && g.e2eeNotReady) ?? null,
+  // only a Discord Target has a voice connection, so only it can carry the flag
+  player.playerState.find(g => g.e2eeNotReady) ?? null,
 )
 const e2eeWarningDismissed = ref(false)
 const showE2eeWarning = computed(() => Boolean(e2eeNotReadyEntry.value) && !e2eeWarningDismissed.value)

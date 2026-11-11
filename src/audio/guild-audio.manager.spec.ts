@@ -276,6 +276,24 @@ describe('guildAudioManager', () => {
       warn.mockRestore()
     })
 
+    it('tells listeners the flag dropped when a reconnect reaches Ready again', async () => {
+      jest.useFakeTimers()
+      jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const { connection } = createDaveConnection({ ready: false })
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      await manager.connect(fakeChannel)
+      await jest.advanceTimersByTimeAsync(3_000)
+      expect(manager.e2eeNotReady).toBe(true)
+
+      const listener = jest.fn()
+      manager.on('encryptionChanged', listener)
+      const next = createDaveConnection({ ready: true })
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(next.connection)
+      await manager.connect({ ...fakeChannel, id: 'channel-2' } as VoiceBasedChannel)
+      expect(manager.e2eeNotReady).toBe(false)
+      expect(listener).toHaveBeenCalledTimes(1)
+    })
+
     it('clears the flag once the session becomes ready', async () => {
       jest.useFakeTimers()
       jest.spyOn(console, 'warn').mockImplementation(() => {})
@@ -323,8 +341,11 @@ describe('guildAudioManager', () => {
       await jest.advanceTimersByTimeAsync(3_000)
       expect(manager.e2eeNotReady).toBe(true)
 
+      const listener = jest.fn()
+      manager.on('encryptionChanged', listener)
       manager.disconnect()
       expect(manager.e2eeNotReady).toBe(false)
+      expect(listener).toHaveBeenCalledTimes(1)
       expect(jest.getTimerCount()).toBe(0)
     })
   })
