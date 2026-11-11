@@ -1,5 +1,5 @@
 import type { Readable } from 'node:stream'
-import { createLocalSink, registerApiHandler, registerAudioStreamHandlers } from './ipc-streams'
+import { createLocalSink, MAX_CHUNK_BYTES, MAX_STREAMS_PER_GUILD, registerApiHandler, registerAudioStreamHandlers, STREAM_BUFFER_BYTES } from './ipc-streams'
 
 type Handler = (event: unknown, payload: any) => unknown
 
@@ -556,5 +556,132 @@ describe('createLocalSink', () => {
       expect(() => sink.stop()).not.toThrow()
     }
     expect(destroyed.webContents.send).not.toHaveBeenCalled()
+  })
+})
+
+describe('registerAudioStreamHandlers: limits (#783)', () => {
+  const lanes = [
+    {
+      lane: 'Music',
+      start: 'audio:startStream',
+      chunk: 'audio:chunk',
+      stop: 'audio:stopStream',
+      started: (player: ReturnType<typeof fakePlayer>) => player.startStream.mock.calls.map(c => c[1] as Readable),
+    },
+    {
+      lane: 'effect',
+      start: 'audio:startEffectStream',
+      chunk: 'audio:effectChunk',
+      stop: 'audio:stopEffectStream',
+      started: (player: ReturnType<typeof fakePlayer>) => player.startEffectStream.mock.calls.map(c => c[1] as Readable),
+    },
+  ]
+
+  it.each(lanes)('drops a $lane chunk above MAX_CHUNK_BYTES with one warn per stream', async ({ start, chunk, started }) => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    registerAudioStreamHandlers(ipc, player)
+    await ipc.invoke(start, { guildId: 'g1', streamId: 's1' })
+    const [stream] = started(player)
+
+    ipc.send(chunk, {
+      guildId: 'g1',
+      streamId: 's1',
+      chunk: new Uint8Array(MAX_CHUNK_BYTES + 1),
+    })
+    ipc.send(chunk, {
+      guildId: 'g1',
+      streamId: 's1',
+      chunk: new Uint8Array(MAX_CHUNK_BYTES + 1),
+    })
+    expect(stream.readableLength).toBe(0)
+    ipc.send(chunk, {
+      guildId: 'g1',
+      streamId: 's1',
+      chunk: new Uint8Array(MAX_CHUNK_BYTES),
+    })
+    expect(stream.readableLength).toBe(MAX_CHUNK_BYTES)
+
+    const oversize = spies.warn.mock.calls.filter(([, msg]) => String(msg).includes('above the'))
+    expect(oversize).toHaveLength(1)
+    expect(oversize[0][1]).toEqual(expect.stringContaining('s1 in guild g1'))
+  })
+
+  it.each(lanes)('drops $lane chunks while the unread buffer is full, warns once, and accepts them again once drained', async ({ start, chunk, started }) => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    registerAudioStreamHandlers(ipc, player)
+    await ipc.invoke(start, { guildId: 'g1', streamId: 's1' })
+    const [stream] = started(player)
+    const size = 16 * 1024
+
+    // A producer far faster than real time, into a consumer that is not reading.
+    for (let i = 0; i < 200; i++) {
+      ipc.send(chunk, {
+        guildId: 'g1',
+        streamId: 's1',
+        chunk: new Uint8Array(size),
+      })
+    }
+
+    expect(stream.readableLength).toBeLessThan(STREAM_BUFFER_BYTES + size)
+    expect(stream.readableLength).toBeGreaterThanOrEqual(STREAM_BUFFER_BYTES)
+    const overflow = spies.warn.mock.calls.filter(([, msg]) => String(msg).includes('falling behind'))
+    expect(overflow).toHaveLength(1)
+
+    // Draining the buffer lets later chunks through again.
+    while (stream.read() !== null) { /* drain */ }
+    ipc.send(chunk, {
+      guildId: 'g1',
+      streamId: 's1',
+      chunk: new Uint8Array([7]),
+    })
+    expect(stream.readableLength).toBe(1)
+  })
+
+  it.each(lanes)('refuses a new $lane stream once a guild has MAX_STREAMS_PER_GUILD, but not a restart or another guild', async ({ start, started }) => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    registerAudioStreamHandlers(ipc, player)
+    for (let i = 0; i < MAX_STREAMS_PER_GUILD; i++)
+      await ipc.invoke(start, { guildId: 'g1', streamId: `s${i}` })
+
+    await expect(ipc.invoke(start, { guildId: 'g1', streamId: 'one-too-many' })).rejects.toThrow('Too many')
+    expect(started(player)).toHaveLength(MAX_STREAMS_PER_GUILD)
+    expect(spies.warn).toHaveBeenCalledWith('[ipc]', expect.stringContaining('one-too-many'))
+
+    await ipc.invoke(start, { guildId: 'g1', streamId: 's0' })
+    await ipc.invoke(start, { guildId: 'g2', streamId: 's0' })
+    expect(started(player)).toHaveLength(MAX_STREAMS_PER_GUILD + 2)
+  })
+
+  it.each(lanes)('forgets a guild once its last $lane stream stops or is refused by the player', async ({ start, stop }) => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    const streams = registerAudioStreamHandlers(ipc, player)
+
+    await ipc.invoke(start, { guildId: 'g1', streamId: 's1' })
+    await ipc.invoke(start, { guildId: 'g1', streamId: 's2' })
+    expect(streams.registrySize()).toEqual({ guilds: 1, streams: 2 })
+    await ipc.invoke(stop, { guildId: 'g1', streamId: 's1' })
+    expect(streams.registrySize()).toEqual({ guilds: 1, streams: 1 })
+    await ipc.invoke(stop, { guildId: 'g1', streamId: 's2' })
+    expect(streams.registrySize()).toEqual({ guilds: 0, streams: 0 })
+
+    player.startStream.mockReturnValue(false)
+    player.startEffectStream.mockReturnValue(false)
+    for (let i = 0; i < 50; i++)
+      await ipc.invoke(start, { guildId: `bogus-${i}`, streamId: 's1' })
+    expect(streams.registrySize()).toEqual({ guilds: 0, streams: 0 })
+  })
+
+  it('forgets a guild whose effect streams are all stopped at once', async () => {
+    const ipc = fakeIpcMain()
+    const player = fakePlayer()
+    const streams = registerAudioStreamHandlers(ipc, player)
+    await ipc.invoke('audio:startEffectStream', { guildId: 'g1', streamId: 'a' })
+    await ipc.invoke('audio:startEffectStream', { guildId: 'g1', streamId: 'b' })
+    await ipc.invoke('audio:stopEffectStream', { guildId: 'g1' })
+    expect(streams.registrySize()).toEqual({ guilds: 0, streams: 0 })
   })
 })

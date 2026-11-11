@@ -2,7 +2,7 @@ import type { VoiceBasedChannel } from 'discord.js'
 import { EventEmitter } from 'node:events'
 import * as voice from '@discordjs/voice'
 import { AudioEngine } from './audio-engine'
-import { GuildAudioManager } from './guild-audio.manager'
+import { GuildAudioManager, MIN_AMBIENCE_REPEAT_DELAY_MS } from './guild-audio.manager'
 
 jest.mock('@discordjs/voice', () => ({
   getVoiceConnection: jest.fn(),
@@ -1052,6 +1052,21 @@ describe('guildAudioManager', () => {
       expect(factory).toHaveBeenCalledTimes(2)
       expect(manager.activeAmbience).toEqual(['rain'])
       randomSpy.mockRestore()
+    })
+
+    it('floors a near-zero repeat interval at MIN_AMBIENCE_REPEAT_DELAY_MS instead of restarting at once (#783)', async () => {
+      jest.useFakeTimers()
+      const firstStream = createFakeStream()
+      const secondStream = createFakeStream()
+      const factory = jest.fn().mockReturnValueOnce(firstStream).mockReturnValueOnce(secondStream)
+
+      await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 0, repeatMax: 0.001 })
+
+      firstStream.emit('end')
+      await jest.advanceTimersByTimeAsync(MIN_AMBIENCE_REPEAT_DELAY_MS - 1)
+      expect(factory).toHaveBeenCalledTimes(1)
+      await jest.advanceTimersByTimeAsync(1)
+      expect(factory).toHaveBeenCalledTimes(2)
     })
 
     it('stop clears a pending interval-repeat restart so it never fires', async () => {

@@ -53,6 +53,14 @@ interface TrackMetadata {
 
 const RECONNECT_GRACE_PERIOD_MS = 5_000
 
+/**
+ * Shortest gap before an interval-repeat Ambience sound plays again (#783).
+ * Each play-through spins up a fresh decoder and mixer input, and bounds like
+ * `repeatMin: 0, repeatMax: 0.001` dodge the seamless-loop branch, so without
+ * a floor they would restart almost back to back.
+ */
+export const MIN_AMBIENCE_REPEAT_DELAY_MS = 250
+
 interface MusicStreamEntry {
   metadata?: TrackMetadata
   seq: number
@@ -678,8 +686,11 @@ export class GuildAudioManager extends EventEmitter {
         else {
           const minMs = entry.repeatMin * 1000
           const maxMs = entry.repeatMax * 1000
-          const delay = minMs + Math.random() * (maxMs - minMs)
-          log.debug(`Ambience ${soundId} played out; next repeat in ${Math.round(delay)} ms`)
+          const drawn = minMs + Math.random() * (maxMs - minMs)
+          const delay = Math.max(MIN_AMBIENCE_REPEAT_DELAY_MS, drawn)
+          log.debug(`Ambience ${soundId} played out; next repeat in ${Math.round(delay)} ms${delay > drawn
+            ? ` (floored from ${Math.round(drawn)} ms)`
+            : ''}`)
           entry.repeatTimer = setTimeout(() => {
             entry.repeatTimer = undefined
             startStream(0, true).catch((err) => {
