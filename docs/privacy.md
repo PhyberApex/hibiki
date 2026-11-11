@@ -26,13 +26,14 @@ The site is hosted on [GitHub Pages](https://docs.github.com/en/pages). GitHub m
 
 The desktop app has no account. It talks to:
 
-- **Discord**, through the bot token you create, to join voice channels and stream audio.
-- **GitHub**, to fetch the public scene registry and community scenes when you open the Scenes browser.
+- **Discord**, through the bot token you create, to join voice channels and stream audio. The app also loads your servers' icons from Discord's image CDN (`cdn.discordapp.com`) to show them in the server picker.
+- **GitHub, once per launch**, one request to the Releases API (`api.github.com`) to check whether a newer version exists. This is **on by default**; GitHub sees your IP address and your Hibiki version (in the User-Agent, for example `Hibiki/1.7.0`). Nothing is downloaded or installed. Turn it off in **Settings → Updates**.
+- **GitHub, on demand**, to fetch the public scene registry and community scenes (`raw.githubusercontent.com`) when you open the Scenes browser. The index is cached for 24 hours.
 - **A Vision Provider you choose** (Claude, or any OpenAI-compatible endpoint including local servers), only if you opt into Vision to Vibe in Settings. The image you select is sent once for analysis and never stored by Hibiki.
 - **Any website you open in the Browser tab**, which is a normal embedded browser and is subject to that site's own policies.
 - **The same self-hosted Umami instance as this website**, only if you switch on Usage Stats (below).
 
-Your configuration, scenes and sound files stay on your computer in the application data folder.
+The app's fonts ship with it, so no font service is contacted. Your configuration, scenes and sound files stay on your computer in the application data folder.
 
 ## Usage Stats in the app
 
