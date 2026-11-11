@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { StorageWarning } from '@/api/config'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { fetchStorageWarnings } from '@/api/config'
+import { logInfo } from '@/audio/audio-element-diagnostics'
 import AppToasts from '@/components/AppToasts.vue'
 import { reportHotkeyRegistrationFailures, startHotkeyDispatch } from '@/hotkeys'
 import { useAccessibilityStore } from '@/stores/accessibility'
@@ -30,6 +31,31 @@ const storageWarningsDismissed = ref(false)
 
 function dismissStorageWarnings() {
   storageWarningsDismissed.value = true
+}
+
+/**
+ * A joined voice channel whose DAVE end-to-end encryption session is not
+ * ready (#785): Discord shows the bot as speaking, but clients in an
+ * encrypted call discard what it sends, so the GM hears silence and would
+ * otherwise take it for a mute.
+ */
+const e2eeNotReadyEntry = computed(() =>
+  // only a Discord Target has a voice connection, so only it can carry the flag
+  player.playerState.find(g => g.e2eeNotReady) ?? null,
+)
+const e2eeWarningDismissed = ref(false)
+const showE2eeWarning = computed(() => Boolean(e2eeNotReadyEntry.value) && !e2eeWarningDismissed.value)
+
+watch(() => e2eeNotReadyEntry.value?.guildId ?? null, (guildId) => {
+  // a later failure shows the warning again even after the GM dismissed an earlier one
+  e2eeWarningDismissed.value = false
+  if (guildId)
+    console.warn(`[app] Warning the GM: end-to-end encryption not ready in guild ${guildId}`)
+})
+
+function dismissE2eeWarning() {
+  e2eeWarningDismissed.value = true
+  logInfo('[app] End-to-end encryption warning dismissed')
 }
 
 const tabs = [
@@ -172,6 +198,23 @@ const showStorageWarnings = computed(() =>
       class="storage-warning-dismiss"
       aria-label="Dismiss storage warning"
       @click="dismissStorageWarnings"
+    >
+      ✕
+    </button>
+  </div>
+  <div v-if="showE2eeWarning" class="e2ee-warning-banner" role="alert">
+    <p class="e2ee-warning-message">
+      Discord's end-to-end encryption isn't ready<template v-if="e2eeNotReadyEntry?.connectedChannelName">
+        in <strong>{{ e2eeNotReadyEntry.connectedChannelName }}</strong>
+      </template>,
+      so players may hear nothing even though the bot shows as speaking.
+      Try ↻ Reconnect, or leave and rejoin the channel.
+    </p>
+    <button
+      type="button"
+      class="storage-warning-dismiss"
+      aria-label="Dismiss encryption warning"
+      @click="dismissE2eeWarning"
     >
       ✕
     </button>
@@ -352,6 +395,22 @@ const showStorageWarnings = computed(() =>
   background: var(--color-error-muted);
   border-bottom: 1px solid var(--color-error);
   color: var(--color-text);
+}
+
+.e2ee-warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: rgba(245, 166, 35, 0.12);
+  border-bottom: 1px solid var(--color-warning);
+  color: var(--color-text);
+}
+
+.e2ee-warning-message {
+  flex: 1;
+  margin: 0;
+  font-size: 0.85rem;
 }
 
 .storage-warning-messages {

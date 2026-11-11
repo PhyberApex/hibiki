@@ -154,8 +154,9 @@ Key fields:
 
 1. Fork the Hibiki repo.
 2. Create a file at `registry/scenes/<your-username>/<scene-slug>.json` with your scene entry.
-3. Open a pull request against the Hibiki repo. The **Registry** CI workflow validates your entry automatically (schema check, slug uniqueness, track source blocks).
-4. Once merged, the index is rebuilt and the scene appears in the **Browse** modal for all Hibiki users.
+3. Run `pnpm registry:validate` and `pnpm registry:build-index`, and commit the updated `registry/index.json` together with your entry.
+4. Open a pull request against the Hibiki repo. The **Registry** CI workflow validates your entry automatically (schema check, slug uniqueness, track source blocks) and checks that `registry/index.json` matches the entries.
+5. Once merged, the scene appears in the **Browse** modal for all Hibiki users.
 
 
 ## Example scenes
@@ -210,14 +211,15 @@ The registry has a JSON Schema at [`registry/schema/scene-entry.schema.json`](ht
 pnpm registry:validate
 ```
 
-CI runs this automatically on PRs that touch `registry/scenes/`. It checks:
-- All required fields present and correctly typed
+CI runs this automatically on PRs that touch `registry/`, using the validator and schema from `main` rather than the ones in the PR. It checks:
+- Every field against the schema: required fields present, types, no unknown fields at any level, non-empty strings, ISO 8601 timestamps
 - `audioBundled` is `false` (no bundled audio allowed)
 - Slug matches the filename and is URL-safe
 - Version is valid semver
 - Every track has a `source` block with at least a `name`
 - Scene has at least one track
 - No duplicate slugs across the registry
+- `registry/index.json` is the one `pnpm registry:build-index` produces from the entries
 
 </article>
 </div>

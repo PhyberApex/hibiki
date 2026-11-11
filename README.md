@@ -88,6 +88,33 @@ Pre-built binaries for **macOS**, **Windows**, and **Linux** are available on th
 > ```
 >
 > Or right-click the app → **Open** → confirm in the dialog.
+> Before clearing the flag, [verify the download](#verify-your-download): `xattr -cr` turns off the one warning macOS would otherwise give you about an unknown app.
+
+### Verify your download
+
+Builds are unsigned, so every release ships two ways to check that a file is the one GitHub Actions built from the tagged commit, and not a copy altered on a mirror or in a re-upload:
+
+- **`SHA256SUMS.txt`** on the release page lists the SHA-256 hash of every asset. Download it next to your file, then:
+
+  ```bash
+  # Linux
+  sha256sum --check --ignore-missing SHA256SUMS.txt
+  # macOS
+  shasum -a 256 --check --ignore-missing SHA256SUMS.txt
+  ```
+
+  On Windows (PowerShell), this prints `True` when the file matches its line in `SHA256SUMS.txt`:
+
+  ```powershell
+  $file = 'Hibiki-<version>.Setup.exe'
+  (Get-FileHash $file).Hash -eq ((Select-String -SimpleMatch "  $file" SHA256SUMS.txt).Line -split ' ')[0]
+  ```
+
+- **Build provenance attestation.** Each asset is attested on GitHub, which ties it to the commit and workflow run that produced it. With the [GitHub CLI](https://cli.github.com/):
+
+  ```bash
+  gh attestation verify <file> --repo PhyberApex/hibiki
+  ```
 
 ## FAQ
 
@@ -187,12 +214,11 @@ When running as the Electron app, data lives in the platform's user data directo
 
 Hibiki has no account. It only contacts:
 
-- **Discord** — once you set a bot token, to log the bot in and stream audio to voice channels.
-- **GitHub** — once per launch, one request to the Releases API (`api.github.com`) to see whether a newer version exists. Nothing is downloaded or installed. Turn it off in **Settings → Updates**.
+- **Discord** — once you set a bot token, to log the bot in and stream audio to voice channels, plus your servers' icons from `cdn.discordapp.com` for the sidebar server list.
+- **GitHub** — once per launch, one request to the Releases API (`api.github.com`) to see whether a newer version exists, sending the app version as its User-Agent. On by default. Nothing is downloaded or installed. Turn it off in **Settings → Updates**.
 - **GitHub** — when you open the community scene registry, to fetch its index (`raw.githubusercontent.com`, cached for 24 hours).
-- **Google Fonts** — to load the app's typeface.
 - **Your Vision Provider** (Anthropic, or the Base URL you set) — only when Vision to Vibe is turned on and you analyze an image.
-- **Websites you open** in the Browser tab.
+- **Websites you open** in the Browser tab. Its first tab starts on the project site (`phyberapex.github.io`, GitHub Pages).
 - **The project's self-hosted Umami** (`analytics.phyberapex.de`) — only if you switch on **Usage Stats** in Settings. Off by default; anonymous counts of which features are used, no identifier stored. The full event list is on the [privacy page](https://phyberapex.github.io/hibiki/privacy).
 
 ## Code signing policy
@@ -210,6 +236,7 @@ Hibiki's builds are currently **unsigned** on every platform. An application to 
 **Policy.**
 
 - Release binaries are built on GitHub Actions from the tagged release commit, never on a workstation.
+- Every release carries `SHA256SUMS.txt` and a GitHub build provenance attestation for each asset, verifiable with `gh attestation verify <file> --repo PhyberApex/hibiki` (see [Verify your download](#verify-your-download)).
 - Once signing is in place, every signing request is approved manually by an approver.
 - Every team member has multi-factor authentication turned on for GitHub.
 - Only Hibiki's own binaries will be signed. Bundled upstream open-source binaries, such as the prebuilt `@snazzah/davey` native module, ship unsigned as their upstream projects publish them.

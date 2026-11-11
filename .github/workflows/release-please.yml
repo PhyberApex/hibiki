@@ -9,6 +9,10 @@ concurrency:
   group: release-please
   cancel-in-progress: false
 
+# Read-only by default (#781); jobs that write widen it for themselves.
+permissions:
+  contents: read
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
@@ -16,9 +20,12 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      # A PAT, not GITHUB_TOKEN, so the release PR's checks run: a fine-grained
+      # token on this repo only, with contents, pull requests and issues
+      # (labels) write. The action is SHA-pinned because it receives it (#781).
       - name: Release Please
         id: release
-        uses: googleapis/release-please-action@v5
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.GH_PAT }}
 
@@ -33,7 +40,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Append the Code signing policy to the release notes
         run: .github/scripts/append-release-policy.sh "${{ needs.release-please.outputs.tag_name }}"
         env:
@@ -48,6 +55,13 @@ jobs:
     if: needs.release-please.outputs.release_created == 'true'
     needs: [release-please, checks]
     uses: ./.github/workflows/build.yml
+    # A called workflow can only narrow the caller's grant: its upload-release
+    # job needs contents: write plus id-token and attestations write for the
+    # build provenance attestation (#782), its build job drops back to read.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     with:
       upload_release: true
       tag_name: ${{ needs.release-please.outputs.tag_name }}

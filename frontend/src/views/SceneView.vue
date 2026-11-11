@@ -20,6 +20,7 @@ import { isMissingFrom } from '@/components/scene/scene-format'
 import SceneHeader from '@/components/scene/SceneHeader.vue'
 import ScenePlaybackBar from '@/components/scene/ScenePlaybackBar.vue'
 import VisionToVibeDialog from '@/components/VisionToVibeDialog.vue'
+import { dialogSafeText } from '@/dialog-text'
 import { usePlayerStore } from '@/stores/player'
 import { useScenePlaybackStore } from '@/stores/scene-playback'
 import { useToastStore } from '@/stores/toast'
@@ -550,7 +551,7 @@ async function stopDeletedScenePlayback(deleted: Scene) {
 
 async function deleteCurrentScene() {
   // eslint-disable-next-line no-alert -- simple confirm for destructive action
-  if (!scene.value || !confirm(`Delete "${scene.value.name}"? This can't be undone.`))
+  if (!scene.value || !confirm(`Delete "${dialogSafeText(scene.value.name)}"? This can't be undone.`))
     return
   const deleted = scene.value
   const { id, name } = deleted

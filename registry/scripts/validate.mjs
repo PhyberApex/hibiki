@@ -1,54 +1,49 @@
 #!/usr/bin/env node
 
 /**
- * Validates all scene entries in registry/scenes/ against the JSON schema.
- * Checks: schema compliance, slug uniqueness, slug matches filename,
- * scene tracks have required source blocks, and audioBundled is false.
+ * Validates all scene entries in a scenes directory (default registry/scenes/)
+ * against registry/schema/scene-entry.schema.json with a real JSON Schema
+ * validator (types, nested additionalProperties, minLength, formats, $defs),
+ * then the checks a schema cannot express: slug matches filename, slug
+ * uniqueness and at least one track per scene.
  *
- * Usage: node registry/scripts/validate.mjs
+ * The schema is always the one next to this script, never one from the
+ * scenes directory: CI validates a PR's entries with the base branch's
+ * scripts and schema so a submission cannot loosen its own gate (#778).
+ *
+ * Usage: node registry/scripts/validate.mjs [--scenes <dir>]
  */
 
-import { readdirSync, readFileSync } from 'node:fs'
-import { basename, extname, join, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { basename, join, relative as relativePath, resolve } from 'node:path'
+import { parseArgs } from 'node:util'
+import addFormats from 'ajv-formats'
+import Ajv2020 from 'ajv/dist/2020.js'
+import { collectJsonFiles } from './scene-files.mjs'
 
 const REGISTRY_DIR = resolve(import.meta.dirname, '..')
-const SCENES_DIR = join(REGISTRY_DIR, 'scenes')
 const SCHEMA_PATH = join(REGISTRY_DIR, 'schema', 'scene-entry.schema.json')
+
+const { values: args } = parseArgs({
+  options: {
+    scenes: { type: 'string' },
+  },
+})
+const SCENES_DIR = resolve(args.scenes ?? join(REGISTRY_DIR, 'scenes'))
 
 const errors = []
 
-function collectJsonFiles(dir) {
-  const files = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      files.push(...collectJsonFiles(full))
-    }
-    else if (entry.isFile() && extname(entry.name) === '.json') {
-      files.push(full)
-    }
-  }
-  return files
+function describeSchemaError(error) {
+  const at = error.instancePath || '(root)'
+  if (error.keyword === 'additionalProperties')
+    return `${at}: unknown field "${error.params.additionalProperty}"`
+  if (error.keyword === 'const' && error.instancePath === '/audioBundled')
+    return `${at}: must be false — the registry does not accept scenes that bundle audio files`
+  return `${at}: ${error.message}`
 }
 
-function validateTrack(track, relative, category, index) {
-  const prefix = `${relative}: scene.${category}[${index}]`
-  if (!track.soundName || typeof track.soundName !== 'string') {
-    errors.push(`${prefix}: missing or invalid "soundName"`)
-  }
-  if (!track.source || typeof track.source !== 'object') {
-    errors.push(`${prefix}: missing "source" — all registry tracks must reference where to find the audio`)
-  }
-  else if (!track.source.name || typeof track.source.name !== 'string') {
-    errors.push(`${prefix}: source.name is required`)
-  }
-  if (track.volume !== undefined && (typeof track.volume !== 'number' || track.volume < 0 || track.volume > 100)) {
-    errors.push(`${prefix}: volume must be a number between 0 and 100`)
-  }
-}
-
-function validateEntry(filePath, schema) {
-  const relative = filePath.replace(`${SCENES_DIR}/`, '')
+function validateEntry(filePath, validateAgainstSchema) {
+  const relative = relativePath(SCENES_DIR, filePath)
   let data
   try {
     data = JSON.parse(readFileSync(filePath, 'utf-8'))
@@ -58,70 +53,20 @@ function validateEntry(filePath, schema) {
     return null
   }
 
-  // Check required fields
-  for (const field of schema.required) {
-    if (data[field] === undefined || data[field] === null) {
-      errors.push(`${relative}: Missing required field "${field}"`)
-    }
+  if (!validateAgainstSchema(data)) {
+    for (const error of validateAgainstSchema.errors)
+      errors.push(`${relative}: ${describeSchemaError(error)}`)
+    return null
   }
 
-  // Check no extra fields
-  const allowed = new Set(Object.keys(schema.properties))
-  for (const key of Object.keys(data)) {
-    if (!allowed.has(key)) {
-      errors.push(`${relative}: Unknown field "${key}"`)
-    }
-  }
-
-  // Slug pattern
-  if (data.slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(data.slug)) {
-    errors.push(`${relative}: Slug "${data.slug}" must be lowercase alphanumeric with hyphens`)
-  }
-
-  // Slug matches filename
   const expectedSlug = basename(filePath, '.json')
-  if (data.slug && data.slug !== expectedSlug) {
+  if (data.slug !== expectedSlug) {
     errors.push(`${relative}: Slug "${data.slug}" does not match filename "${expectedSlug}.json"`)
   }
 
-  // Version pattern
-  if (data.version && !/^\d+\.\d+\.\d+$/.test(data.version)) {
-    errors.push(`${relative}: Version "${data.version}" must be semver (e.g. 1.0.0)`)
-  }
-
-  // Tags non-empty
-  if (Array.isArray(data.tags) && data.tags.length === 0) {
-    errors.push(`${relative}: Tags array must have at least one entry`)
-  }
-
-  // audioBundled must be false — the registry only accepts reference-only scenes
-  if (data.audioBundled !== false) {
-    errors.push(`${relative}: "audioBundled" must be false — the registry does not accept scenes that bundle audio files`)
-  }
-
-  // Timestamps
-  for (const field of ['createdAt', 'updatedAt']) {
-    if (data[field] && Number.isNaN(Date.parse(data[field]))) {
-      errors.push(`${relative}: "${field}" is not a valid ISO 8601 date`)
-    }
-  }
-
-  // Scene structure
-  if (data.scene && typeof data.scene === 'object') {
-    for (const category of ['music', 'ambience', 'effects']) {
-      if (!Array.isArray(data.scene[category])) {
-        errors.push(`${relative}: scene.${category} must be an array`)
-        continue
-      }
-      data.scene[category].forEach((track, i) => validateTrack(track, relative, category, i))
-    }
-    if (data.scene.musicMode !== undefined && !['single', 'sequential', 'shuffle'].includes(data.scene.musicMode)) {
-      errors.push(`${relative}: scene.musicMode must be one of single, sequential, shuffle`)
-    }
-    const totalTracks = (data.scene.music?.length ?? 0) + (data.scene.ambience?.length ?? 0) + (data.scene.effects?.length ?? 0)
-    if (totalTracks === 0) {
-      errors.push(`${relative}: Scene must have at least one track across music, ambience, or effects`)
-    }
+  const totalTracks = data.scene.music.length + data.scene.ambience.length + data.scene.effects.length
+  if (totalTracks === 0) {
+    errors.push(`${relative}: Scene must have at least one track across music, ambience, or effects`)
   }
 
   return data
@@ -129,44 +74,39 @@ function validateEntry(filePath, schema) {
 
 // Main
 const schema = JSON.parse(readFileSync(SCHEMA_PATH, 'utf-8'))
+const ajv = new Ajv2020({ allErrors: true, strict: true })
+addFormats(ajv)
+const validateAgainstSchema = ajv.compile(schema)
 
-let jsonFiles
+let sceneFiles
 try {
-  jsonFiles = collectJsonFiles(SCENES_DIR)
+  sceneFiles = collectJsonFiles(SCENES_DIR)
 }
 catch {
-  jsonFiles = []
+  sceneFiles = []
 }
 
-// Filter out .gitkeep and non-json
-const sceneFiles = jsonFiles.filter(f => extname(f) === '.json')
-
 if (sceneFiles.length === 0) {
-  console.warn('No scene entries found in registry/scenes/ — nothing to validate.')
+  console.warn(`No scene entries found in ${SCENES_DIR} — nothing to validate.`)
   process.exit(0)
 }
 
-// Validate all entries
 const slugs = new Map()
 
 for (const file of sceneFiles) {
-  const data = validateEntry(file, schema)
+  const data = validateEntry(file, validateAgainstSchema)
   if (!data)
     continue
 
-  // Slug uniqueness
-  const relative = file.replace(`${SCENES_DIR}/`, '')
-  if (data.slug) {
-    if (slugs.has(data.slug)) {
-      errors.push(`${relative}: Duplicate slug "${data.slug}" (also in ${slugs.get(data.slug)})`)
-    }
-    else {
-      slugs.set(data.slug, relative)
-    }
+  const relative = relativePath(SCENES_DIR, file)
+  if (slugs.has(data.slug)) {
+    errors.push(`${relative}: Duplicate slug "${data.slug}" (also in ${slugs.get(data.slug)})`)
+  }
+  else {
+    slugs.set(data.slug, relative)
   }
 }
 
-// Report
 if (errors.length > 0) {
   console.error(`\nRegistry validation failed with ${errors.length} error(s):\n`)
   for (const err of errors) {

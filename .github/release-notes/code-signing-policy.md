@@ -11,6 +11,7 @@ Hibiki's builds are currently **unsigned** on every platform. An application to 
 **Policy.**
 
 - Release binaries are built on GitHub Actions from the tagged release commit, never on a workstation.
+- Every release carries `SHA256SUMS.txt` and a GitHub build provenance attestation for each asset, verifiable with `gh attestation verify <file> --repo PhyberApex/hibiki` (see [Verify your download](https://github.com/PhyberApex/hibiki#verify-your-download)).
 - Once signing is in place, every signing request is approved manually by an approver.
 - Every team member has multi-factor authentication turned on for GitHub.
 - Only Hibiki's own binaries will be signed. Bundled upstream open-source binaries, such as the prebuilt `@snazzah/davey` native module, ship unsigned as their upstream projects publish them.

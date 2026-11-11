@@ -1,5 +1,6 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { AccessibilitySettings } from './config/accessibility-settings'
+import type { Bookmark } from './config/bookmarks'
 import type { DiscordStatus } from './config/discord-token-settings'
 import type { HotkeySettings } from './config/hotkey-settings'
 import type { LocalOutputDevice } from './config/local-output-device-settings'
@@ -19,11 +20,13 @@ import { dirname } from 'node:path'
 import { generateDependencyReport } from '@discordjs/voice'
 import { getConfig } from './config'
 import { normalizeAccessibilitySettings, parseAccessibilitySettings } from './config/accessibility-settings'
+import { normalizeBookmarks, parseBookmarks } from './config/bookmarks'
 import { createDiscordTokenSettings, isDiscordTokenConfigured } from './config/discord-token-settings'
 import { createHotkeySettings } from './config/hotkey-settings'
 import { createLocalOutputDeviceSettings } from './config/local-output-device-settings'
 import { createOutputTargetSettings } from './config/output-target-settings'
 import { normalizeSceneFadeLength, parseSceneFadeLength } from './config/scene-fade-settings'
+import { createStoragePathSettings } from './config/storage-path-settings'
 import { createUsageStatsSettings } from './config/usage-stats-settings'
 import { createDiscordClient } from './discord/discord-client'
 import { getStorageWarnings } from './json-file'
@@ -102,8 +105,8 @@ export interface EmbeddedApi {
     clearDiscordToken: () => Promise<DiscordStatus>
     getStoragePath: () => Promise<{ path: string | null }>
     setStoragePath: (path: string) => Promise<void>
-    getBookmarks: () => Promise<{ name: string, url: string, favicon?: string }[]>
-    setBookmarks: (bookmarks: { name: string, url: string, favicon?: string }[]) => Promise<void>
+    getBookmarks: () => Promise<Bookmark[]>
+    setBookmarks: (bookmarks: Bookmark[]) => Promise<void>
     getAccessibility: () => Promise<AccessibilitySettings>
     setAccessibility: (settings: AccessibilitySettings) => Promise<void>
     getSceneFadeLength: () => Promise<number>
@@ -242,6 +245,8 @@ export function createShutdownHandler(
 }
 
 export interface EmbeddedAppOptions {
+  /** `app.isPackaged`, injected by main. Only an unpackaged build reads the repository-root `.env` (#776); defaults to packaged. */
+  packaged?: boolean
   /** Delivers the Local Target's mix to the renderer (the main process owns the window); see ADR-0004. */
   localSink?: import('./audio/local-sink-pump').LocalSink
   /** The running app's version (`app.getVersion()`), which the update check compares against. */
@@ -259,13 +264,14 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
   const report = generateDependencyReport()
   log.info('Voice dependency report:\n', report)
   log.info(`DAVE library backend: ${describeDaveBackend()}`)
-  const config = getConfig()
+  const config = getConfig({ packaged: options.packaged ?? true })
   await ensureStorageDirs(config)
   log.info(`Storage root ${config.audio.storageRoot}: music ${config.audio.musicDir}, effects ${config.audio.effectsDir}, ambience ${config.audio.ambienceDir}, data ${config.database.path}`)
   const appConfig = createAppConfig(config, codec)
   log.info(`Secrets at rest are ${appConfig.secretsEncrypted ? 'encrypted' : 'NOT encrypted (no usable OS keychain backend; see any safeStorage warning above)'}`)
 
   const localOutputDevice = createLocalOutputDeviceSettings(appConfig)
+  const storagePath = createStoragePathSettings(appConfig)
   const outputTargets = createOutputTargetSettings(appConfig, () => isDiscordTokenConfigured(appConfig, config.discord.token))
 
   const sounds = createSoundLibrary(config)
@@ -378,31 +384,12 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       getDiscord: () => discordToken.getStatus(),
       setDiscordToken: token => discordToken.setToken(token),
       clearDiscordToken: () => discordToken.clearToken(),
-      getStoragePath: async () => {
-        const p = await appConfig.get('storage.path')
-        return {
-          path: p && p.trim()
-            ? p.trim()
-            : null,
-        }
-      },
-      setStoragePath: async (path: string) => {
-        const value = path.trim() || ''
-        await appConfig.set('storage.path', value)
-      },
-      getBookmarks: async () => {
-        const raw = await appConfig.get('bookmarks')
-        if (!raw)
-          return []
-        try {
-          return JSON.parse(raw)
-        }
-        catch {
-          return []
-        }
-      },
-      setBookmarks: async (bookmarks: { name: string, url: string, favicon?: string }[]) => {
-        await appConfig.set('bookmarks', JSON.stringify(bookmarks))
+      getStoragePath: () => storagePath.get(),
+      setStoragePath: path => storagePath.set(path),
+      getBookmarks: async () => parseBookmarks(await appConfig.get('bookmarks')),
+      // Favicons are checked here, where they are persisted, not only in the renderer (#785).
+      setBookmarks: async (bookmarks) => {
+        await appConfig.set('bookmarks', JSON.stringify(normalizeBookmarks(bookmarks)))
       },
       getAccessibility: async () => parseAccessibilitySettings(await appConfig.get('accessibility')),
       setAccessibility: async (settings) => {

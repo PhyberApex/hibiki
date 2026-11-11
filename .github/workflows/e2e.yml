@@ -18,6 +18,10 @@ on:
   pull_request:
     branches: [main]
 
+# Read-only by default (#781); the e2e job adds actions: read for its queue.
+permissions:
+  contents: read
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
@@ -25,16 +29,20 @@ jobs:
     permissions:
       actions: read
       contents: read
-    env:
-      DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-      E2E_GUILD_ID: ${{ secrets.E2E_GUILD_ID }}
-      E2E_VOICE_CHANNEL_ID: ${{ secrets.E2E_VOICE_CHANNEL_ID }}
-      E2E_SIDECAR_TOKEN: ${{ secrets.E2E_SIDECAR_TOKEN }}
+    # The Discord secrets live only on the steps that read them, never the
+    # job: install, build and Playwright setup run dependency-supplied code
+    # (vite, rollup and tsc plugins), and in-repo branches such as Renovate's
+    # do receive secrets (#772). Scope any new step that needs them the same.
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate required secrets
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          E2E_GUILD_ID: ${{ secrets.E2E_GUILD_ID }}
+          E2E_VOICE_CHANNEL_ID: ${{ secrets.E2E_VOICE_CHANNEL_ID }}
+          E2E_SIDECAR_TOKEN: ${{ secrets.E2E_SIDECAR_TOKEN }}
         run: |
           missing=()
           [ -z "$DISCORD_TOKEN" ] && missing+=("DISCORD_TOKEN")
@@ -49,12 +57,12 @@ jobs:
           fi
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           version: 12.18.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26.13.0
           cache: pnpm
@@ -91,7 +99,14 @@ jobs:
         run: .github/scripts/wait-for-e2e-slot.sh
 
       - name: Run E2E tests (Playwright + Electron)
-        run: xvfb-run --auto-servernum pnpm run test:e2e
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          E2E_GUILD_ID: ${{ secrets.E2E_GUILD_ID }}
+          E2E_VOICE_CHANNEL_ID: ${{ secrets.E2E_VOICE_CHANNEL_ID }}
+          E2E_SIDECAR_TOKEN: ${{ secrets.E2E_SIDECAR_TOKEN }}
+        # Not `pnpm run test:e2e`: that re-runs `pnpm install` in e2e/, which
+        # would execute dependency code with the secrets loaded.
+        run: xvfb-run --auto-servernum pnpm --dir e2e test
 
   # Plays a Scene through the Local Target: no Discord token, bot login or
   # secrets, so it also runs on fork PRs where the job above cannot.
@@ -101,15 +116,15 @@ jobs:
       CI: 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           version: 12.18.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26.13.0
           cache: pnpm

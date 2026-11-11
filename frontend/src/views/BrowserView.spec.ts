@@ -636,6 +636,26 @@ describe('browserView', () => {
       expect(tabPills()).toHaveLength(2)
     })
 
+    it.each([
+      'file:///home/gm/.ssh/id_rsa',
+      'hibiki://app/',
+      'javascript:alert(1)',
+    ])('refuses to open a stored bookmark to %s', async (url) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.mocked(listBookmarks).mockResolvedValue([
+        { name: 'Tampered', url },
+      ])
+      await mountBrowser()
+      vi.mocked(createBrowserView).mockClear()
+
+      await wrapper!.find('.bookmark-item-main').trigger('click')
+      await flush()
+
+      expect(createBrowserView).not.toHaveBeenCalled()
+      expect(tabPills()).toHaveLength(1)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[browser] Refused to open a bookmark'))
+    })
+
     it('renames a bookmark on Enter and persists it', async () => {
       withBookmarks()
       await mountBrowser()

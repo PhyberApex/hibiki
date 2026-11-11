@@ -5,6 +5,24 @@ const { createLogger } = require('./logger')
 const ipcLog = createLogger('ipc')
 
 /**
+ * Ceilings on what the renderer can make main hold (#783). Every producer on
+ * these lanes is a real-time capture sending 16 KiB of 48 kHz stereo s16le PCM
+ * per worklet buffer, so these sit far above anything a healthy renderer does.
+ *
+ * `audio:chunk` / `audio:effectChunk` are fire-and-forget, so nothing slows the
+ * renderer down, and `feedMixerInput` keeps the source paused between refills:
+ * whatever arrives faster than the mixer plays it waits in the `PassThrough`.
+ * Once `STREAM_BUFFER_BYTES` (about two seconds of audio) wait unread, chunks
+ * are dropped rather than queued, which also keeps a stalled lane from
+ * replaying stale audio for minutes once it resumes. The check runs before each
+ * push, so the buffer peaks at that plus one chunk (at most `MAX_CHUNK_BYTES`).
+ */
+const MAX_CHUNK_BYTES = 1024 * 1024
+const STREAM_BUFFER_BYTES = 48000 * 2 * 2 * 2
+/** Per guild and per lane; each stream is a `PassThrough` plus a mixer input with its own poll timer. */
+const MAX_STREAMS_PER_GUILD = 32
+
+/**
  * The Local Target's sink (ADR-0004): the backend mix goes to the renderer as
  * `audio:localSinkStart` / `audio:localSinkChunk` / `audio:localSinkStop`, the
  * main -> renderer mirror of the `audio:*` chunk pattern. The renderer reports
@@ -33,9 +51,12 @@ function createLocalSink(getWindow) {
   }
 }
 
-/** The generic `api` channel: dispatches `{ domain, method, args }` to the `EmbeddedApi` and logs every failed call. */
-function registerApiHandler(ipcMain, api, getHotkeys) {
-  ipcMain.handle('api', async (_, { domain, method, args }) => {
+/**
+ * The generic `api` channel: dispatches `{ domain, method, args }` to the `EmbeddedApi` and logs every failed call.
+ * `ipc` is main's `trustedIpc`, so untrusted senders never reach the dispatch.
+ */
+function registerApiHandler(ipc, api, getHotkeys) {
+  ipc.handle('api', async (_, { domain, method, args }) => {
     // Own properties only: `__proto__`, `constructor` and inherited methods are not part of the API.
     const obj = Object.hasOwn(api, domain)
       ? api[domain]
@@ -70,7 +91,7 @@ function registerApiHandler(ipcMain, api, getHotkeys) {
  * crashes or reloads would leave them as silent, still-"playing" mixer inputs:
  * main calls the returned `endAll(reason)` whenever the renderer goes away.
  */
-function registerAudioStreamHandlers(ipcMain, player) {
+function registerAudioStreamHandlers(ipc, player) {
   /** Map<guildId, Map<streamId|undefined, PassThrough>> - multiple music streams per guild, mixed by backend */
   const audioStreams = new Map()
   /** Map<guildId, Map<streamId, PassThrough>> - multiple streams per guild, mixed by backend */
@@ -80,24 +101,34 @@ function registerAudioStreamHandlers(ipcMain, player) {
   const warnedUnknown = new Set()
   const MAX_WARNED_UNKNOWN = 256
 
+  /** Chunks dropped per stream (oversize or overflow), so each kind warns once and the total is logged at its end. */
+  const dropped = new WeakMap()
+
   const streamsFor = (registry, guildId) => {
     if (!registry.has(guildId))
       registry.set(guildId, new Map())
     return registry.get(guildId)
   }
 
-  const end = (streams, streamId) => {
-    const stream = streams.get(streamId)
+  /** Ends one stream and forgets its guild once that guild has none left on this lane. */
+  const end = (registry, guildId, streamId) => {
+    const streams = registry.get(guildId)
+    const stream = streams?.get(streamId)
     if (stream) {
       streams.delete(streamId)
       stream.end()
+      const drops = dropped.get(stream)
+      if (drops)
+        ipcLog.warn(`Stream ${streamId} in guild ${guildId} ended after dropping ${drops.oversize} oversize and ${drops.overflow} overflow chunk(s)`)
     }
+    if (streams && streams.size === 0)
+      registry.delete(guildId)
   }
 
-  const replace = (streams, streamId) => {
-    end(streams, streamId)
-    const stream = new PassThrough()
-    streams.set(streamId, stream)
+  const replace = (registry, guildId, streamId) => {
+    end(registry, guildId, streamId)
+    const stream = new PassThrough({ readableHighWaterMark: STREAM_BUFFER_BYTES })
+    streamsFor(registry, guildId).set(streamId, stream)
     return stream
   }
 
@@ -107,20 +138,34 @@ function registerAudioStreamHandlers(ipcMain, player) {
    * Target) has no consumer, so it is dropped from the registry instead of
    * buffering every later chunk.
    */
-  const openStream = (lane, streams, streamId, guildId, start) => {
+  const openStream = (lane, registry, streamId, guildId, start) => {
+    const streams = registry.get(guildId)
+    if (streams && !streams.has(streamId) && streams.size >= MAX_STREAMS_PER_GUILD) {
+      ipcLog.warn(`${lane} ${streamId} for guild ${guildId} refused: ${streams.size} streams already open (limit ${MAX_STREAMS_PER_GUILD})`)
+      throw new Error(`Too many audio streams for guild ${guildId}`)
+    }
     let accepted
     try {
-      accepted = start(replace(streams, streamId))
+      accepted = start(replace(registry, guildId, streamId))
     }
     catch (err) {
       ipcLog.warn(`${lane} ${streamId} for guild ${guildId} refused by the player; dropping it`)
-      end(streams, streamId)
+      end(registry, guildId, streamId)
       throw err
     }
     if (accepted !== true) {
       ipcLog.info(`${lane} ${streamId} for guild ${guildId} not taken by the player; dropping it`)
-      end(streams, streamId)
+      end(registry, guildId, streamId)
     }
+  }
+
+  /** Counts a dropped chunk, warning only on the first of each kind for this stream. */
+  const drop = (lane, stream, guildId, streamId, kind, reason) => {
+    const drops = dropped.get(stream) ?? { oversize: 0, overflow: 0 }
+    dropped.set(stream, drops)
+    if (drops[kind] === 0)
+      ipcLog.warn(`${lane} for stream ${streamId} in guild ${guildId} ${reason}; dropping such chunks`)
+    drops[kind]++
   }
 
   const unknownKey = (lane, guildId, streamId) => `${lane}:${guildId}:${streamId}`
@@ -136,46 +181,52 @@ function registerAudioStreamHandlers(ipcMain, player) {
       }
       return
     }
-    if (chunk && chunk.byteLength > 0)
-      stream.push(Buffer.from(chunk))
+    if (!chunk || !(chunk.byteLength > 0))
+      return
+    if (chunk.byteLength > MAX_CHUNK_BYTES) {
+      drop(lane, stream, guildId, streamId, 'oversize', `sent a ${chunk.byteLength}-byte chunk, above the ${MAX_CHUNK_BYTES}-byte limit`)
+      return
+    }
+    // `push()` returned false once the buffer reached its high-water mark; past it nothing is reading fast enough.
+    if (stream.readableLength >= stream.readableHighWaterMark) {
+      drop(lane, stream, guildId, streamId, 'overflow', `is falling behind (${stream.readableLength} bytes unread)`)
+      return
+    }
+    stream.push(Buffer.from(chunk))
   }
 
-  ipcMain.handle('audio:startStream', async (_, { guildId, metadata, streamId }) => {
-    const streams = streamsFor(audioStreams, guildId)
+  ipc.handle('audio:startStream', async (_, { guildId, metadata, streamId }) => {
     warnedUnknown.delete(unknownKey('audio:chunk', guildId, streamId))
     ipcLog.info(`audio:startStream ${streamId} for guild ${guildId}`)
-    openStream('audio:startStream', streams, streamId, guildId, stream => player.startStream(guildId, stream, metadata, streamId))
+    openStream('audio:startStream', audioStreams, streamId, guildId, stream => player.startStream(guildId, stream, metadata, streamId))
   })
 
-  ipcMain.on('audio:chunk', (_, { guildId, streamId, chunk }) => {
+  ipc.on('audio:chunk', (_, { guildId, streamId, chunk }) => {
     write('audio:chunk', audioStreams.get(guildId)?.get(streamId), guildId, streamId, chunk)
   })
 
-  ipcMain.handle('audio:stopStream', async (_, { guildId, streamId }) => {
-    const streams = audioStreams.get(guildId)
-    if (streams)
-      end(streams, streamId)
+  ipc.handle('audio:stopStream', async (_, { guildId, streamId }) => {
+    end(audioStreams, guildId, streamId)
     ipcLog.info(`audio:stopStream ${streamId} for guild ${guildId}`)
     player.stopStream(guildId, streamId)
   })
 
-  ipcMain.handle('audio:startEffectStream', async (_, { guildId, streamId, volume }) => {
+  ipc.handle('audio:startEffectStream', async (_, { guildId, streamId, volume }) => {
     const id = streamId || `stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-    const streams = streamsFor(effectStreams, guildId)
     warnedUnknown.delete(unknownKey('audio:effectChunk', guildId, id))
     ipcLog.info(`audio:startEffectStream ${id} for guild ${guildId}${volume !== undefined
       ? ` at volume ${volume}`
       : ''}`)
-    openStream('audio:startEffectStream', streams, id, guildId, stream => player.startEffectStream(guildId, stream, id, volume))
+    openStream('audio:startEffectStream', effectStreams, id, guildId, stream => player.startEffectStream(guildId, stream, id, volume))
     return id
   })
 
-  ipcMain.handle('audio:setEffectStreamVolume', async (_, { guildId, streamId, volume }) => {
+  ipc.handle('audio:setEffectStreamVolume', async (_, { guildId, streamId, volume }) => {
     ipcLog.debug(`audio:setEffectStreamVolume ${streamId} = ${volume} for guild ${guildId}`)
     player.setEffectStreamVolume(guildId, streamId, volume)
   })
 
-  ipcMain.on('audio:effectChunk', (_, { guildId, streamId, chunk }) => {
+  ipc.on('audio:effectChunk', (_, { guildId, streamId, chunk }) => {
     const streams = effectStreams.get(guildId)
     const stream = streamId
       ? streams?.get(streamId)
@@ -183,18 +234,18 @@ function registerAudioStreamHandlers(ipcMain, player) {
     write('audio:effectChunk', stream, guildId, streamId, chunk)
   })
 
-  ipcMain.handle('audio:stopEffectStream', async (_, { guildId, streamId }) => {
+  ipc.handle('audio:stopEffectStream', async (_, { guildId, streamId }) => {
     const streams = effectStreams.get(guildId)
     if (!streams)
       return
     ipcLog.info(`audio:stopEffectStream ${streamId ?? '(all)'} for guild ${guildId}`)
-    if (streamId) {
-      end(streams, streamId)
-    }
-    else {
-      streams.forEach(s => s.end())
-      streams.clear()
-    }
+    const ids = streamId
+      ? [streamId]
+      : [
+          ...streams.keys(),
+        ]
+    for (const id of ids)
+      end(effectStreams, guildId, id)
   })
 
   /**
@@ -204,9 +255,9 @@ function registerAudioStreamHandlers(ipcMain, player) {
    * mixer input drains and removes itself once its source has ended.
    */
   const endAll = (reason) => {
-    for (const [guildId, streams] of audioStreams) {
-      for (const streamId of streams.keys()) {
-        end(streams, streamId)
+    for (const [guildId, streams] of Array.from(audioStreams)) {
+      for (const streamId of Array.from(streams.keys())) {
+        end(audioStreams, guildId, streamId)
         ipcLog.info(`Ended music stream ${streamId} for guild ${guildId}: ${reason}`)
         try {
           player.stopStream(guildId, streamId)
@@ -216,17 +267,33 @@ function registerAudioStreamHandlers(ipcMain, player) {
         }
       }
     }
-    for (const [guildId, streams] of effectStreams) {
-      for (const streamId of streams.keys()) {
-        end(streams, streamId)
+    for (const [guildId, streams] of Array.from(effectStreams)) {
+      for (const streamId of Array.from(streams.keys())) {
+        end(effectStreams, guildId, streamId)
         ipcLog.info(`Ended effect stream ${streamId} for guild ${guildId}: ${reason}`)
       }
     }
-    audioStreams.clear()
-    effectStreams.clear()
   }
 
-  return { endAll }
+  /** How many guilds and streams both lanes hold; lets the specs see that emptied guilds are forgotten. */
+  const registrySize = () => {
+    let streams = 0
+    for (const registry of [audioStreams, effectStreams]) {
+      for (const guildStreams of registry.values())
+        streams += guildStreams.size
+    }
+    const guilds = new Set(audioStreams.keys()).union(new Set(effectStreams.keys())).size
+    return { guilds, streams }
+  }
+
+  return { endAll, registrySize }
 }
 
-module.exports = { createLocalSink, registerApiHandler, registerAudioStreamHandlers }
+module.exports = {
+  createLocalSink,
+  MAX_CHUNK_BYTES,
+  MAX_STREAMS_PER_GUILD,
+  registerApiHandler,
+  registerAudioStreamHandlers,
+  STREAM_BUFFER_BYTES,
+}

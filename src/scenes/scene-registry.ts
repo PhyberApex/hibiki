@@ -3,9 +3,10 @@ import type { RegistryEntry, RegistryIndex } from './scene-package.types'
 import type { Scene, SceneItem } from './scene-store'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { readBoundedText, ResponseTooLargeError } from '../http-body'
 import { writeJsonFileAtomic } from '../json-file'
 import { createLogger } from '../logger'
-import { SOUND_CATEGORIES } from '../sound/sound-id'
+import { isSafeSoundId, SOUND_CATEGORIES } from '../sound/sound-id'
 import { createSceneStore, isRecord, normalizeMusicMode, uniqueSceneName } from './scene-store'
 
 const log = createLogger('scene-registry')
@@ -16,6 +17,8 @@ const HOUR_MS = 60 * 60 * 1000
 const STALE_MS = 24 * HOUR_MS
 /** Without it a stalled connection pins the renderer's `getIndex` for undici's multi-minute defaults (#652). */
 export const DEFAULT_REGISTRY_FETCH_TIMEOUT_MS = 10_000
+/** The project's index is tens of KB; the bound keeps a hostile or broken override from filling memory (#784). */
+export const DEFAULT_MAX_REGISTRY_INDEX_BYTES = 5 * 1024 * 1024
 
 interface CachedIndex {
   fetchedAt: string
@@ -24,9 +27,57 @@ interface CachedIndex {
   data: RegistryIndex
 }
 
-/** The index to fetch: `HIBIKI_REGISTRY_INDEX_URL` when set, else the project's own. */
+/** `url` for the log: any `user:password@` it carries is masked. */
+function withoutCredentials(url: string): string {
+  try {
+    const parsed = new URL(url)
+    if (!parsed.username && !parsed.password)
+      return url
+    parsed.username = '***'
+    parsed.password = ''
+    return parsed.href
+  }
+  catch {
+    return url.replace(/\/\/[^/@]*@/, '//***@')
+  }
+}
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+/** Why `url` may not be the index URL, or `null` when it may: https anywhere, plain http only to a loopback test server. */
+function refuseIndexUrl(url: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  }
+  catch {
+    return 'it is not a valid URL'
+  }
+  if (parsed.protocol === 'https:')
+    return null
+  if (parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname))
+    return null
+  return parsed.protocol === 'http:'
+    ? 'plain http is only allowed to a loopback host'
+    : `the ${parsed.protocol} scheme is not allowed`
+}
+
+/**
+ * The index to fetch: `HIBIKI_REGISTRY_INDEX_URL` when set and https (or http
+ * to a loopback host, for a local test server), else the project's own. The
+ * index decides what installs, so it is never read from disk or over an
+ * unauthenticated connection to another machine (#784).
+ */
 export function resolveRegistryIndexUrl(override: string | undefined): string {
-  return override?.trim() || REGISTRY_INDEX_URL
+  const url = override?.trim()
+  if (!url)
+    return REGISTRY_INDEX_URL
+  const refusal = refuseIndexUrl(url)
+  if (refusal) {
+    log.warn(`Ignoring HIBIKI_REGISTRY_INDEX_URL ${JSON.stringify(withoutCredentials(url))}: ${refusal}; using ${REGISTRY_INDEX_URL}`)
+    return REGISTRY_INDEX_URL
+  }
+  return url
 }
 
 function getCachePath(config: Config): string {
@@ -38,9 +89,35 @@ function getCachePath(config: Config): string {
   return join(dir, CACHE_FILENAME)
 }
 
-/** Only the part every caller relies on; each entry is checked when it is installed. */
+/** Only the part every caller relies on; entries are filtered by `withListableEntries`. */
 function isRegistryIndex(data: unknown): data is RegistryIndex {
   return isRecord(data) && Array.isArray(data.scenes)
+}
+
+const LISTED_TEXT_FIELDS = ['name', 'description', 'author'] as const
+
+/** What the Registry browser reads off every entry to list and search it; the rest is checked on install. */
+function isListableEntry(entry: unknown): entry is RegistryEntry {
+  return isRecord(entry)
+    && typeof entry.slug === 'string'
+    && entry.slug !== ''
+    && LISTED_TEXT_FIELDS.every(field => typeof entry[field] === 'string')
+    && Array.isArray(entry.tags)
+    && entry.tags.every(tag => typeof tag === 'string')
+}
+
+/**
+ * The index without entries that are not well-typed records. The index is
+ * remote, untrusted data: one bad entry must not break the Registry browser
+ * for everyone until it is fixed upstream (#778).
+ */
+function withListableEntries(index: RegistryIndex, source: string): RegistryIndex {
+  const scenes = index.scenes.filter(isListableEntry)
+  const dropped = index.scenes.length - scenes.length
+  if (dropped === 0)
+    return index
+  log.warn(`Dropped ${dropped} malformed registry entr(y/ies) from ${source}: each needs a slug, name, description, author and a list of tags`)
+  return { ...index, scenes }
 }
 
 function isInstallableEntry(entry: RegistryEntry): boolean {
@@ -50,6 +127,21 @@ function isInstallableEntry(entry: RegistryEntry): boolean {
     && isRecord(scene)
     && SOUND_CATEGORIES.every(category =>
       Array.isArray(scene[category]) && scene[category].every(isRecord))
+}
+
+/**
+ * Every item's `soundName` becomes its sound id, which is later globbed inside
+ * a category folder, so it must be one safe path segment: the same gate the
+ * zip import applies (#637, #784). Throws on the first that is not.
+ */
+function assertSafeSoundNames(entry: RegistryEntry): void {
+  for (const category of SOUND_CATEGORIES) {
+    const unsafe = entry.scene[category].find(item => !isSafeSoundId(item.soundName))
+    if (!unsafe)
+      continue
+    log.warn(`Registry entry '${entry.slug}' rejected: unsafe ${category} sound name ${JSON.stringify(unsafe.soundName) ?? 'undefined'}`)
+    throw new Error(`Registry entry '${entry.slug}' has an invalid ${category} sound name`)
+  }
 }
 
 async function readCache(cachePath: string): Promise<CachedIndex | null> {
@@ -95,9 +187,13 @@ function registryEntryToScene(entry: RegistryEntry): Omit<Scene, 'id' | 'created
 
 export interface SceneRegistryOptions {
   timeoutMs?: number
+  maxIndexBytes?: number
 }
 
-export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_URL, { timeoutMs = DEFAULT_REGISTRY_FETCH_TIMEOUT_MS }: SceneRegistryOptions = {}) {
+export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_URL, {
+  timeoutMs = DEFAULT_REGISTRY_FETCH_TIMEOUT_MS,
+  maxIndexBytes = DEFAULT_MAX_REGISTRY_INDEX_BYTES,
+}: SceneRegistryOptions = {}) {
   const cachePath = getCachePath(config)
 
   /** A cached index, unless it was fetched from another index URL. */
@@ -110,8 +206,12 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
       log.info(`Ignoring registry cache fetched from ${cachedUrl}; the index is now ${indexUrl}`)
       return null
     }
-    if (isRegistryIndex(cached.data))
-      return cached
+    if (isRegistryIndex(cached.data)) {
+      return {
+        ...cached,
+        data: withListableEntries(cached.data, cachePath),
+      }
+    }
     log.warn(`Ignoring malformed registry cache at ${cachePath}`)
     return null
   }
@@ -124,7 +224,17 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
       })
       if (!response.ok)
         throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText} (${indexUrl})`)
-      return await response.json()
+      let text: string
+      try {
+        text = await readBoundedText(response, maxIndexBytes)
+      }
+      catch (e) {
+        if (!(e instanceof ResponseTooLargeError))
+          throw e
+        log.warn(`Registry index from ${indexUrl} refused: larger than ${maxIndexBytes} bytes`)
+        throw new Error(`Registry index is larger than ${maxIndexBytes} bytes (${indexUrl})`)
+      }
+      return JSON.parse(text)
     }
     catch (e) {
       if ((e as Error).name !== 'TimeoutError')
@@ -137,11 +247,12 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
   /** Fetches the index and caches it; throws on any failure, leaving the cache untouched. */
   async function fetchAndCache(): Promise<RegistryIndex> {
     log.info(`Fetching registry index from ${indexUrl}…`)
-    const data = await fetchIndexBody()
-    if (!isRegistryIndex(data)) {
+    const body = await fetchIndexBody()
+    if (!isRegistryIndex(body)) {
       log.warn(`Registry index from ${indexUrl} is malformed: no scenes list; not caching it`)
       throw new Error(`Registry index is malformed (${indexUrl})`)
     }
+    const data = withListableEntries(body, indexUrl)
     await writeCache(cachePath, {
       fetchedAt: new Date().toISOString(),
       url: indexUrl,
@@ -176,22 +287,25 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
       }
     },
 
+    /**
+     * The index an install reads: `fetchIndex` without a forced refresh, so a
+     * cache past `STALE_MS` is refetched and only served stale while offline,
+     * never installed from indefinitely (#784).
+     */
     async getIndex(): Promise<RegistryIndex> {
-      const cached = await readOwnCache()
-      if (cached)
-        return cached.data
       return this.fetchIndex()
     },
 
     async installFromRegistry(slug: string): Promise<Scene> {
       const index = await this.getIndex()
-      const entry = index.scenes.find(s => s?.slug === slug)
+      const entry = index.scenes.find(s => s.slug === slug)
       if (!entry)
         throw new Error(`Scene '${slug}' not found in registry`)
       if (!isInstallableEntry(entry)) {
         log.warn(`Registry entry '${slug}' is malformed: needs a name and music, ambience and effects lists`)
         throw new Error(`Registry entry '${slug}' is malformed`)
       }
+      assertSafeSoundNames(entry)
 
       const scenes = createSceneStore(config)
       const sceneData = registryEntryToScene(entry)

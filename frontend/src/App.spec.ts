@@ -590,6 +590,61 @@ describe('app', () => {
     expect(wrapper.find('.storage-warning-banner').exists()).toBe(false)
   })
 
+  describe('end-to-end encryption warning (#785)', () => {
+    async function mountWithState(entries: object[]) {
+      const { fetchPlayerState, fetchBotStatus } = await import('@/api/player')
+      vi.mocked(fetchPlayerState).mockResolvedValue(entries as never)
+      vi.mocked(fetchBotStatus).mockResolvedValue({ ready: true, userTag: 'Bot#0' })
+      await router.push('/scenes')
+      await router.isReady()
+      const wrapper = mount(App, {
+        global: {
+          plugins: [
+            createPinia(),
+            router,
+          ],
+        },
+      })
+      await flushPromises()
+      return wrapper
+    }
+
+    const joined = {
+      targetId: 'g1',
+      kind: 'discord',
+      guildId: 'g1',
+      connectedChannelId: 'ch1',
+      connectedChannelName: 'Tavern',
+      isIdle: true,
+      track: null,
+      source: 'live',
+    }
+
+    it('warns, naming the channel, when the voice connection\'s DAVE session is not ready, until dismissed', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const wrapper = await mountWithState([
+        { ...joined, e2eeNotReady: true },
+      ])
+      const banner = wrapper.find('.e2ee-warning-banner')
+      expect(banner.exists()).toBe(true)
+      expect(banner.attributes('role')).toBe('alert')
+      expect(banner.text()).toContain('Tavern')
+      expect(banner.text()).toContain('may hear nothing')
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[app] Warning the GM: end-to-end encryption not ready in guild g1'))
+
+      await banner.find('button').trigger('click')
+      expect(wrapper.find('.e2ee-warning-banner').exists()).toBe(false)
+      warn.mockRestore()
+    })
+
+    it('shows no warning while the session is ready', async () => {
+      const wrapper = await mountWithState([
+        { ...joined, e2eeNotReady: false },
+      ])
+      expect(wrapper.find('.e2ee-warning-banner').exists()).toBe(false)
+    })
+  })
+
   it('shows no warning banner when there are no storage warnings', async () => {
     const { fetchStorageWarnings } = await import('@/api/config')
     vi.mocked(fetchStorageWarnings).mockResolvedValue([])

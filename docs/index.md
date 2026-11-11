@@ -225,6 +225,7 @@ pnpm dev</code></pre>
         <p>The app is not code-signed, so macOS quarantines it on first launch. Clear the flag once:</p>
         <p><code>xattr -cr /Applications/Hibiki.app</code></p>
         <p>Or right-click the app, choose <strong>Open</strong>, and confirm.</p>
+        <p>Before you do, check the download against <code>SHA256SUMS.txt</code> on the release page, or with <code>gh attestation verify &lt;file&gt; --repo PhyberApex/hibiki</code>. See <a href="https://github.com/PhyberApex/hibiki#verify-your-download">Verify your download</a>.</p>
       </div>
     </aside>
   </div>

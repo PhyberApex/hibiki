@@ -1,13 +1,39 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { parseRange, resolveAppPath } from './protocol'
+import { APP_CONTENT_SECURITY_POLICY, parseRange, resolveAppPath } from './protocol'
 
 describe('parseRange', () => {
   it('serves the whole file without a parseable range', () => {
     expect(parseRange(null, 100)).toEqual({ kind: 'full' })
-    expect(parseRange('bytes=-500', 100)).toEqual({ kind: 'full' })
     expect(parseRange('items=0-1', 100)).toEqual({ kind: 'full' })
+  })
+
+  it('ignores a header that is not exactly a bytes range (#784)', () => {
+    expect(parseRange('superbytes=1-2', 100)).toEqual({ kind: 'full' })
+    expect(parseRange('bytes=1-2x', 100)).toEqual({ kind: 'full' })
+    expect(parseRange('bytes = 0-5', 100)).toEqual({ kind: 'full' })
+    expect(parseRange('bytes=-', 100)).toEqual({ kind: 'full' })
+  })
+
+  it('reads the range unit case-insensitively', () => {
+    expect(parseRange('Bytes=0-1', 100)).toEqual({ kind: 'partial', start: 0, end: 1 })
+  })
+
+  it('serves a suffix range as the file\'s last bytes (#784)', () => {
+    expect(parseRange('bytes=-10', 100)).toEqual({ kind: 'partial', start: 90, end: 99 })
+    expect(parseRange('bytes=-500', 100)).toEqual({ kind: 'partial', start: 0, end: 99 })
+    expect(parseRange(`bytes=-${'9'.repeat(400)}`, 100)).toEqual({ kind: 'partial', start: 0, end: 99 })
+  })
+
+  it('refuses an empty suffix range or any suffix range on a zero-byte file', () => {
+    expect(parseRange('bytes=-0', 100)).toEqual({ kind: 'unsatisfiable' })
+    expect(parseRange('bytes=-5', 0)).toEqual({ kind: 'unsatisfiable' })
+  })
+
+  it('answers a multi-range request with the whole file instead of only its first range (#784)', () => {
+    expect(parseRange('bytes=0-1,5-6', 100)).toEqual({ kind: 'full' })
+    expect(parseRange('bytes=0-1, -5', 100)).toEqual({ kind: 'full' })
   })
 
   it('reads an open-ended range to the last byte', () => {
@@ -104,8 +130,52 @@ describe('resolveAppPath', () => {
     )
   })
 
+  it('refuses a path the file system cannot stat instead of throwing (#784)', () => {
+    const pathname = `/${'a'.repeat(300)}`
+    expect(() => resolveAppPath(webDistDir, pathname)).not.toThrow()
+    expect(resolveAppPath(webDistDir, pathname)).toEqual(refused('unreadable path (ENAMETOOLONG)'))
+  })
+
   it('refuses a malformed escape or a NUL byte', () => {
     expect(resolveAppPath(webDistDir, '/assets/%E0%A4%A')).toEqual(refused('malformed escape'))
     expect(resolveAppPath(webDistDir, '/index.html%00.js')).toEqual(refused('NUL byte'))
+  })
+})
+
+describe('the app Content-Security-Policy', () => {
+  const directives = new Map(
+    APP_CONTENT_SECURITY_POLICY.split(';').map((d) => {
+      const [name, ...sources] = d.trim().split(/\s+/)
+      return [name, sources] as const
+    }),
+  )
+
+  it('denies everything not named explicitly', () => {
+    expect(directives.get('default-src')).toEqual(['\'none\''])
+  })
+
+  it('runs only the app bundle\'s own scripts, never inline ones or another origin\'s', () => {
+    expect(directives.get('script-src')).toEqual(['\'self\'', 'blob:'])
+  })
+
+  it('loads styles and fonts from the app bundle alone, with no remote font origin', () => {
+    expect(directives.get('style-src')).toEqual(['\'self\'', '\'unsafe-inline\''])
+    expect(directives.get('font-src')).toEqual(['\'self\'', 'data:'])
+  })
+
+  it('streams media from hibiki://sound only', () => {
+    expect(directives.get('media-src')).toEqual(['hibiki://sound'])
+  })
+
+  it('keeps the renderer off the network and out of frames, plugins and form posts', () => {
+    expect(directives.get('connect-src')).toEqual(['\'self\''])
+    for (const name of [
+      'frame-src',
+      'object-src',
+      'base-uri',
+      'form-action',
+      'frame-ancestors',
+    ])
+      expect(directives.get(name)).toEqual(['\'none\''])
   })
 })

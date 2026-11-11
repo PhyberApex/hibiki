@@ -2,7 +2,7 @@ import type { VoiceBasedChannel } from 'discord.js'
 import { EventEmitter } from 'node:events'
 import * as voice from '@discordjs/voice'
 import { AudioEngine } from './audio-engine'
-import { GuildAudioManager } from './guild-audio.manager'
+import { GuildAudioManager, MIN_AMBIENCE_REPEAT_DELAY_MS } from './guild-audio.manager'
 
 jest.mock('@discordjs/voice', () => ({
   getVoiceConnection: jest.fn(),
@@ -225,6 +225,128 @@ describe('guildAudioManager', () => {
 
       expect(connection.destroy).not.toHaveBeenCalled()
       expect(getEngineMock().destroy).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('end-to-end encryption state (#785)', () => {
+    /** A Ready connection whose networking state, DAVE session included, the test changes at will. */
+    function createDaveConnection(dave: { ready: boolean } | null) {
+      const connection = new EventEmitter() as FakeConnection
+      connection.joinConfig = { channelId: 'channel-1' }
+      connection.subscribe = jest.fn()
+      connection.destroy = jest.fn()
+      const session = { ready: dave?.ready ?? false }
+      Object.defineProperty(connection, 'state', {
+        get: () => ({
+          status: voice.VoiceConnectionStatus.Ready,
+          networking: {
+            state: {
+              code: voice.NetworkingStatusCode.Ready,
+              connectionData: { encryptionMode: 'aead_aes256_gcm_rtpsize' },
+              dave: dave
+                ? { protocolVersion: 1, session, voicePrivacyCode: null }
+                : undefined,
+            },
+          },
+        }),
+      })
+      return { connection, session }
+    }
+
+    afterEach(() => {
+      manager.destroy()
+      jest.useRealTimers()
+    })
+
+    it('reports a DAVE session that is still not ready once the handshake had time, and tells listeners', async () => {
+      jest.useFakeTimers()
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const { connection } = createDaveConnection({ ready: false })
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      const listener = jest.fn()
+      manager.on('encryptionChanged', listener)
+
+      await manager.connect(fakeChannel)
+      expect(manager.e2eeNotReady).toBe(false)
+
+      await jest.advanceTimersByTimeAsync(3_000)
+      expect(manager.e2eeNotReady).toBe(true)
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect(warn).toHaveBeenCalledWith('[voice]', expect.stringContaining('session NOT ready'))
+      warn.mockRestore()
+    })
+
+    it('tells listeners the flag dropped when a reconnect reaches Ready again', async () => {
+      jest.useFakeTimers()
+      jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const { connection } = createDaveConnection({ ready: false })
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      await manager.connect(fakeChannel)
+      await jest.advanceTimersByTimeAsync(3_000)
+      expect(manager.e2eeNotReady).toBe(true)
+
+      const listener = jest.fn()
+      manager.on('encryptionChanged', listener)
+      const next = createDaveConnection({ ready: true })
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(next.connection)
+      await manager.connect({ ...fakeChannel, id: 'channel-2' } as VoiceBasedChannel)
+      expect(manager.e2eeNotReady).toBe(false)
+      expect(listener).toHaveBeenCalledTimes(1)
+    })
+
+    it('clears the flag once the session becomes ready', async () => {
+      jest.useFakeTimers()
+      jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const { connection, session } = createDaveConnection({ ready: false })
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      const listener = jest.fn()
+      manager.on('encryptionChanged', listener)
+      await manager.connect(fakeChannel)
+      await jest.advanceTimersByTimeAsync(3_000)
+      expect(manager.e2eeNotReady).toBe(true)
+
+      session.ready = true
+      await jest.advanceTimersByTimeAsync(3_000)
+      expect(manager.e2eeNotReady).toBe(false)
+      expect(listener).toHaveBeenCalledTimes(2)
+
+      // no change, no event
+      await jest.advanceTimersByTimeAsync(9_000)
+      expect(listener).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not flag a call without DAVE, or one whose session is ready', async () => {
+      jest.useFakeTimers()
+      for (const dave of [
+        null,
+        { ready: true },
+      ]) {
+        const { connection } = createDaveConnection(dave)
+        ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+        await manager.connect(fakeChannel)
+        await jest.advanceTimersByTimeAsync(6_000)
+        expect(manager.e2eeNotReady).toBe(false)
+        manager.disconnect()
+        manager = new GuildAudioManager(guildId)
+      }
+    })
+
+    it('drops the flag and stops checking when the GM leaves', async () => {
+      jest.useFakeTimers()
+      jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const { connection } = createDaveConnection({ ready: false })
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      ;(voice.getVoiceConnection as jest.Mock).mockReturnValue(connection)
+      await manager.connect(fakeChannel)
+      await jest.advanceTimersByTimeAsync(3_000)
+      expect(manager.e2eeNotReady).toBe(true)
+
+      const listener = jest.fn()
+      manager.on('encryptionChanged', listener)
+      manager.disconnect()
+      expect(manager.e2eeNotReady).toBe(false)
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect(jest.getTimerCount()).toBe(0)
     })
   })
 
@@ -1054,6 +1176,21 @@ describe('guildAudioManager', () => {
       randomSpy.mockRestore()
     })
 
+    it('floors a near-zero repeat interval at MIN_AMBIENCE_REPEAT_DELAY_MS instead of restarting at once (#783)', async () => {
+      jest.useFakeTimers()
+      const firstStream = createFakeStream()
+      const secondStream = createFakeStream()
+      const factory = jest.fn().mockReturnValueOnce(firstStream).mockReturnValueOnce(secondStream)
+
+      await manager.playAmbience(factory, 'rain', { volume: 70, repeatMin: 0, repeatMax: 0.001 })
+
+      firstStream.emit('end')
+      await jest.advanceTimersByTimeAsync(MIN_AMBIENCE_REPEAT_DELAY_MS - 1)
+      expect(factory).toHaveBeenCalledTimes(1)
+      await jest.advanceTimersByTimeAsync(1)
+      expect(factory).toHaveBeenCalledTimes(2)
+    })
+
     it('stop clears a pending interval-repeat restart so it never fires', async () => {
       jest.useFakeTimers()
       const firstStream = createFakeStream()
@@ -1542,6 +1679,64 @@ describe('guildAudioManager', () => {
       await playPromise
 
       expect(getEngineMock().playMusicFromStream).not.toHaveBeenCalled()
+    })
+
+    describe('cancelling the decode of a slot that is gone (#773)', () => {
+      /** A factory that captures the signal it is handed and settles only when the test says so (or rejects once aborted, like the PCM cache). */
+      function signalledFactory() {
+        let signal!: AbortSignal
+        let resolveFn!: () => void
+        const factory = jest.fn().mockImplementation((s: AbortSignal) => new Promise((resolve, reject) => {
+          signal = s
+          resolveFn = () => resolve(effectResult(createFakeStream()))
+          s.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        }))
+        return {
+          factory,
+          signal: () => signal,
+          resolve: () => resolveFn(),
+        }
+      }
+
+      it('aborts the decode of an instance evicted by the cap, and resolves its call without starting it', async () => {
+        const oldest = signalledFactory()
+        const firstTrigger = manager.playEffect(oldest.factory, 'fx1', { volume: 90 })
+        for (let i = 0; i < 7; i++)
+          await manager.playEffect(jest.fn().mockReturnValue(effectResult(createFakeStream())), 'fx1', { volume: 90 })
+        expect(oldest.signal().aborted).toBe(false)
+
+        await manager.playEffect(jest.fn().mockReturnValue(effectResult(createFakeStream())), 'fx1', { volume: 90 })
+
+        expect(oldest.signal().aborted).toBe(true)
+        await expect(firstTrigger).resolves.toMatchObject({ soundId: 'fx1', durationMs: 0 })
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(8)
+      })
+
+      it('aborts an in-flight decode on stopAllEffects and on stopEffect of its id', async () => {
+        const bulk = signalledFactory()
+        const bulkCall = manager.playEffect(bulk.factory, 'fx1', { volume: 90 })
+        manager.stopAllEffects()
+        expect(bulk.signal().aborted).toBe(true)
+        await expect(bulkCall).resolves.toMatchObject({ soundId: 'fx1' })
+
+        const single = signalledFactory()
+        const singleCall = manager.playEffect(single.factory, 'fx2', { volume: 90 })
+        const reservedId = (manager as unknown as { effectStreamIds: Set<string> }).effectStreamIds.values().next().value as string
+        manager.stopEffect(reservedId)
+        expect(single.signal().aborted).toBe(true)
+        await expect(singleCall).resolves.toMatchObject({ instanceId: reservedId, soundId: 'fx2' })
+        expect(getEngineMock().playMusicFromStream).not.toHaveBeenCalled()
+      })
+
+      it('never aborts the decode of an instance that is still live', async () => {
+        const live = signalledFactory()
+        const call = manager.playEffect(live.factory, 'fx1', { volume: 90 })
+        live.resolve()
+        await call
+
+        expect(live.signal().aborted).toBe(false)
+        expect(getEngineMock().playMusicFromStream).toHaveBeenCalledTimes(1)
+      })
     })
 
     it('an instance that already ended naturally does not count toward the cap', async () => {

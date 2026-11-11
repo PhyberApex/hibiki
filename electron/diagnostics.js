@@ -83,11 +83,38 @@ function redactHomeDir(text, homeDir) {
 }
 
 /**
+ * Shapes of the secrets Hibiki handles, should one ever reach the log: a
+ * Discord bot token (three base64url parts joined by dots), an Anthropic key
+ * (`sk-ant-…`) and an OpenAI-style key (`sk-…`, `sk-proj-…`). The `sk-`
+ * shapes take no word boundary: the logger writes a newline as a literal `\n`,
+ * so a key logged right after one follows the letter `n`. Redacting a
+ * lookalike id is the cheaper mistake.
+ */
+const SECRET_PATTERNS = [
+  /(?<![\w-])[\w-]{23,}\.[\w-]{6,7}\.[\w-]{27,}(?![\w-])/g,
+  /sk-ant-[\w-]+/g,
+  /sk-[\w-]{20,}/g,
+]
+const REDACTED = '[redacted]'
+
+/** `lines` with every secret-shaped string replaced, and how many were. */
+function redactSecrets(lines) {
+  let count = 0
+  const redacted = lines.map(line => SECRET_PATTERNS.reduce((text, pattern) => text.replace(pattern, () => {
+    count++
+    return REDACTED
+  }), line))
+  return { lines: redacted, count }
+}
+
+/**
  * The plain-text block Settings → Diagnostics copies for a bug report (#698).
  * Secrets are excluded by construction: it reads only the same status readers
  * Settings uses, which report "set / not set", never a value. Storage warnings
  * name only the file, and the home folder is replaced with `~` everywhere
- * (log tail included), since a full path carries the OS user name.
+ * (log tail included), since a full path carries the OS user name. The log
+ * tail, the one part not secret-free by construction, also loses anything
+ * shaped like a Discord token or an API key (#780).
  */
 async function buildDiagnosticsSummary({ environment, api, hotkeyStatus, secretStorageAvailable, loadLogTail, homeDir, log }) {
   const config = api.config
@@ -144,10 +171,16 @@ async function buildDiagnosticsSummary({ environment, api, hotkeyStatus, secretS
     lines.push('Storage warnings:', ...storageWarnings.map(w => `- ${path.basename(w.file)} (backup: ${path.basename(w.backupPath)})`))
 
   lines.push('', `## Log (last ${LOG_TAIL_LINES} lines of hibiki.log)`)
-  if (logTail)
-    lines.push(...logTail)
-  else
+  if (logTail) {
+    // The tail is the one part not secret-free by construction: it holds whatever any code ever logged (#780).
+    const redaction = redactSecrets(logTail)
+    if (redaction.count > 0)
+      log?.warn(`Diagnostics summary: redacted ${redaction.count} secret-shaped string(s) from the log tail`)
+    lines.push(...redaction.lines)
+  }
+  else {
     lines.push('(log file could not be read)')
+  }
 
   return redactHomeDir(`${lines.join('\n')}\n`, homeDir)
 }

@@ -29,12 +29,36 @@ const filtered = computed(() => {
   )
 })
 
+/**
+ * What the list and the search read off an entry. The backend already drops
+ * anything else, but the index is remote data and one bad entry must not
+ * break the browser (#778).
+ */
+function isListableEntry(entry: unknown): entry is RegistryEntry {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry))
+    return false
+  const e = entry as Record<string, unknown>
+  return typeof e.slug === 'string'
+    && e.slug !== ''
+    && typeof e.name === 'string'
+    && typeof e.description === 'string'
+    && typeof e.author === 'string'
+    && Array.isArray(e.tags)
+    && e.tags.every(tag => typeof tag === 'string')
+}
+
 async function load(forceRefresh = false) {
   loading.value = true
   loadError.value = null
   try {
     const index = await getRegistryIndex(forceRefresh)
-    entries.value = index.scenes
+    const scenes: unknown[] = Array.isArray(index?.scenes)
+      ? index.scenes
+      : []
+    const listable = scenes.filter(isListableEntry)
+    if (listable.length < scenes.length)
+      console.warn(`[registry] Dropped ${scenes.length - listable.length} malformed registry entries`)
+    entries.value = listable
   }
   catch (err) {
     loadError.value = err instanceof Error

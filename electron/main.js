@@ -1,16 +1,20 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { Readable } = require('node:stream')
-const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { installDevToolsPolicy } = require('./devtools')
 const { buildDiagnosticsSummary, LOG_TAIL_LINES, readLogTail } = require('./diagnostics')
+const { pickFavicon } = require('./favicon')
 const { createHotkeys } = require('./hotkeys')
+const { createTrustedIpc } = require('./ipc-sender')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
 const { createUncaughtExceptionHandler, exitWithError } = require('./lifecycle')
 const { createLogger, setupFileLogging } = require('./logger')
-const { describeScheme, describeUrl, forwardMainFrameNavigation, guardMainWindowNavigation, isWebUrl, releaseOnMainFrameNavigation } = require('./navigation-guard')
+const { describeScheme, describeUrl, forwardMainFrameNavigation, guardBrowserTab, guardMainWindowNavigation, isTabUrl, isWebUrl, refuseDownloads, releaseOnMainFrameNavigation } = require('./navigation-guard')
 const { installPermissionPolicy } = require('./permissions')
-const { parseRange, resolveAppPath } = require('./protocol')
-const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
+const { APP_CONTENT_SECURITY_POLICY, parseRange, resolveAppPath } = require('./protocol')
+const { parseSoundPath, SOUND_ALLOWED_ORIGIN, soundRequestRefusal } = require('./sound-url')
+const { assertTabCapacity } = require('./tab-limit')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
 // install/update/uninstall. Quitting here means `app.whenReady()` below never
@@ -54,11 +58,16 @@ const appLog = createLogger('app')
 const dialogLog = createLogger('dialog')
 const diagnosticsLog = createLogger('diagnostics')
 
+/** Every IPC handler registers through this: it refuses any sender that is not the app's own top-level frame (#774). */
+const trustedIpc = createTrustedIpc(ipcMain)
+
 let appHandle = null
 let mainWindow = null
 let hotkeys = null
 /** `registerAudioStreamHandlers`' handle; `endAll` tears down the renderer's chunked-IPC streams when it goes away. */
 let audioStreamHandlers = null
+/** Set once in `whenReady` by `installDevToolsPolicy`; goes into every window's and Browser tab's `webPreferences.devTools` (#785). */
+let devTools = false
 
 process.on('uncaughtException', createUncaughtExceptionHandler({
   dialog,
@@ -118,6 +127,7 @@ function createWindow(loadUrl) {
     webPreferences: {
       // The Local sink starts playing on backend demand, not on a click.
       autoplayPolicy: 'no-user-gesture-required',
+      devTools,
       preload: path.join(__dirname, 'preload.js'),
     },
   })
@@ -162,8 +172,8 @@ function createWindow(loadUrl) {
 }
 
 function registerIpcHandlers(api) {
-  registerApiHandler(ipcMain, api, () => hotkeys)
-  audioStreamHandlers = registerAudioStreamHandlers(ipcMain, api.player)
+  registerApiHandler(trustedIpc, api, () => hotkeys)
+  audioStreamHandlers = registerAudioStreamHandlers(trustedIpc, api.player)
 }
 
 const browserViews = new Map()
@@ -194,17 +204,34 @@ function releaseRendererResources(win, reason) {
   destroyAllBrowserViews(win, reason)
 }
 
+/**
+ * Throws unless a Browser tab may show `url`, logging `refusal` and the URL's
+ * origin first. Main checks every URL the renderer hands a tab rather than
+ * trusting it (#775).
+ */
+function assertTabUrl(url, refusal) {
+  if (isTabUrl(url))
+    return
+  browserLog.warn(`${refusal} ${describeUrl(url)}`)
+  throw new Error('Browser tabs only show http(s) pages or about:blank')
+}
+
 function registerBrowserViewHandlers() {
-  ipcMain.handle('browserView:create', async (_, { url }) => {
+  trustedIpc.handle('browserView:create', async (_, { url }) => {
     if (!mainWindow)
       throw new Error('No main window')
-    const view = new WebContentsView()
+    assertTabUrl(url, 'Refused to open a tab at')
+    assertTabCapacity(browserViews.size)
+    const view = new WebContentsView({
+      webPreferences: { devTools },
+    })
     mainWindow.contentView.addChildView(view)
     view.setBounds({ x: 0, y: 0, width: 0, height: 0 })
     const id = view.webContents.id
 
+    // A navigation `guardBrowserTab` cancels still starts, so it is kept out of the URL bar.
     view.webContents.on('did-start-navigation', forwardMainFrameNavigation((navUrl) => {
-      if (mainWindow)
+      if (mainWindow && isTabUrl(navUrl))
         mainWindow.webContents.send('browserView:didNavigate', id, navUrl)
     }))
     view.webContents.on('page-title-updated', (_, title) => {
@@ -217,9 +244,9 @@ function registerBrowserViewHandlers() {
     })
     view.webContents.on('page-favicon-updated', (_, favicons) => {
       if (mainWindow) {
-        const faviconUrl = Array.isArray(favicons) && favicons.length > 0
-          ? favicons[0]
-          : null
+        const faviconUrl = pickFavicon(favicons)
+        if (!faviconUrl && Array.isArray(favicons) && favicons.length > 0)
+          browserLog.debug(`Tab ${id}: no favicon shown, none of ${favicons.length} is an https or data:image URL within the length cap`)
         mainWindow.webContents.send('browserView:faviconUpdated', id, faviconUrl)
       }
     })
@@ -231,27 +258,24 @@ function registerBrowserViewHandlers() {
       if (mainWindow)
         mainWindow.webContents.send('browserView:mediaPlaying', id, false)
     })
-    view.webContents.setWindowOpenHandler(({ url: linkUrl }) => {
-      view.webContents.loadURL(linkUrl)
-      return { action: 'deny' }
-    })
+    guardBrowserTab(view.webContents, { tabId: id })
 
     view.webContents.on('did-fail-load', (_, errorCode, errorDescription, failedUrl, isMainFrame) => {
       if (isMainFrame)
-        browserLog.warn(`Tab ${id} failed to load ${failedUrl}: ${errorDescription} (${errorCode})`)
+        browserLog.warn(`Tab ${id} failed to load ${describeUrl(failedUrl)}: ${errorDescription} (${errorCode})`)
     })
     view.webContents.on('render-process-gone', (_, details) => {
       browserLog.error(`Tab ${id} renderer gone: ${details.reason}`)
     })
     browserViews.set(id, view)
 
-    browserLog.info(`Tab ${id} opened at ${url}`)
+    browserLog.info(`Tab ${id} opened at ${describeUrl(url)}`)
     view.webContents.loadURL(url).catch(() => {})
 
     return id
   })
 
-  ipcMain.handle('browserView:destroy', async (_, { id }) => {
+  trustedIpc.handle('browserView:destroy', async (_, { id }) => {
     const view = browserViews.get(id)
     if (!view)
       return
@@ -270,42 +294,43 @@ function registerBrowserViewHandlers() {
     return view
   }
 
-  ipcMain.handle('browserView:setBounds', async (_, { id, bounds }) => {
+  trustedIpc.handle('browserView:setBounds', async (_, { id, bounds }) => {
     knownView(id, 'setBounds', 'debug')?.setBounds(bounds)
   })
 
-  ipcMain.handle('browserView:loadURL', async (_, { id, url }) => {
+  trustedIpc.handle('browserView:loadURL', async (_, { id, url }) => {
     const view = knownView(id, 'loadURL')
-    if (view) {
-      browserLog.info(`Tab ${id} loading ${describeUrl(url)}`)
-      view.webContents.loadURL(url).catch(() => {})
-    }
+    if (!view)
+      return
+    assertTabUrl(url, `Tab ${id} refused to load`)
+    browserLog.info(`Tab ${id} loading ${describeUrl(url)}`)
+    view.webContents.loadURL(url).catch(() => {})
   })
 
-  ipcMain.handle('browserView:goBack', async (_, { id }) => {
+  trustedIpc.handle('browserView:goBack', async (_, { id }) => {
     const view = knownView(id, 'goBack')
     if (view?.webContents.navigationHistory.canGoBack())
       view.webContents.navigationHistory.goBack()
   })
 
-  ipcMain.handle('browserView:goForward', async (_, { id }) => {
+  trustedIpc.handle('browserView:goForward', async (_, { id }) => {
     const view = knownView(id, 'goForward')
     if (view?.webContents.navigationHistory.canGoForward())
       view.webContents.navigationHistory.goForward()
   })
 
-  ipcMain.handle('browserView:reload', async (_, { id }) => {
+  trustedIpc.handle('browserView:reload', async (_, { id }) => {
     knownView(id, 'reload')?.webContents.reload()
   })
 
-  ipcMain.handle('browserView:getMediaSourceId', async (_, { id }) => {
+  trustedIpc.handle('browserView:getMediaSourceId', async (_, { id }) => {
     const view = browserViews.get(id)
     if (!view || !mainWindow)
       throw new Error('View or window not found')
     return view.webContents.getMediaSourceId(mainWindow.webContents)
   })
 
-  ipcMain.handle('browserView:setAudioMuted', async (_, { id, muted }) => {
+  trustedIpc.handle('browserView:setAudioMuted', async (_, { id, muted }) => {
     const view = browserViews.get(id)
     if (!view)
       throw new Error(`Tab ${id} not found`)
@@ -313,7 +338,7 @@ function registerBrowserViewHandlers() {
     browserLog.debug(`Tab ${id} ${muted ? 'muted' : 'unmuted'}`)
   })
 
-  ipcMain.handle('browserView:show', async (_, { id }) => {
+  trustedIpc.handle('browserView:show', async (_, { id }) => {
     const view = browserViews.get(id)
     if (view && mainWindow) {
       mainWindow.contentView.removeChildView(view)
@@ -321,7 +346,7 @@ function registerBrowserViewHandlers() {
     }
   })
 
-  ipcMain.handle('browserView:hide', async (_, { id }) => {
+  trustedIpc.handle('browserView:hide', async (_, { id }) => {
     const view = browserViews.get(id)
     if (view && mainWindow)
       mainWindow.contentView.removeChildView(view)
@@ -341,9 +366,22 @@ function fileResponse(filePath, init, readOptions) {
   return new Response(Readable.toWeb(fs.createReadStream(filePath, readOptions)), init)
 }
 
+/**
+ * Sizes and streams the same open file descriptor, so a file replaced between
+ * the two (a re-import, a sync client's atomic rename) cannot advertise one
+ * file's `Content-Length` and deliver another's bytes (#784). The descriptor
+ * is closed here until a file stream takes it over (`autoClose`).
+ */
 function serveSoundFile(request, filePath) {
-  const stats = fs.statSync(filePath)
-  const totalSize = stats.size
+  const fd = fs.openSync(filePath, 'r')
+  let totalSize
+  try {
+    totalSize = fs.fstatSync(fd).size
+  }
+  catch (err) {
+    fs.closeSync(fd)
+    throw err
+  }
   const ext = path.extname(filePath).toLowerCase()
   const mime = {
     '.mp3': 'audio/mpeg',
@@ -356,6 +394,7 @@ function serveSoundFile(request, filePath) {
   const rangeHeader = request.headers.get('range')
   const range = parseRange(rangeHeader, totalSize)
   if (range.kind === 'unsatisfiable') {
+    fs.closeSync(fd)
     protocolLog.debug(`${path.basename(filePath)} 416 range "${rangeHeader}" outside ${totalSize} bytes`)
     return new Response(null, {
       status: 416,
@@ -377,11 +416,11 @@ function serveSoundFile(request, filePath) {
         'Accept-Ranges': 'bytes',
         'Access-Control-Allow-Origin': SOUND_ALLOWED_ORIGIN,
       },
-    }, { start, end })
+    }, { fd, start, end })
   }
 
   protocolLog.debug(`${path.basename(filePath)} 200 full ${totalSize} bytes${rangeHeader
-    ? ` (unparsed range "${rangeHeader}")`
+    ? ` (ignored range "${rangeHeader}")`
     : ''}`)
   return fileResponse(filePath, {
     headers: {
@@ -390,7 +429,7 @@ function serveSoundFile(request, filePath) {
       'Accept-Ranges': 'bytes',
       'Access-Control-Allow-Origin': SOUND_ALLOWED_ORIGIN,
     },
-  })
+  }, { fd })
 }
 
 function registerHibikiProtocol(api, webDistDir) {
@@ -400,6 +439,11 @@ function registerHibikiProtocol(api, webDistDir) {
     const pathname = u.pathname || '/'
 
     if (host === 'sound') {
+      const refusal = soundRequestRefusal(request.initiatorOrigin)
+      if (refusal) {
+        protocolLog.warn(`Refused hibiki://sound request: ${refusal}`)
+        return new Response('Forbidden', { status: 403 })
+      }
       const sound = parseSoundPath(pathname)
       if (!sound.ok) {
         protocolLog.warn(`Rejected hibiki://sound${pathname}: ${sound.reason}`)
@@ -419,33 +463,52 @@ function registerHibikiProtocol(api, webDistDir) {
     }
 
     if (host === 'app') {
-      const resolved = resolveAppPath(webDistDir, pathname)
-      if (!resolved.ok) {
-        protocolLog.warn(`Rejected hibiki://app${pathname}: ${resolved.reason}`)
+      // Like the sound branch, nothing may throw out of the handler: it would
+      // reach uncaughtException and the crash dialog (#784).
+      try {
+        return serveAppFile(webDistDir, pathname)
+      }
+      catch (err) {
+        protocolLog.warn(`Could not serve hibiki://app${pathname}:`, err)
         return new Response('Not Found', { status: 404 })
       }
-      const { filePath } = resolved
-      const ext = path.extname(filePath).toLowerCase()
-      const mime = {
-        '.html': 'text/html',
-        '.js': 'application/javascript',
-        '.css': 'text/css',
-        '.json': 'application/json',
-        '.ico': 'image/x-icon',
-        '.svg': 'image/svg+xml',
-        '.png': 'image/png',
-        '.woff2': 'font/woff2',
-      }[ext] || 'application/octet-stream'
-      return fileResponse(filePath, {
-        headers: { 'Content-Type': mime },
-      })
     }
 
     return new Response('Not Found', { status: 404 })
   })
 }
 
+function serveAppFile(webDistDir, pathname) {
+  const resolved = resolveAppPath(webDistDir, pathname)
+  if (!resolved.ok) {
+    protocolLog.warn(`Rejected hibiki://app${pathname}: ${resolved.reason}`)
+    return new Response('Not Found', { status: 404 })
+  }
+  const { filePath } = resolved
+  const ext = path.extname(filePath).toLowerCase()
+  const mime = {
+    '.html': 'text/html',
+    '.js': 'application/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.ico': 'image/x-icon',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+  }[ext] || 'application/octet-stream'
+  return fileResponse(filePath, {
+    headers: { 'Content-Type': mime, 'Content-Security-Policy': APP_CONTENT_SECURITY_POLICY },
+  })
+}
+
 app.whenReady().then(async () => {
+  devTools = installDevToolsPolicy({
+    Menu,
+    packaged: app.isPackaged,
+    env: process.env,
+    platform: process.platform,
+  })
   const userDataPath = app.getPath('userData')
   const botRoot = path.join(__dirname, '..')
   process.env.HIBIKI_USER_DATA = userDataPath
@@ -453,11 +516,25 @@ app.whenReady().then(async () => {
   const dataDir = path.join(userDataPath, 'data')
   await fs.promises.mkdir(dataDir, { recursive: true })
   const appConfigPath = path.join(dataDir, 'app-config.json')
+  // Logged so a sound library "in the wrong place" is diagnosable from hibiki.log (#776).
+  const envStoragePath = process.env.HIBIKI_STORAGE_PATH
+  if (envStoragePath)
+    appLog.info(`HIBIKI_STORAGE_PATH set in the environment: ${envStoragePath}`)
   try {
     const raw = await fs.promises.readFile(appConfigPath, 'utf-8')
     const appConfig = JSON.parse(raw)
-    if (appConfig && typeof appConfig['storage.path'] === 'string' && appConfig['storage.path'].trim()) {
-      process.env.HIBIKI_STORAGE_PATH = appConfig['storage.path'].trim()
+    const storagePath = appConfig && typeof appConfig['storage.path'] === 'string'
+      ? appConfig['storage.path'].trim()
+      : ''
+    // setStoragePath only stores absolute folders; a relative one predates that check and would resolve against cwd (#776).
+    if (storagePath && path.isAbsolute(storagePath)) {
+      appLog.info(`Storage path from Settings: ${storagePath}${envStoragePath
+        ? ` (overrides HIBIKI_STORAGE_PATH=${envStoragePath} from the environment)`
+        : ''}`)
+      process.env.HIBIKI_STORAGE_PATH = storagePath
+    }
+    else if (storagePath) {
+      appLog.warn(`Ignoring stored storage path ${storagePath}: not an absolute path`)
     }
   }
   catch {
@@ -478,6 +555,7 @@ app.whenReady().then(async () => {
   try {
     secretCodec = await createSecretCodec()
     const embedded = await getEmbeddedApp(secretCodec, {
+      packaged: app.isPackaged,
       localSink: createLocalSink(() => mainWindow),
       appVersion: app.getVersion(),
       usageStats: {
@@ -510,12 +588,13 @@ app.whenReady().then(async () => {
     getApi: () => api,
     getWindow: () => mainWindow,
   })
-  ipcMain.handle('hotkeys:getStatus', () => hotkeys.getStatus())
+  trustedIpc.handle('hotkeys:getStatus', () => hotkeys.getStatus())
   await hotkeys.sync()
   registerBrowserViewHandlers()
   registerHibikiProtocol(api, webDistDir)
 
   installPermissionPolicy(session.defaultSession)
+  refuseDownloads(session.defaultSession)
 
   /**
    * Registers a file dialog handler that logs the request and the GM's choice.
@@ -523,7 +602,7 @@ app.whenReady().then(async () => {
    * `show(title, options)` opens the dialog and resolves to the chosen path, or `null` when cancelled.
    */
   const handleFileDialog = (kind, defaultTitle, show) => {
-    ipcMain.handle(`dialog:${kind}`, async (_, options = {}) => {
+    trustedIpc.handle(`dialog:${kind}`, async (_, options = {}) => {
       const title = options.title ?? defaultTitle
       dialogLog.info(`${kind} "${title}" opened`)
       const chosen = await show(BrowserWindow.getFocusedWindow() ?? null, title, options)
@@ -567,10 +646,10 @@ app.whenReady().then(async () => {
       : result.filePaths[0]
   })
 
-  ipcMain.handle('logs:getPath', () => logging.logFile)
-  ipcMain.handle('logs:openFolder', () => shell.openPath(logging.logsDir))
+  trustedIpc.handle('logs:getPath', () => logging.logFile)
+  trustedIpc.handle('logs:openFolder', () => shell.openPath(logging.logsDir))
   // Settings → Diagnostics "Copy diagnostics" (#698): the content is never logged, only that it was copied.
-  ipcMain.handle('diagnostics:copy', async () => {
+  trustedIpc.handle('diagnostics:copy', async () => {
     diagnosticsLog.info('Copy diagnostics requested')
     try {
       const summary = await buildDiagnosticsSummary({
@@ -597,7 +676,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  ipcMain.handle('shell:openExternal', (_, url) => {
+  trustedIpc.handle('shell:openExternal', (_, url) => {
     if (isWebUrl(url))
       return shell.openExternal(url)
     appLog.warn(`openExternal refused a non-web URL (${describeScheme(url)})`)

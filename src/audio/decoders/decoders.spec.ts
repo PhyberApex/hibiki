@@ -4,6 +4,7 @@ import { createReadStream, mkdtempSync, readFileSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { canDecode, createPcmStream, MIXER_CHANNELS, MIXER_SAMPLE_RATE } from './index'
+import { sniffOggCodec } from './ogg-sniff'
 
 jest.mock('node:fs', () => {
   const actual = jest.requireActual('node:fs')
@@ -117,6 +118,92 @@ describe('backend sound decoders', () => {
 
   it('reports an Ogg Opus declaring 255 channels as not decodable (#765)', async () => {
     await expect(canDecode(patchedOgg('fixture-stereo-48000.opus', 'OpusHead', (b, at) => b.writeUInt8(255, at + 9)))).resolves.toBe(false)
+  })
+
+  /** One Ogg page (CRC left zero: the sniffer does not check it) carrying `payload` as a single packet. */
+  function oggPage(payload: Buffer, sequence: number): Buffer {
+    const header = Buffer.alloc(27)
+    header.write('OggS', 0, 'ascii')
+    header[5] = sequence === 0
+      ? 0x02
+      : 0x00
+    header.writeUInt32LE(sequence, 18)
+    const segments: number[] = []
+    for (let left = payload.length; ; left -= 255) {
+      segments.push(Math.min(left, 255))
+      if (left < 255)
+        break
+    }
+    header[26] = segments.length
+    return Buffer.concat([
+      header,
+      Buffer.from(segments),
+      payload,
+    ])
+  }
+
+  function oggFile(name: string, ...payloads: Buffer[]): string {
+    const dir = mkdtempSync(join(tmpdir(), 'hibiki-decoders-'))
+    const path = join(dir, name)
+    writeFileSync(path, Buffer.concat(payloads.map(oggPage)))
+    return path
+  }
+
+  /** A Vorbis identification header declaring a stereo 44.1 kHz stream. */
+  function vorbisIdHeader(): Buffer {
+    const id = Buffer.alloc(30)
+    id.write('\x01vorbis', 0, 'latin1')
+    id[11] = 2
+    id.writeUInt32LE(44100, 12)
+    return id
+  }
+
+  it.each([
+    ['Vorbis', 'fixture-stereo-44100.ogg', 'vorbis'],
+    ['Opus', 'fixture-stereo-48000.opus', 'opus'],
+  ])('sniffs the %s fixture from its first page', async (_label, name, codec) => {
+    await expect(sniffOggCodec(fixture(name))).resolves.toBe(codec)
+  })
+
+  it('does not take an Ogg FLAC whose comments mention Vorbis for Vorbis (#784)', async () => {
+    const path = oggFile(
+      'flac-in-ogg.ogg',
+      Buffer.concat([
+        Buffer.from('\x7FFLAC\x01\x00\x00\x01fLaC', 'latin1'),
+        Buffer.alloc(38),
+      ]),
+      Buffer.concat([
+        Buffer.from('reference vorbis comment ', 'latin1'),
+        vorbisIdHeader(),
+      ]),
+    )
+    await expect(sniffOggCodec(path)).resolves.toBeNull()
+    await expect(canDecode(path)).resolves.toBe(false)
+  })
+
+  it('does not take a later page\'s OpusHead for the stream\'s codec (#784)', async () => {
+    const opusHead = readFileSync(fixture('fixture-stereo-48000.opus')).subarray(28, 47)
+    const path = oggFile('skeleton-first.ogg', Buffer.from('fishead\x00', 'latin1'), opusHead)
+    await expect(sniffOggCodec(path)).resolves.toBeNull()
+    await expect(canDecode(path)).resolves.toBe(false)
+  })
+
+  it('reads the codec only from the start of the first page\'s payload (#784)', async () => {
+    const path = oggFile('padded.ogg', Buffer.concat([
+      Buffer.from('xx', 'latin1'),
+      vorbisIdHeader(),
+    ]))
+    await expect(sniffOggCodec(path)).resolves.toBeNull()
+    await expect(sniffOggCodec(oggFile('plain.ogg', vorbisIdHeader()))).resolves.toBe('vorbis')
+  })
+
+  it('refuses a first page cut short before its payload', async () => {
+    const page = oggPage(vorbisIdHeader(), 0)
+    const dir = mkdtempSync(join(tmpdir(), 'hibiki-decoders-'))
+    const path = join(dir, 'cut.ogg')
+    writeFileSync(path, page.subarray(0, 27))
+    await expect(sniffOggCodec(path)).resolves.toBeNull()
+    await expect(canDecode(path)).resolves.toBe(false)
   })
 
   it('reports a .flac-named file with only the magic bytes as not decodable', async () => {

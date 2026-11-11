@@ -44,8 +44,10 @@ export function formatTimerSeconds(ms: number): string {
 /** Elapsed / total of an Effect's longest-remaining instance (#509) or the playing Music track (#695). */
 export type TimerProgress = Pick<EffectSoundStatus, 'elapsedMs' | 'totalMs'>
 
-/** `m:ss / m:ss` (elapsed / total). */
+/** `m:ss / m:ss` (elapsed / total), or just the elapsed `m:ss` while the total isn't known yet (e.g. an Effect too long for the PCM cache on its first play, #773). */
 export function timerLabel(progress: TimerProgress): string {
+  if (progress.totalMs <= 0)
+    return formatTimerSeconds(progress.elapsedMs)
   return `${formatTimerSeconds(progress.elapsedMs)} / ${formatTimerSeconds(progress.totalMs)}`
 }
 
