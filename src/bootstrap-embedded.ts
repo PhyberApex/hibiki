@@ -1,4 +1,5 @@
 import type { VoiceBasedChannel } from 'discord.js'
+import type { Config } from './config'
 import type { AccessibilitySettings } from './config/accessibility-settings'
 import type { DiscordStatus } from './config/discord-token-settings'
 import type { HotkeySettings } from './config/hotkey-settings'
@@ -24,6 +25,7 @@ import { createHotkeySettings } from './config/hotkey-settings'
 import { createLocalOutputDeviceSettings } from './config/local-output-device-settings'
 import { createOutputTargetSettings } from './config/output-target-settings'
 import { normalizeSceneFadeLength, parseSceneFadeLength } from './config/scene-fade-settings'
+import { createStoragePathSettings } from './config/storage-path-settings'
 import { createUsageStatsSettings } from './config/usage-stats-settings'
 import { createDiscordClient } from './discord/discord-client'
 import { getStorageWarnings } from './json-file'
@@ -242,6 +244,8 @@ export function createShutdownHandler(
 }
 
 export interface EmbeddedAppOptions {
+  /** `app.isPackaged`, injected by main. Only an unpackaged build reads the repository-root `.env` (#776); defaults to packaged. */
+  packaged?: boolean
   /** Delivers the Local Target's mix to the renderer (the main process owns the window); see ADR-0004. */
   localSink?: import('./audio/local-sink-pump').LocalSink
   /** The running app's version (`app.getVersion()`), which the update check compares against. */
@@ -254,18 +258,31 @@ export interface EmbeddedAppOptions {
   usageStats?: { gate: UsageStatsGate, environment: Omit<UsageStatsEnvironment, 'appVersion'> }
 }
 
+/** Names (never values) of the secrets the environment supplies; each one wins over its stored counterpart. */
+function logSecretsFromEnvironment(config: Config): void {
+  const fromEnv = [
+    config.discord.token && 'DISCORD_TOKEN',
+    config.vision.apiKey && 'HIBIKI_VISION_API_KEY',
+    config.vision.openaiApiKey && 'HIBIKI_VISION_OPENAI_API_KEY',
+  ].filter(Boolean)
+  if (fromEnv.length)
+    log.info(`Secrets from the environment, overriding Settings: ${fromEnv.join(', ')}`)
+}
+
 export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOptions = {}): Promise<EmbeddedApp> {
   process.env.HIBIKI_EMBEDDED = '1'
   const report = generateDependencyReport()
   log.info('Voice dependency report:\n', report)
   log.info(`DAVE library backend: ${describeDaveBackend()}`)
-  const config = getConfig()
+  const config = getConfig({ packaged: options.packaged ?? true })
+  logSecretsFromEnvironment(config)
   await ensureStorageDirs(config)
   log.info(`Storage root ${config.audio.storageRoot}: music ${config.audio.musicDir}, effects ${config.audio.effectsDir}, ambience ${config.audio.ambienceDir}, data ${config.database.path}`)
   const appConfig = createAppConfig(config, codec)
   log.info(`Secrets at rest are ${appConfig.secretsEncrypted ? 'encrypted' : 'NOT encrypted (no usable OS keychain backend; see any safeStorage warning above)'}`)
 
   const localOutputDevice = createLocalOutputDeviceSettings(appConfig)
+  const storagePath = createStoragePathSettings(appConfig)
   const outputTargets = createOutputTargetSettings(appConfig, () => isDiscordTokenConfigured(appConfig, config.discord.token))
 
   const sounds = createSoundLibrary(config)
@@ -378,18 +395,8 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       getDiscord: () => discordToken.getStatus(),
       setDiscordToken: token => discordToken.setToken(token),
       clearDiscordToken: () => discordToken.clearToken(),
-      getStoragePath: async () => {
-        const p = await appConfig.get('storage.path')
-        return {
-          path: p && p.trim()
-            ? p.trim()
-            : null,
-        }
-      },
-      setStoragePath: async (path: string) => {
-        const value = path.trim() || ''
-        await appConfig.set('storage.path', value)
-      },
+      getStoragePath: () => storagePath.get(),
+      setStoragePath: path => storagePath.set(path),
       getBookmarks: async () => {
         const raw = await appConfig.get('bookmarks')
         if (!raw)

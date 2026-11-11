@@ -473,9 +473,14 @@ app.whenReady().then(async () => {
   try {
     const raw = await fs.promises.readFile(appConfigPath, 'utf-8')
     const appConfig = JSON.parse(raw)
-    if (appConfig && typeof appConfig['storage.path'] === 'string' && appConfig['storage.path'].trim()) {
-      process.env.HIBIKI_STORAGE_PATH = appConfig['storage.path'].trim()
-    }
+    const storagePath = appConfig && typeof appConfig['storage.path'] === 'string'
+      ? appConfig['storage.path'].trim()
+      : ''
+    // setStoragePath only stores absolute folders; a relative one predates that check and would resolve against cwd (#776).
+    if (storagePath && path.isAbsolute(storagePath))
+      process.env.HIBIKI_STORAGE_PATH = storagePath
+    else if (storagePath)
+      appLog.warn(`Ignoring stored storage path ${storagePath}: not an absolute path; using the default`)
   }
   catch {
     // First launch or corrupted config — fall through to defaults
@@ -495,6 +500,7 @@ app.whenReady().then(async () => {
   try {
     secretCodec = await createSecretCodec()
     const embedded = await getEmbeddedApp(secretCodec, {
+      packaged: app.isPackaged,
       localSink: createLocalSink(() => mainWindow),
       appVersion: app.getVersion(),
       usageStats: {

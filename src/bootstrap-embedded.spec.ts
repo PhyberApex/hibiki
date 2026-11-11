@@ -9,6 +9,7 @@ import { createDiscordTokenSettings } from './config/discord-token-settings'
 import { createHotkeySettings } from './config/hotkey-settings'
 import { createLocalOutputDeviceSettings } from './config/local-output-device-settings'
 import { createOutputTargetSettings } from './config/output-target-settings'
+import { createStoragePathSettings } from './config/storage-path-settings'
 import { createDiscordClient as createDiscordClientImpl } from './discord/discord-client'
 import { getStorageWarnings } from './json-file'
 import { createAppConfig } from './persistence'
@@ -49,6 +50,9 @@ jest.mock('./config/local-output-device-settings', () => ({
 }))
 jest.mock('./config/output-target-settings', () => ({
   createOutputTargetSettings: jest.fn(),
+}))
+jest.mock('./config/storage-path-settings', () => ({
+  createStoragePathSettings: jest.fn(),
 }))
 jest.mock('./config/usage-stats-settings', () => ({
   createUsageStatsSettings: jest.fn(() => ({})),
@@ -163,6 +167,7 @@ const config = {
     ambienceDir: '/data/ambience',
   },
   discord: { token: undefined },
+  vision: { apiKey: '', openaiApiKey: '' },
 }
 
 function voiceChannel(id: string) {
@@ -275,6 +280,10 @@ function fakeServices() {
       get: jest.fn().mockResolvedValue(null),
       set: jest.fn().mockResolvedValue(undefined),
     },
+    storagePath: {
+      get: jest.fn().mockResolvedValue({ path: '/mnt/sounds' }),
+      set: jest.fn().mockResolvedValue(undefined),
+    },
     discordToken: {
       getStatus: jest.fn().mockResolvedValue({ configured: false }),
       setToken: jest.fn().mockResolvedValue({ configured: true }),
@@ -322,6 +331,7 @@ function stubServiceFactories(services: Services): void {
   jest.mocked(createHotkeySettings).mockReturnValue(services.hotkeySettings as any)
   jest.mocked(createOutputTargetSettings).mockReturnValue(services.outputTargets as any)
   jest.mocked(createLocalOutputDeviceSettings).mockReturnValue(services.localOutputDevice as any)
+  jest.mocked(createStoragePathSettings).mockReturnValue(services.storagePath as any)
   jest.mocked(createDiscordTokenSettings).mockReturnValue(services.discordToken as any)
   jest.mocked(createVisionSettings).mockReturnValue(services.visionSettings as any)
   jest.mocked(createVisionService).mockReturnValue(services.vision as any)
@@ -378,6 +388,25 @@ describe('getEmbeddedApp', () => {
 
       await expect(getEmbeddedApp()).resolves.toHaveProperty('api')
       expect(spies.error).toHaveBeenCalledWith('[hibiki]', 'Storage warm-up failed:', err)
+    })
+
+    it('treats the build as packaged, reading no .env, unless main says otherwise (#776)', async () => {
+      expect(getConfig).toHaveBeenLastCalledWith({ packaged: true })
+      await getEmbeddedApp(undefined, { packaged: false })
+      expect(getConfig).toHaveBeenLastCalledWith({ packaged: false })
+    })
+
+    it('logs which secrets come from the environment by name, never by value', async () => {
+      jest.mocked(getConfig).mockReturnValue({
+        ...config,
+        discord: { token: 'env-token' },
+        vision: { apiKey: 'sk-env-claude', openaiApiKey: '' },
+      } as any)
+      await getEmbeddedApp()
+      expect(spies.info).toHaveBeenCalledWith('[hibiki]', 'Secrets from the environment, overriding Settings: DISCORD_TOKEN, HIBIKI_VISION_API_KEY')
+      const logged = spies.info.mock.calls.flat().join(' ')
+      expect(logged).not.toContain('env-token')
+      expect(logged).not.toContain('sk-env-claude')
     })
 
     it('fetches the default Scene Registry index and logs it', () => {
@@ -493,14 +522,14 @@ describe('getEmbeddedApp', () => {
   })
 
   describe('config', () => {
-    it('trims the storage path and reports an empty one as unset', async () => {
-      await expect(api.config.getStoragePath()).resolves.toEqual({ path: null })
-
-      await api.config.setStoragePath('  /mnt/sounds  ')
+    it('routes the storage path to the storage path settings, rejections included', async () => {
       await expect(api.config.getStoragePath()).resolves.toEqual({ path: '/mnt/sounds' })
 
-      await api.config.setStoragePath('   ')
-      await expect(api.config.getStoragePath()).resolves.toEqual({ path: null })
+      await api.config.setStoragePath('/mnt/sounds')
+      expect(services.storagePath.set).toHaveBeenCalledWith('/mnt/sounds')
+
+      services.storagePath.set.mockRejectedValueOnce(new Error('not absolute'))
+      await expect(api.config.setStoragePath('sounds')).rejects.toThrow('not absolute')
     })
 
     it('round-trips bookmarks and treats missing or corrupt ones as none', async () => {

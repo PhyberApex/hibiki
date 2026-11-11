@@ -293,4 +293,52 @@ describe('createVisionSettings', () => {
       expect(state.openaiCompatible.keyWithheld).toBe(false)
     })
   })
+
+  describe('says in hibiki.log where an analysis key comes from (#776)', () => {
+    let info: jest.SpyInstance
+
+    beforeEach(() => {
+      info = jest.spyOn(console, 'info').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      info.mockRestore()
+    })
+
+    function logged(): string {
+      return info.mock.calls.map(args => args.join(' ')).join('\n')
+    }
+
+    it('names HIBIKI_VISION_API_KEY when the Claude key comes from the environment, without the key', async () => {
+      const config = makeConfig({ claudeKey: 'sk-env-claude' })
+      const appConfig = createAppConfig(config)
+      await appConfig.set('vision.apiKey', 'sk-stored-claude')
+      const providerConfig = await createVisionSettings(config, appConfig).getProviderConfig()
+      expect(providerConfig.apiKey).toBe('sk-env-claude')
+      expect(logged()).toContain('HIBIKI_VISION_API_KEY')
+      expect(logged()).toContain('https://api.anthropic.com')
+      expect(logged()).not.toContain('sk-env-claude')
+    })
+
+    it('says the stored key is used when no Claude env key is set', async () => {
+      const config = makeConfig()
+      const appConfig = createAppConfig(config)
+      await appConfig.set('vision.apiKey', 'sk-stored-claude')
+      await createVisionSettings(config, appConfig).getProviderConfig()
+      expect(logged()).toContain('stored in Settings')
+      expect(logged()).not.toContain('HIBIKI_VISION_API_KEY')
+      expect(logged()).not.toContain('sk-stored-claude')
+    })
+
+    it('names HIBIKI_VISION_OPENAI_API_KEY when the OpenAI key comes from the environment', async () => {
+      const config = makeConfig({ openaiKey: 'sk-env-openai' })
+      const appConfig = createAppConfig(config)
+      const settings = createVisionSettings(config, appConfig)
+      await settings.setProvider('openai-compatible')
+      info.mockClear()
+      await settings.getProviderConfig()
+      expect(logged()).toContain('HIBIKI_VISION_OPENAI_API_KEY')
+      expect(logged()).not.toContain('sk-env-openai')
+    })
+  })
 })

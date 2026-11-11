@@ -3,7 +3,7 @@ import type { createAppConfig } from '../persistence'
 import type { VisionProviderConfig, VisionProviderId } from './vision.service'
 import { createLogger } from '../logger'
 import { describeEndpoint, endpointOrigin, validateOpenAiBaseUrl } from './vision-endpoint'
-import { OPENAI_COMPATIBLE_DEFAULT_BASE_URL, OPENAI_COMPATIBLE_DEFAULT_MODEL } from './vision.service'
+import { CLAUDE_BASE_URL, OPENAI_COMPATIBLE_DEFAULT_BASE_URL, OPENAI_COMPATIBLE_DEFAULT_MODEL } from './vision.service'
 
 export interface VisionProviderState {
   keyConfigured: boolean
@@ -51,6 +51,13 @@ function isVisionProviderId(value: string | null): value is VisionProviderId {
 
 const log = createLogger('vision-settings')
 
+/** Where an analysis key came from, so "it's sending somewhere else" is diagnosable from hibiki.log (#776). Never the key itself. */
+function describeKeySource(fromEnvironment: boolean, envVar: string): string {
+  return fromEnvironment
+    ? `comes from ${envVar} in the environment (overrides any key stored in Settings)`
+    : 'is the one stored in Settings'
+}
+
 export function createVisionSettings(config: Config, appConfig: ReturnType<typeof createAppConfig>) {
   async function getProvider(): Promise<VisionProviderId> {
     const stored = await appConfig.get(PROVIDER_CONFIG_KEY)
@@ -88,17 +95,18 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
    * there; elsewhere the stored key is used if it was saved for this origin (a key saved before binding
    * existed belongs to the current Base URL until the Base URL changes, see `setOpenAiBaseUrl`).
    */
-  async function getOpenAiKey(baseUrl: string): Promise<{ apiKey: string | null, withheld: boolean }> {
+  async function getOpenAiKey(baseUrl: string): Promise<{ apiKey: string | null, withheld: boolean, fromEnvironment: boolean }> {
     const origin = endpointOrigin(baseUrl)
     const envKey = config.vision.openaiApiKey
     if (envKey && origin === endpointOrigin(OPENAI_COMPATIBLE_DEFAULT_BASE_URL))
-      return { apiKey: envKey, withheld: false }
+      return { apiKey: envKey, withheld: false, fromEnvironment: true }
     const { key, boundOrigin } = await getStoredOpenAiKey()
     if (key && origin !== null && (boundOrigin ?? origin) === origin)
-      return { apiKey: key, withheld: false }
+      return { apiKey: key, withheld: false, fromEnvironment: false }
     return {
       apiKey: null,
       withheld: Boolean(envKey || key),
+      fromEnvironment: false,
     }
   }
 
@@ -130,12 +138,17 @@ export function createVisionSettings(config: Config, appConfig: ReturnType<typeo
         getOpenAiBaseUrl(),
         getOpenAiModel(),
       ])
-      const { apiKey, withheld } = await getOpenAiKey(baseUrl)
+      const { apiKey, withheld, fromEnvironment } = await getOpenAiKey(baseUrl)
       if (withheld)
         log.warn(`openai-compatible API key withheld from ${describeEndpoint(baseUrl)}: it was saved for another endpoint (or is the env key, which only goes to OpenAI)`)
+      else if (apiKey)
+        log.info(`openai-compatible API key for ${describeEndpoint(baseUrl)} ${describeKeySource(fromEnvironment, 'HIBIKI_VISION_OPENAI_API_KEY')}`)
       return { provider, apiKey, baseUrl, model }
     }
-    return { provider: 'claude', apiKey: await getClaudeApiKey() }
+    const apiKey = await getClaudeApiKey()
+    if (apiKey)
+      log.info(`claude API key for ${CLAUDE_BASE_URL} ${describeKeySource(Boolean(config.vision.apiKey), 'HIBIKI_VISION_API_KEY')}`)
+    return { provider: 'claude', apiKey }
   }
 
   async function get(): Promise<VisionSettingsState> {
