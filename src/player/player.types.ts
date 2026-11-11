@@ -17,6 +17,8 @@ export interface GuildPlaybackState {
   guildId: string
   connectedChannelId?: string
   connectedChannelName?: string
+  /** The voice connection's DAVE end-to-end encryption session is not ready, so Discord clients likely hear nothing (#785); present when live. */
+  e2eeNotReady?: boolean
   isIdle: boolean
   track?: TrackSummary | null
   source: 'live' | 'discord'

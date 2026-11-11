@@ -149,3 +149,26 @@ test('plays a Scene through the Local Target without Discord', async () => {
 
   await invokeApi(page, 'player', 'stop', [LOCAL])
 })
+
+test('serves hibiki://sound only to requests the app renderer makes (#785)', async () => {
+  const url = `hibiki://sound/music/${MUSIC_ID}`
+  // the renderer's own fetch and audio element are what the Sound Library preview and the m4a fallback use
+  const fromRenderer = await page.evaluate(async (soundUrl) => {
+    const response = await fetch(soundUrl)
+    const audio = new Audio()
+    audio.crossOrigin = 'anonymous'
+    const duration = await new Promise<number>((resolve, reject) => {
+      audio.addEventListener('loadedmetadata', () => resolve(audio.duration), { once: true })
+      audio.addEventListener('error', () => reject(new Error(`audio error ${audio.error?.code}`)), { once: true })
+      audio.src = soundUrl
+    })
+    return { status: response.status, duration }
+  }, url)
+  expect(fromRenderer.status).toBe(200)
+  expect(fromRenderer.duration).toBeGreaterThan(0)
+
+  // nothing in a page made this request, so it carries no initiator origin
+  const fromMain = await app.evaluate(async ({ net }, soundUrl) => (await net.fetch(soundUrl)).status, url)
+  expect(fromMain).toBe(403)
+  await expect.poll(logText).toContain('Refused hibiki://sound request: no initiating page')
+})

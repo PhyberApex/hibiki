@@ -236,6 +236,40 @@ describe('createPlayer', () => {
     })
   })
 
+  describe('end-to-end encryption state (#785)', () => {
+    afterEach(() => jest.useRealTimers())
+
+    it('reports a DAVE session that is not ready on the guild\'s live state, and pushes a state change', async () => {
+      jest.useFakeTimers()
+      jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const connection = createFakeConnection() as FakeConnection & { state: unknown }
+      connection.state = {
+        status: voice.VoiceConnectionStatus.Ready,
+        networking: {
+          state: {
+            code: voice.NetworkingStatusCode.Ready,
+            dave: {
+              protocolVersion: 1,
+              session: { ready: false },
+            },
+          },
+        },
+      }
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      const player = createPlayer(createFakeDiscordClient(), createFakeSoundLibrary())
+      await player.connect(fakeChannel)
+      expect((await player.getState())[0]).toMatchObject({ e2eeNotReady: false })
+
+      const stateChanged = jest.fn()
+      player.onStateChanged(stateChanged)
+      await jest.advanceTimersByTimeAsync(3_000)
+
+      expect(stateChanged).toHaveBeenCalled()
+      expect((await player.getState())[0]).toMatchObject({ guildId: 'guild-1', e2eeNotReady: true })
+      await player.destroyAll()
+    })
+  })
+
   describe('disconnect', () => {
     it('tears down the manager directly, without destroying the connection out from under its own teardown guard', async () => {
       const connection = createFakeConnection()

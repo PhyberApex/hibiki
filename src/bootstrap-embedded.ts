@@ -1,5 +1,6 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { AccessibilitySettings } from './config/accessibility-settings'
+import type { Bookmark } from './config/bookmarks'
 import type { DiscordStatus } from './config/discord-token-settings'
 import type { HotkeySettings } from './config/hotkey-settings'
 import type { LocalOutputDevice } from './config/local-output-device-settings'
@@ -19,6 +20,7 @@ import { dirname } from 'node:path'
 import { generateDependencyReport } from '@discordjs/voice'
 import { getConfig } from './config'
 import { normalizeAccessibilitySettings, parseAccessibilitySettings } from './config/accessibility-settings'
+import { normalizeBookmarks, parseBookmarks } from './config/bookmarks'
 import { createDiscordTokenSettings, isDiscordTokenConfigured } from './config/discord-token-settings'
 import { createHotkeySettings } from './config/hotkey-settings'
 import { createLocalOutputDeviceSettings } from './config/local-output-device-settings'
@@ -103,8 +105,8 @@ export interface EmbeddedApi {
     clearDiscordToken: () => Promise<DiscordStatus>
     getStoragePath: () => Promise<{ path: string | null }>
     setStoragePath: (path: string) => Promise<void>
-    getBookmarks: () => Promise<{ name: string, url: string, favicon?: string }[]>
-    setBookmarks: (bookmarks: { name: string, url: string, favicon?: string }[]) => Promise<void>
+    getBookmarks: () => Promise<Bookmark[]>
+    setBookmarks: (bookmarks: Bookmark[]) => Promise<void>
     getAccessibility: () => Promise<AccessibilitySettings>
     setAccessibility: (settings: AccessibilitySettings) => Promise<void>
     getSceneFadeLength: () => Promise<number>
@@ -384,19 +386,10 @@ export async function getEmbeddedApp(codec?: SecretCodec, options: EmbeddedAppOp
       clearDiscordToken: () => discordToken.clearToken(),
       getStoragePath: () => storagePath.get(),
       setStoragePath: path => storagePath.set(path),
-      getBookmarks: async () => {
-        const raw = await appConfig.get('bookmarks')
-        if (!raw)
-          return []
-        try {
-          return JSON.parse(raw)
-        }
-        catch {
-          return []
-        }
-      },
-      setBookmarks: async (bookmarks: { name: string, url: string, favicon?: string }[]) => {
-        await appConfig.set('bookmarks', JSON.stringify(bookmarks))
+      getBookmarks: async () => parseBookmarks(await appConfig.get('bookmarks')),
+      // Favicons are checked here, where they are persisted, not only in the renderer (#785).
+      setBookmarks: async (bookmarks) => {
+        await appConfig.set('bookmarks', JSON.stringify(normalizeBookmarks(bookmarks)))
       },
       getAccessibility: async () => parseAccessibilitySettings(await appConfig.get('accessibility')),
       setAccessibility: async (settings) => {

@@ -228,6 +228,107 @@ describe('guildAudioManager', () => {
     })
   })
 
+  describe('end-to-end encryption state (#785)', () => {
+    /** A Ready connection whose networking state, DAVE session included, the test changes at will. */
+    function createDaveConnection(dave: { ready: boolean } | null) {
+      const connection = new EventEmitter() as FakeConnection
+      connection.joinConfig = { channelId: 'channel-1' }
+      connection.subscribe = jest.fn()
+      connection.destroy = jest.fn()
+      const session = { ready: dave?.ready ?? false }
+      Object.defineProperty(connection, 'state', {
+        get: () => ({
+          status: voice.VoiceConnectionStatus.Ready,
+          networking: {
+            state: {
+              code: voice.NetworkingStatusCode.Ready,
+              connectionData: { encryptionMode: 'aead_aes256_gcm_rtpsize' },
+              dave: dave
+                ? { protocolVersion: 1, session, voicePrivacyCode: null }
+                : undefined,
+            },
+          },
+        }),
+      })
+      return { connection, session }
+    }
+
+    afterEach(() => {
+      manager.destroy()
+      jest.useRealTimers()
+    })
+
+    it('reports a DAVE session that is still not ready once the handshake had time, and tells listeners', async () => {
+      jest.useFakeTimers()
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const { connection } = createDaveConnection({ ready: false })
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      const listener = jest.fn()
+      manager.on('encryptionChanged', listener)
+
+      await manager.connect(fakeChannel)
+      expect(manager.e2eeNotReady).toBe(false)
+
+      await jest.advanceTimersByTimeAsync(3_000)
+      expect(manager.e2eeNotReady).toBe(true)
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect(warn).toHaveBeenCalledWith('[voice]', expect.stringContaining('session NOT ready'))
+      warn.mockRestore()
+    })
+
+    it('clears the flag once the session becomes ready', async () => {
+      jest.useFakeTimers()
+      jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const { connection, session } = createDaveConnection({ ready: false })
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      const listener = jest.fn()
+      manager.on('encryptionChanged', listener)
+      await manager.connect(fakeChannel)
+      await jest.advanceTimersByTimeAsync(3_000)
+      expect(manager.e2eeNotReady).toBe(true)
+
+      session.ready = true
+      await jest.advanceTimersByTimeAsync(3_000)
+      expect(manager.e2eeNotReady).toBe(false)
+      expect(listener).toHaveBeenCalledTimes(2)
+
+      // no change, no event
+      await jest.advanceTimersByTimeAsync(9_000)
+      expect(listener).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not flag a call without DAVE, or one whose session is ready', async () => {
+      jest.useFakeTimers()
+      for (const dave of [
+        null,
+        { ready: true },
+      ]) {
+        const { connection } = createDaveConnection(dave)
+        ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+        await manager.connect(fakeChannel)
+        await jest.advanceTimersByTimeAsync(6_000)
+        expect(manager.e2eeNotReady).toBe(false)
+        manager.disconnect()
+        manager = new GuildAudioManager(guildId)
+      }
+    })
+
+    it('drops the flag and stops checking when the GM leaves', async () => {
+      jest.useFakeTimers()
+      jest.spyOn(console, 'warn').mockImplementation(() => {})
+      const { connection } = createDaveConnection({ ready: false })
+      ;(voice.joinVoiceChannel as jest.Mock).mockReturnValue(connection)
+      ;(voice.getVoiceConnection as jest.Mock).mockReturnValue(connection)
+      await manager.connect(fakeChannel)
+      await jest.advanceTimersByTimeAsync(3_000)
+      expect(manager.e2eeNotReady).toBe(true)
+
+      manager.disconnect()
+      expect(manager.e2eeNotReady).toBe(false)
+      expect(jest.getTimerCount()).toBe(0)
+    })
+  })
+
   describe('connect: Ready timeout (#645)', () => {
     it('destroys the half-joined connection and reports not connected', async () => {
       const connection = createFakeConnection()

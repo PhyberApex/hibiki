@@ -531,6 +531,17 @@ describe('getEmbeddedApp', () => {
       await expect(api.config.getBookmarks()).resolves.toEqual([])
     })
 
+    it('stores a bookmark without a favicon that is not https or data:image (#785)', async () => {
+      await api.config.setBookmarks([
+        { name: 'Beacon', url: 'https://evil.example', favicon: 'http://evil.example/track.gif' },
+        { name: 'Icon', url: 'https://ok.example', favicon: 'https://ok.example/favicon.ico' },
+      ])
+      await expect(api.config.getBookmarks()).resolves.toEqual([
+        { name: 'Beacon', url: 'https://evil.example' },
+        { name: 'Icon', url: 'https://ok.example', favicon: 'https://ok.example/favicon.ico' },
+      ])
+    })
+
     it('stores accessibility settings and the scene fade length normalised', async () => {
       await expect(api.config.getAccessibility()).resolves.toEqual({ luminancePulses: true, reduceMotion: null })
       await api.config.setAccessibility({ luminancePulses: false, reduceMotion: 'yes' } as any)

@@ -7,7 +7,7 @@ import { basename, extname, join } from 'node:path'
 import AdmZip from 'adm-zip'
 import slugify from 'slugify'
 import { createLogger } from '../logger'
-import { idFromFilename, isSafeSoundId, SOUND_CATEGORIES } from '../sound/sound-id'
+import { idFromFilename, isSafeSoundId, SOUND_CATEGORIES, SOUND_FILE_EXTENSIONS } from '../sound/sound-id'
 import { countRepeatIntervals, createSceneStore, isRecord, normalizeMusicMode, uniqueSceneName } from './scene-store'
 
 const log = createLogger('scene-import')
@@ -216,6 +216,20 @@ function createFreshSoundIds(taken: (id: string) => boolean): (soundId: string) 
   }
 }
 
+/**
+ * A stem an archive may keep as its library file name: letters, digits, `_`,
+ * `-` and inner dots, the shape the Sound Library's own ids have. Anything else
+ * (spaces, backslashes, trailing dots or spaces, control characters) is renamed.
+ */
+const KEEPABLE_STEM = /^[\w-](?:[\w.-]*[\w-])?$/
+/** Names Windows reserves for devices, with or without an extension: `CON.mp3` is not a file there. */
+const WINDOWS_DEVICE_NAME = /^(?:con|prn|aux|nul|com\d|lpt\d)$/i
+
+/** Whether a bundled file may keep its archive name: a keepable stem that is no Windows device name before its first dot. */
+function canKeepFilename(stem: string): boolean {
+  return KEEPABLE_STEM.test(stem) && !WINDOWS_DEVICE_NAME.test(stem.split('.')[0]!)
+}
+
 /** Bytes the bundled sounds planned so far declare, and how many they take in the archive. */
 interface BundledTotals {
   declared: number
@@ -274,10 +288,30 @@ async function planBundledSounds(zip: AdmZip, config: Config, limits: SceneImpor
       const filename = basename(entry.entryName)
       if (filename.startsWith('.'))
         continue
+      // Without an audio extension `findFilename`'s `<id>.*` never matches, so the file could never be deleted (#785).
+      const ext = extname(filename).toLowerCase()
+      if (!SOUND_FILE_EXTENSIONS.includes(ext)) {
+        log.warn(`Skipped ${entry.entryName} in ${archiveName}: ${ext
+          ? `${JSON.stringify(ext)} is not`
+          : 'it has no'} sound file extension`)
+        continue
+      }
       totals.declared += entry.header.size
       totals.compressed += entry.header.compressedSize
       assertWithinLimits(entry, totals, limits, archiveName)
       const soundId = idFromFilename(filename)
+      if (!canKeepFilename(soundId)) {
+        const renamed = freshSoundId(soundId)
+        plannedIds.add(renamed.toLowerCase())
+        planned.push({
+          entry,
+          destDir,
+          filename: `${renamed}${ext}`,
+          soundId: renamed,
+          reuse: false,
+        })
+        continue
+      }
       const sameFile = library.get(soundId.toLowerCase())?.find(f => f.filename === filename && f.size === entry.header.size)
       if (sameFile && !plannedIds.has(soundId.toLowerCase())) {
         plannedIds.add(soundId.toLowerCase())
@@ -356,8 +390,10 @@ async function writeBundledSounds(planned: BundledSound[], written: BundledSound
     written.push(sound)
     if (filename === original)
       log.info(`Extracted ${entry.entryName} to ${join(destDir, filename)}`)
-    else
+    else if (canKeepFilename(idFromFilename(original)))
       log.info(`Extracted ${entry.entryName} to ${join(destDir, filename)} as ${soundId}: ${idFromFilename(original)} is already in the library`)
+    else
+      log.info(`Extracted ${entry.entryName} to ${join(destDir, filename)} as ${soundId}: its name is not one a library file may have`)
   }
 }
 

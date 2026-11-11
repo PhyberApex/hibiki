@@ -36,4 +36,24 @@ function parseSoundPath(pathname) {
   return { ok: true, type, id }
 }
 
-module.exports = { parseSoundPath, SOUND_ALLOWED_ORIGIN }
+/**
+ * Why a `hibiki://sound` request may not be served, or null when it may (#785).
+ * `Access-Control-Allow-Origin` only stops cross-origin *reads*: a Browser tab
+ * shares the session and the scheme, so its `<audio>`, `<img>`, a `no-cors`
+ * fetch or a navigation would still make main open and stream the file, and
+ * load/error events alone tell that page which sound ids exist. Electron sets
+ * `initiatorOrigin` from the browser side, so a page cannot forge it; it is
+ * absent for requests nothing in a page made, and those are refused too,
+ * because only the app's own renderer ever loads a sound.
+ *
+ * @param {string | undefined} initiatorOrigin the `request.initiatorOrigin` Electron hands the protocol handler
+ */
+function soundRequestRefusal(initiatorOrigin) {
+  if (initiatorOrigin === SOUND_ALLOWED_ORIGIN)
+    return null
+  return initiatorOrigin === undefined
+    ? 'no initiating page'
+    : `initiated by ${JSON.stringify(initiatorOrigin)}, not ${SOUND_ALLOWED_ORIGIN}`
+}
+
+module.exports = { parseSoundPath, SOUND_ALLOWED_ORIGIN, soundRequestRefusal }

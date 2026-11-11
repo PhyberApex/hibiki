@@ -1,3 +1,5 @@
+import type { BoundedResponse } from '../http-body'
+import { readBoundedText, ResponseTooLargeError } from '../http-body'
 import { createLogger } from '../logger'
 
 const log = createLogger('updates')
@@ -7,6 +9,8 @@ const SETTINGS_KEY = 'updates'
 export const LATEST_RELEASE_URL = 'https://api.github.com/repos/PhyberApex/hibiki/releases/latest'
 const RELEASE_PAGE_PREFIX = 'https://github.com/PhyberApex/hibiki/releases/'
 export const DEFAULT_UPDATE_CHECK_TIMEOUT_MS = 5000
+/** A release's JSON is tens of KB; the timeout alone would let a slow, endless body grow main's heap for its full length (#785). */
+export const MAX_RELEASE_RESPONSE_BYTES = 1024 * 1024
 
 export interface UpdateCheckSettings {
   enabled: boolean
@@ -18,10 +22,9 @@ export interface AvailableUpdate {
 }
 
 /** The slice of `fetch` the check needs, so tests can stand in for GitHub. */
-export type FetchLike = (url: string, init: { headers: Record<string, string>, signal: AbortSignal }) => Promise<{
+export type FetchLike = (url: string, init: { headers: Record<string, string>, signal: AbortSignal }) => Promise<BoundedResponse & {
   ok: boolean
   status: number
-  json: () => Promise<unknown>
 }>
 
 export interface UpdateCheckStore {
@@ -132,7 +135,7 @@ export function createUpdateCheck({ store, currentVersion, fetch, timeoutMs = DE
         log.warn(`Update check failed: GitHub answered HTTP ${response.status}`)
         return null
       }
-      const latest = parseRelease(await response.json())
+      const latest = parseRelease(JSON.parse(await readBoundedText(response, MAX_RELEASE_RESPONSE_BYTES)))
       if (!latest)
         log.warn('Update check failed: GitHub returned no usable release')
       return latest
@@ -140,6 +143,8 @@ export function createUpdateCheck({ store, currentVersion, fetch, timeoutMs = DE
     catch (e) {
       if (controller.signal.aborted)
         log.warn(`Update check timed out after ${timeoutMs} ms`)
+      else if (e instanceof ResponseTooLargeError)
+        log.warn(`Update check failed: GitHub's answer is larger than ${MAX_RELEASE_RESPONSE_BYTES} bytes`)
       else
         log.warn('Update check failed:', e)
       return null

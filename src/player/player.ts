@@ -65,6 +65,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
       manager.on('trackChanged', () => stateEvents.emit('stateChanged'))
       manager.on('ambienceChanged', () => stateEvents.emit('stateChanged'))
       manager.on('effectsChanged', () => stateEvents.emit('stateChanged'))
+      manager.on('encryptionChanged', () => stateEvents.emit('stateChanged'))
       managers.set(guildId, manager)
     }
     return managers.get(guildId)!
@@ -373,6 +374,7 @@ export function createPlayer(discord: DiscordClient, sounds: SoundLibrary, optio
       guildId,
       connectedChannelId: manager.channelId ?? undefined,
       connectedChannelName: manager.channelLabel,
+      e2eeNotReady: manager.e2eeNotReady,
       isIdle: manager.isIdle,
       track: manager.track ?? null,
       source: 'live' as const,

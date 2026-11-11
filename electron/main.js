@@ -1,8 +1,10 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { Readable } = require('node:stream')
-const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, protocol, safeStorage, session, shell, WebContentsView } = require('electron')
+const { installDevToolsPolicy } = require('./devtools')
 const { buildDiagnosticsSummary, LOG_TAIL_LINES, readLogTail } = require('./diagnostics')
+const { pickFavicon } = require('./favicon')
 const { createHotkeys } = require('./hotkeys')
 const { createTrustedIpc } = require('./ipc-sender')
 const { createLocalSink, registerApiHandler, registerAudioStreamHandlers } = require('./ipc-streams')
@@ -11,7 +13,7 @@ const { createLogger, setupFileLogging } = require('./logger')
 const { describeScheme, describeUrl, forwardMainFrameNavigation, guardBrowserTab, guardMainWindowNavigation, isTabUrl, isWebUrl, refuseDownloads, releaseOnMainFrameNavigation } = require('./navigation-guard')
 const { installPermissionPolicy } = require('./permissions')
 const { APP_CONTENT_SECURITY_POLICY, parseRange, resolveAppPath } = require('./protocol')
-const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
+const { parseSoundPath, SOUND_ALLOWED_ORIGIN, soundRequestRefusal } = require('./sound-url')
 const { assertTabCapacity } = require('./tab-limit')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
@@ -64,6 +66,8 @@ let mainWindow = null
 let hotkeys = null
 /** `registerAudioStreamHandlers`' handle; `endAll` tears down the renderer's chunked-IPC streams when it goes away. */
 let audioStreamHandlers = null
+/** Set once in `whenReady` by `installDevToolsPolicy`; goes into every window's and Browser tab's `webPreferences.devTools` (#785). */
+let devTools = false
 
 process.on('uncaughtException', createUncaughtExceptionHandler({
   dialog,
@@ -123,6 +127,7 @@ function createWindow(loadUrl) {
     webPreferences: {
       // The Local sink starts playing on backend demand, not on a click.
       autoplayPolicy: 'no-user-gesture-required',
+      devTools,
       preload: path.join(__dirname, 'preload.js'),
     },
   })
@@ -217,7 +222,9 @@ function registerBrowserViewHandlers() {
       throw new Error('No main window')
     assertTabUrl(url, 'Refused to open a tab at')
     assertTabCapacity(browserViews.size)
-    const view = new WebContentsView()
+    const view = new WebContentsView({
+      webPreferences: { devTools },
+    })
     mainWindow.contentView.addChildView(view)
     view.setBounds({ x: 0, y: 0, width: 0, height: 0 })
     const id = view.webContents.id
@@ -237,9 +244,9 @@ function registerBrowserViewHandlers() {
     })
     view.webContents.on('page-favicon-updated', (_, favicons) => {
       if (mainWindow) {
-        const faviconUrl = Array.isArray(favicons) && favicons.length > 0
-          ? favicons[0]
-          : null
+        const faviconUrl = pickFavicon(favicons)
+        if (!faviconUrl && Array.isArray(favicons) && favicons.length > 0)
+          browserLog.debug(`Tab ${id}: no favicon shown, none of ${favicons.length} is an https or data:image URL within the length cap`)
         mainWindow.webContents.send('browserView:faviconUpdated', id, faviconUrl)
       }
     })
@@ -432,6 +439,11 @@ function registerHibikiProtocol(api, webDistDir) {
     const pathname = u.pathname || '/'
 
     if (host === 'sound') {
+      const refusal = soundRequestRefusal(request.initiatorOrigin)
+      if (refusal) {
+        protocolLog.warn(`Refused hibiki://sound request: ${refusal}`)
+        return new Response('Forbidden', { status: 403 })
+      }
       const sound = parseSoundPath(pathname)
       if (!sound.ok) {
         protocolLog.warn(`Rejected hibiki://sound${pathname}: ${sound.reason}`)
@@ -491,6 +503,12 @@ function serveAppFile(webDistDir, pathname) {
 }
 
 app.whenReady().then(async () => {
+  devTools = installDevToolsPolicy({
+    Menu,
+    packaged: app.isPackaged,
+    env: process.env,
+    platform: process.platform,
+  })
   const userDataPath = app.getPath('userData')
   const botRoot = path.join(__dirname, '..')
   process.env.HIBIKI_USER_DATA = userDataPath

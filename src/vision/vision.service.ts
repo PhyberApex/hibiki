@@ -1,7 +1,8 @@
 import type { LookupAddresses } from './vision-endpoint'
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { extname } from 'node:path'
 import Anthropic from '@anthropic-ai/sdk'
+import { readBoundedText, ResponseTooLargeError } from '../http-body'
 import { createLogger } from '../logger'
 import { assertEndpointResolvesSafely, describeEndpoint } from './vision-endpoint'
 
@@ -66,13 +67,39 @@ const VIBE_SCHEMA = {
   additionalProperties: false,
 } as const
 
-function normalizeAnalysis(raw: unknown): VibeAnalysis {
+/**
+ * Largest image Vision to Vibe sends (#785). The file is read whole and sent
+ * base64-encoded (a third larger) in one JSON body, so an unbounded one would
+ * pass hundreds of MB through main and bill the GM's API account for it;
+ * Anthropic's API refuses images over 5 MB anyway.
+ */
+export const MAX_VISION_IMAGE_BYTES = 5 * 1024 * 1024
+/** At most this many tags are kept from an analysis: the prompt asks for 5 to 10, and every tag is matched against every sound (#785). */
+export const MAX_VIBE_TAGS = 20
+/** Longer tags are dropped: the prompt asks for one to three words. */
+export const MAX_VIBE_TAG_LENGTH = 64
+/** The description is cut to this many characters: the prompt asks for one or two sentences. */
+export const MAX_VIBE_DESCRIPTION_LENGTH = 1000
+/** An OpenAI-compatible answer is a few KB; a larger one is refused unread (#785). */
+export const MAX_VISION_RESPONSE_BYTES = 1024 * 1024
+
+/**
+ * The analysis with only string tags, trimmed, at most `MAX_VIBE_TAGS` of at
+ * most `MAX_VIBE_TAG_LENGTH` characters, and a description of at most
+ * `MAX_VIBE_DESCRIPTION_LENGTH`. The endpoint may be any server the GM points
+ * Hibiki at, so its answer is bounded before matching runs over it (#785).
+ */
+export function normalizeAnalysis(raw: unknown): VibeAnalysis {
   const candidate = raw as Partial<VibeAnalysis> | null
   const description = typeof candidate?.description === 'string'
-    ? candidate.description.trim()
+    ? candidate.description.trim().slice(0, MAX_VIBE_DESCRIPTION_LENGTH)
     : ''
   const tags = Array.isArray(candidate?.tags)
-    ? candidate.tags.filter((t): t is string => typeof t === 'string').map(t => t.trim()).filter(t => t.length > 0)
+    ? candidate.tags
+        .filter((t): t is string => typeof t === 'string')
+        .map(t => t.trim())
+        .filter(t => t.length > 0 && t.length <= MAX_VIBE_TAG_LENGTH)
+        .slice(0, MAX_VIBE_TAGS)
     : []
   return { description, tags }
 }
@@ -195,9 +222,11 @@ export function createOpenAICompatibleVisionProvider(options: OpenAICompatiblePr
 
       let payload: unknown
       try {
-        payload = await response.json()
+        payload = JSON.parse(await readBoundedText(response, MAX_VISION_RESPONSE_BYTES))
       }
-      catch {
+      catch (err) {
+        if (err instanceof ResponseTooLargeError)
+          throw new Error(`The vision endpoint's answer is larger than ${MAX_VISION_RESPONSE_BYTES} bytes, which no vibe analysis is.`)
         throw unreadable
       }
 
@@ -236,12 +265,27 @@ function defaultCreateProvider(config: VisionProviderConfig): VisionProvider {
 export interface VisionServiceOptions {
   getProviderConfig: () => Promise<VisionProviderConfig>
   createProvider?: (config: VisionProviderConfig) => VisionProvider
+  /** Defaults to `MAX_VISION_IMAGE_BYTES`; injectable for tests. */
+  maxImageBytes?: number
+}
+
+/** `bytes` in MB with one decimal, for messages the GM reads. */
+function megabytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 const log = createLogger('vision')
 
 export function createVisionService(options: VisionServiceOptions) {
   const createProvider = options.createProvider ?? defaultCreateProvider
+  const maxImageBytes = options.maxImageBytes ?? MAX_VISION_IMAGE_BYTES
+
+  function assertImageSize(bytes: number): void {
+    if (bytes <= maxImageBytes)
+      return
+    log.warn(`Refused to analyze a ${bytes}-byte image: over the ${maxImageBytes}-byte limit`)
+    throw new Error(`This image is ${megabytes(bytes)}; Vision to Vibe takes images up to ${megabytes(maxImageBytes)}. Use a smaller or more compressed image.`)
+  }
 
   return {
     async analyzeImageVibe(imagePath: string): Promise<VibeAnalysis> {
@@ -251,7 +295,10 @@ export function createVisionService(options: VisionServiceOptions) {
       const mediaType = resolveImageMediaType(imagePath)
       if (!mediaType)
         throw new Error('Unsupported image format. Use a PNG, JPEG, GIF, or WebP image.')
+      assertImageSize((await stat(imagePath)).size)
       const data = await readFile(imagePath)
+      // the file may have grown since the stat
+      assertImageSize(data.length)
       const target = providerConfig.provider === 'openai-compatible'
         ? `${describeEndpoint(providerConfig.baseUrl ?? OPENAI_COMPATIBLE_DEFAULT_BASE_URL)} (${providerConfig.model ?? 'default model'}, ${providerConfig.apiKey ? 'with' : 'without'} API key)`
         : `claude at ${CLAUDE_BASE_URL}`

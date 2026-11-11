@@ -2,7 +2,7 @@ import type { VisionProviderConfig } from './vision.service'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createOpenAICompatibleVisionProvider, createVisionService, OPENAI_COMPATIBLE_DEFAULT_BASE_URL, OPENAI_COMPATIBLE_DEFAULT_MODEL } from './vision.service'
+import { createOpenAICompatibleVisionProvider, createVisionService, MAX_VIBE_TAG_LENGTH, MAX_VIBE_TAGS, MAX_VISION_IMAGE_BYTES, MAX_VISION_RESPONSE_BYTES, normalizeAnalysis, OPENAI_COMPATIBLE_DEFAULT_BASE_URL, OPENAI_COMPATIBLE_DEFAULT_MODEL } from './vision.service'
 
 const mockCreate = jest.fn()
 
@@ -21,6 +21,11 @@ jest.mock('@anthropic-ai/sdk', () => {
   MockAnthropic.AuthenticationError = class extends MockAPIError {}
   return { __esModule: true, default: MockAnthropic }
 })
+
+/** What a vision endpoint answers: `body` as a JSON `Response`. */
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), { status: 200 })
+}
 
 describe('createVisionService', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'hibiki-vision-'))
@@ -100,6 +105,25 @@ describe('createVisionService', () => {
     expect(mockCreate).not.toHaveBeenCalled()
   })
 
+  it('refuses an image over the size cap without reading it into a request (#785)', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const bigPath = join(tempRoot, 'big.png')
+    writeFileSync(bigPath, Buffer.alloc(2048))
+    const service = createVisionService({
+      getProviderConfig: async () => ({ provider: 'claude', apiKey: 'sk-test' }),
+      maxImageBytes: 1024,
+    })
+    await expect(service.analyzeImageVibe(bigPath)).rejects.toThrow(/takes images up to 0\.0 MB/)
+    expect(mockCreate).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledWith('[vision]', expect.stringContaining('2048-byte image: over the 1024-byte limit'))
+    warn.mockRestore()
+  })
+
+  it('caps images at a few MB by default (#785)', () => {
+    expect(MAX_VISION_IMAGE_BYTES).toBeGreaterThanOrEqual(1024 * 1024)
+    expect(MAX_VISION_IMAGE_BYTES).toBeLessThanOrEqual(10 * 1024 * 1024)
+  })
+
   it('rejects unsupported image formats without calling the API', async () => {
     const bmpPath = join(tempRoot, 'map.bmp')
     writeFileSync(bmpPath, 'x')
@@ -109,21 +133,18 @@ describe('createVisionService', () => {
   })
 
   it('dispatches to the OpenAI-compatible provider without requiring a key', async () => {
-    const fetchImpl = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                description: 'x',
-                tags: ['a'],
-              }),
-            },
+    const fetchImpl = jest.fn().mockResolvedValue(jsonResponse({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              description: 'x',
+              tags: ['a'],
+            }),
           },
-        ],
-      }),
-    })
+        },
+      ],
+    }))
     const service = createVisionService({
       getProviderConfig: async () => ({
         provider: 'openai-compatible',
@@ -163,21 +184,18 @@ describe('createOpenAICompatibleVisionProvider', () => {
   }
 
   it('posts the image inline as a data URL and requests structured JSON output', async () => {
-    const fetchImpl = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                description: 'A misty swamp.',
-                tags: ['misty', 'swamp'],
-              }),
-            },
+    const fetchImpl = jest.fn().mockResolvedValue(jsonResponse({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              description: 'A misty swamp.',
+              tags: ['misty', 'swamp'],
+            }),
           },
-        ],
-      }),
-    })
+        },
+      ],
+    }))
     const { instance } = provider({ apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' }, fetchImpl)
 
     const result = await instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })
@@ -201,18 +219,15 @@ describe('createOpenAICompatibleVisionProvider', () => {
   })
 
   it('omits the Authorization header when no key is configured', async () => {
-    const fetchImpl = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({ description: 'x', tags: [] }),
-            },
+    const fetchImpl = jest.fn().mockResolvedValue(jsonResponse({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({ description: 'x', tags: [] }),
           },
-        ],
-      }),
-    })
+        },
+      ],
+    }))
     const { instance } = provider({ apiKey: null }, fetchImpl)
     await instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })
     const headers = fetchImpl.mock.calls[0][1].headers as Record<string, string>
@@ -281,44 +296,77 @@ describe('createOpenAICompatibleVisionProvider', () => {
   })
 
   it('reports a non-JSON model response with a readable message', async () => {
-    const fetchImpl = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: { content: 'not json' },
-          },
-        ],
-      }),
-    })
+    const fetchImpl = jest.fn().mockResolvedValue(jsonResponse({
+      choices: [
+        {
+          message: { content: 'not json' },
+        },
+      ],
+    }))
     const { instance } = provider({ apiKey: 'sk-test' }, fetchImpl)
     await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow(/couldn't understand/i)
   })
 
   it('reports a malformed (non-text) model response with a readable message', async () => {
-    const fetchImpl = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ choices: [] }),
-    })
+    const fetchImpl = jest.fn().mockResolvedValue(jsonResponse({ choices: [] }))
     const { instance } = provider({ apiKey: 'sk-test' }, fetchImpl)
     await expect(instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })).rejects.toThrow(/couldn't understand/i)
   })
 
   it('trims a trailing slash from a custom Base URL', async () => {
-    const fetchImpl = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({ description: 'x', tags: [] }),
-            },
+    const fetchImpl = jest.fn().mockResolvedValue(jsonResponse({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({ description: 'x', tags: [] }),
           },
-        ],
-      }),
-    })
+        },
+      ],
+    }))
     const { instance } = provider({ apiKey: 'sk-test', baseUrl: 'http://localhost:11434/v1/' }, fetchImpl)
     await instance.analyzeImage({ data: imageBuffer, mediaType: 'image/png' })
     expect(fetchImpl).toHaveBeenCalledWith('http://localhost:11434/v1/chat/completions', expect.anything())
+  })
+})
+
+describe('normalizeAnalysis (#785)', () => {
+  it('keeps at most MAX_VIBE_TAGS tags', () => {
+    const tags = Array.from({ length: 10_000 }, (_, i) => `tag ${i}`)
+    expect(normalizeAnalysis({ description: 'x', tags }).tags).toEqual(tags.slice(0, MAX_VIBE_TAGS))
+  })
+
+  it('drops tags longer than MAX_VIBE_TAG_LENGTH', () => {
+    const long = 'a'.repeat(MAX_VIBE_TAG_LENGTH + 1)
+    const edge = 'b'.repeat(MAX_VIBE_TAG_LENGTH)
+    expect(normalizeAnalysis({
+      description: 'x',
+      tags: [long, edge, 'stormy'],
+    }).tags).toEqual([edge, 'stormy'])
+  })
+
+  it('cuts an overlong description', () => {
+    expect(normalizeAnalysis({
+      description: 'x'.repeat(100_000),
+      tags: [],
+    }).description.length).toBeLessThanOrEqual(1000)
+  })
+})
+
+describe('openAI-compatible response cap (#785)', () => {
+  it('refuses an answer larger than MAX_VISION_RESPONSE_BYTES', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(new Response('x'.repeat(MAX_VISION_RESPONSE_BYTES + 1), { status: 200 }))
+    const instance = createOpenAICompatibleVisionProvider({
+      apiKey: 'sk-test',
+      baseUrl: OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
+      model: OPENAI_COMPATIBLE_DEFAULT_MODEL,
+      fetchImpl,
+      lookupImpl: jest.fn().mockResolvedValue([
+        { address: '104.18.6.192', family: 4 },
+      ]),
+    })
+    await expect(instance.analyzeImage({
+      data: Buffer.from('x'),
+      mediaType: 'image/png',
+    })).rejects.toThrow(/larger than \d+ bytes/)
   })
 })

@@ -3,6 +3,22 @@ import { parse } from 'node:path'
 
 export const SOUND_CATEGORIES: readonly SoundCategory[] = ['music', 'effects', 'ambience']
 
+/**
+ * Extensions a sound file from a Scene package may carry (#785): every format
+ * with a backend decoder (ADR-0003) plus the ones only the renderer fallback
+ * plays. A file with none of them is never written into the library.
+ */
+export const SOUND_FILE_EXTENSIONS: readonly string[] = [
+  '.mp3',
+  '.wav',
+  '.flac',
+  '.ogg',
+  '.oga',
+  '.opus',
+  '.m4a',
+  '.aac',
+]
+
 export function isSoundCategory(value: unknown): value is SoundCategory {
   return typeof value === 'string' && (SOUND_CATEGORIES as readonly string[]).includes(value)
 }

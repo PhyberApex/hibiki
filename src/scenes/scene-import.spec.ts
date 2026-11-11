@@ -760,6 +760,59 @@ describe('importScene', () => {
         .toBe(join(config.audio.musicDir, 'drizzle.wav-mix.wav'))
     })
 
+    describe('imported filenames (#785)', () => {
+      it.each([
+        ['a Windows device name', 'sounds/music/CON.mp3', /^con-\d+$/],
+        ['a lower-case device name', 'sounds/music/com1.mp3', /^com1-\d+$/],
+        ['a device name before a second dot', 'sounds/music/nul.loop.mp3', /^nulloop-\d+$/],
+        ['spaces and capitals', 'sounds/music/Dark Forest.mp3', /^dark-forest-\d+$/],
+        ['a trailing space in the stem', 'sounds/music/rain .mp3', /^rain-\d+$/],
+        ['nothing a slug keeps', 'sounds/music/✨.mp3', /^sound-\d+$/],
+      ])('renames a bundled file with %s to a <slug>-<stamp> id, keeping the item\'s soundName', async (_, entryName, idPattern) => {
+        const zipPath = createManifestZip(bundledManifest(`Renamed ${entryName}`, entryName), { [entryName]: 'bytes' })
+        const scene = await importScene(config, zipPath)
+        const item = scene.music[0]!
+        expect(item.soundId).toMatch(idPattern)
+        expect(item.soundName).toBe('Theme')
+        await expect(createSoundLibrary(config).getFilePath('music', item.soundId))
+          .resolves
+          .toBe(join(config.audio.musicDir, `${item.soundId}.mp3`))
+      })
+
+      it('lower-cases the extension of a renamed file', async () => {
+        const zipPath = createManifestZip(bundledManifest('Upper Ext', 'sounds/music/Loud Theme.MP3'), { 'sounds/music/Loud Theme.MP3': 'x' })
+        const scene = await importScene(config, zipPath)
+        expect(readdirSync(config.audio.musicDir)).toContain(`${scene.music[0]!.soundId}.mp3`)
+      })
+
+      it.each([
+        ['no extension', 'sounds/music/noext'],
+        ['an extension that is not audio', 'sounds/music/payload.exe'],
+        ['a bare trailing dot', 'sounds/music/dot.'],
+      ])('skips a bundled file with %s, so no undeletable file lands in the library', async (_, entryName) => {
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+        const before = existsSync(config.audio.musicDir)
+          ? readdirSync(config.audio.musicDir)
+          : []
+        const zipPath = createManifestZip(bundledManifest(`Skipped ${entryName}`, entryName), { [entryName]: 'bytes' })
+        const scene = await importScene(config, zipPath)
+        const after = existsSync(config.audio.musicDir)
+          ? readdirSync(config.audio.musicDir)
+          : []
+        expect(after).toEqual(before)
+        // like a bundled file missing from the archive, the item falls back to its sound name
+        expect(scene.music[0]!.soundId).toBe('Theme')
+        expect(warn).toHaveBeenCalledWith('[scene-import]', expect.stringContaining(`Skipped ${entryName}`))
+        warn.mockRestore()
+      })
+
+      it('keeps a name already shaped like a library id, so re-importing reuses it', async () => {
+        const zipPath = createManifestZip(bundledManifest('Kept Name', 'sounds/music/kept_name.v2-17000.mp3'), { 'sounds/music/kept_name.v2-17000.mp3': 'x' })
+        const scene = await importScene(config, zipPath)
+        expect(scene.music[0]!.soundId).toBe('kept_name.v2-17000')
+      })
+    })
+
     it('sees a library file whose stem contains its extension as taken (#662)', async () => {
       mkdirSync(config.audio.musicDir, { recursive: true })
       writeFileSync(join(config.audio.musicDir, 'hail.mp3-mix.mp3'), 'the GM\'s own hail')
