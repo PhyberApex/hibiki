@@ -143,6 +143,54 @@ describe('registryBrowser', () => {
     expect(wrapper.find('.registry-list').exists()).toBe(false)
   })
 
+  describe('entries that are not well-typed records (#778)', () => {
+    const malformed = [
+      null,
+      'tavern',
+      {
+        ...entry('numeric-author'),
+        author: 42,
+      },
+      {
+        ...entry('string-tags'),
+        tags: 'spooky',
+      },
+      {
+        ...entry('numeric-tag'),
+        tags: ['ok', 7],
+      },
+      {
+        ...entry('object-name'),
+        name: {},
+      },
+      {
+        ...entry('no-description'),
+        description: undefined,
+      },
+      {
+        ...entry('x'),
+        slug: 42,
+      },
+    ] as unknown as RegistryEntry[]
+
+    it('drops them, lists the rest, searches without throwing and warns', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const wrapper = await mountLoaded([...malformed, tavern, dungeon])
+      expect(entryNames(wrapper)).toEqual(['Cozy Tavern', 'Dark Dungeon'])
+      await wrapper.find('.registry-search').setValue('o')
+      expect(entryNames(wrapper)).toEqual(['Cozy Tavern', 'Dark Dungeon'])
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(`[registry] Dropped ${malformed.length} malformed`))
+      warn.mockRestore()
+    })
+
+    it('shows the empty state when the index has no scenes list at all', async () => {
+      vi.mocked(getRegistryIndex).mockResolvedValue({ version: 1 } as unknown as RegistryIndex)
+      const wrapper = mount(RegistryBrowser)
+      await flushPromises()
+      expect(wrapper.text()).toContain('No scenes in the registry yet.')
+    })
+  })
+
   describe('search', () => {
     it.each([
       [

@@ -1,40 +1,101 @@
 name: Registry
 
+# No job here holds a write token, and no job runs registry code a pull
+# request authored (#778):
+#  - validate (pull requests): the validator, index builder and schema come
+#    from the PR's base commit; the PR's head commit only supplies data (its
+#    entries and its registry/index.json). A PR therefore cannot loosen its
+#    own gate by editing registry/scripts or registry/schema. A PR changing
+#    the schema is checked against the old one, so land schema changes before
+#    the entries that need them. Changes to the scripts themselves are
+#    exercised by their specs in the Checks workflow.
+#  - verify-main (pushes to main): the same checks on main, which catches an
+#    index that two PRs each kept in sync on their own but not together.
+#
+# The contributor commits the rebuilt index (`pnpm registry:build-index`)
+# with the entry; CI only checks it. Main's ruleset requires a pull request
+# for every change, so CI could not commit the index there itself.
+
 on:
   pull_request:
     branches: [main]
     paths:
-      - 'registry/scenes/**'
-      - 'registry/schema/**'
-      - 'registry/scripts/**'
+      - 'registry/**'
+  push:
+    branches: [main]
+    paths:
+      - 'registry/**'
+
+permissions:
+  contents: read
 
 jobs:
   validate:
-    name: Validate and build index
+    name: Validate registry entries and index
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Checkout code
+      - name: Checkout base (validator, index builder and schema)
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Checkout PR head (data only)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr-head
+          persist-credentials: false
+          sparse-checkout: registry
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.18.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 26.13.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Validate the PR's registry entries
+        run: node registry/scripts/validate.mjs --scenes pr-head/registry/scenes
+
+      - name: Check the PR's index.json matches its entries
+        run: node registry/scripts/build-index.mjs --scenes pr-head/registry/scenes --out pr-head/registry/index.json --check
+
+  verify-main:
+    name: Verify registry on main
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.18.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Validate registry entries
         run: node registry/scripts/validate.mjs
 
-      - name: Build index.json
-        run: node registry/scripts/build-index.mjs
-
-      - name: Commit updated index
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add registry/index.json
-          git diff --cached --quiet || git commit -m "chore: rebuild registry index [skip ci]"
-          git push
+      - name: Check index.json matches the entries
+        run: node registry/scripts/build-index.mjs --check

@@ -1,17 +1,31 @@
 #!/usr/bin/env node
 
 /**
- * Reads all scene entries from registry/scenes/ and builds registry/index.json.
+ * Reads all scene entries from a scenes directory (default registry/scenes/)
+ * and builds the index (default registry/index.json).
  *
- * Usage: node registry/scripts/build-index.mjs
+ * With --check it writes nothing and exits 1 when the index on disk differs
+ * from the one it would build: CI uses that, so the committed index is always
+ * the one the entries produce and no workflow needs a write token (#778).
+ *
+ * Usage: node registry/scripts/build-index.mjs [--scenes <dir>] [--out <file>] [--check]
  */
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
+import { parseArgs } from 'node:util'
 
 const REGISTRY_DIR = resolve(import.meta.dirname, '..')
-const SCENES_DIR = join(REGISTRY_DIR, 'scenes')
-const INDEX_PATH = join(REGISTRY_DIR, 'index.json')
+
+const { values: args } = parseArgs({
+  options: {
+    scenes: { type: 'string' },
+    out: { type: 'string' },
+    check: { type: 'boolean', default: false },
+  },
+})
+const SCENES_DIR = resolve(args.scenes ?? join(REGISTRY_DIR, 'scenes'))
+const INDEX_PATH = resolve(args.out ?? join(REGISTRY_DIR, 'index.json'))
 
 function collectJsonFiles(dir) {
   const files = []
@@ -48,7 +62,7 @@ for (const file of sceneFiles) {
 scenes.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
 // Derived from the entries rather than the clock so rebuilding an unchanged
-// registry yields a byte-identical index (CI commits the rebuilt file).
+// registry yields a byte-identical index (CI compares the committed file).
 const updatedAt = scenes
   .map(s => s.updatedAt)
   .filter(Boolean)
@@ -61,5 +75,23 @@ const index = {
   scenes,
 }
 
-writeFileSync(INDEX_PATH, `${JSON.stringify(index, null, 2)}\n`, 'utf-8')
-console.log(`Built index.json with ${scenes.length} scene(s).`)
+const built = `${JSON.stringify(index, null, 2)}\n`
+
+if (args.check) {
+  let current = null
+  try {
+    current = readFileSync(INDEX_PATH, 'utf-8')
+  }
+  catch {
+    // a missing index is out of date
+  }
+  if (current !== built) {
+    console.error(`${INDEX_PATH} is out of date with its ${scenes.length} scene(s). Run \`pnpm registry:build-index\` and commit registry/index.json.`)
+    process.exit(1)
+  }
+  console.log(`index.json is up to date with ${scenes.length} scene(s).`)
+}
+else {
+  writeFileSync(INDEX_PATH, built, 'utf-8')
+  console.log(`Built index.json with ${scenes.length} scene(s).`)
+}

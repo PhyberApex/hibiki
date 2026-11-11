@@ -1,4 +1,4 @@
-/** Jest config: specs live next to the code in src/ (backend), electron/ (main process) and forge/ (packaging). */
+/** Jest config: specs live next to the code in src/ (backend), electron/ (main process), forge/ (packaging) and registry/ (registry CI scripts). */
 const path = require('path');
 
 const packageRoot = __dirname;
@@ -6,7 +6,7 @@ const packageRoot = __dirname;
 module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: packageRoot,
-  roots: ['<rootDir>/src', '<rootDir>/electron', '<rootDir>/forge'],
+  roots: ['<rootDir>/src', '<rootDir>/electron', '<rootDir>/forge', '<rootDir>/registry'],
   testRegex: '.*\\.spec\\.ts$',
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
