@@ -11,9 +11,10 @@
  * Usage: node registry/scripts/build-index.mjs [--scenes <dir>] [--out <file>] [--check]
  */
 
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { extname, join, resolve } from 'node:path'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
+import { collectJsonFiles } from './scene-files.mjs'
 
 const REGISTRY_DIR = resolve(import.meta.dirname, '..')
 
@@ -27,26 +28,14 @@ const { values: args } = parseArgs({
 const SCENES_DIR = resolve(args.scenes ?? join(REGISTRY_DIR, 'scenes'))
 const INDEX_PATH = resolve(args.out ?? join(REGISTRY_DIR, 'index.json'))
 
-function collectJsonFiles(dir) {
-  const files = []
-  try {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = join(dir, entry.name)
-      if (entry.isDirectory()) {
-        files.push(...collectJsonFiles(full))
-      }
-      else if (entry.isFile() && extname(entry.name) === '.json') {
-        files.push(full)
-      }
-    }
-  }
-  catch {
-    // scenes dir may be empty or not exist
-  }
-  return files
+let sceneFiles
+try {
+  sceneFiles = collectJsonFiles(SCENES_DIR)
 }
-
-const sceneFiles = collectJsonFiles(SCENES_DIR)
+catch {
+  // scenes dir may be empty or not exist
+  sceneFiles = []
+}
 const scenes = []
 
 for (const file of sceneFiles) {

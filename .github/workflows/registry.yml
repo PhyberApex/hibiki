@@ -7,7 +7,9 @@ name: Registry
 #    entries and its registry/index.json). A PR therefore cannot loosen its
 #    own gate by editing registry/scripts or registry/schema. A PR changing
 #    the schema is checked against the old one, so land schema changes before
-#    the entries that need them. Changes to the scripts themselves are
+#    the entries that need them. Likewise a change to the index format lands
+#    without the rebuilt index, and the index follows in its own PR once the
+#    new builder is on main. Changes to the scripts themselves are
 #    exercised by their specs in the Checks workflow.
 #  - verify-main (pushes to main): the same checks on main, which catches an
 #    index that two PRs each kept in sync on their own but not together.

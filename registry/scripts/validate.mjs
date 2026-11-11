@@ -14,11 +14,12 @@
  * Usage: node registry/scripts/validate.mjs [--scenes <dir>]
  */
 
-import { readdirSync, readFileSync } from 'node:fs'
-import { basename, extname, join, relative as relativePath, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { basename, join, relative as relativePath, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import addFormats from 'ajv-formats'
 import Ajv2020 from 'ajv/dist/2020.js'
+import { collectJsonFiles } from './scene-files.mjs'
 
 const REGISTRY_DIR = resolve(import.meta.dirname, '..')
 const SCHEMA_PATH = join(REGISTRY_DIR, 'schema', 'scene-entry.schema.json')
@@ -32,20 +33,6 @@ const SCENES_DIR = resolve(args.scenes ?? join(REGISTRY_DIR, 'scenes'))
 
 const errors = []
 
-function collectJsonFiles(dir) {
-  const files = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      files.push(...collectJsonFiles(full))
-    }
-    else if (entry.isFile() && extname(entry.name) === '.json') {
-      files.push(full)
-    }
-  }
-  return files
-}
-
 function describeSchemaError(error) {
   const at = error.instancePath || '(root)'
   if (error.keyword === 'additionalProperties')
@@ -55,7 +42,7 @@ function describeSchemaError(error) {
   return `${at}: ${error.message}`
 }
 
-function validateEntry(filePath, validateSchema) {
+function validateEntry(filePath, validateAgainstSchema) {
   const relative = relativePath(SCENES_DIR, filePath)
   let data
   try {
@@ -66,8 +53,8 @@ function validateEntry(filePath, validateSchema) {
     return null
   }
 
-  if (!validateSchema(data)) {
-    for (const error of validateSchema.errors)
+  if (!validateAgainstSchema(data)) {
+    for (const error of validateAgainstSchema.errors)
       errors.push(`${relative}: ${describeSchemaError(error)}`)
     return null
   }
@@ -89,7 +76,7 @@ function validateEntry(filePath, validateSchema) {
 const schema = JSON.parse(readFileSync(SCHEMA_PATH, 'utf-8'))
 const ajv = new Ajv2020({ allErrors: true, strict: true })
 addFormats(ajv)
-const validateSchema = ajv.compile(schema)
+const validateAgainstSchema = ajv.compile(schema)
 
 let sceneFiles
 try {
@@ -107,7 +94,7 @@ if (sceneFiles.length === 0) {
 const slugs = new Map()
 
 for (const file of sceneFiles) {
-  const data = validateEntry(file, validateSchema)
+  const data = validateEntry(file, validateAgainstSchema)
   if (!data)
     continue
 

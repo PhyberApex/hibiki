@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -221,6 +221,18 @@ describe('registry validate.mjs (#778)', () => {
       code: 1,
       output: expect.stringContaining('Duplicate slug "cozy-tavern"'),
     })
+  })
+
+  it('ignores a symlinked entry instead of following it out of the tree', () => {
+    const outside = join(scenesDir, '..', `${scenesDir.split('/').pop()}-outside.json`)
+    writeFileSync(outside, '{ "secret": true }')
+    symlinkSync(outside, join(scenesDir, 'author', 'cozy-tavern.json'))
+    try {
+      expect(run()).toEqual({ code: 0, output: '' })
+    }
+    finally {
+      rmSync(outside, { force: true })
+    }
   })
 
   it('passes with a warning when there is nothing to validate', () => {
