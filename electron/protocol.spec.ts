@@ -6,8 +6,34 @@ import { APP_CONTENT_SECURITY_POLICY, parseRange, resolveAppPath } from './proto
 describe('parseRange', () => {
   it('serves the whole file without a parseable range', () => {
     expect(parseRange(null, 100)).toEqual({ kind: 'full' })
-    expect(parseRange('bytes=-500', 100)).toEqual({ kind: 'full' })
     expect(parseRange('items=0-1', 100)).toEqual({ kind: 'full' })
+  })
+
+  it('ignores a header that is not exactly a bytes range (#784)', () => {
+    expect(parseRange('superbytes=1-2', 100)).toEqual({ kind: 'full' })
+    expect(parseRange('bytes=1-2x', 100)).toEqual({ kind: 'full' })
+    expect(parseRange('bytes = 0-5', 100)).toEqual({ kind: 'full' })
+    expect(parseRange('bytes=-', 100)).toEqual({ kind: 'full' })
+  })
+
+  it('reads the range unit case-insensitively', () => {
+    expect(parseRange('Bytes=0-1', 100)).toEqual({ kind: 'partial', start: 0, end: 1 })
+  })
+
+  it('serves a suffix range as the file\'s last bytes (#784)', () => {
+    expect(parseRange('bytes=-10', 100)).toEqual({ kind: 'partial', start: 90, end: 99 })
+    expect(parseRange('bytes=-500', 100)).toEqual({ kind: 'partial', start: 0, end: 99 })
+    expect(parseRange(`bytes=-${'9'.repeat(400)}`, 100)).toEqual({ kind: 'partial', start: 0, end: 99 })
+  })
+
+  it('refuses an empty suffix range or any suffix range on a zero-byte file', () => {
+    expect(parseRange('bytes=-0', 100)).toEqual({ kind: 'unsatisfiable' })
+    expect(parseRange('bytes=-5', 0)).toEqual({ kind: 'unsatisfiable' })
+  })
+
+  it('answers a multi-range request with the whole file instead of only its first range (#784)', () => {
+    expect(parseRange('bytes=0-1,5-6', 100)).toEqual({ kind: 'full' })
+    expect(parseRange('bytes=0-1, -5', 100)).toEqual({ kind: 'full' })
   })
 
   it('reads an open-ended range to the last byte', () => {
@@ -102,6 +128,12 @@ describe('resolveAppPath', () => {
         ? refused('outside the app bundle')
         : index(),
     )
+  })
+
+  it('refuses a path the file system cannot stat instead of throwing (#784)', () => {
+    const pathname = `/${'a'.repeat(300)}`
+    expect(() => resolveAppPath(webDistDir, pathname)).not.toThrow()
+    expect(resolveAppPath(webDistDir, pathname)).toEqual(refused('unreadable path (ENAMETOOLONG)'))
   })
 
   it('refuses a malformed escape or a NUL byte', () => {
