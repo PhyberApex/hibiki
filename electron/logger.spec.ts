@@ -73,6 +73,50 @@ describe('setupFileLogging', () => {
     expect(readLog()).toMatch(/\[error\] cycle \[object Object\] 10\n$/)
   })
 
+  it('escapes line breaks in strings so no caller can forge an entry (#780)', () => {
+    setupFileLogging(dir, 'start')
+    const forged = 'x\r\n2026-11-10T00:00:00.000Z [info ] [audio] Voice connection ready'
+
+    // eslint-disable-next-line no-console
+    console.info('[scenes] Saved', forged, 'a\rb\u2028c\u2029d\u0085e')
+
+    const lines = readLog().trimEnd().split(/\r\n|[\n\r\u2028\u2029\u0085]/)
+    expect(lines).toHaveLength(3)
+    expect(lines[2]).toMatch(/\[info \] \[scenes\] Saved x\\r\\n2026-11-10T00:00:00\.000Z \[info \] \[audio\] Voice connection ready a\\rb\\u2028c\\u2029d\\u0085e$/)
+  })
+
+  it('indents the continuation lines of an error so a forged message cannot pass as an entry', () => {
+    setupFileLogging(dir, 'start')
+    const err = new Error('bad channel\n2026-11-10T00:00:00.000Z [info ] forged')
+
+    console.error('[audio] join failed:', err)
+
+    const lines = readLog().trimEnd().split('\n')
+    expect(lines[2]).toMatch(/Z \[error\] \[audio\] join failed: Error: bad channel$/)
+    for (const continuation of lines.slice(3))
+      expect(continuation).toMatch(/^\s/)
+    expect(lines.slice(3).join('\n')).toContain('  2026-11-10T00:00:00.000Z [info ] forged')
+  })
+
+  it('escapes the line separators JSON leaves raw in objects', () => {
+    setupFileLogging(dir, 'start')
+
+    // eslint-disable-next-line no-console
+    console.info('[scenes]', { soundName: 'a\u2028b\nc' })
+
+    expect(readLog()).toMatch(/\[info \] \[scenes\] \{"soundName":"a\\u2028b\\nc"\}\n$/)
+  })
+
+  it('clamps very long strings', () => {
+    setupFileLogging(dir, 'start')
+
+    // eslint-disable-next-line no-console
+    console.info('a'.repeat(10_000))
+
+    const last = readLog().trimEnd().split('\n').at(-1)!
+    expect(last).toMatch(/\[info \] a{4000}… \(6000 more characters\)$/)
+  })
+
   it('logs unhandled rejections', () => {
     setupFileLogging(dir, 'start')
     const listener = process.listeners('unhandledRejection').find(l => !rejectionListeners.includes(l))!

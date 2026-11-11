@@ -12,16 +12,56 @@ const LEVELS = [
   'debug',
 ]
 
+/** Longest a single string argument may run in a log line before it is cut. */
+const MAX_STRING_CHARS = 4000
+/** Everything a log viewer or editor may break a line on. */
+const LINE_BREAKS = /\r\n|[\n\r\u2028\u2029\u0085]/g
+const ESCAPED_BREAKS = {
+  '\n': '\\n',
+  '\r': '\\r',
+  '\u2028': '\\u2028',
+  '\u2029': '\\u2029',
+  '\u0085': '\\u0085',
+}
+
+/**
+ * A string as it may appear in a log line (#780): line breaks escaped, since
+ * strings carry scene, sound and Discord channel names a downloaded package or
+ * another server member controls, and a raw break would let them forge entries
+ * in the one artifact every bug report ships with. Clamped so one argument
+ * cannot flood the file.
+ */
+function formatString(text) {
+  const clamped = text.length > MAX_STRING_CHARS
+    ? `${text.slice(0, MAX_STRING_CHARS)}… (${text.length - MAX_STRING_CHARS} more characters)`
+    : text
+  return clamped.replace(LINE_BREAKS, match => [...match].map(c => ESCAPED_BREAKS[c]).join(''))
+}
+
+/**
+ * An error's stack, kept multi-line for readability but with every
+ * continuation line indented: an entry starts with a timestamp at column 0,
+ * so an attacker-controlled message cannot pass for one.
+ */
+function formatError(err) {
+  const text = err.stack || `${err.name}: ${err.message}`
+  return text.replace(LINE_BREAKS, '\n  ')
+}
+
 function formatArg(arg) {
   if (arg instanceof Error)
-    return arg.stack || `${arg.name}: ${arg.message}`
+    return formatError(arg)
   if (typeof arg === 'string')
-    return arg
+    return formatString(arg)
   try {
-    return JSON.stringify(arg)
+    // JSON escapes `\n` and `\r` but not U+2028, U+2029 or U+0085. `undefined` stays undefined, which `join` prints as nothing.
+    const json = JSON.stringify(arg)
+    return json === undefined
+      ? json
+      : formatString(json)
   }
   catch {
-    return String(arg)
+    return formatString(String(arg))
   }
 }
 

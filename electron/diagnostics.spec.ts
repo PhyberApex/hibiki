@@ -189,6 +189,39 @@ describe('buildDiagnosticsSummary', () => {
     expect(text).not.toContain('/home/gm')
   })
 
+  it('redacts secret-shaped strings from the log tail and logs that it did (#780)', async () => {
+    const log = {
+      warn: jest.fn(),
+    }
+    const discordToken = `${'M'.repeat(24)}.${'G'.repeat(6)}.${'x_-'.repeat(13)}`
+    const text = await build({
+      loadLogTail: async () => [
+        `[discord] login with ${discordToken} failed`,
+        '[vision] key sk-ant-api03-abc_DEF-123 rejected',
+        '[vision] key sk-proj-AbCdEf_1234567890-xyzXYZ rejected',
+        '[app] task-runner-1 and sk-short stay',
+      ],
+      log,
+    })
+
+    expect(text).toContain('[discord] login with [redacted] failed')
+    expect(text).toContain('[vision] key [redacted] rejected')
+    expect(text).not.toContain(discordToken)
+    expect(text).not.toContain('sk-ant-')
+    expect(text).not.toContain('sk-proj-')
+    expect(text).toContain('[app] task-runner-1 and sk-short stay')
+    expect(log.warn).toHaveBeenCalledWith('Diagnostics summary: redacted 3 secret-shaped strings from the log tail')
+  })
+
+  it('logs nothing about redaction when the log tail holds no secrets', async () => {
+    const log = {
+      warn: jest.fn(),
+    }
+    await build({ log })
+
+    expect(log.warn).not.toHaveBeenCalled()
+  })
+
   it('says so when there are no storage warnings', async () => {
     expect(await build()).toContain('Storage warnings: none')
   })
