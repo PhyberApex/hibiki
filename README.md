@@ -103,7 +103,12 @@ Builds are unsigned, so every release ships two ways to check that a file is the
   shasum -a 256 --check --ignore-missing SHA256SUMS.txt
   ```
 
-  On Windows (PowerShell), compare the output of `Get-FileHash .\<file>` with the file's line in `SHA256SUMS.txt`.
+  On Windows (PowerShell), this prints `True` when the file matches its line in `SHA256SUMS.txt`:
+
+  ```powershell
+  $file = 'Hibiki-<version>.Setup.exe'
+  (Get-FileHash $file).Hash -eq ((Select-String -SimpleMatch "  $file" SHA256SUMS.txt).Line -split ' ')[0]
+  ```
 
 - **Build provenance attestation.** Each asset is attested on GitHub, which ties it to the commit and workflow run that produced it. With the [GitHub CLI](https://cli.github.com/):
 
