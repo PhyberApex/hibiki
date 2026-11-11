@@ -1,4 +1,4 @@
-import { parseSoundPath, SOUND_ALLOWED_ORIGIN } from './sound-url'
+import { parseSoundPath, SOUND_ALLOWED_ORIGIN, soundRequestRefusal } from './sound-url'
 
 describe('parseSoundPath', () => {
   it('decodes the id of a sound URL', () => {
@@ -37,5 +37,20 @@ describe('parseSoundPath', () => {
 
   it('only lets the app renderer read sound responses', () => {
     expect(SOUND_ALLOWED_ORIGIN).toBe('hibiki://app')
+  })
+})
+
+describe('soundRequestRefusal (#785)', () => {
+  it('serves a request the app renderer made', () => {
+    expect(soundRequestRefusal(SOUND_ALLOWED_ORIGIN)).toBeNull()
+  })
+
+  it.each([
+    ['a Browser tab page', 'https://evil.example', 'initiated by "https://evil.example"'],
+    ['an opaque origin', 'null', 'initiated by "null"'],
+    ['another hibiki host', 'hibiki://sound', 'initiated by "hibiki://sound"'],
+    ['no page at all', undefined, 'no initiating page'],
+  ])('refuses a request from %s', (_, origin, reason) => {
+    expect(soundRequestRefusal(origin)).toContain(reason)
   })
 })

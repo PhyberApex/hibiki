@@ -1,16 +1,12 @@
 import type { FetchLike } from './update-check'
-import { createUpdateCheck, isNewerVersion, LATEST_RELEASE_URL } from './update-check'
+import { createUpdateCheck, isNewerVersion, LATEST_RELEASE_URL, MAX_RELEASE_RESPONSE_BYTES } from './update-check'
 
 function release(tag: string, url = `https://github.com/PhyberApex/hibiki/releases/tag/${tag}`) {
   return { tag_name: tag, html_url: url }
 }
 
 function respond(body: unknown, status = 200): FetchLike {
-  return jest.fn(async () => ({
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  }))
+  return jest.fn(async () => new Response(JSON.stringify(body), { status }))
 }
 
 function setup({ currentVersion = '1.6.0', fetch = respond(release('v1.7.0')), initial = {} as Record<string, string>, timeoutMs = 5000 } = {}) {
@@ -105,6 +101,24 @@ describe('update check', () => {
     expect(await setup({
       fetch: respond({ nope: true }),
     }).updates.check()).toBeNull()
+  })
+
+  it('reports nothing, reading no further, when the answer is larger than the cap (#785)', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const huge = {
+      ...release('v1.7.0'),
+      body: 'x'.repeat(MAX_RELEASE_RESPONSE_BYTES),
+    }
+    expect(await setup({
+      fetch: respond(huge),
+    }).updates.check()).toBeNull()
+    expect(warn).toHaveBeenCalledWith('[updates]', expect.stringContaining(`larger than ${MAX_RELEASE_RESPONSE_BYTES} bytes`))
+    warn.mockRestore()
+  })
+
+  it('reports nothing when the answer is not JSON', async () => {
+    const fetch: FetchLike = jest.fn(async () => new Response('<html>', { status: 200 }))
+    expect(await setup({ fetch }).updates.check()).toBeNull()
   })
 
   it('never links anywhere but GitHub', async () => {

@@ -17,8 +17,37 @@ import { resolveVoiceOptions } from './voice-options'
 
 const log = createLogger('voice')
 
-/** How long after Ready to log the encryption state again: the DAVE (end-to-end encryption) handshake completes asynchronously after the connection is ready. */
+/**
+ * How often the encryption state is read while connected. The DAVE
+ * (end-to-end encryption) handshake completes asynchronously after the
+ * connection is ready, and runs again whenever someone joins or leaves the
+ * call, so one check after Ready is not enough (#785).
+ */
 const ENCRYPTION_RECHECK_MS = 3_000
+
+/**
+ * What protects the audio on a connection, as far as the GM needs to know:
+ * `e2ee-not-ready` is a DAVE session that exists but has not finished its
+ * handshake, so packets go out with transport encryption only and clients in
+ * an end-to-end encrypted call discard them. `transport-only` is a call with no
+ * DAVE session at all, which Discord clients do play. `unknown` covers every
+ * state before the connection and its networking are ready.
+ */
+export type VoiceEncryption = 'e2ee' | 'e2ee-not-ready' | 'transport-only' | 'unknown'
+
+function encryptionState(connection: VoiceConnection): VoiceEncryption {
+  const state = connection.state
+  if (state?.status !== VoiceConnectionStatus.Ready)
+    return 'unknown'
+  const networking = state.networking?.state
+  if (!networking || networking.code !== NetworkingStatusCode.Ready)
+    return 'unknown'
+  if (!networking.dave)
+    return 'transport-only'
+  return networking.dave.session?.ready
+    ? 'e2ee'
+    : 'e2ee-not-ready'
+}
 
 /**
  * One-line summary of what protects the audio on this connection. Discord
@@ -287,23 +316,62 @@ export class GuildAudioManager extends EventEmitter {
     return connection
   }
 
-  private encryptionRecheck?: ReturnType<typeof setTimeout>
+  private encryptionRecheck?: ReturnType<typeof setInterval>
+  /** The last state `checkEncryption` saw; `unknown` until its first check. */
+  private encryption: VoiceEncryption = 'unknown'
 
+  /** Reads the encryption state every `ENCRYPTION_RECHECK_MS` while `connection` is this manager's, from `ENCRYPTION_RECHECK_MS` after Ready. */
   private scheduleEncryptionRecheck(connection: VoiceConnection): void {
     this.clearEncryptionRecheck()
-    this.encryptionRecheck = setTimeout(() => {
-      this.encryptionRecheck = undefined
-      if (this.connection === connection)
-        log.info(`Encryption ${ENCRYPTION_RECHECK_MS} ms after ready (guild ${this.guildId}): ${describeEncryption(connection)}`)
+    let first = true
+    this.encryptionRecheck = setInterval(() => {
+      if (this.connection !== connection) {
+        this.clearEncryptionRecheck()
+        return
+      }
+      this.checkEncryption(connection, first)
+      first = false
     }, ENCRYPTION_RECHECK_MS)
     this.encryptionRecheck.unref?.()
   }
 
+  /**
+   * Logs the state on the first check and on every change after it, and emits
+   * `encryptionChanged` when `e2eeNotReady` flips, so the UI can tell the GM
+   * that Discord clients may be hearing silence (#785).
+   */
+  private checkEncryption(connection: VoiceConnection, first: boolean): void {
+    const state = encryptionState(connection)
+    const previous = this.encryption
+    if (!first && state === previous)
+      return
+    this.encryption = state
+    const summary = `(guild ${this.guildId}): ${describeEncryption(connection)}`
+    if (state === 'e2ee-not-ready')
+      log.warn(`DAVE end-to-end encryption session NOT ready ${summary}; Discord clients in an end-to-end encrypted call discard what Hibiki sends, so the GM is warned in the app`)
+    else if (first)
+      log.info(`Encryption ${ENCRYPTION_RECHECK_MS} ms after ready ${summary}`)
+    else
+      log.info(`Encryption changed from ${previous} to ${state} ${summary}`)
+    if ((state === 'e2ee-not-ready') !== (previous === 'e2ee-not-ready'))
+      this.emit('encryptionChanged')
+  }
+
   private clearEncryptionRecheck(): void {
     if (this.encryptionRecheck !== undefined) {
-      clearTimeout(this.encryptionRecheck)
+      clearInterval(this.encryptionRecheck)
       this.encryptionRecheck = undefined
     }
+    const wasNotReady = this.e2eeNotReady
+    this.encryption = 'unknown'
+    // a reconnect or a new join must not leave the GM's warning up until some unrelated state change
+    if (wasNotReady)
+      this.emit('encryptionChanged')
+  }
+
+  /** Whether the voice connection has a DAVE session that is not ready, so what it sends is likely discarded by Discord clients (#785). */
+  get e2eeNotReady(): boolean {
+    return this.encryption === 'e2ee-not-ready'
   }
 
   /** Current encryption summary for playback logs, or a placeholder when not connected. */

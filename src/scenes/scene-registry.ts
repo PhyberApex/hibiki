@@ -3,6 +3,7 @@ import type { RegistryEntry, RegistryIndex } from './scene-package.types'
 import type { Scene, SceneItem } from './scene-store'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { readBoundedText, ResponseTooLargeError } from '../http-body'
 import { writeJsonFileAtomic } from '../json-file'
 import { createLogger } from '../logger'
 import { isSafeSoundId, SOUND_CATEGORIES } from '../sound/sound-id'
@@ -184,38 +185,6 @@ function registryEntryToScene(entry: RegistryEntry): Omit<Scene, 'id' | 'created
   }
 }
 
-/**
- * The response body as text, refusing it once it passes `maxBytes`: up front
- * from a declared `Content-Length`, else as soon as the streamed bytes do.
- */
-async function readBoundedText(response: Response, maxBytes: number, source: string): Promise<string> {
-  const tooLarge = () => {
-    log.warn(`Registry index from ${source} refused: larger than ${maxBytes} bytes`)
-    return new Error(`Registry index is larger than ${maxBytes} bytes (${source})`)
-  }
-  if (Number(response.headers.get('content-length')) > maxBytes) {
-    await response.body?.cancel()
-    throw tooLarge()
-  }
-  if (!response.body)
-    return ''
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done)
-      break
-    total += value.byteLength
-    if (total > maxBytes) {
-      await reader.cancel()
-      throw tooLarge()
-    }
-    chunks.push(value)
-  }
-  return Buffer.concat(chunks).toString('utf-8')
-}
-
 export interface SceneRegistryOptions {
   timeoutMs?: number
   maxIndexBytes?: number
@@ -255,7 +224,17 @@ export function createSceneRegistry(config: Config, indexUrl = REGISTRY_INDEX_UR
       })
       if (!response.ok)
         throw new Error(`Failed to fetch registry index: ${response.status} ${response.statusText} (${indexUrl})`)
-      return JSON.parse(await readBoundedText(response, maxIndexBytes, indexUrl))
+      let text: string
+      try {
+        text = await readBoundedText(response, maxIndexBytes)
+      }
+      catch (e) {
+        if (!(e instanceof ResponseTooLargeError))
+          throw e
+        log.warn(`Registry index from ${indexUrl} refused: larger than ${maxIndexBytes} bytes`)
+        throw new Error(`Registry index is larger than ${maxIndexBytes} bytes (${indexUrl})`)
+      }
+      return JSON.parse(text)
     }
     catch (e) {
       if ((e as Error).name !== 'TimeoutError')
