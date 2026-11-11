@@ -41,6 +41,8 @@ const MEDIA_TYPES_BY_EXTENSION: Record<string, VisionImageMediaType> = {
 }
 
 const CLAUDE_MODEL = 'claude-opus-5'
+/** The Claude provider only ever talks to Anthropic; there is no setting or env var to move it. */
+export const CLAUDE_BASE_URL = 'https://api.anthropic.com'
 
 export const OPENAI_COMPATIBLE_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
 /** OpenAI's flagship vision-capable model per their current docs, pinned the same way `CLAUDE_MODEL` is. */
@@ -75,8 +77,20 @@ function normalizeAnalysis(raw: unknown): VibeAnalysis {
   return { description, tags }
 }
 
-export function createClaudeVisionProvider(apiKey: string): VisionProvider {
-  const client = new Anthropic({ apiKey })
+export interface ClaudeProviderOptions {
+  /** Injectable for tests; defaults to the SDK's own fetch. */
+  fetchImpl?: typeof fetch
+}
+
+export function createClaudeVisionProvider(apiKey: string, options: ClaudeProviderOptions = {}): VisionProvider {
+  // Explicit, so the SDK's `ANTHROPIC_BASE_URL` env fallback can never send the key and image elsewhere (#776).
+  const client = new Anthropic({
+    apiKey,
+    baseURL: CLAUDE_BASE_URL,
+    ...(options.fetchImpl
+      ? { fetch: options.fetchImpl }
+      : {}),
+  })
   return {
     async analyzeImage(image) {
       const response = await client.messages.create({
@@ -240,7 +254,7 @@ export function createVisionService(options: VisionServiceOptions) {
       const data = await readFile(imagePath)
       const target = providerConfig.provider === 'openai-compatible'
         ? `${describeEndpoint(providerConfig.baseUrl ?? OPENAI_COMPATIBLE_DEFAULT_BASE_URL)} (${providerConfig.model ?? 'default model'}, ${providerConfig.apiKey ? 'with' : 'without'} API key)`
-        : 'claude'
+        : `claude at ${CLAUDE_BASE_URL}`
       log.info(`Analyzing ${mediaType} image (${data.length} bytes) with ${target}`)
       try {
         const result = await createProvider(providerConfig).analyzeImage({ data, mediaType })
