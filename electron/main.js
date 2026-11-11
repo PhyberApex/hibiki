@@ -12,6 +12,7 @@ const { describeScheme, describeUrl, forwardMainFrameNavigation, guardBrowserTab
 const { installPermissionPolicy } = require('./permissions')
 const { APP_CONTENT_SECURITY_POLICY, parseRange, resolveAppPath } = require('./protocol')
 const { parseSoundPath, SOUND_ALLOWED_ORIGIN } = require('./sound-url')
+const { assertTabCapacity } = require('./tab-limit')
 
 // Squirrel.Windows relaunches the installed app with lifecycle flags during
 // install/update/uninstall. Quitting here means `app.whenReady()` below never
@@ -215,6 +216,7 @@ function registerBrowserViewHandlers() {
     if (!mainWindow)
       throw new Error('No main window')
     assertTabUrl(url, 'Refused to open a tab at')
+    assertTabCapacity(browserViews.size)
     const view = new WebContentsView()
     mainWindow.contentView.addChildView(view)
     view.setBounds({ x: 0, y: 0, width: 0, height: 0 })
