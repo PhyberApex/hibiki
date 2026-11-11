@@ -187,7 +187,7 @@ When running as the Electron app, data lives in the platform's user data directo
 
 Hibiki has no account. It only contacts:
 
-- **Discord** — once you set a bot token, to log the bot in and stream audio to voice channels, plus your servers' icons from `cdn.discordapp.com` for the server picker.
+- **Discord** — once you set a bot token, to log the bot in and stream audio to voice channels, plus your servers' icons from `cdn.discordapp.com` for the sidebar server list.
 - **GitHub** — once per launch, one request to the Releases API (`api.github.com`) to see whether a newer version exists, sending the app version as its User-Agent. On by default. Nothing is downloaded or installed. Turn it off in **Settings → Updates**.
 - **GitHub** — when you open the community scene registry, to fetch its index (`raw.githubusercontent.com`, cached for 24 hours).
 - **Your Vision Provider** (Anthropic, or the Base URL you set) — only when Vision to Vibe is turned on and you analyze an image.
