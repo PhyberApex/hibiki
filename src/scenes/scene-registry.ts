@@ -26,6 +26,21 @@ interface CachedIndex {
   data: RegistryIndex
 }
 
+/** `url` for the log: any `user:password@` it carries is masked. */
+function withoutCredentials(url: string): string {
+  try {
+    const parsed = new URL(url)
+    if (!parsed.username && !parsed.password)
+      return url
+    parsed.username = '***'
+    parsed.password = ''
+    return parsed.href
+  }
+  catch {
+    return url.replace(/\/\/[^/@]*@/, '//***@')
+  }
+}
+
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
 /** Why `url` may not be the index URL, or `null` when it may: https anywhere, plain http only to a loopback test server. */
@@ -58,7 +73,7 @@ export function resolveRegistryIndexUrl(override: string | undefined): string {
     return REGISTRY_INDEX_URL
   const refusal = refuseIndexUrl(url)
   if (refusal) {
-    log.warn(`Ignoring HIBIKI_REGISTRY_INDEX_URL ${JSON.stringify(url)}: ${refusal}; using ${REGISTRY_INDEX_URL}`)
+    log.warn(`Ignoring HIBIKI_REGISTRY_INDEX_URL ${JSON.stringify(withoutCredentials(url))}: ${refusal}; using ${REGISTRY_INDEX_URL}`)
     return REGISTRY_INDEX_URL
   }
   return url

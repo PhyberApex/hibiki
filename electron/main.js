@@ -362,21 +362,19 @@ function fileResponse(filePath, init, readOptions) {
 /**
  * Sizes and streams the same open file descriptor, so a file replaced between
  * the two (a re-import, a sync client's atomic rename) cannot advertise one
- * file's `Content-Length` and deliver another's bytes (#784).
+ * file's `Content-Length` and deliver another's bytes (#784). The descriptor
+ * is closed here until a file stream takes it over (`autoClose`).
  */
 function serveSoundFile(request, filePath) {
   const fd = fs.openSync(filePath, 'r')
+  let totalSize
   try {
-    return serveSoundFd(request, filePath, fd)
+    totalSize = fs.fstatSync(fd).size
   }
   catch (err) {
     fs.closeSync(fd)
     throw err
   }
-}
-
-function serveSoundFd(request, filePath, fd) {
-  const totalSize = fs.fstatSync(fd).size
   const ext = path.extname(filePath).toLowerCase()
   const mime = {
     '.mp3': 'audio/mpeg',

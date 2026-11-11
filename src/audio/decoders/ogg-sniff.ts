@@ -97,7 +97,7 @@ export async function probeOgg(filePath: string): Promise<boolean> {
     const payload = await readFirstPayload(filePath)
     const layout = payload && parseLayout(payload)
     if (!layout) {
-      log.info(`${basename(filePath)} does not open with a complete Vorbis or Opus identification header; leaving it to the renderer`)
+      log.debug(`${basename(filePath)} does not open with a complete Vorbis or Opus identification header; leaving it to the renderer`)
       return false
     }
     if (!isSupportedPcmLayout(layout.sampleRate, layout.channels)) {

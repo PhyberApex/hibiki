@@ -642,5 +642,11 @@ describe('resolveRegistryIndexUrl', () => {
       expect(resolveRegistryIndexUrl(url)).toBe(REGISTRY_INDEX_URL)
       expect(warn).toHaveBeenCalledWith('[scene-registry]', expect.stringContaining('HIBIKI_REGISTRY_INDEX_URL'))
     })
+
+    it('masks credentials in the refused URL it logs', () => {
+      expect(resolveRegistryIndexUrl('http://gm:hunter2@example.com/index.json')).toBe(REGISTRY_INDEX_URL)
+      expect(warn).toHaveBeenCalledWith('[scene-registry]', expect.stringContaining('http://***@example.com/index.json'))
+      expect(warn).not.toHaveBeenCalledWith('[scene-registry]', expect.stringContaining('hunter2'))
+    })
   })
 })
