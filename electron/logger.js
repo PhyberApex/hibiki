@@ -12,30 +12,41 @@ const LEVELS = [
   'debug',
 ]
 
-/** Longest a single string argument may run in a log line before it is cut. */
-const MAX_STRING_CHARS = 4000
-/** Everything a log viewer or editor may break a line on. */
-const LINE_BREAKS = /\r\n|[\n\r\u2028\u2029\u0085]/g
-const ESCAPED_BREAKS = {
-  '\n': '\\n',
-  '\r': '\\r',
-  '\u2028': '\\u2028',
-  '\u2029': '\\u2029',
-  '\u0085': '\\u0085',
+/** Longest a single argument may run in a log line before it is cut. */
+const MAX_ARG_CHARS = 4000
+/** Everything a log viewer, editor or terminal may break a line on. */
+const LINE_BREAKS = /\r\n|[\n\r\v\f\u0085\u2028\u2029]/g
+/** C0 and C1 control characters but tab, and the Unicode line and paragraph separators: line breaks, plus ESC and friends a terminal acts on. */
+const CONTROL_CHARS = /(?!\t)[\p{Cc}\u2028\u2029]/gu
+
+/** `\n` and `\r` as their usual escapes, every other control character as `\uXXXX`. */
+function escapeControlChar(c) {
+  if (c === '\n')
+    return '\\n'
+  if (c === '\r')
+    return '\\r'
+  return `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`
+}
+
+/** Clamped so one argument cannot flood the file; never cuts a surrogate pair in half. */
+function clamp(text) {
+  if (text.length <= MAX_ARG_CHARS)
+    return text
+  const end = /[\uD800-\uDBFF]/.test(text[MAX_ARG_CHARS - 1])
+    ? MAX_ARG_CHARS - 1
+    : MAX_ARG_CHARS
+  return `${text.slice(0, end)}… (${text.length - end} more characters)`
 }
 
 /**
- * A string as it may appear in a log line (#780): line breaks escaped, since
- * strings carry scene, sound and Discord channel names a downloaded package or
- * another server member controls, and a raw break would let them forge entries
- * in the one artifact every bug report ships with. Clamped so one argument
- * cannot flood the file.
+ * A string as it may appear in a log line (#780): control characters
+ * escaped, since strings carry scene, sound and Discord channel names a
+ * downloaded package or another server member controls, and a raw line break
+ * (or a terminal escape) would let them forge entries in the one artifact
+ * every bug report ships with.
  */
 function formatString(text) {
-  const clamped = text.length > MAX_STRING_CHARS
-    ? `${text.slice(0, MAX_STRING_CHARS)}… (${text.length - MAX_STRING_CHARS} more characters)`
-    : text
-  return clamped.replace(LINE_BREAKS, match => [...match].map(c => ESCAPED_BREAKS[c]).join(''))
+  return clamp(text).replace(CONTROL_CHARS, escapeControlChar)
 }
 
 /**
@@ -44,8 +55,12 @@ function formatString(text) {
  * so an attacker-controlled message cannot pass for one.
  */
 function formatError(err) {
-  const text = err.stack || `${err.name}: ${err.message}`
-  return text.replace(LINE_BREAKS, '\n  ')
+  const text = String(err.stack || `${err.name}: ${err.message}`)
+  return clamp(text)
+    .replace(LINE_BREAKS, '\n  ')
+    .replace(CONTROL_CHARS, c => c === '\n'
+      ? c
+      : escapeControlChar(c))
 }
 
 function formatArg(arg) {
@@ -54,7 +69,7 @@ function formatArg(arg) {
   if (typeof arg === 'string')
     return formatString(arg)
   try {
-    // JSON escapes `\n` and `\r` but not U+2028, U+2029 or U+0085. `undefined` stays undefined, which `join` prints as nothing.
+    // JSON escapes C0 controls but not DEL, C1 (ESC's 8-bit kin), U+2028 or U+2029. `undefined` stays undefined, which `join` prints as nothing.
     const json = JSON.stringify(arg)
     return json === undefined
       ? json
@@ -94,12 +109,12 @@ function setupFileLogging(logsDir, header) {
   }
 
   const append = (level, args) => {
-    const line = `${new Date().toISOString()} [${level.padEnd(5)}] ${args.map(formatArg).join(' ')}\n`
     try {
+      const line = `${new Date().toISOString()} [${level.padEnd(5)}] ${args.map(formatArg).join(' ')}\n`
       fs.appendFileSync(logFile, line)
     }
     catch {
-      // Logging must never take the app down with it.
+      // Logging must never take the app down with it, whether formatting an odd value or writing fails.
     }
   }
 

@@ -85,12 +85,15 @@ function redactHomeDir(text, homeDir) {
 /**
  * Shapes of the secrets Hibiki handles, should one ever reach the log: a
  * Discord bot token (three base64url parts joined by dots), an Anthropic key
- * (`sk-ant-…`) and an OpenAI-style key (`sk-…`, `sk-proj-…`).
+ * (`sk-ant-…`) and an OpenAI-style key (`sk-…`, `sk-proj-…`). The `sk-`
+ * shapes take no word boundary: the logger writes a newline as a literal `\n`,
+ * so a key logged right after one follows the letter `n`. Redacting a
+ * lookalike id is the cheaper mistake.
  */
 const SECRET_PATTERNS = [
   /(?<![\w-])[\w-]{23,}\.[\w-]{6,7}\.[\w-]{27,}(?![\w-])/g,
-  /(?<![\w-])sk-ant-[\w-]+/g,
-  /(?<![\w-])sk-[\w-]{20,}/g,
+  /sk-ant-[\w-]+/g,
+  /sk-[\w-]{20,}/g,
 ]
 const REDACTED = '[redacted]'
 
@@ -170,10 +173,10 @@ async function buildDiagnosticsSummary({ environment, api, hotkeyStatus, secretS
   lines.push('', `## Log (last ${LOG_TAIL_LINES} lines of hibiki.log)`)
   if (logTail) {
     // The tail is the one part not secret-free by construction: it holds whatever any code ever logged (#780).
-    const tail = redactSecrets(logTail)
-    if (tail.count > 0)
-      log?.warn(`Diagnostics summary: redacted ${tail.count} secret-shaped strings from the log tail`)
-    lines.push(...tail.lines)
+    const redaction = redactSecrets(logTail)
+    if (redaction.count > 0)
+      log?.warn(`Diagnostics summary: redacted ${redaction.count} secret-shaped string(s) from the log tail`)
+    lines.push(...redaction.lines)
   }
   else {
     lines.push('(log file could not be read)')

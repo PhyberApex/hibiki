@@ -107,6 +107,35 @@ describe('setupFileLogging', () => {
     expect(readLog()).toMatch(/\[info \] \[scenes\] \{"soundName":"a\\u2028b\\nc"\}\n$/)
   })
 
+  it('escapes terminal control characters but keeps tabs', () => {
+    setupFileLogging(dir, 'start')
+
+    // eslint-disable-next-line no-console
+    console.info('[audio] channel', '\x1B[2Kfake\tname\x7F')
+
+    expect(readLog()).toMatch(/\[info \] \[audio\] channel \\u001b\[2Kfake\tname\\u007f\n$/)
+  })
+
+  it('clamps very long error stacks too', () => {
+    setupFileLogging(dir, 'start')
+    const err = new Error('boom')
+    err.stack = `Error: ${'e'.repeat(9000)}`
+
+    console.error(err)
+
+    expect(readLog()).toMatch(/\[error\] Error: e{3993}… \(5007 more characters\)\n$/)
+  })
+
+  it('never throws on a value it cannot format', () => {
+    setupFileLogging(dir, 'start')
+    const err = new Error('odd')
+    Object.defineProperty(err, 'stack', {
+      value: { toString: null },
+    })
+
+    expect(() => console.error('[app]', err)).not.toThrow()
+  })
+
   it('clamps very long strings', () => {
     setupFileLogging(dir, 'start')
 

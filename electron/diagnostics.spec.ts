@@ -199,6 +199,7 @@ describe('buildDiagnosticsSummary', () => {
         `[discord] login with ${discordToken} failed`,
         '[vision] key sk-ant-api03-abc_DEF-123 rejected',
         '[vision] key sk-proj-AbCdEf_1234567890-xyzXYZ rejected',
+        '[vision] request failed: {"body":"x\\nsk-AbCdEfGhIjKlMnOpQrStUv"}',
         '[app] task-runner-1 and sk-short stay',
       ],
       log,
@@ -209,8 +210,9 @@ describe('buildDiagnosticsSummary', () => {
     expect(text).not.toContain(discordToken)
     expect(text).not.toContain('sk-ant-')
     expect(text).not.toContain('sk-proj-')
+    expect(text).toContain('{"body":"x\\n[redacted]"}')
     expect(text).toContain('[app] task-runner-1 and sk-short stay')
-    expect(log.warn).toHaveBeenCalledWith('Diagnostics summary: redacted 3 secret-shaped strings from the log tail')
+    expect(log.warn).toHaveBeenCalledWith('Diagnostics summary: redacted 4 secret-shaped string(s) from the log tail')
   })
 
   it('logs nothing about redaction when the log tail holds no secrets', async () => {
