@@ -12,16 +12,71 @@ const LEVELS = [
   'debug',
 ]
 
+/** Longest a single argument may run in a log line before it is cut. */
+const MAX_ARG_CHARS = 4000
+/** Everything a log viewer, editor or terminal may break a line on. */
+const LINE_BREAKS = /\r\n|[\n\r\v\f\u0085\u2028\u2029]/g
+/** C0 and C1 control characters but tab, and the Unicode line and paragraph separators: line breaks, plus ESC and friends a terminal acts on. */
+const CONTROL_CHARS = /(?!\t)[\p{Cc}\u2028\u2029]/gu
+
+/** `\n` and `\r` as their usual escapes, every other control character as `\uXXXX`. */
+function escapeControlChar(c) {
+  if (c === '\n')
+    return '\\n'
+  if (c === '\r')
+    return '\\r'
+  return `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`
+}
+
+/** Clamped so one argument cannot flood the file; never cuts a surrogate pair in half. */
+function clamp(text) {
+  if (text.length <= MAX_ARG_CHARS)
+    return text
+  const end = /[\uD800-\uDBFF]/.test(text[MAX_ARG_CHARS - 1])
+    ? MAX_ARG_CHARS - 1
+    : MAX_ARG_CHARS
+  return `${text.slice(0, end)}… (${text.length - end} more characters)`
+}
+
+/**
+ * A string as it may appear in a log line (#780): control characters
+ * escaped, since strings carry scene, sound and Discord channel names a
+ * downloaded package or another server member controls, and a raw line break
+ * (or a terminal escape) would let them forge entries in the one artifact
+ * every bug report ships with.
+ */
+function formatString(text) {
+  return clamp(text).replace(CONTROL_CHARS, escapeControlChar)
+}
+
+/**
+ * An error's stack, kept multi-line for readability but with every
+ * continuation line indented: an entry starts with a timestamp at column 0,
+ * so an attacker-controlled message cannot pass for one.
+ */
+function formatError(err) {
+  const text = String(err.stack || `${err.name}: ${err.message}`)
+  return clamp(text)
+    .replace(LINE_BREAKS, '\n  ')
+    .replace(CONTROL_CHARS, c => c === '\n'
+      ? c
+      : escapeControlChar(c))
+}
+
 function formatArg(arg) {
   if (arg instanceof Error)
-    return arg.stack || `${arg.name}: ${arg.message}`
+    return formatError(arg)
   if (typeof arg === 'string')
-    return arg
+    return formatString(arg)
   try {
-    return JSON.stringify(arg)
+    // JSON escapes C0 controls but not DEL, C1 (ESC's 8-bit kin), U+2028 or U+2029. `undefined` stays undefined, which `join` prints as nothing.
+    const json = JSON.stringify(arg)
+    return json === undefined
+      ? json
+      : formatString(json)
   }
   catch {
-    return String(arg)
+    return formatString(String(arg))
   }
 }
 
@@ -54,12 +109,12 @@ function setupFileLogging(logsDir, header) {
   }
 
   const append = (level, args) => {
-    const line = `${new Date().toISOString()} [${level.padEnd(5)}] ${args.map(formatArg).join(' ')}\n`
     try {
+      const line = `${new Date().toISOString()} [${level.padEnd(5)}] ${args.map(formatArg).join(' ')}\n`
       fs.appendFileSync(logFile, line)
     }
     catch {
-      // Logging must never take the app down with it.
+      // Logging must never take the app down with it, whether formatting an odd value or writing fails.
     }
   }
 
