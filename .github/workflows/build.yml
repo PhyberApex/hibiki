@@ -80,12 +80,19 @@ jobs:
   # Separate from build so the write-scoped token never shares a job with
   # dependency code. !cancelled() keeps the old fail-fast: false behaviour: a
   # failed platform still lets the others reach the release.
+  # Builds are unsigned (ADR-0008), so every release also carries
+  # SHA256SUMS.txt and a build provenance attestation per asset (#782);
+  # id-token and attestations write are what actions/attest needs to sign
+  # with Sigstore and store the result. Attesting happens before the upload
+  # so no asset is ever published without one.
   upload-release:
     if: ${{ !cancelled() && inputs.upload_release && inputs.tag_name }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -94,13 +101,61 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      # The one list of what a release publishes: this step hashes exactly
+      # the files it hands the upload step, so no asset ships without a
+      # checksum and an attestation. Hashes go by bare file name, as the
+      # release page lists them, so `sha256sum --check` works on a plain
+      # download. GitHub turns spaces into dots on upload (Squirrel's
+      # "Hibiki-1.8.0 Setup.exe" is published as "Hibiki-1.8.0.Setup.exe"),
+      # so files are renamed to that form first, and any other character
+      # GitHub might rewrite, or two assets sharing a name, fails the job.
+      - name: Write SHA256SUMS.txt
+        id: sums
+        working-directory: release-assets
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          for f in **/*\ *; do
+            [ -f "$f" ] || continue
+            dir="$(dirname "$f")"
+            base="$(basename "$f")"
+            mv -n -- "$f" "${dir}/${base// /.}"
+          done
+          files=(**/*.dmg **/*.zip **/*.exe **/*.AppImage **/*.deb)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::No release assets found to checksum."
+            exit 1
+          fi
+          names="$(printf '%s\n' "${files[@]##*/}")"
+          if odd="$(grep -v '^[A-Za-z0-9._-]*$' <<<"$names")"; then
+            echo "::error::Release asset names GitHub would rewrite: ${odd}"
+            exit 1
+          fi
+          dupes="$(sort <<<"$names" | uniq -d)"
+          if [ -n "$dupes" ]; then
+            echo "::error::Release assets share a file name: ${dupes}"
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            (cd "$(dirname "$f")" && sha256sum "$(basename "$f")")
+          done | sort -k 2 >../SHA256SUMS.txt
+          {
+            echo 'files<<EOF'
+            printf 'release-assets/%s\n' "${files[@]}"
+            echo 'SHA256SUMS.txt'
+            echo 'EOF'
+          } >>"$GITHUB_OUTPUT"
+          echo "Checksummed ${#files[@]} release assets:"
+          cat ../SHA256SUMS.txt
+
+      # Verifiable with `gh attestation verify <file> --repo PhyberApex/hibiki`.
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: SHA256SUMS.txt
+
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ inputs.tag_name }}
-          files: |
-            release-assets/**/*.dmg
-            release-assets/**/*.zip
-            release-assets/**/*.exe
-            release-assets/**/*.AppImage
-            release-assets/**/*.deb
+          files: ${{ steps.sums.outputs.files }}

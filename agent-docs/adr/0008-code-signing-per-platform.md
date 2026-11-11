@@ -74,6 +74,10 @@ The maintainer chose **not** to take Plan B yet. Windows builds **stay unsigned*
 
 The README's Code signing policy section and the release-page copy stay, reworded to say the builds are unsigned, because the team roles and process they describe will be needed verbatim by any future application and cost nothing to keep. The SignPath attribution was removed from the README, the release-notes template and the docs site download block (which had been added in #595 and #598). Follow-ups #593 and #594 are closed; no Plan B issues are filed until a trigger fires.
 
+## Amendment: checksums and build provenance while unsigned (#782)
+
+Unsigned builds leave a GM no way to tell a release asset from a copy altered on a mirror or a re-upload, and the `xattr -cr` note talks away the one warning macOS would give. This does not change the signing decision above; it adds verifiability that needs no certificate and keeps working once builds are signed. `build.yml`'s `upload-release` job hashes every asset into `SHA256SUMS.txt` (by the name the release page shows it under), attests each with `actions/attest` (SLSA build provenance, Sigstore-signed, so `upload-release` and the `build-release` caller in `release-please.yml` also hold `id-token: write` and `attestations: write`), then uploads the assets and the checksum file. The README Download section ("Verify your download"), the docs site macOS note and the Code signing policy say how to check them. The `xattr -cr` notes themselves stay as decided.
+
 ## Follow-up work
 
 Follow-up issues are filed only for Plan A, the route actually taken:

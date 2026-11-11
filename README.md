@@ -88,6 +88,33 @@ Pre-built binaries for **macOS**, **Windows**, and **Linux** are available on th
 > ```
 >
 > Or right-click the app → **Open** → confirm in the dialog.
+> Before clearing the flag, [verify the download](#verify-your-download): `xattr -cr` turns off the one warning macOS would otherwise give you about an unknown app.
+
+### Verify your download
+
+Builds are unsigned, so every release ships two ways to check that a file is the one GitHub Actions built from the tagged commit, and not a copy altered on a mirror or in a re-upload:
+
+- **`SHA256SUMS.txt`** on the release page lists the SHA-256 hash of every asset. Download it next to your file, then:
+
+  ```bash
+  # Linux
+  sha256sum --check --ignore-missing SHA256SUMS.txt
+  # macOS
+  shasum -a 256 --check --ignore-missing SHA256SUMS.txt
+  ```
+
+  On Windows (PowerShell), this prints `True` when the file matches its line in `SHA256SUMS.txt`:
+
+  ```powershell
+  $file = 'Hibiki-<version>.Setup.exe'
+  (Get-FileHash $file).Hash -eq ((Select-String -SimpleMatch "  $file" SHA256SUMS.txt).Line -split ' ')[0]
+  ```
+
+- **Build provenance attestation.** Each asset is attested on GitHub, which ties it to the commit and workflow run that produced it. With the [GitHub CLI](https://cli.github.com/):
+
+  ```bash
+  gh attestation verify <file> --repo PhyberApex/hibiki
+  ```
 
 ## FAQ
 
@@ -209,6 +236,7 @@ Hibiki's builds are currently **unsigned** on every platform. An application to 
 **Policy.**
 
 - Release binaries are built on GitHub Actions from the tagged release commit, never on a workstation.
+- Every release carries `SHA256SUMS.txt` and a GitHub build provenance attestation for each asset, verifiable with `gh attestation verify <file> --repo PhyberApex/hibiki` (see [Verify your download](#verify-your-download)).
 - Once signing is in place, every signing request is approved manually by an approver.
 - Every team member has multi-factor authentication turned on for GitHub.
 - Only Hibiki's own binaries will be signed. Bundled upstream open-source binaries, such as the prebuilt `@snazzah/davey` native module, ship unsigned as their upstream projects publish them.
