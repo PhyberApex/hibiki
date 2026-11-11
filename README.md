@@ -191,7 +191,7 @@ Hibiki has no account. It only contacts:
 - **GitHub** — once per launch, one request to the Releases API (`api.github.com`) to see whether a newer version exists, sending the app version as its User-Agent. On by default. Nothing is downloaded or installed. Turn it off in **Settings → Updates**.
 - **GitHub** — when you open the community scene registry, to fetch its index (`raw.githubusercontent.com`, cached for 24 hours).
 - **Your Vision Provider** (Anthropic, or the Base URL you set) — only when Vision to Vibe is turned on and you analyze an image.
-- **Websites you open** in the Browser tab.
+- **Websites you open** in the Browser tab. Its first tab starts on the project site (`phyberapex.github.io`, GitHub Pages).
 - **The project's self-hosted Umami** (`analytics.phyberapex.de`) — only if you switch on **Usage Stats** in Settings. Off by default; anonymous counts of which features are used, no identifier stored. The full event list is on the [privacy page](https://phyberapex.github.io/hibiki/privacy).
 
 ## Code signing policy

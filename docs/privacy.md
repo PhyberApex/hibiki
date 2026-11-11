@@ -31,6 +31,7 @@ The desktop app has no account. It talks to:
 - **GitHub, on demand**, to fetch the community scene registry index (`raw.githubusercontent.com`), which holds the community scenes, when you open the Scenes browser. The index is cached for 24 hours; installing a scene fetches nothing more.
 - **A Vision Provider you choose** (Claude, or any OpenAI-compatible endpoint including local servers), only if you opt into Vision to Vibe in Settings. The image you select is sent once for analysis and never stored by Hibiki.
 - **Any website you open in the Browser tab**, which is a normal embedded browser and is subject to that site's own policies.
+- **This website (`phyberapex.github.io`, on GitHub Pages)**, as the first page the Browser tab shows when you open it.
 - **The same self-hosted Umami instance as this website**, only if you switch on Usage Stats (below).
 
 The app's fonts ship with it, so no font service is contacted. Your configuration, scenes and sound files stay on your computer in the application data folder.
