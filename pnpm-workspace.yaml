@@ -23,6 +23,13 @@ shellEmulator: true
 # version so it stops being exotic; revisit once forge/cli ships stable on rebuild@4.
 overrides:
   '@electron/node-gyp': npm:@electron/node-gyp@10.2.0-electron.2
+  # @discordjs/voice@0.19.2 pins its own nested ws@8.19.0, which is the copy the
+  # Discord voice gateway actually loads (the hoisted top-level ws is not what voice
+  # resolves). 8.19.0 carries GHSA-96hv-2xvq-fx4p (fragment memory exhaustion, fixed
+  # in 8.21.0) and GHSA-58qx-3vcg-4xpx (uninitialized memory disclosure, fixed in
+  # 8.20.1). Force every ws onto the patched line; drop once voice widens its range
+  # (#777). Mirrored in e2e/pnpm-workspace.yaml: drop both together.
+  ws: ^8.21.1
 
 allowBuilds:
   '@discordjs/opus': false
