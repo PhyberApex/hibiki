@@ -1,5 +1,7 @@
 const path = require('node:path')
+const { FusesPlugin } = require('@electron-forge/plugin-fuses')
 const { assertNoStrayAppFiles, ignoreAppFile } = require('./forge/app-files')
+const { fusesConfig } = require('./forge/fuses')
 
 module.exports = {
   packagerConfig: {
@@ -73,5 +75,10 @@ module.exports = {
         },
       },
     },
+  ],
+
+  // Electron Fuses (#770), reasons in forge/fuses.js.
+  plugins: [
+    new FusesPlugin(fusesConfig),
   ],
 }

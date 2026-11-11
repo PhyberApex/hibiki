@@ -261,6 +261,12 @@ importers:
       '@electron-forge/maker-zip':
         specifier: ^8.0.0
         version: 8.0.1(supports-color@8.1.1)
+      '@electron-forge/plugin-fuses':
+        specifier: ^8.0.1
+        version: 8.0.1(@electron/fuses@2.1.3)(supports-color@8.1.1)
+      '@electron/fuses':
+        specifier: ^2.1.3
+        version: 2.1.3
       '@fontsource/plus-jakarta-sans':
         specifier: ^5.3.0
         version: 5.3.0
@@ -796,6 +802,12 @@ packages:
     resolution: {integrity: sha512-lN0ZQyRmMNC/m/XV+Pc7mb/YnLlmSGzWb46McZrk5/vwDyS6t4ZqyA9LDpKs21chjEoQS7q7PLNDRuyh4Lb6KQ==}
     engines: {node: '>= 22.13.0'}
 
+  '@electron-forge/plugin-fuses@8.0.1':
+    resolution: {integrity: sha512-H1mbQgRfyWkudz4nsDWVOXK15DodVYIKNXGmR+OZJhSBQTirLWlPYqG+JR3OnnDtdSklb/nsllogh2SGt151VA==}
+    engines: {node: '>= 22.13.0'}
+    peerDependencies:
+      '@electron/fuses': ^2.1.3
+
   '@electron-forge/publisher-base@8.0.1':
     resolution: {integrity: sha512-b+Rm5/RAyVRYRWzFgtsh2LDjuqYDZAUVnm/3LjvwNOmt2lM/ET0nUENdlGPsvjEf55SwRAlgRiKXxYKApeaT8Q==}
     engines: {node: '>= 22.13.0'}
@@ -819,6 +831,11 @@ packages:
 
   '@electron/asar@4.3.1':
     resolution: {integrity: sha512-6pI64z/tMSBkUTZLQFYhs2YiB7fS9sKA6gy7/2nH1Ju7GGwT32UPsj4Mxsws5NMmtR6C0zYdXVxEU/rGqJRCJA==}
+    engines: {node: '>=22.12.0'}
+    hasBin: true
+
+  '@electron/fuses@2.1.3':
+    resolution: {integrity: sha512-LoKJUXNiJ4JM8IIrUltSHI+8pkogaGj5wmJx81jE/Wk3g2w1/kfMbTEKNoY5kitGE8hiC12h32R/1SlywFtxXg==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
@@ -6575,6 +6592,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@electron-forge/plugin-fuses@8.0.1(@electron/fuses@2.1.3)(supports-color@8.1.1)':
+    dependencies:
+      '@electron-forge/plugin-base': 8.0.1(supports-color@8.1.1)
+      '@electron-forge/shared-types': 8.0.1(supports-color@8.1.1)
+      '@electron/fuses': 2.1.3
+    transitivePeerDependencies:
+      - supports-color
+
   '@electron-forge/publisher-base@8.0.1(supports-color@8.1.1)':
     dependencies:
       '@electron-forge/shared-types': 8.0.1(supports-color@8.1.1)
@@ -6607,6 +6632,8 @@ snapshots:
     dependencies:
       glob: 13.0.6
       minimatch: 10.2.6
+
+  '@electron/fuses@2.1.3': {}
 
   '@electron/get@5.1.0(supports-color@8.1.1)':
     dependencies:
