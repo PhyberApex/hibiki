@@ -20,12 +20,12 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      # A PAT, not GITHUB_TOKEN, so the release PR's checks run: a fine-grained
+      # token on this repo only, with contents, pull requests and issues
+      # (labels) write. The action is SHA-pinned because it receives it (#781).
       - name: Release Please
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        # A PAT, not GITHUB_TOKEN, so the release PR's checks run: a fine-grained
-        # token on this repo only, with contents, pull requests and issues
-        # (labels) write. The action is SHA-pinned because it receives it (#781).
         with:
           token: ${{ secrets.GH_PAT }}
 
