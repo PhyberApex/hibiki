@@ -166,6 +166,9 @@ overrides:
   '@electron/node-gyp': npm:@electron/node-gyp@10.2.0-electron.2
   ws: ^8.21.1
 
+patchedDependencies:
+  cross-zip@4.0.1: a06378adaf63688f93addec173f7d10022c9fe92f3084a38d1bbdce2dddd1d20
+
 importers:
 
   .:
@@ -6568,7 +6571,7 @@ snapshots:
       '@electron-forge/core-utils': 8.0.1(supports-color@8.1.1)
       '@electron-forge/maker-base': 8.0.1(supports-color@8.1.1)
       '@electron-forge/shared-types': 8.0.1(supports-color@8.1.1)
-      cross-zip: 4.0.1
+      cross-zip: 4.0.1(patch_hash=a06378adaf63688f93addec173f7d10022c9fe92f3084a38d1bbdce2dddd1d20)
     transitivePeerDependencies:
       - supports-color
 
@@ -8731,7 +8734,7 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
-  cross-zip@4.0.1: {}
+  cross-zip@4.0.1(patch_hash=a06378adaf63688f93addec173f7d10022c9fe92f3084a38d1bbdce2dddd1d20): {}
 
   cssesc@3.0.0: {}
 
