@@ -31,6 +31,9 @@ overrides:
   # (#777). Mirrored in e2e/pnpm-workspace.yaml: drop both together.
   ws: ^8.21.1
 
+patchedDependencies:
+  cross-zip@4.0.1: patches/cross-zip@4.0.1.patch
+
 allowBuilds:
   '@discordjs/opus': false
   '@parcel/watcher': true

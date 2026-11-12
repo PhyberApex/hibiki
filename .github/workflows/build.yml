@@ -48,15 +48,10 @@ jobs:
         with:
           version: 12.18.0
 
-      # Packaging stays on Node 24 while dev and the other workflows run the
-      # .nvmrc Node 26: newer majors removed fs.rmdir's `recursive` option,
-      # which maker-zip's cross-zip still calls on win32, so the Windows make
-      # step fails on Node 26 (#705). renovate.json caps this file's Node below
-      # 25; lift both once cross-zip switches to fs.rm.
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.22.3
+          node-version-file: .nvmrc
           cache: pnpm
 
       - name: Install dependencies

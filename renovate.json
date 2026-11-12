@@ -26,13 +26,6 @@
       "matchManagers": ["npm"],
       "matchDepTypes": ["dependencies"],
       "minimumReleaseAge": "7 days"
-    },
-    {
-      "description": "Packaging stays on Node 24: maker-zip's cross-zip breaks on Windows under Node 26 (#705)",
-      "matchManagers": ["github-actions"],
-      "matchFileNames": [".github/workflows/build.yml"],
-      "matchDepNames": ["node"],
-      "allowedVersions": "<25"
     }
   ]
 }
