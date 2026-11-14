@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.9.0](https://github.com/PhyberApex/hibiki/compare/v1.8.0...v1.9.0) (2026-11-14)
+
+
+### Features
+
+* **scenes:** overlap the Music Mode advance with the outgoing track ([#739](https://github.com/PhyberApex/hibiki/issues/739)) ([4cefd56](https://github.com/PhyberApex/hibiki/commit/4cefd56c52278989b640f120b9924efc4bc33fce))
+
+
+### Bug Fixes
+
+* **audio:** bound audio IPC chunks, stream registries, Browser tab count and ambience repeat gap ([#806](https://github.com/PhyberApex/hibiki/issues/806)) ([e623bdd](https://github.com/PhyberApex/hibiki/commit/e623bdd52fdea3eb6da2fa820bf59645671263c7))
+* **audio:** bound file-declared sample rate, channels and chunk sizes in decoders ([#787](https://github.com/PhyberApex/hibiki/issues/787)) ([1fb4d6c](https://github.com/PhyberApex/hibiki/commit/1fb4d6c9e9869ebc24e5927af1d134cb53c10d49))
+* **browser:** stop nesting controls inside buttons in the tab bar and bookmark lists ([#734](https://github.com/PhyberApex/hibiki/issues/734)) ([40146c6](https://github.com/PhyberApex/hibiki/commit/40146c6770dadc298f7d4677db6d5627de27fbdd))
+* **deps:** override ws to ^8.21.1 so the Discord voice gateway loads a patched copy ([#800](https://github.com/PhyberApex/hibiki/issues/800)) ([fd0aea0](https://github.com/PhyberApex/hibiki/commit/fd0aea0768ee3d82c3697146aaa42b6965d1e35e))
+* **deps:** update dependency @snazzah/davey to ^0.2.0 ([#747](https://github.com/PhyberApex/hibiki/issues/747)) ([fe93da4](https://github.com/PhyberApex/hibiki/commit/fe93da41122fa2321c46870d96abe65d4a4faa3d))
+* **effects:** bound Effect PCM cache decodes and cancel ones nobody will play ([#796](https://github.com/PhyberApex/hibiki/issues/796)) ([e364ef6](https://github.com/PhyberApex/hibiki/commit/e364ef6db16884363fdb183dcd36fd71412ea439))
+* **packaging:** flip Electron Fuses to disable runAsNode, NODE_OPTIONS and --inspect in packaged builds ([#793](https://github.com/PhyberApex/hibiki/issues/793)) ([1fedb30](https://github.com/PhyberApex/hibiki/commit/1fedb309b51688a902dab47a5a4cad0b154d1f99)), closes [#770](https://github.com/PhyberApex/hibiki/issues/770)
+* **packaging:** ship an allowlist in app.asar so a local .env never packages ([#786](https://github.com/PhyberApex/hibiki/issues/786)) ([61ba0c1](https://github.com/PhyberApex/hibiki/commit/61ba0c11dc022c59886c5eb3d3c981d575a9b415))
+* **registry:** validate entries with ajv and stop running PR-authored scripts with a write token ([#801](https://github.com/PhyberApex/hibiki/issues/801)) ([04784bb](https://github.com/PhyberApex/hibiki/commit/04784bb518604f77b4057874da45ea86fa388231))
+* **scenes:** cap Scene import entries, items, archive size and compression ratio ([#791](https://github.com/PhyberApex/hibiki/issues/791)) ([bb3e9c0](https://github.com/PhyberApex/hibiki/commit/bb3e9c02e2373fddc624061662148651c5f6f64f))
+* **security:** add a CSP to hibiki://app, a preload channel allowlist and IPC sender checks ([#797](https://github.com/PhyberApex/hibiki/issues/797)) ([91fc15c](https://github.com/PhyberApex/hibiki/commit/91fc15cb42ff8d0500f86192c59d3877b0600643))
+* **security:** escape control characters in hibiki.log lines and redact secrets from the Diagnostics log tail ([#803](https://github.com/PhyberApex/hibiki/issues/803)) ([f7fad27](https://github.com/PhyberApex/hibiki/commit/f7fad27d6925af5f522e37ecbf22cb1ceffb37c9))
+* **security:** harden devtools, favicons, dialog text, imported filenames, Vision caps, sound-URL origin and DAVE state ([#808](https://github.com/PhyberApex/hibiki/issues/808)) ([7ba5f8e](https://github.com/PhyberApex/hibiki/commit/7ba5f8e53ae1d30e7d040687e95d6cf78e190670))
+* **security:** harden the hibiki:// handler, Ogg codec sniffing and the Scene Registry gate ([#807](https://github.com/PhyberApex/hibiki/issues/807)) ([959906f](https://github.com/PhyberApex/hibiki/commit/959906f36a8363b555428ba7afb77267469ced9e))
+* **security:** keep Browser tabs on web pages and refuse downloads ([#798](https://github.com/PhyberApex/hibiki/issues/798)) ([e6fb507](https://github.com/PhyberApex/hibiki/commit/e6fb5070f0a3e4a93a283ce79245f4cbecc4e8ab))
+* **security:** pin the Claude provider to api.anthropic.com and stop reading .env from cwd ([#799](https://github.com/PhyberApex/hibiki/issues/799)) ([3fef7a3](https://github.com/PhyberApex/hibiki/commit/3fef7a3759f94f6818ea283e4934e2a34433d758))
+* **sound:** refuse symlinked sounds so a file cannot be read or streamed from outside the library ([#788](https://github.com/PhyberApex/hibiki/issues/788)) ([a7b6a9f](https://github.com/PhyberApex/hibiki/commit/a7b6a9ffde36b06c7a3c6e9450362010b95e5218))
+* **storage:** write app-config.json and its backups owner-only and redact secrets from corrupt backups ([#792](https://github.com/PhyberApex/hibiki/issues/792)) ([5241754](https://github.com/PhyberApex/hibiki/commit/5241754d79538c717801409e70db4f8fe6bc1baf))
+* **views:** revert failed Vision Provider select, stop preview before delete, warn on bare typing-key Hotkeys, end endless Connecting banner ([#732](https://github.com/PhyberApex/hibiki/issues/732)) ([0d7d82b](https://github.com/PhyberApex/hibiki/commit/0d7d82b7b64de487886d15491285c048c14c73b9)), closes [#716](https://github.com/PhyberApex/hibiki/issues/716)
+* **vision:** guard the OpenAI-compatible Base URL and bind the API key to its endpoint ([#790](https://github.com/PhyberApex/hibiki/issues/790)) ([a6eed30](https://github.com/PhyberApex/hibiki/commit/a6eed307b42d14f0e1ec727229cdf268468990e5))
+
 ## [1.8.0](https://github.com/PhyberApex/hibiki/compare/v1.7.0...v1.8.0) (2026-10-30)
 
 
