@@ -232,7 +232,7 @@ importers:
         version: 1.0.3
       music-metadata:
         specifier: ^12.3.2
-        version: 12.3.5(supports-color@8.1.1)
+        version: 12.5.0(supports-color@8.1.1)
       node-audio-mixer:
         specifier: ^2.1.0
         version: 2.2.0
@@ -3047,6 +3047,7 @@ packages:
 
   electron-squirrel-startup@1.0.1:
     resolution: {integrity: sha512-sTfFIHGku+7PsHLJ7v0dRcZNkALrV+YEozINTW8X1nM//e5O3L+rfYuvSW00lmGHnYmUjARZulD8F2V8ISI9RA==}
+    deprecated: This package is archived and deprecated, it will not get any updates.
 
   electron-to-chromium@1.5.406:
     resolution: {integrity: sha512-hWH5ORBi3d0IipnMh7BN5GDTaAmrSSSWmznwt2zltdiRNEWoEQyTwF0FFSBxzHO7hLSRT6loQu3IQGV0wg/Tvg==}
@@ -4527,8 +4528,8 @@ packages:
   murmur-32@0.2.0:
     resolution: {integrity: sha512-ZkcWZudylwF+ir3Ld1n7gL6bI2mQAzXvSobPwVtu8aYi2sbXeipeSkdcanRLzIofLcM5F53lGaKm2dk7orBi7Q==}
 
-  music-metadata@12.3.5:
-    resolution: {integrity: sha512-U/+Bj30qfT8ZHIRQzdV36X3kxT69fEpHEkRaUuYb4PtwevQHb2uTE4BF10tY9SQZKgeCnIMRnxCF8TX0AOKGEg==}
+  music-metadata@12.5.0:
+    resolution: {integrity: sha512-+o2irTJVlskl1JuNp8/3MxtZ4DUstfkvOo5eYBYKzcm7L8IK9oTTO/GTpJxqky7IEJctN1/CjzGGPDYXC3Kewg==}
     engines: {node: '>=22'}
 
   nan@2.27.0:
@@ -10995,7 +10996,7 @@ snapshots:
       imul: 1.0.1
     optional: true
 
-  music-metadata@12.3.5(supports-color@8.1.1):
+  music-metadata@12.5.0(supports-color@8.1.1):
     dependencies:
       '@borewit/text-codec': 0.2.3
       '@tokenizer/token': 0.3.0
