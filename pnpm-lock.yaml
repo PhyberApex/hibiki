@@ -232,7 +232,7 @@ importers:
         version: 1.0.3
       music-metadata:
         specifier: ^12.3.2
-        version: 12.3.5(supports-color@8.1.1)
+        version: 12.5.0(supports-color@8.1.1)
       node-audio-mixer:
         specifier: ^2.1.0
         version: 2.2.0
@@ -4528,8 +4528,8 @@ packages:
   murmur-32@0.2.0:
     resolution: {integrity: sha512-ZkcWZudylwF+ir3Ld1n7gL6bI2mQAzXvSobPwVtu8aYi2sbXeipeSkdcanRLzIofLcM5F53lGaKm2dk7orBi7Q==}
 
-  music-metadata@12.3.5:
-    resolution: {integrity: sha512-U/+Bj30qfT8ZHIRQzdV36X3kxT69fEpHEkRaUuYb4PtwevQHb2uTE4BF10tY9SQZKgeCnIMRnxCF8TX0AOKGEg==}
+  music-metadata@12.5.0:
+    resolution: {integrity: sha512-+o2irTJVlskl1JuNp8/3MxtZ4DUstfkvOo5eYBYKzcm7L8IK9oTTO/GTpJxqky7IEJctN1/CjzGGPDYXC3Kewg==}
     engines: {node: '>=22'}
 
   nan@2.27.0:
@@ -5256,8 +5256,8 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
 
-  strtok3@10.6.3:
-    resolution: {integrity: sha512-MD8mENgyXMr2mDaDfzP3RWYDSyYQxIIou7HhCiCJiBekrsoDtUG0id3vYnjDfY9ndOEbazFXe13Qw6u/1AB8ew==}
+  strtok3@10.8.0:
+    resolution: {integrity: sha512-e6bW3fD6V01DPmcbLfNtn0cjsiHvTKS/hivgbzqYMfHb/nLes4QQ0H5QBxlkPQayF4xv08AvlSgptGwN86Eemw==}
     engines: {node: '>=18'}
 
   sumchecker@3.0.1:
@@ -7632,7 +7632,7 @@ snapshots:
   '@tokenizer/inflate@0.6.0(supports-color@8.1.1)':
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
-      strtok3: 10.6.3
+      strtok3: 10.8.0
       token-types: 6.1.2
     transitivePeerDependencies:
       - supports-color
@@ -9487,7 +9487,7 @@ snapshots:
   file-type@22.3.0(supports-color@8.1.1):
     dependencies:
       '@tokenizer/inflate': 0.6.0(supports-color@8.1.1)
-      strtok3: 10.6.3
+      strtok3: 10.8.0
       token-types: 6.1.2
       uint8array-extras: 1.6.0
     transitivePeerDependencies:
@@ -10996,7 +10996,7 @@ snapshots:
       imul: 1.0.1
     optional: true
 
-  music-metadata@12.3.5(supports-color@8.1.1):
+  music-metadata@12.5.0(supports-color@8.1.1):
     dependencies:
       '@borewit/text-codec': 0.2.3
       '@tokenizer/token': 0.3.0
@@ -11004,7 +11004,7 @@ snapshots:
       debug: 4.4.3(supports-color@8.1.1)
       file-type: 22.3.0(supports-color@8.1.1)
       media-typer: 2.0.0
-      strtok3: 10.6.3
+      strtok3: 10.8.0
       token-types: 6.1.2
       uint8array-extras: 1.6.0
       win-guid: 0.2.1
@@ -11704,7 +11704,7 @@ snapshots:
 
   strip-json-comments@3.1.1: {}
 
-  strtok3@10.6.3:
+  strtok3@10.8.0:
     dependencies:
       '@tokenizer/token': 0.3.0
 
