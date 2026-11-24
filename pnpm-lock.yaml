@@ -232,7 +232,7 @@ importers:
         version: 1.0.3
       music-metadata:
         specifier: ^12.3.2
-        version: 12.5.0(supports-color@8.1.1)
+        version: 12.7.0(supports-color@8.1.1)
       node-audio-mixer:
         specifier: ^2.1.0
         version: 2.2.0
@@ -4510,8 +4510,8 @@ packages:
   murmur-32@0.2.0:
     resolution: {integrity: sha512-ZkcWZudylwF+ir3Ld1n7gL6bI2mQAzXvSobPwVtu8aYi2sbXeipeSkdcanRLzIofLcM5F53lGaKm2dk7orBi7Q==}
 
-  music-metadata@12.5.0:
-    resolution: {integrity: sha512-+o2irTJVlskl1JuNp8/3MxtZ4DUstfkvOo5eYBYKzcm7L8IK9oTTO/GTpJxqky7IEJctN1/CjzGGPDYXC3Kewg==}
+  music-metadata@12.7.0:
+    resolution: {integrity: sha512-E+cJkyXLFjVOhxl1C1Yw67Hrj3QaeW19908WOSJQrM0qDf0nm4fDc3zWhZFX6MWaXstkfykLYi/61YqOEw7KHg==}
     engines: {node: '>=22'}
 
   nan@2.27.0:
@@ -10945,7 +10945,7 @@ snapshots:
       imul: 1.0.1
     optional: true
 
-  music-metadata@12.5.0(supports-color@8.1.1):
+  music-metadata@12.7.0(supports-color@8.1.1):
     dependencies:
       '@borewit/text-codec': 0.2.3
       '@tokenizer/token': 0.3.0
